@@ -1,0 +1,19 @@
+# Build output
+build/
+
+# EazyMake internal directories
+.ezmk/
+
+# Archives
+*.7z
+
+# Claude AI settings (local)
+.claude/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+Desktop.ini
