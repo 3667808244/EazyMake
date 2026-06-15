@@ -21,14 +21,15 @@ No build system exists for EazyMake itself yet. Once implementation begins:
 
 | Command | Purpose |
 |---|---|
-| `ezmk new <name>` | Scaffold a new project |
-| `ezmk build [--disable-cache]` | Build the project |
-| `ezmk run [--disable-cache]` | Build and run |
-| `ezmk clean` | Remove `.ezmk/cache/` and temp files |
-| `ezmk install [-p\|-u\|-g] <pkg>` | Install a package (default: `-p`) |
-| `ezmk remove [-p\|-u\|-g] <pkg>` | Remove a package (default: `-pug`) |
-| `ezmk search [-p\|-u\|-g] <pkg>` | Search for a package (default: `-pug`) |
-| `ezmk info [-p\|-u\|-g] <pkg>` | Show package info (default: `-pug`) |
+| `ezmk project new <name>` | Scaffold a new project |
+| `ezmk project build [--disable-cache]` | Build the project |
+| `ezmk project run [--disable-cache]` | Build and run |
+| `ezmk project clean` | Remove `.ezmk/cache/` and temp files |
+| `ezmk pkg install [-p\|-u\|-g] <pkg_file_or_url>` | Install a package (default: `-p`) |
+| `ezmk pkg remove [-p\|-u\|-g] <pkg>` | Remove a package (default: `-pug`) |
+| `ezmk pkg search [-p\|-u\|-g] <pkg>` | Search for a package (default: `-pug`) |
+| `ezmk pkg info [-p\|-u\|-g] <pkg>` | Show package info (default: `-pug`) |
+| `ezmk repo add/update/remove/list` | (placeholder, not yet implemented) |
 
 Scope flags: `-p` (project), `-u` (user), `-g` (global). `install` only supports one scope; others accept combined flags like `-pug`.
 
@@ -51,9 +52,9 @@ Scope flags: `-p` (project), `-u` (user), `-g` (global). `install` only supports
 ### Configuration (`ezmk.toml`)
 
 Four sections:
-- `[project]` — `name` (string), `type` (`"executable"` only for now; `"static"` / `"shared"` planned)
-- `[compile]` — `flags` (array), `include_dir` (array)
-- `[link]` — `flags` (array), `system_target` (array of system libs to link)
+- `[project]` — `name` (string), `type` (`"executable"` / `"static"` / `"shared"`), `version` (string, required), `language` (string, default `"C++17"`, format `<语言><版本>`)
+- `[compile]` — `flags` (array), `include_dirs` (array, default `["include"]`, `-I` paths)
+- `[link]` — `flags` (array), `link_dirs` (array, `-L` paths), `system_target` (array of system libs to link)
 - `[depends]` — `lib` (array of dependency library names)
 
 ### Package management (see `docs/pkg.md`)

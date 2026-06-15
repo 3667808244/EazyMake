@@ -1,5 +1,7 @@
 # 默认创建文件
 
+`ezmk project new <name>` 生成以下文件。
+
 ---
 
 ## `<project_dir>/src/main.cpp`
@@ -19,12 +21,17 @@ int main(int argc, char **argv){
 [project]
 name = "{project_name}"
 type = "executable"
+version = "0.1.0"
+language = "C++17"
 
 [compile]
 flags = ["-Wall", "-Wextra", "-O2"]
+include_dirs = ["include"]
 
 [link]
 flags = []
+link_dirs = []
+system_target = []
 
 [depends]
 lib = []

@@ -19,17 +19,21 @@ int main(int argc, char** argv) {
             ezmk::cli::print_usage();
             break;
 
-        case ezmk::cli::Command::New:
-            ezmk::project::create_project(*args.project_name);
+        case ezmk::cli::Command::ProjectNew:
+            ezmk::project::create_project(*args.project_name, args.project_type);
             break;
 
-        case ezmk::cli::Command::Build: {
+        case ezmk::cli::Command::Version:
+            std::cout << "EazyMake 0.1.2" << std::endl;
+            break;
+
+        case ezmk::cli::Command::ProjectBuild: {
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             ezmk::build::build_project(cfg, args.build_opts);
             break;
         }
 
-        case ezmk::cli::Command::Run: {
+        case ezmk::cli::Command::ProjectRun: {
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             auto exe = ezmk::build::build_project(cfg, args.build_opts);
             ezmk::util::info("Running " + exe.filename().string() + "...");
@@ -42,25 +46,25 @@ int main(int argc, char** argv) {
             break;
         }
 
-        case ezmk::cli::Command::Clean:
+        case ezmk::cli::Command::ProjectClean:
             ezmk::cache::clear_cache();
             ezmk::util::remove_all(".ezmk/temp");
             ezmk::util::info("Cleaned cache and temp files");
             break;
 
-        case ezmk::cli::Command::Install: {
+        case ezmk::cli::Command::PkgInstall: {
             auto& opts = *args.install_opts;
             ezmk::pkg::install(opts.pkg_file, opts.scope);
             break;
         }
 
-        case ezmk::cli::Command::Remove: {
+        case ezmk::cli::Command::PkgRemove: {
             auto& opts = *args.query_opts;
             ezmk::pkg::remove(opts.pkg_name, opts.scopes);
             break;
         }
 
-        case ezmk::cli::Command::Search: {
+        case ezmk::cli::Command::PkgSearch: {
             auto& opts = *args.query_opts;
             auto results = ezmk::pkg::search(opts.pkg_name, opts.scopes);
             if (results.empty()) {
@@ -73,11 +77,18 @@ int main(int argc, char** argv) {
             break;
         }
 
-        case ezmk::cli::Command::Info: {
+        case ezmk::cli::Command::PkgInfo: {
             auto& opts = *args.query_opts;
             ezmk::pkg::info(opts.pkg_name, opts.scopes);
             break;
         }
+
+        case ezmk::cli::Command::RepoAdd:
+        case ezmk::cli::Command::RepoUpdate:
+        case ezmk::cli::Command::RepoRemove:
+        case ezmk::cli::Command::RepoList:
+            ezmk::util::info("repo subcommand not yet implemented (placeholder)");
+            break;
 
         } // switch
 

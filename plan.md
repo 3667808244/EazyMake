@@ -1,406 +1,376 @@
-# EazyMake 实现计划
-
-## 总体分析
-
-EazyMake 是一个 C/C++ 构建工具，本身用 C++ 编写，基于 GCC/g++（Windows 上通过 MSYS2）。设计文档齐全，当前 `include/` 和 `src/` 为空，需要从零实现。
-
-## 技术选型
-
-| 关注点 | 选择 | 理由 |
-|---|---|---|
-| C++ 标准 | C++17 | `std::filesystem` 用于跨平台文件操作 |
-| TOML 解析 | `toml++` (header-only) | 成熟稳定，C++17 native，无需编译 |
-| 文件哈希 | 自写 SHA-256 | 标准算法，约 100 行，零依赖 |
-| ZIP 解压 | `miniz` (单文件, public domain) | 嵌入源码编译，无需外部命令 |
-| tar.gz 解压 | `miniz` (gzip) + 自写 tar 解析 | tar 格式简单（512 字节块头），约 150 行 |
-| HTTP 下载 | `WinHTTP` (Win) / 系统 `curl` 命令回退 | Windows 原生 API，Linux 上几乎所有发行版自带 curl |
-| 静态链接 | `-static`（GCC/MinGW） | 单可执行文件，无运行时依赖 |
-
-**目标**：单个 `ezmk`（或 `ezmk.exe`）可执行文件，不依赖任何外部动态库或系统命令。
-
-## 目录结构
-
-```
-EazyMake/
-  include/
-    ezmk/
-      cli.hpp
-      config.hpp
-      project.hpp
-      build.hpp
-      cache.hpp
-      pkg.hpp
-      util.hpp
-    vendor/
-      toml.hpp           # toml++ (header-only, 从 GitHub 引入)
-      miniz.h            # miniz zip/gzip 压缩解压
-  src/
-    main.cpp             # 入口，CLI 路由分发
-    cli.cpp              # 命令行参数解析
-    config.cpp           # ezmk.toml 解析（基于 toml++）
-    project.cpp          # ezmk new：脚手架生成
-    build.cpp            # 编译 + 链接引擎
-    cache.cpp            # 增量编译缓存（哈希比对 + record.json）
-    pkg.cpp              # 包管理（install/remove/search/info + 依赖拓扑排序）
-    util.cpp             # 文件系统、SHA-256、tar 解析、日志、跨平台工具
-    vendor/
-      miniz.c            # miniz 实现（直接编译到可执行文件中）
-```
-
-## 模块设计与职责
-
-### `util` — 跨平台工具层
-- 平台检测宏：`EZMK_WIN`、`EZMK_EXE_SUFFIX`(`.exe`/空)、`EZMK_OBJ_SUFFIX`(`.obj`/`.o`)
-- 路径操作：规范化（统一 `/`）、判断绝对/相对路径
-- 文件系统：递归创建目录、递归删除、文件复制、文件哈希
-- SHA-256 实现
-- tar 格式解析（512 字节块头 → 文件名+内容）
-- miniz 封装：`unzip(file, dest_dir)`、`untargz(file, dest_dir)`
-- 日志输出（带前缀 `[ezmk]`、`[ezmk error]` 等）
-
-### `cli` — 命令行解析
-- 子命令枚举：`New`, `Build`, `Run`, `Clean`, `Install`, `Remove`, `Search`, `Info`
-- `Build`/`Run` 附带 `--disable-cache` bool 标志
-- `Install` 附带作用域 `-p`/`-u`/`-g`（默认 `-p`）
-- `Remove`/`Search`/`Info` 附带作用域 `-p`/`-u`/`-g`（默认 `-pug`，可连用）
-- `Install` 附带位置参数 `<pkg_file_or_url>`
-- 简单的 argc/argv 遍历解析，不引入第三方 CLI 库
-
-### `config` — TOML 配置解析（基于 toml++）
-- 读取并解析 `ezmk.toml`
-- 提取 `[project]`：`name`(string)、`type`(string, 当前仅 `"executable"`)
-- 提取 `[compile]`：`flags`(string array)、`include_dir`(string array)
-- 提取 `[link]`：`flags`(string array)、`system_target`(string array)
-- 提取 `[depends]`：`lib`(string array)
-- 未知节/键静默忽略（向前兼容）
-
-### `project` — 项目脚手架
-- `ezmk new <name>`：
-  1. 创建 `<name>/` 目录
-  2. 创建 `src/main.cpp`（Hello World 模板）
-  3. 创建 `ezmk.toml`（填入项目名、默认编译标志 `-Wall -Wextra -O2`）
-  4. 创建空 `README.md`
-  5. 创建 `include/`、`build/`、`.ezmk/pkg/`、`.ezmk/temp/`、`.ezmk/cache/` 目录
-- 若目标目录已存在，报错并退出
-
-### `build` — 编译引擎
-- **扫描**：遍历 `src/` 收集 `.c`/`.cpp`/`.cxx` 文件
-- **编译**：对每个源文件调用 `g++ -c <src> -o <obj>`，附带：
-  - `[compile].flags`（如 `-Wall -Wextra -O2`）
-  - `-I<project>/include`
-  - `-I` 每个 `[compile].include_dir`
-  - `-I` 每个已安装包的 `include/` 目录
-  - `-MMD -MF <depfile>`（生成 Make 依赖文件，供缓存使用）
-  - 目标文件输出到 `.ezmk/temp/`，保持目录结构以处理同名文件
-- **链接**：`g++ <all .o> <all pkg .a> -o build/<name>[.exe]`，附带：
-  - `[link].flags`
-  - `-l` 每个 `[link].system_target`
-  - `-L` 每个已安装包的库路径
-- 调用编译器前检查 `g++` 是否可用
-
-### `cache` — 增量编译缓存
-- **哈希**：SHA-256 of 文件内容（二进制读取）
-- **依赖解析**：读取 `.d` 文件（Makefile 规则格式），提取头文件路径列表
-- **record.json 结构**（按 `docs/@cache.md`）：
-  ```json
-  {
-    "version": 1,
-    "compile_options_signature": "sha256...",
-    "files": {
-      "src/main.cpp": {
-        "source_hash": "...",
-        "object_file": ".ezmk/cache/obj/main.o",
-        "compiler": "g++",
-        "compile_opts": ["-Wall", "-O2"],
-        "dependencies": [
-          {"path": "include/foo.h", "hash": "..."},
-          {"path": "/usr/include/iostream", "hash": "..."}
-        ],
-        "last_build_time": "2025-03-01T12:34:56Z"
-      }
-    }
-  }
-  ```
-- **缓存命中判断**：
-  1. 源文件哈希相同？
-  2. 编译选项签名相同？
-  3. 所有依赖头文件哈希相同且数量相同？
-  4. 全部命中 → 跳过编译；否则 → 重新编译并更新 record
-- **原子写入**：先写 `.tmp` 再 `rename`
-- **`--disable-cache`**：跳过缓存检查，全部重编译，但结果依然更新 record
-- **`ezmk clean`**：删除 `.ezmk/cache/` 整个目录
-
-### `pkg` — 包管理
-- **作用域路径**：
-  - 全局：`<ezmk_install_dir>/pkg/`
-  - 用户：`~/.local/ezmk/pkg/`（Windows: `%LOCALAPPDATA%/ezmk/pkg/`）
-  - 项目：`<project_dir>/.ezmk/pkg/`
-- **安装流程** (`ezmk install [-p|-u|-g] <pkg_file_or_url>`)：
-  1. 若参数是 URL（含 `://` 或 `://`省略时以 `xxx.xxx/` 形式），用 HTTP 下载到临时文件（默认补 `https://`）
-  2. 解压（`.zip` → miniz；`.tar.gz` → miniz+tar解析）
-  3. 验证包结构（存在 `include/`、`src/`、`ezmk.toml`）
-  4. 解析 `[depends].lib`，递归检查/安装缺失的依赖到相应作用域
-  5. 拓扑排序全部依赖包，检测循环依赖
-  6. 按依赖顺序逐个编译包为 `<pkg_name>.a` 静态库
-  7. 复制包文件到作用域安装目录
-  8. 全局安装或覆盖文件时二次确认
-- **移除** (`ezmk remove [-p|-u|-g] <pkg>`)：
-  - 按 `-p` → `-u` → `-g` 顺序查找，删除第一个匹配的包目录
-- **查找** (`ezmk search [-p|-u|-g] <pkg>`)：
-  - 按 `-p` → `-u` → `-g` 顺序查找，列出匹配的包路径
-- **信息** (`ezmk info [-p|-u|-g] <pkg>`)：
-  - 读取找到的包的 `ezmk.toml` 并显示关键信息
-
-### `main` — 入口 + 路由
-- 解析命令行 → 分发到对应模块
-- 顶层异常捕获，友好报错
-
-## 实现阶段
-
-### 第一阶段：骨架（util + vendor + cli + config + project + main）
-
-**目标**：`ezmk new` 能生成完整项目，`ezmk build` 能打印解析出的配置。
-
-- 引入 `toml.hpp`（header-only，放到 `include/vendor/`）
-- 引入 `miniz.h` / `miniz.c`（放到 `include/vendor/` 和 `src/vendor/`）
-- 编写 `util`（SHA-256、tar 解析、文件操作、平台宏）
-- 编写 `cli`（argc/argv 解析）
-- 编写 `config`（toml++ 封装）
-- 编写 `project`（脚手架）
-- 编写 `main.cpp`（路由骨架）
-
-### 第二阶段：构建引擎（build）
-
-**目标**：`ezmk build` 能编译并链接出可执行文件。
-
-- 编写 `build`（扫描 → 编译 → 链接）
-- 正确传递编译/链接标志和 include/lib 路径
-- 修改 `main.cpp` 对接 build 模块
-
-### 第三阶段：增量缓存（cache）
-
-**目标**：重复 build 跳过未改动文件，`--disable-cache` 和 `ezmk clean` 可用。
-
-- 编写 `cache`（SHA-256 哈希、.d 依赖解析、record.json 读写、缓存判断）
-- 集成到 build 流程
-- 实现 `ezmk clean`
-
-### 第四阶段：包管理（pkg）
-
-**目标**：`ezmk install`/`remove`/`search`/`info` 完整可用。
-
-- 编写 `pkg`（下载、解压、验证、依赖拓扑排序、编译 .a、安装/移除/查找/信息）
-- 全局安装和覆盖文件二次确认
-
-### 第五阶段：`ezmk run` + 收尾
-
-**目标**：完整的命令行体验 + 静态链接单文件产物。
-
-- `ezmk run`：先 build，成功则 `exec` 执行产物
-- 确保 `-static` 链接，验证生成的 `ezmk.exe` 不依赖外部 DLL
-
-## 关键设计决策
-
-### 编译命令模板
-
-```
-g++ -std=c++17 -c <src> -o <obj> \
-  <compile.flags> \
-  -I<project_include> -I<pkg_includes>... \
-  -MMD -MF <depfile>
-```
-
-链接命令：
-```
-g++ <all .o> <all pkg .a> -o build/<name>[.exe] \
-  <link.flags> \
-  -L<pkg_lib_dirs> -l<system_targets>
-```
-
-### 依赖拓扑排序（Kahn 算法）
-
-```
-输入：包名列表
-1. 读取每个包的 [depends].lib，构建邻接表 + 入度表
-2. 队列初始化为入度为 0 的包
-3. BFS：每弹出一个包，将其后继的入度减 1，入度为 0 则入队
-4. 若弹出数量 != 总包数 → 存在循环依赖，报错
-```
-
-### 跨平台适配点
-
-| 事项 | Windows (MinGW) | Linux |
-|---|---|---|
-| 可执行文件 | `name.exe` | `name` |
-| 目标文件 | `.obj` | `.o` |
-| 静态库 | `lib<name>.a` | `lib<name>.a` |
-| 编译器 | `g++.exe` | `g++` |
-| 用户安装目录 | `%LOCALAPPDATA%/ezmk/pkg/` | `~/.local/ezmk/pkg/` |
-| HTTP 下载 | WinHTTP API | `curl` 命令（回退） |
-| 路径风格 | MSYS2 接受 `/`，内部统一 `/` | `/` |
-
-### 编译器检测
-
-构建前检查 `g++` 是否在 PATH 中，不可用时给出明确提示（如 "请安装 MSYS2 并安装 gcc 包"）。
+# EazyMake 0.1.2 更新计划
 
 ---
 
-## 当前进度（2026-06-14）
+## 一、命令行参数改为子命令格式
 
-### 已完成：框架搭建 + 依赖引入
+将 0.1.1 的扁平命令结构重构为二级子命令结构，按功能域分组为 `project`、`pkg`、`repo` 三个子命令组。
 
-项目骨架已就绪，所有头文件接口声明完整，源文件均为空实现（`// TODO`），`build.sh` 可编译通过。
-
-**目录结构：**
-
-```
-EazyMake/
-  include/
-    ezmk/
-      util.hpp      # 跨平台工具层接口
-      cli.hpp       # CLI 解析接口
-      config.hpp    # ezmk.toml 解析接口
-      project.hpp   # 项目脚手架接口
-      build.hpp     # 构建引擎接口
-      cache.hpp     # 增量缓存接口
-      pkg.hpp       # 包管理接口
-    vendor/
-      toml.hpp          # toml++ v3.4.0 (header-only, 485KB)
-      miniz.h           # miniz 2.2.0 主头文件
-      miniz_export.h    # DLL export stub (静态链接用)
-      miniz_common.h    # miniz 公共定义
-      miniz_tdef.h      # miniz 压缩
-      miniz_tinfl.h     # miniz 解压
-      miniz_zip.h       # miniz ZIP 读写
-  src/
-    main.cpp         # 入口（CLI 路由为空）
-    util.cpp         # 空实现
-    cli.cpp          # 空实现
-    config.cpp       # 空实现
-    project.cpp      # 空实现
-    build.cpp        # 空实现
-    cache.cpp        # 空实现
-    pkg.cpp          # 空实现
-    vendor/
-      miniz.c            # miniz 主实现
-      miniz_tdef.c       # miniz 压缩实现
-      miniz_tinfl.c      # miniz 解压实现
-      miniz_zip.c        # miniz ZIP 读写实现
-  build/
-    ezmk.exe         # 编译产物（当前为空壳，无功能）
-  build.sh           # 构建脚本（自动检测 MSYS2/Linux，-static 链接）
-```
-
-**构建方式：**
+### 1.1 project 子命令
 
 ```bash
-bash build.sh
-# 产物: build/ezmk.exe (Windows/MSYS2) 或 build/ezmk (Linux)
+ezmk project new <project_name>
+ezmk project build [--disable-cache]
+ezmk project run [--disable-cache]
+ezmk project clean
 ```
 
-**下一步：** 第一阶段实现——编写 `util.cpp`、`cli.cpp`、`config.cpp`、`project.cpp`、`main.cpp` 的具体实现，达成 `ezmk new` 生成项目 + `ezmk build` 打印配置。
+| 命令 | 说明 |
+|------|------|
+| `new <name>` | 在当前目录下创建 `<name>/` 项目目录，生成 `ezmk.toml`、`src/main.cpp`、`include/`、`README.md` |
+| `build` | 扫描 `src/` 下所有源文件，按缓存策略增量编译，最后链接生成可执行文件到 `build/` |
+| `run` | 等同于 `build` + 执行 `build/<name>`（或 `build/<name>.exe`） |
+| `clean` | 删除 `.ezmk/cache/` 目录（含 `record.json` 和 `obj/`），以及 `.ezmk/temp/` |
+
+`--disable-cache` 标志：忽略已有缓存记录，强制重新编译所有源文件，但编译完成后仍会更新缓存。
+
+### 1.2 pkg 子命令
+
+```bash
+ezmk pkg install [-p|-u|-g] <pkg_file_or_url>
+ezmk pkg remove [-p|-u|-g] <pkg>
+ezmk pkg search [-p|-u|-g] <pkg>
+ezmk pkg info [-p|-u|-g] <pkg>
+```
+
+作用域参数：
+
+| 参数 | 作用域 | 安装路径 |
+|------|--------|----------|
+| `-p` | 项目 | `<project_dir>/.ezmk/pkg/` |
+| `-u` | 用户 | `~/.local/ezmk/pkg/` |
+| `-g` | 全局 | `<ezmk_install_dir>/pkg/` |
+
+规则：
+- `install` 仅支持单个作用域参数（`-p`、`-u`、`-g` 三选一），默认 `-p`
+- `remove` / `search` / `info` 支持组合参数（如 `-pug` 表示三个作用域都操作），默认 `-pug`
+- 搜索/查找时按 `-p` → `-u` → `-g` 顺序，先找到的为准
+
+`<pkg_file_or_url>` 说明：
+- 可以是本地文件路径（`.zip` 或 `.tar.gz`）
+- 可以是 URL（协议可省略，默认 `https://`）
+- 包文件结构须符合 `docs/pkg.md` 定义的格式（含 `include/`、`src/`、`ezmk.toml`）
+
+### 1.3 repo 子命令（占位）
+
+```bash
+# 以下子命令暂不实现，仅占位，留待后续版本
+ezmk repo add [-p|-u|-g] <address>
+ezmk repo update
+ezmk repo remove [-p|-u|-g] <name>
+ezmk repo list
+```
+
+设计意图：`repo` 用于管理包来源仓库。EazyMake 不设中央仓库，用户自行注册本地或远程仓库地址。`repo add` 注册一个仓库路径/URL，`repo update` 刷新仓库索引，`repo remove` 取消注册，`repo list` 列出已注册仓库。
 
 ---
 
-## 当前进度（2026-06-14，更新）
+## 二、增加编译模式
 
-### Phase 1 ✓ — 骨架
+`project.type` 字段在现有 `"executable"` 基础上新增 `"static"` 和 `"shared"`。
 
-- `util.cpp` — 日志、文件系统（基于 std::filesystem）、SHA-256 自实现、tar 格式解析（512 字节块头）、ZIP 解压（miniz）、tar.gz 解压（miniz tinfl + 自写 tar 解析）、HTTP 下载（Windows: WinHTTP，Linux: curl 回退）、进程执行（Windows: CreateProcess，Linux: popen）、跨平台路径规范化
-- `cli.cpp` — 完整 argc/argv 解析，支持全部子命令、`--disable-cache`、`-p`/`-u`/`-g` 及组合（`-pug`）
-- `config.cpp` — 基于 toml++ v3.4.0 解析/写入 ezmk.toml（四个 section：project/compile/link/depends）
-- `project.cpp` — `ezmk new` 脚手架（目录结构 + 模板 main.cpp + ezmk.toml + 空 README.md）
-- `main.cpp` — CLI 路由分发全部 8 个子命令
+### 2.1 三种模式对比
 
-### Phase 2 ✓ — 构建引擎
+| type | 产物 | 是否需要 main.cpp | 编译/链接方式 |
+|------|------|-------------------|---------------|
+| `executable` | `build/<name>`（Win 下 `<name>.exe`） | **是** | `g++` 编译 `.cpp` → `.o`，再链接为可执行文件 |
+| `static` | `build/lib<name>.a` | 否 | `g++` 编译 `.cpp` → `.o`，`ar rcs` 打包为静态库 |
+| `shared` | `build/lib<name>.dll`（Win）/ `lib<name>.so`（Unix） | 否 | `g++ -shared -fPIC` 编译，链接为动态库 |
 
-- `build.cpp` — 完整的编译链接流程
-  - 扫描 `src/` 收集 `.c`/`.cpp`/`.cxx`
-  - 对每个源文件调用 `g++ -c`，传递 `[compile].flags`、`-I` include 目录、`-MMD -MF` 生成 `.d` 依赖文件
-  - `.o` 文件输出到 `.ezmk/temp/`，保持源码目录结构
-  - 链接：`g++ <all .o> -o build/<name>[.exe]`，传递 `[link].flags` 和 `-l<system_targets>`
-  - 找不到编译器时给出提示
+### 2.2 各模式详细行为
 
-### Phase 3 ✓ — 增量编译缓存
+**executable（可执行文件）**
+- 必须存在 `src/main.cpp`（或 `src/main.c`），否则报错
+- 链接时自动链接 `[depends]` 中声明的所有依赖库
+- 链接系统库（`[link]` 节中的 `system_target`）
 
-- `cache.cpp` — 按 `docs/@cache.md` 规范完整实现
-  - SHA-256 哈希源码和所有依赖头文件
-  - `.d` 文件解析（处理 CRLF、续行符 `\`）
-  - `record.json` 读写（含自定义最小 JSON 解析器/写入器），原子写入（`.tmp` → `rename`）
-  - 缓存命中三条件：源码哈希相同、编译选项签名相同、所有记录的头文件当前哈希匹配
-  - 全局编译选项签名改变 → 清空全部缓存
-  - `--disable-cache` 强制全量重编译但依然更新缓存
-- `build.cpp` 集成：编译前查缓存，命中则复制 `.o` 跳过编译，未命中则编译并更新 record
+**static（静态库）**
+- 不要求 `main.cpp`，编译 `src/` 下所有源文件为目标文件
+- 使用 `ar rcs` 将所有 `.o` 打包为 `lib<name>.a`
+- 编译时默认添加 `-fPIC`（便于被其他库链接）
+- 其 `[depends]` 中声明的依赖在链接阶段处理：当其他可执行文件依赖此静态库时，递归链接所有传递依赖
 
-### Phase 4 ✓ — 包管理
+**shared（动态库）**
+- 不要求 `main.cpp`，编译 `src/` 下所有源文件为目标文件
+- 使用 `g++ -shared` 链接为动态库
+- 编译时必须加 `-fPIC`
+- Windows 平台生成 `.dll`（含导入库 `.dll.a`），Unix 平台生成 `.so`
 
-- `pkg.cpp` — 完整包管理
-  - 作用域路径：项目 `.ezmk/pkg/`、用户 `~/.local/ezmk/pkg/`（Win: `%LOCALAPPDATA%`）、全局 `<exe_dir>/pkg/`
-  - `install`：下载（URL 省略协议默认 `https://`）→ 解压（tar.gz/ZIP）→ 验证结构 → 依赖递归检查 → Kahn 拓扑排序 → 逐包编译为 `.a` → 复制安装
-  - `remove`：按作用域顺序查找删除
-  - `search`：按作用域顺序查找返回路径
-  - `info`：显示包名、类型、位置、编译标志、依赖
-  - 安全确认：全局安装、覆盖文件时 `[y/N]` 确认
-  - 循环依赖检测
-- `build.cpp` 集成：构建时自动检测 `.ezmk/pkg/` 下的已安装包，添加 `-I` 和链接 `.a`
+---
 
-### 全部命令状态
+## 三、增加配置字段
 
-| 命令 | 状态 |
-|---|---|
-| `ezmk new <name>` | 完整可用 |
-| `ezmk build [--disable-cache]` | 完整可用（含增量缓存） |
-| `ezmk run [--disable-cache]` | 完整可用 |
-| `ezmk clean` | 完整可用 |
-| `ezmk install [-p\|-u\|-g] <file_or_url>` | 完整可用 |
-| `ezmk remove [-p\|-u\|-g] <pkg>` | 完整可用 |
-| `ezmk search [-p\|-u\|-g] <pkg>` | 完整可用 |
-| `ezmk info [-p\|-u\|-g] <pkg>` | 完整可用 |
+### 3.1 `project.version`（必须）
 
-### 构建
-
-```bash
-bash build.sh
-# 产物: build/ezmk.exe (MSYS2/MinGW 静态链接) 或 build/ezmk (Linux)
+```toml
+[project]
+version = "0.1.0"
 ```
 
-### 偶后事项
+- **必须字段**，`ezmk project new` 自动生成默认值 `"0.1.0"`
+- 解析 `ezmk.toml` 时若缺失该字段，报错并提示补充
+- 格式建议为 `<major>.<minor>.<patch>`（SemVer），但不做强校验（非空即可）
+- 用途：包管理时标识版本、`ezmk pkg info` 展示
 
-- ~~包编译时的依赖链 include 传递~~ ✓ (2026-06-14)
-- ~~`ezmk.toml` `[compile]` 的 `include_dir` 相对路径处理~~ ✓ (2026-06-14)
-- ~~包编译缓存（当前包的 `.a` 不参与项目缓存体系）~~ ✓ (2026-06-14)
-- 系统包源 / 中央仓库（当前每次需手动提供包文件或 URL）
+### 3.2 `project.language`（选填，默认 `"C++17"`）
 
-### 缓存体系（2026-06-14 更新）
+```toml
+[project]
+language = "C++17"
+```
 
-**包编译缓存**（新增）：
+格式为 `<语言><版本>`，解析规则：
 
-- 每个包的 `build/` 目录下存储 `.pkg_cache.json`，结构复用项目缓存的 `CacheRecord`
-- `compile_package()` 流程：
-  1. 加载 `<pkg_dir>/build/.pkg_cache.json`
-  2. 对比全局编译选项签名，变化则清空全部条目
-  3. 对每个源文件：查缓存（源码哈希 + 选项签名 + 依赖头文件哈希），命中跳过编译，未命中则编译并生成 `.d` 文件
-  4. 依赖路径标准化为 pkg_dir 相对路径，使缓存在包重新安装后仍有效
-  5. 所有文件命中 + `.a` 存在 → 跳过归档步骤
-- `check_cache()` 新增 `proj_root` 参数的重载，支持非 cwd 根目录
-- `load_record()`/`save_record()` 新增自定义路径重载
-- `compile_options_signature()` 新增 `extra_includes` 参数重载
+| 配置值 | 语言 | 标准版本 | 编译器 | 编译标志 |
+|--------|------|----------|--------|----------|
+| `C++17`（默认） | C++ | C++17 | `g++` | `-std=c++17` |
+| `C++20` | C++ | C++20 | `g++` | `-std=c++20` |
+| `C++23` | C++ | C++23 | `g++` | `-std=c++23` |
+| `C++14` | C++ | C++14 | `g++` | `-std=c++14` |
+| `C++11` | C++ | C++11 | `g++` | `-std=c++11` |
+| `C17` | C | C17 | `gcc` | `-std=c17` |
+| `C11` | C | C11 | `gcc` | `-std=c11` |
+| `C99` | C | C99 | `gcc` | `-std=c99` |
 
-**bug 修复**：
-- `install()` 中 `std::rand()` 未播种 → 改用 `std::mt19937` 随机引擎避免临时目录名冲突
-- `install()` 异常时未清理临时目录 → 添加 try/catch 确保清理 staging 目录
-- 运算符优先级括号警告修复
+解析逻辑：
+1. 若以 `C++` 开头 → 语言为 C++，编译器选 `g++`
+2. 若以 `C` 开头且不是 `C++` → 语言为 C，编译器选 `gcc`
+3. 版本号部分必须为合法值（`89`/`99`/`11`/`14`/`17`/`20`/`23`），否则报错
+4. 缺省时默认 `C++17`
 
-### 第五阶段：收尾 ✓ (2026-06-14)
+### 3.3 `compile.include_dirs`（选填，默认 `["include"]`）
 
-- 零警告编译（`-Wall -Wextra`）
-- 静态链接验证：仅依赖 Windows 系统 DLL（ntdll, kernel32, WINHTTP 等），无 libstdc++/libgcc 运行时依赖
-- 全部 8 个子命令端到端测试通过
-- 全部 CLI 标志测试通过（`--help`/`-h`/`help`、`--disable-cache`、`-p`/`-u`/`-g`/`-pug`）
-- 边缘情况测试通过（未知命令、缺少 ezmk.toml、目录已存在、无项目名等）
-- 多源文件 + 头文件依赖变更 → 缓存正确失效并重编译
-- 包依赖链 include 传递 + 编译缓存 + 项目缓存联动验证通过
+```toml
+[compile]
+include_dirs = ["include", "third_party/foo/include"]
+```
 
-### 剩余事项
+- 替代旧字段 `compile.include_dir`（注意：旧字段为单数，新字段为复数）
+- 类型：字符串数组，每个元素为相对于项目根目录的路径
+- 默认值 `["include"]`（保持向后兼容）
+- 编译时每个路径展开为 `-I<path>` 传给编译器
 
-- 系统包源 / 中央仓库（当前每次需手动提供包文件或 URL）
+### 3.4 `link.link_dirs`（选填，默认 `[]`）
+
+```toml
+[link]
+link_dirs = ["third_party/foo/lib"]
+```
+
+- 类型：字符串数组，每个元素为相对于项目根目录的路径
+- 默认值 `[]`（空列表）
+- 链接时每个路径展开为 `-L<path>` 传给链接器
+- 用于指定第三方预编译库的搜索路径
+
+### 3.5 完整 `ezmk.toml` 示例（0.1.2）
+
+```toml
+[project]
+name = "myapp"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+flags = ["-Wall", "-Wextra", "-O2"]
+include_dirs = ["include"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []
+```
+
+---
+
+## 四、字段命名调整
+
+为保持一致性，0.1.2 对旧字段名做如下调整：
+
+| 旧字段名 | 新字段名 | 说明 |
+|----------|----------|------|
+| `compile.include_dir` | `compile.include_dirs` | 改为复数，与 `link.link_dirs` 风格统一 |
+
+注：`link.system_target` 保持不变（`system_target` 作为集合名词可接受单数形式）；若解析时遇到旧字段名 `include_dir`（单数），可做兼容处理，自动映射到 `include_dirs`。
+
+---
+
+## 五、默认项目模板更新
+
+`ezmk project new <name>` 生成的 `ezmk.toml` 需同步新字段：
+
+```toml
+[project]
+name = "{project_name}"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+flags = ["-Wall", "-Wextra", "-O2"]
+include_dirs = ["include"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []
+```
+
+`src/main.cpp` 和 `README.md` 内容与 0.1.1 保持一致（见 `docs/default_craete.md`）。
+
+---
+
+## 六、相关文档需同步更新
+
+| 文档 | 更新内容 |
+|------|----------|
+| `docs/config_file.md` | 新增 `version`、`language`、`include_dirs`、`link_dirs` 字段说明；更新 `type` 可选值 |
+| `docs/default_craete.md` | 更新 `ezmk.toml` 默认模板 |
+| `docs/pkg.md` | 补充 `pkg_file_or_url` 的 URL 格式说明 |
+| `CLAUDE.md` | 更新命令行表格（子命令格式）、配置节说明 |
+
+---
+
+## 七、实现要点
+
+### 7.1 CLI 解析
+
+入口 `main()` 解析 `argv`：
+1. 第一参数为子命令组（`project` / `pkg` / `repo`），不匹配则打印帮助
+2. 第二参数为具体操作（`new` / `build` / `run` / `clean` / `install` / `remove` / `search` / `info` / `add` / `update` / `list`）
+3. 后续参数为该操作的选项和值
+4. `repo` 组直接打印 "not implemented yet" 并退出
+
+### 7.2 配置解析
+
+- 读取 `ezmk.toml`，解析四个节：`[project]`、`[compile]`、`[link]`、`[depends]`
+- `project.version` 缺失 → 报错退出
+- `project.language` 缺失 → 默认 `C++17`
+- `project.type` 缺失 → 默认 `executable`
+- `compile.include_dirs` 缺失 → 默认 `["include"]`
+- `link.link_dirs` 缺失 → 默认 `[]`
+- 兼容旧字段 `compile.include_dir`（单数），自动映射
+
+### 7.3 构建逻辑
+
+```
+1. 解析 ezmk.toml
+2. 根据 project.language 选择编译器（g++ 或 gcc）
+3. 扫描 src/ 下所有源文件（*.c, *.cpp, *.cxx）
+4. 对每个源文件：
+   a. 检查缓存（见 docs/@cache.md）
+   b. 若缓存命中 → 跳过
+   c. 若缓存未命中 → 编译为 .o，更新缓存记录
+5. 根据 project.type：
+   - executable: g++ *.o -o build/<name> + 链接依赖
+   - static: ar rcs build/lib<name>.a *.o
+   - shared: g++ -shared *.o -o build/lib<name>.dll + 链接依赖
+```
+
+### 7.4 包安装逻辑
+
+```
+1. 判断参数是本地路径还是 URL
+2. 本地：直接读取；URL：下载到 .ezmk/temp/
+3. 解压到临时目录，校验结构（include/ + src/ + ezmk.toml）
+4. 解析包内 ezmk.toml 的 [depends]，递归检查依赖是否已安装
+5. 编译依赖链（从叶子到根），每个依赖输出 lib<name>.a
+6. 将 .a 文件和 include/ 头文件复制到对应作用域的 pkg/ 目录
+```
+
+### 7.5 `--disable-cache` 处理
+
+- 设置该标志后，跳过 `record.json` 读取，所有源文件强制重编译
+- 编译完成后正常更新缓存（保证下次构建可受益）
+
+---
+
+## 八、安全性注意事项
+
+回顾 `docs/@safety.md`，0.1.2 中需注意的安全点：
+
+1. **全局安装二次确认**：`ezmk pkg install -g` 时提示 "Installing globally. Continue? [y/N]"
+2. **覆盖确认**：安装时若目标路径已存在同名包，提示 "Package already exists. Overwrite? [y/N]"
+3. **URL 下载警告**：从 URL 下载包时，显示下载地址并要求确认
+
+---
+
+## 九、实现进度
+
+### ✅ 已完成（2026-06-15）
+
+#### 9.1 设计文档更新
+
+| 文档 | 状态 |
+|------|------|
+| `docs/config_file.md` | ✅ 表格化、新增 `version`/`language`/`include_dirs`/`link_dirs`，修正 `systam_target` 拼写 |
+| `docs/default_craete.md` | ✅ 模板同步新字段 |
+| `docs/pkg.md` | ✅ 新增 URL 格式说明、下载流程 |
+| `CLAUDE.md` | ✅ CLI 改为子命令格式、config 节同步新字段 |
+
+#### 9.2 配置层 (`config.hpp` / `config.cpp`)
+
+- ✅ `ProjectSection` 新增 `version`（必须）、`language`（默认 `"C++17"`）
+- ✅ `LinkSection` 新增 `link_dirs`
+- ✅ 新增 `LanguageInfo` 结构体和 `parse_language()` 函数（C++17 → `g++ -std=c++17`，C11 → `gcc -std=c11`）
+- ✅ `parse_config()` 读取新字段，`project.version` 缺失时抛错
+- ✅ `include_dirs` 兼容旧字段 `include_dir`（单数），默认值 `["include"]`
+- ✅ `write_default_config()` 输出完整 0.1.2 模板（含 `version`/`language`/`include_dirs`/`link_dirs`）
+
+#### 9.3 CLI 层 (`cli.hpp` / `cli.cpp` / `main.cpp`)
+
+- ✅ `Command` 枚举改为二级子命令：`ProjectNew`/`ProjectBuild`/`ProjectRun`/`ProjectClean`/`PkgInstall`/`PkgRemove`/`PkgSearch`/`PkgInfo`/`RepoAdd`/`RepoUpdate`/`RepoRemove`/`RepoList`
+- ✅ `parse()` 解析 `ezmk <group> <action> [args]` 格式
+- ✅ `Repo*` 命令在 `main.cpp` 打印 "not yet implemented"
+- ✅ `print_usage()` 输出新的子命令帮助信息
+
+#### 9.4 构建层 (`build.hpp` / `build.cpp`)
+
+- ✅ 根据 `project.language` 选择编译器（`g++` 或 `gcc`）和 `-std=` 标志
+- ✅ `executable`：链接为可执行文件
+- ✅ `static`：`ar rcs` 打包为 `lib<name>.a`，不要求 `main.cpp`
+- ✅ `shared`：`-fPIC` 编译 + `-shared` 链接为 `lib<name>.dll`/`.so`，不要求 `main.cpp`
+- ✅ 链接时添加 `link.link_dirs` 的 `-L` 路径
+
+#### 9.5 包管理 (`pkg.cpp`)
+
+- ✅ `compile_package()` 改为使用 `parse_language()` 获取编译器和标准，不再硬编码 `g++ -std=c++17`
+
+#### 9.6 `--version` 全局标志（2026-06-15）
+
+- ✅ `ezmk --version` / `ezmk version` / `ezmk -V` 三种形式均打印 `EazyMake 0.1.2`
+- ✅ 在 CLI 解析早期截获，不支持与其他子命令组合
+
+#### 9.7 `ezmk project new --type` 参数（2026-06-15）
+
+- ✅ `ezmk project new <name> --type executable|static|shared`
+- ✅ 默认 `executable`，非法值报错
+- ✅ `create_project()` / `write_default_config()` 链路完整传递 type
+
+#### 9.8 Bug 修复：作用域标志误匹配（2026-06-15）
+
+- 🐛 `parse_scope_flags()` 未检查前导 `-`，导致含 `p`/`u`/`g` 字符的包名（如 `testpkg`）被误认为作用域标志
+- ✅ 修复：在函数入口添加 `if (a.empty() || a[0] != '-') return false;`
+
+#### 9.9 包信息扩展（2026-06-15）
+
+- ✅ `ezmk pkg info` 输出新增字段：
+  - `Version` — 从包内 `ezmk.toml` 的 `project.version` 读取
+  - `Language` — 语言标准
+  - `Scope` — 包所在作用域（project/user/global）
+  - `Installed` — 安装时间（目录最后修改时间）
+  - `Include dirs` — 编译包含目录列表
+  - `Artifacts` — 构建产物（`.a`/`.dll`/`.so`），无产物时显示 `(none)`
+- ✅ 编译标志和依赖为空时显示 `(none)` 而非留空
+
+### 🔜 待完成
+
+| 项目 | 说明 |
+|------|------|
+| `repo` 子命令真实实现 | 当前仅占位，需实现 repo 目录扫描和索引 |

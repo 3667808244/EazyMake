@@ -56,8 +56,30 @@
 
 执行操作时会安装参数顺序查找
 
-注: `ezmk install`不支持多作用域
+注: `ezmk pkg install`不支持多作用域
 
 ---
 
-还有EazyMake没有仓库,包文件需要手动下载后执行命令安装,或者提供包的URL(可省略协议头,默认https)由EazyMake下载
+## 包来源
+
+EazyMake没有中央仓库,包文件可通过以下方式提供:
+
+### 本地文件
+
+```bash
+ezmk pkg install -p ./foo-0.1.0.zip
+ezmk pkg install -u ~/downloads/bar-1.2.0.tar.gz
+```
+
+### URL 下载
+
+```bash
+ezmk pkg install -p https://example.com/packages/foo-0.1.0.zip
+ezmk pkg install -g example.com/packages/bar-1.2.0.tar.gz   # 省略协议头,默认 https://
+```
+
+URL 格式说明:
+- 完整 URL: `https://<host>/<path>/<pkg>.zip` 或 `.tar.gz`
+- 省略协议: `<host>/<path>/<pkg>.zip` → 自动补全为 `https://`
+- 支持协议: `https://`、`http://`
+- 下载到 `.ezmk/temp/` 后解压安装，安装完成删除临时文件

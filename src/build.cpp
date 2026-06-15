@@ -10,33 +10,40 @@ namespace ezmk::build {
 
 // ---- helpers ----
 
-static fs::path g_gxx;
-
-static const fs::path& find_compiler() {
-    if (!g_gxx.empty()) return g_gxx;
+static fs::path find_compiler(const config::LanguageInfo& lang) {
 #ifdef EZMK_WIN
-    g_gxx = "g++.exe";
+    return fs::path(lang.compiler + ".exe");
 #else
-    g_gxx = "g++";
+    return fs::path(lang.compiler);
 #endif
-    return g_gxx;
 }
 
 static std::string make_compile_cmd(const fs::path& src,
                                     const fs::path& obj,
                                     const fs::path& depfile,
                                     const config::CompileSection& compile,
+                                    const config::LanguageInfo& lang,
                                     const std::vector<fs::path>& extra_includes,
-                                    const fs::path& proj_root) {
+                                    const fs::path& proj_root,
+                                    bool use_pic = false) {
     std::ostringstream cmd;
-    cmd << find_compiler() << " -std=c++17 -c ";
+    cmd << lang.compiler << " " << lang.std_flag << " -c ";
     cmd << "\"" << src.string() << "\" -o \"" << obj.string() << "\"";
 
     for (auto& f : compile.flags) {
         cmd << " " << f;
     }
 
-    cmd << " -I\"" << (fs::current_path() / "include").string() << "\"";
+    if (use_pic) {
+        cmd << " -fPIC";
+    }
+
+    // Default include: project include/
+    auto def_inc = fs::current_path() / "include";
+    if (util::file_exists(def_inc)) {
+        cmd << " -I\"" << def_inc.string() << "\"";
+    }
+
     for (auto& d : compile.include_dirs) {
         fs::path resolved = d;
         if (resolved.is_relative()) resolved = proj_root / resolved;
@@ -54,9 +61,11 @@ static std::string make_compile_cmd(const fs::path& src,
 static std::string make_link_cmd(const std::vector<fs::path>& objs,
                                  const std::vector<fs::path>& archives,
                                  const fs::path& output,
-                                 const config::LinkSection& link) {
+                                 const config::LinkSection& link,
+                                 const config::LanguageInfo& lang,
+                                 bool shared = false) {
     std::ostringstream cmd;
-    cmd << find_compiler();
+    cmd << lang.compiler;
 
     for (auto& o : objs) {
         cmd << " \"" << o.string() << "\"";
@@ -67,8 +76,15 @@ static std::string make_link_cmd(const std::vector<fs::path>& objs,
 
     cmd << " -o \"" << output.string() << "\"";
 
+    if (shared) {
+        cmd << " -shared";
+    }
+
     for (auto& f : link.flags) {
         cmd << " " << f;
+    }
+    for (auto& d : link.link_dirs) {
+        cmd << " -L\"" << d << "\"";
     }
     for (auto& t : link.system_targets) {
         cmd << " -l" << t;
@@ -82,8 +98,11 @@ static std::string make_link_cmd(const std::vector<fs::path>& objs,
 // ===================================================================
 
 fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opts) {
+    // Parse language → compiler + std flag
+    auto lang = config::parse_language(cfg.project.language);
+
     // Verify compiler
-    auto& gxx = find_compiler();
+    auto gxx = find_compiler(lang);
     auto ver = util::run_command(gxx.string() + " --version 2>&1");
     if (ver.exit_code != 0) {
         util::fatal("compiler not found: " + gxx.string() +
@@ -96,11 +115,21 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     fs::path build_dir = proj_root / "build";
     fs::path cache_obj_dir = proj_root / ".ezmk/cache/obj";
 
+    // Check src/ exists
     if (!util::file_exists(src_dir)) {
-        util::fatal("src/ directory not found. Run 'ezmk new' to create a project.");
+        util::fatal("src/ directory not found. Run 'ezmk project new' to create a project.");
     }
 
-    util::info("Building " + cfg.project.name + "...");
+    // Check main.cpp requirement for executable
+    if (cfg.project.type == "executable") {
+        if (!util::file_exists(src_dir / "main.cpp") &&
+            !util::file_exists(src_dir / "main.c")) {
+            util::fatal("src/main.cpp is required for executable project type");
+        }
+    }
+
+    util::info("Building " + cfg.project.name + " (" + cfg.project.type + ", " +
+               cfg.project.language + ")...");
 
     fs::create_directories(temp_dir);
     fs::create_directories(build_dir);
@@ -116,13 +145,16 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             util::info("  Compile options changed, invalidating all caches");
         }
         record.compile_options_signature = cur_sig;
-        record.files.clear(); // invalidate all entries
+        record.files.clear();
     }
 
     auto sources = util::list_files(src_dir, {".c", ".cc", ".cpp", ".cxx"});
     if (sources.empty()) {
         util::fatal("no source files found in src/");
     }
+
+    // Need -fPIC for shared libraries
+    bool use_pic = (cfg.project.type == "shared");
 
     // Detect installed packages in .ezmk/pkg/
     std::vector<fs::path> extra_includes;
@@ -169,7 +201,6 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         if (!opts.disable_cache) {
             auto cached = cache::check_cache(src, cfg.compile, record);
             if (cached && util::file_exists(*cached)) {
-                // Cache hit: copy cached .o to temp
                 std::error_code ec;
                 fs::copy_file(*cached, obj, fs::copy_options::overwrite_existing, ec);
                 if (!ec) {
@@ -178,14 +209,14 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                     util::info("  [cached] " + rel.string());
                     continue;
                 }
-                // If copy fails, fall through to compile
             }
         }
 
         // Cache miss: compile
         ++cache_misses;
         util::info("  Compiling " + rel.string());
-        std::string cmd = make_compile_cmd(src, obj, dep, cfg.compile, extra_includes, proj_root);
+        std::string cmd = make_compile_cmd(src, obj, dep, cfg.compile, lang,
+                                           extra_includes, proj_root, use_pic);
         auto res = util::run_command(cmd);
         if (res.exit_code != 0) {
             util::error("compilation failed for " + src.string());
@@ -204,7 +235,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         auto& entry = record.files[rel_src];
         entry.source_hash = util::sha256_file(src);
         entry.object_file = fs::relative(cache_obj, proj_root).generic_string();
-        entry.compiler = gxx.string();
+        entry.compiler = lang.compiler;
         entry.compile_opts = cfg.compile.flags;
         entry.dependencies = cache::parse_depfile_and_hash(dep);
         entry.last_build_time = cache::iso_time();
@@ -220,14 +251,59 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         util::info(summary);
     }
 
-    // Link phase
+    // Link phase — varies by project type
+    if (cfg.project.type == "static") {
+        // Static library: ar rcs
+        fs::path lib = build_dir / ("lib" + cfg.project.name + ".a");
+
+        util::info("  Archiving " + lib.filename().string());
+        std::ostringstream ar_cmd;
+        ar_cmd << "ar rcs \"" << lib.string() << "\"";
+        for (auto& o : objects) {
+            ar_cmd << " \"" << o.string() << "\"";
+        }
+        auto ar_res = util::run_command(ar_cmd.str());
+        if (ar_res.exit_code != 0) {
+            util::error("archive creation failed");
+            if (!ar_res.err.empty()) util::error(ar_res.err);
+            util::fatal("build failed");
+        }
+        util::info("Build successful: " + lib.string());
+        return lib;
+    }
+
+    if (cfg.project.type == "shared") {
+        std::string lib_name = "lib" + cfg.project.name;
+#ifdef EZMK_WIN
+        lib_name += ".dll";
+#else
+        lib_name += ".so";
+#endif
+        fs::path lib = build_dir / lib_name;
+
+        util::info("  Linking " + lib.filename().string());
+        std::string link_cmd = make_link_cmd(objects, pkg_archives, lib,
+                                             cfg.link, lang, true);
+        auto link_res = util::run_command(link_cmd);
+        if (link_res.exit_code != 0) {
+            util::error("link failed");
+            if (!link_res.err.empty()) util::error(link_res.err);
+            if (!link_res.out.empty()) util::error(link_res.out);
+            util::fatal("build failed");
+        }
+        util::info("Build successful: " + lib.string());
+        return lib;
+    }
+
+    // Default: executable
     fs::path exe = build_dir / cfg.project.name;
 #ifdef EZMK_WIN
     exe += ".exe";
 #endif
 
     util::info("  Linking " + exe.filename().string());
-    std::string link_cmd = make_link_cmd(objects, pkg_archives, exe, cfg.link);
+    std::string link_cmd = make_link_cmd(objects, pkg_archives, exe,
+                                         cfg.link, lang);
     auto link_res = util::run_command(link_cmd);
     if (link_res.exit_code != 0) {
         util::error("link failed");

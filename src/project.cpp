@@ -6,14 +6,14 @@
 
 namespace ezmk::project {
 
-void create_project(const std::string& name) {
+void create_project(const std::string& name, const std::string& project_type) {
     fs::path root = fs::current_path() / name;
 
     if (util::file_exists(root)) {
         util::fatal("directory already exists: " + root.string());
     }
 
-    util::info("Creating project: " + name);
+    util::info("Creating project: " + name + " (" + project_type + ")");
 
     // Directory structure
     fs::create_directories(root / "include");
@@ -23,7 +23,8 @@ void create_project(const std::string& name) {
     fs::create_directories(root / ".ezmk/temp");
     fs::create_directories(root / ".ezmk/cache");
 
-    // src/main.cpp
+    // src/main.cpp (only for executable — library projects may not need it,
+    // but we still create it as a starting point)
     std::string main_cpp = R"(#include <iostream>
 
 int main(int argc, char **argv){
@@ -34,7 +35,7 @@ int main(int argc, char **argv){
     util::file_write(root / "src/main.cpp", main_cpp);
 
     // ezmk.toml
-    config::write_default_config(root / "ezmk.toml", name);
+    config::write_default_config(root / "ezmk.toml", name, project_type);
 
     // README.md (empty)
     util::file_write(root / "README.md", "");

@@ -7,14 +7,19 @@
 namespace ezmk::cli {
 
 enum class Command {
-    New,
-    Build,
-    Run,
-    Clean,
-    Install,
-    Remove,
-    Search,
-    Info,
+    ProjectNew,
+    ProjectBuild,
+    ProjectRun,
+    ProjectClean,
+    PkgInstall,
+    PkgRemove,
+    PkgSearch,
+    PkgInfo,
+    RepoAdd,
+    RepoUpdate,
+    RepoRemove,
+    RepoList,
+    Version,
     Help,
 };
 
@@ -38,20 +43,29 @@ struct QueryOptions {
     std::string pkg_name;
 };
 
+struct RepoOptions {
+    std::string repo_path;   // for add
+    std::string repo_name;   // for remove
+};
+
 struct CliArgs {
     Command cmd = Command::Help;
 
-    // Only valid for New
+    // Only valid for ProjectNew
     std::optional<std::string> project_name;
+    std::string project_type = "executable";   // --type flag
 
-    // Only valid for Build / Run
+    // Only valid for ProjectBuild / ProjectRun
     BuildOptions build_opts;
 
-    // Only valid for Install
+    // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;
 
-    // Only valid for Remove / Search / Info
+    // Only valid for PkgRemove / PkgSearch / PkgInfo
     std::optional<QueryOptions> query_opts;
+
+    // Only valid for RepoAdd / RepoRemove
+    std::optional<RepoOptions> repo_opts;
 };
 
 CliArgs parse(int argc, char** argv);

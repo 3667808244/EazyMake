@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <deque>
 #include <iostream>
 #include <map>
@@ -129,8 +130,9 @@ fs::path compile_package(const fs::path& pkg_dir,
 
         // Cache miss: compile
         ++cache_misses;
+        auto lang = config::parse_language(cfg.project.language);
         std::ostringstream cmd;
-        cmd << "g++ -std=c++17 -c ";
+        cmd << lang.compiler << " " << lang.std_flag << " -c ";
         for (auto& f : cfg.compile.flags) cmd << f << " ";
         cmd << "-I\"" << (pkg_dir / "include").string() << "\" ";
         for (auto& d : cfg.compile.include_dirs) {
@@ -477,6 +479,34 @@ std::vector<fs::path> search(const std::string& pkg_name,
 // Info
 // ===================================================================
 
+namespace {
+    const char* scope_name(cli::Scope s) {
+        switch (s) {
+        case cli::Scope::Project: return "project";
+        case cli::Scope::User:    return "user";
+        case cli::Scope::Global:  return "global";
+        }
+        return "unknown";
+    }
+
+    std::string format_time(const fs::path& p) {
+        std::error_code ec;
+        auto ftime = fs::last_write_time(p, ec);
+        if (ec) return "(unknown)";
+
+        // Convert to system_clock time
+        auto sctp = std::chrono::time_point_cast<
+            std::chrono::system_clock::duration>(
+            ftime - fs::file_time_type::clock::now()
+            + std::chrono::system_clock::now());
+        auto tt = std::chrono::system_clock::to_time_t(sctp);
+        auto* tm = std::localtime(&tt);
+        char buf[32];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm);
+        return buf;
+    }
+}
+
 void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
     for (auto scope : scopes) {
         fs::path dir = pkg_install_dir(scope);
@@ -484,15 +514,40 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
         if (util::file_exists(pkg_path)) {
             auto cfg = config::parse_config(pkg_path / "ezmk.toml");
             std::cout << "Package: " << cfg.project.name << "\n";
+            std::cout << "  Version: " << cfg.project.version << "\n";
             std::cout << "  Type: " << cfg.project.type << "\n";
+            std::cout << "  Language: " << cfg.project.language << "\n";
+            std::cout << "  Scope: " << scope_name(scope) << "\n";
             std::cout << "  Location: " << pkg_path.string() << "\n";
+            std::cout << "  Installed: " << format_time(pkg_path) << "\n";
             std::cout << "  Compile flags:";
             for (auto& f : cfg.compile.flags) std::cout << " " << f;
+            if (cfg.compile.flags.empty()) std::cout << " (none)";
+            std::cout << "\n";
+            std::cout << "  Include dirs:";
+            for (auto& d : cfg.compile.include_dirs) std::cout << " " << d;
+            if (cfg.compile.include_dirs.empty()) std::cout << " (none)";
             std::cout << "\n";
             std::cout << "  Dependencies:";
             if (cfg.depends.libs.empty()) std::cout << " (none)";
             for (auto& d : cfg.depends.libs) std::cout << " " << d;
             std::cout << "\n";
+
+            // Show built artifacts
+            fs::path build_dir = pkg_path / "build";
+            if (util::file_exists(build_dir)) {
+                std::cout << "  Artifacts:";
+                bool found = false;
+                for (auto& f : fs::directory_iterator(build_dir)) {
+                    auto ext = f.path().extension().string();
+                    if (ext == ".a" || ext == ".dll" || ext == ".so") {
+                        std::cout << " " << f.path().filename().string();
+                        found = true;
+                    }
+                }
+                if (!found) std::cout << " (none)";
+                std::cout << "\n";
+            }
             return;
         }
     }
