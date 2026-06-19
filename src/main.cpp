@@ -4,6 +4,7 @@
 #include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
 #include "ezmk/pkg.hpp"
+#include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
 
 #include <exception>
@@ -24,7 +25,7 @@ int main(int argc, char** argv) {
             break;
 
         case ezmk::cli::Command::Version:
-            std::cout << "EazyMake 0.1.2" << std::endl;
+            std::cout << "EazyMake 0.1.3" << std::endl;
             break;
 
         case ezmk::cli::Command::ProjectBuild: {
@@ -84,16 +85,31 @@ int main(int argc, char** argv) {
         }
 
         case ezmk::cli::Command::RepoAdd:
-        case ezmk::cli::Command::RepoUpdate:
+            ezmk::repo::add(args.repo_opts);
+            break;
+
         case ezmk::cli::Command::RepoRemove:
+            ezmk::repo::remove(args.repo_opts.name, args.repo_opts.scopes);
+            break;
+
+        case ezmk::cli::Command::RepoUpdate:
+            ezmk::repo::update(args.repo_opts.name, args.repo_opts.scopes);
+            break;
+
         case ezmk::cli::Command::RepoList:
-            ezmk::util::info("repo subcommand not yet implemented (placeholder)");
+            ezmk::repo::list(args.repo_opts.scopes);
             break;
 
         } // switch
 
+    } catch (const ezmk::fatal_error&) {
+        // fatal() already printed the message; just clean up
+        ezmk::util::remove_all(".ezmk/temp");
+        return 1;
     } catch (const std::exception& e) {
-        ezmk::util::fatal(e.what());
+        ezmk::util::error(e.what());
+        ezmk::util::remove_all(".ezmk/temp");
+        return 1;
     }
 
     return 0;

@@ -5,9 +5,8 @@
 #include <filesystem>
 #include "ezmk/cli.hpp"
 
-namespace fs = std::filesystem;
-
 namespace ezmk::pkg {
+namespace fs = std::filesystem;
 
 // ---- Path resolution ----
 // Get the install directory for a given scope.

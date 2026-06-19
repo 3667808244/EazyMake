@@ -1,9 +1,20 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 #include <filesystem>
+
+namespace ezmk {
+
+// Fatal error — thrown instead of exit(1) so destructors run and temp files get cleaned.
+class fatal_error : public std::runtime_error {
+public:
+    explicit fatal_error(std::string_view msg) : std::runtime_error(std::string(msg)) {}
+};
+
+} // namespace ezmk
 
 // Platform detection
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
@@ -15,15 +26,14 @@
   #define EZMK_OBJ_SUFFIX ".o"
 #endif
 
-namespace fs = std::filesystem;
-
 namespace ezmk::util {
+namespace fs = std::filesystem;
 
 // ---- Logging ----
 void info(std::string_view msg);
 void warn(std::string_view msg);
 void error(std::string_view msg);
-[[noreturn]] void fatal(std::string_view msg);
+[[noreturn]] void fatal(std::string_view msg);  // throws ezmk::fatal_error
 
 // ---- Filesystem ----
 bool file_exists(const fs::path& p);
@@ -40,10 +50,6 @@ std::vector<fs::path> list_files(const fs::path& dir,
 // Platform-specific paths
 fs::path get_home_dir();
 fs::path get_exe_dir();
-
-// ---- SHA-256 ----
-std::string sha256(std::string_view data);
-std::string sha256_file(const fs::path& p);
 
 // ---- Archive extraction ----
 // Wraps miniz for zip; wraps miniz+gzip + custom tar parser for .tar.gz
@@ -65,6 +71,21 @@ struct ProcResult {
     std::string err;
 };
 ProcResult run_command(const std::string& cmd);
+
+// ---- Git helpers ----
+// Check if git is available in PATH.
+bool git_available();
+
+// Clone a git repository. Returns true on success.
+// branch: branch to track (default "main").
+bool git_clone(const std::string& url, const fs::path& dest, std::string_view branch = "main");
+
+// Pull latest changes in a git repository. Returns true on success.
+bool git_pull(const fs::path& repo_dir, std::string_view branch = "main");
+
+// Get the ISO 8601 timestamp of the last commit in a git repo.
+// Returns empty string on failure.
+std::string git_last_commit_time(const fs::path& repo_dir);
 
 // ---- Cross-platform ----
 // Make a path use forward slashes (MSYS2-compatible)

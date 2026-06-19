@@ -7,9 +7,8 @@
 #include <optional>
 #include "ezmk/config.hpp"
 
-namespace fs = std::filesystem;
-
 namespace ezmk::cache {
+namespace fs = std::filesystem;
 
 struct DepEntry {
     std::string path;  // header file path (may be absolute or relative)

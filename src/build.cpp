@@ -1,5 +1,6 @@
 #include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
+#include "ezmk/crypto.hpp"
 #include "ezmk/util.hpp"
 
 #include <cstdlib>
@@ -233,7 +234,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         // Update cache record
         auto rel_src = rel.generic_string();
         auto& entry = record.files[rel_src];
-        entry.source_hash = util::sha256_file(src);
+        entry.source_hash = crypto::sha256_file(src);
         entry.object_file = fs::relative(cache_obj, proj_root).generic_string();
         entry.compiler = lang.compiler;
         entry.compile_opts = cfg.compile.flags;

@@ -6,13 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS2 on Windows). It prioritizes ease of use over feature richness — for complex builds, use CMake.
 
-Design specifications live in `docs/`. No source code has been written yet; the project is currently in the design/planning phase.
+Design specifications live in `docs/`. Source code is under active development; see `plan.md` for the current milestone.
 
 ## Build & test commands
 
-No build system exists for EazyMake itself yet. Once implementation begins:
-
-- Build EazyMake itself: `g++ -std=c++17 src/*.cpp -I include/ -o ezmk` (or equivalent on MSYS2)
+- Build EazyMake itself: `g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -lwinhttp -static` (MSYS2)
+- On Linux: `g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -static`
 - No test framework chosen yet.
 
 ## Architecture (from design docs)
@@ -29,7 +28,10 @@ No build system exists for EazyMake itself yet. Once implementation begins:
 | `ezmk pkg remove [-p\|-u\|-g] <pkg>` | Remove a package (default: `-pug`) |
 | `ezmk pkg search [-p\|-u\|-g] <pkg>` | Search for a package (default: `-pug`) |
 | `ezmk pkg info [-p\|-u\|-g] <pkg>` | Show package info (default: `-pug`) |
-| `ezmk repo add/update/remove/list` | (placeholder, not yet implemented) |
+| `ezmk repo add [-p\|-u\|-g] <git_url_or_path> [--name <name>] [--branch <branch>]` | Register a git-based repo (clone to local cache) |
+| `ezmk repo remove [-p\|-u\|-g] <name>` | Unregister a repo and delete its cache |
+| `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` the repo cache (or re-read local dir) |
+| `ezmk repo list [-p\|-u\|-g]` | List registered repos with URL, branch, last update |
 
 Scope flags: `-p` (project), `-u` (user), `-g` (global). `install` only supports one scope; others accept combined flags like `-pug`.
 
@@ -43,6 +45,9 @@ Scope flags: `-p` (project), `-u` (user), `-g` (global). `install` only supports
     cache/          # build cache
       record.json
       obj/
+    repo/           # registered repo list + cloned cache
+      list.toml
+      .cache/
   include/          # project headers (*.h, *.hpp)
   src/              # project sources (*.c, *.cpp, *.cxx), must include main.cpp
   build/            # output directory
@@ -66,7 +71,16 @@ Install paths by scope:
 - User: `~/.local/ezmk/pkg/`
 - Project: `<project_dir>/.ezmk/pkg/`
 
-There is no central package repository — users download package files manually or provide a URL (protocol optional, defaults to https).
+There is no central package repository. Users can manually download packages, provide a URL, or register git-based repos (`ezmk repo add <git_url>`) to install packages by name. See `docs/repo.md` for the repository design.
+
+### Repository management (see `docs/repo.md`)
+
+A repo is a git repository containing `index.toml` + `packages/` directory. `ezmk repo add` clones it to a local cache; `ezmk repo update` does `git pull`. Local directories are also supported (`type = "local"`). When a repo is registered, `pkg install <name>` can install packages by name without specifying a full URL.
+
+Repo registries (`list.toml`) are stored per scope:
+- Global: `<ezmk_install_dir>/repo/list.toml`
+- User: `~/.local/ezmk/repo/list.toml`
+- Project: `.ezmk/repo/list.toml`
 
 ### Build caching (see `docs/@cache.md`)
 

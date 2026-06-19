@@ -5,9 +5,8 @@
 #include "ezmk/config.hpp"
 #include "ezmk/cli.hpp"
 
-namespace fs = std::filesystem;
-
 namespace ezmk::build {
+namespace fs = std::filesystem;
 
 // Run a full build: compile all sources, link according to project.type.
 // Returns the path to the built artifact (executable, .a, or .dll/.so).

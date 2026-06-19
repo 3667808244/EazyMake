@@ -1,28 +1,18 @@
 #include "ezmk/cache.hpp"
+#include "ezmk/crypto.hpp"
 #include "ezmk/util.hpp"
+#include "nlohmann_json.hpp"
 
 #include <algorithm>
 #include <ctime>
 #include <fstream>
-#include <sstream>
 #include <stdexcept>
 
 namespace ezmk::cache {
 
 // ===================================================================
-// Helpers: minimal JSON read/write for record.json
+// Helpers
 // ===================================================================
-
-static std::string json_escape(std::string_view s) {
-    std::string out;
-    out.reserve(s.size());
-    for (char c : s) {
-        if (c == '"') out += "\\\"";
-        else if (c == '\\') out += "\\\\";
-        else out += c;
-    }
-    return out;
-}
 
 std::string iso_time() {
     auto t = std::time(nullptr);
@@ -32,201 +22,51 @@ std::string iso_time() {
     return buf;
 }
 
-// Very minimal JSON writer — only writes the exact structure we need.
 static std::string record_to_json(const CacheRecord& rec) {
-    std::ostringstream j;
-    j << "{\n";
-    j << "  \"version\": " << rec.version << ",\n";
-    j << "  \"compile_options_signature\": \"" << json_escape(rec.compile_options_signature) << "\",\n";
-    j << "  \"files\": {\n";
+    nlohmann::json j;
+    j["version"] = rec.version;
+    j["compile_options_signature"] = rec.compile_options_signature;
 
-    bool first_file = true;
+    auto& files = j["files"] = nlohmann::json::object();
     for (auto& [key, fe] : rec.files) {
-        if (!first_file) j << ",\n";
-        first_file = false;
-
-        j << "    \"" << json_escape(key) << "\": {\n";
-        j << "      \"source_hash\": \"" << fe.source_hash << "\",\n";
-        j << "      \"object_file\": \"" << json_escape(fe.object_file) << "\",\n";
-        j << "      \"compiler\": \"" << json_escape(fe.compiler) << "\",\n";
-        j << "      \"compile_opts\": [";
-        for (size_t i = 0; i < fe.compile_opts.size(); ++i) {
-            if (i) j << ", ";
-            j << "\"" << json_escape(fe.compile_opts[i]) << "\"";
+        auto& f = files[key] = nlohmann::json::object();
+        f["source_hash"] = fe.source_hash;
+        f["object_file"] = fe.object_file;
+        f["compiler"] = fe.compiler;
+        f["compile_opts"] = fe.compile_opts;
+        auto& deps = f["dependencies"] = nlohmann::json::array();
+        for (auto& d : fe.dependencies) {
+            deps.push_back({{"path", d.path}, {"hash", d.hash}});
         }
-        j << "],\n";
-        j << "      \"dependencies\": [";
-        for (size_t i = 0; i < fe.dependencies.size(); ++i) {
-            if (i) j << ", ";
-            j << "{\"path\": \"" << json_escape(fe.dependencies[i].path)
-              << "\", \"hash\": \"" << fe.dependencies[i].hash << "\"}";
-        }
-        j << "],\n";
-        j << "      \"last_build_time\": \"" << fe.last_build_time << "\"\n";
-        j << "    }";
+        f["last_build_time"] = fe.last_build_time;
     }
 
-    j << "\n  }\n";
-    j << "}\n";
-    return j.str();
-}
-
-// Minimal JSON parser — only handles the exact structure of record.json.
-static void json_skip_ws(std::string_view& s) {
-    while (!s.empty() && (s.front() == ' ' || s.front() == '\t'
-                          || s.front() == '\n' || s.front() == '\r'))
-        s.remove_prefix(1);
-}
-
-static std::string_view json_read_string(std::string_view& s) {
-    json_skip_ws(s);
-    if (s.empty() || s.front() != '"') throw std::runtime_error("expected '\"' in JSON");
-    s.remove_prefix(1);
-    size_t end = 0;
-    bool escape = false;
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (escape) { escape = false; continue; }
-        if (s[i] == '\\') { escape = true; continue; }
-        if (s[i] == '"') { end = i; break; }
-    }
-    auto val = s.substr(0, end);
-    s.remove_prefix(end + 1);
-    return val;
-}
-
-static void json_expect(std::string_view& s, char c) {
-    json_skip_ws(s);
-    if (s.empty() || s.front() != c)
-        throw std::runtime_error(std::string("expected '") + c + "' in JSON");
-    s.remove_prefix(1);
-}
-
-static void json_skip_value(std::string_view& s) {
-    json_skip_ws(s);
-    if (s.empty()) return;
-    char c = s.front();
-    if (c == '"') {
-        json_read_string(s);
-    } else if (c == '{') {
-        s.remove_prefix(1);
-        int depth = 1;
-        while (depth > 0 && !s.empty()) {
-            if (s.front() == '"') { json_read_string(s); continue; }
-            if (s.front() == '{') ++depth;
-            if (s.front() == '}') --depth;
-            s.remove_prefix(1);
-        }
-    } else if (c == '[') {
-        s.remove_prefix(1);
-        int depth = 1;
-        while (depth > 0 && !s.empty()) {
-            if (s.front() == '"') { json_read_string(s); continue; }
-            if (s.front() == '[') ++depth;
-            if (s.front() == ']') --depth;
-            s.remove_prefix(1);
-        }
-    } else {
-        // number, bool, null — skip to next structural char
-        while (!s.empty() && s.front() != ',' && s.front() != '}' && s.front() != ']')
-            s.remove_prefix(1);
-    }
+    return j.dump(2); // pretty-print with 2-space indent
 }
 
 static CacheRecord json_to_record(std::string_view json) {
+    auto j = nlohmann::json::parse(json);
     CacheRecord rec;
-    json_skip_ws(json);
-    json_expect(json, '{');
+    rec.version = j.value("version", 1);
+    rec.compile_options_signature = j.value("compile_options_signature", "");
 
-    while (true) {
-        json_skip_ws(json);
-        if (json.empty()) break;
-        if (json.front() == '}') { json.remove_prefix(1); break; }
-        if (json.front() == ',') { json.remove_prefix(1); continue; }
-
-        auto key = std::string(json_read_string(json));
-        json_expect(json, ':');
-
-        if (key == "version") {
-            json_skip_ws(json);
-            size_t n = 0;
-            while (!json.empty() && json.front() >= '0' && json.front() <= '9') {
-                n = n * 10 + (json.front() - '0');
-                json.remove_prefix(1);
+    if (j.contains("files")) {
+        for (auto& [fname, fj] : j["files"].items()) {
+            FileEntry fe;
+            fe.source_hash = fj.value("source_hash", "");
+            fe.object_file = fj.value("object_file", "");
+            fe.compiler = fj.value("compiler", "");
+            for (auto& opt : fj["compile_opts"]) {
+                fe.compile_opts.push_back(opt.get<std::string>());
             }
-            rec.version = static_cast<int>(n);
-        } else if (key == "compile_options_signature") {
-            rec.compile_options_signature = std::string(json_read_string(json));
-        } else if (key == "files") {
-            json_skip_ws(json);
-            json_expect(json, '{');
-            while (true) {
-                json_skip_ws(json);
-                if (json.empty()) break;
-                if (json.front() == '}') { json.remove_prefix(1); break; }
-                if (json.front() == ',') { json.remove_prefix(1); continue; }
-
-                auto fname = std::string(json_read_string(json));
-                json_expect(json, ':');
-                json_skip_ws(json);
-                json_expect(json, '{');
-
-                FileEntry fe;
-                while (true) {
-                    json_skip_ws(json);
-                    if (json.empty()) break;
-                    if (json.front() == '}') { json.remove_prefix(1); break; }
-                    if (json.front() == ',') { json.remove_prefix(1); continue; }
-
-                    auto fkey = std::string(json_read_string(json));
-                    json_expect(json, ':');
-
-                    if (fkey == "source_hash") {
-                        fe.source_hash = std::string(json_read_string(json));
-                    } else if (fkey == "object_file") {
-                        fe.object_file = std::string(json_read_string(json));
-                    } else if (fkey == "compiler") {
-                        fe.compiler = std::string(json_read_string(json));
-                    } else if (fkey == "compile_opts") {
-                        json_expect(json, '[');
-                        while (true) {
-                            json_skip_ws(json);
-                            if (json.empty()) break;
-                            if (json.front() == ']') { json.remove_prefix(1); break; }
-                            if (json.front() == ',') { json.remove_prefix(1); continue; }
-                            fe.compile_opts.push_back(std::string(json_read_string(json)));
-                        }
-                    } else if (fkey == "dependencies") {
-                        json_expect(json, '[');
-                        while (true) {
-                            json_skip_ws(json);
-                            if (json.empty()) break;
-                            if (json.front() == ']') { json.remove_prefix(1); break; }
-                            if (json.front() == ',') { json.remove_prefix(1); continue; }
-                            json_expect(json, '{');
-                            DepEntry dep;
-                            while (true) {
-                                json_skip_ws(json);
-                                if (json.empty()) break;
-                                if (json.front() == '}') { json.remove_prefix(1); break; }
-                                if (json.front() == ',') { json.remove_prefix(1); continue; }
-                                auto dkey = std::string(json_read_string(json));
-                                json_expect(json, ':');
-                                if (dkey == "path") dep.path = std::string(json_read_string(json));
-                                else if (dkey == "hash") dep.hash = std::string(json_read_string(json));
-                                else json_skip_value(json);
-                            }
-                            fe.dependencies.push_back(std::move(dep));
-                        }
-                    } else if (fkey == "last_build_time") {
-                        fe.last_build_time = std::string(json_read_string(json));
-                    } else {
-                        json_skip_value(json);
-                    }
-                }
-                rec.files[fname] = std::move(fe);
+            for (auto& dep : fj["dependencies"]) {
+                fe.dependencies.push_back({
+                    dep.value("path", ""),
+                    dep.value("hash", "")
+                });
             }
-        } else {
-            json_skip_value(json);
+            fe.last_build_time = fj.value("last_build_time", "");
+            rec.files[std::string(fname)] = std::move(fe);
         }
     }
     return rec;
@@ -293,7 +133,7 @@ std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile) {
 
         DepEntry dep;
         dep.path = tok;
-        dep.hash = util::sha256_file(fs::path(tok));
+        dep.hash = crypto::sha256_file(fs::path(tok));
         deps.push_back(std::move(dep));
     }
 
@@ -321,7 +161,7 @@ std::string compile_options_signature(const config::CompileSection& compile,
         combined += inc.string();
         combined += ' ';
     }
-    return util::sha256(combined);
+    return crypto::sha256(combined);
 }
 
 std::optional<fs::path> check_cache(const fs::path& src_file,
@@ -342,7 +182,7 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
     auto& entry = it->second;
 
     // 1. Source hash
-    std::string cur_hash = util::sha256_file(src_file);
+    std::string cur_hash = crypto::sha256_file(src_file);
     if (cur_hash != entry.source_hash) return std::nullopt;
 
     // 2. Compile options signature
@@ -353,7 +193,7 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
     for (auto& dep : entry.dependencies) {
         fs::path dep_path(dep.path);
         if (dep_path.is_relative()) dep_path = proj_root / dep_path;
-        std::string cur_hdr_hash = util::sha256_file(dep_path);
+        std::string cur_hdr_hash = crypto::sha256_file(dep_path);
         if (cur_hdr_hash != dep.hash) return std::nullopt;
     }
 

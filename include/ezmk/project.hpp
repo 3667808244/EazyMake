@@ -3,9 +3,8 @@
 #include <string>
 #include <filesystem>
 
-namespace fs = std::filesystem;
-
 namespace ezmk::project {
+namespace fs = std::filesystem;
 
 // Create a new EazyMake project scaffold at ./<name>/
 // project_type: "executable" (default), "static", or "shared".

@@ -83,3 +83,20 @@ URL 格式说明:
 - 省略协议: `<host>/<path>/<pkg>.zip` → 自动补全为 `https://`
 - 支持协议: `https://`、`http://`
 - 下载到 `.ezmk/temp/` 后解压安装，安装完成删除临时文件
+
+### 仓库查找（0.1.3+）
+
+如果已通过 `ezmk repo add` 注册了仓库，可以直接用包名安装而无需提供完整 URL 或文件路径：
+
+```bash
+ezmk repo add -p git@github.com:user/ezmk-repo.git --name my-repo
+ezmk repo update
+ezmk pkg install -p foo          # 自动在已注册仓库中搜索 "foo"
+```
+
+查找顺序：
+1. 本地文件路径 / 显式 URL（和之前一样）
+2. 已注册仓库的本地缓存中按名称搜索（项目 → 用户 → 全局）
+3. 仍未找到 → 报错
+
+详见 `docs/repo.md`。

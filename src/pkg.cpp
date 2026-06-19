@@ -1,6 +1,8 @@
 #include "ezmk/pkg.hpp"
 #include "ezmk/cache.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/crypto.hpp"
+#include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
 
 #include <algorithm>
@@ -157,7 +159,7 @@ fs::path compile_package(const fs::path& pkg_dir,
         // Update cache entry
         auto rel_src = fs::relative(src, pkg_dir).generic_string();
         auto& entry = record.files[rel_src];
-        entry.source_hash = util::sha256_file(src);
+        entry.source_hash = crypto::sha256_file(src);
         entry.object_file = fs::relative(obj, pkg_dir).generic_string();
         entry.compiler = "g++";
         entry.compile_opts = cfg.compile.flags;
@@ -311,7 +313,14 @@ void install(const std::string& pkg_file, cli::Scope scope) {
     } else {
         archive_path = input;
         if (!util::file_exists(archive_path)) {
-            util::fatal("package file not found: " + pkg_file);
+            // Not a local file or URL — try searching registered repos
+            util::info("Searching registered repos for '" + pkg_file + "'...");
+            archive_path = repo::search_package(pkg_file, {
+                cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+            if (archive_path.empty() || !util::file_exists(archive_path)) {
+                util::fatal("package not found: " + pkg_file);
+            }
+            util::info("Found in repo: " + archive_path.string());
         }
     }
 

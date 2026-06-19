@@ -4,9 +4,8 @@
 #include <vector>
 #include <filesystem>
 
-namespace fs = std::filesystem;
-
 namespace ezmk::config {
+namespace fs = std::filesystem;
 
 struct ProjectSection {
     std::string name;

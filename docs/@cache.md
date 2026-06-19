@@ -117,3 +117,9 @@
 3. 执行 `ezmk clean`：
    - 删除 `.ezmk/cache/` 目录及 `record.json`。
    - 下次构建全量编译。
+
+---
+
+## 实现说明
+
+`record.json` 的读写使用 [nlohmann/json](https://github.com/nlohmann/json) 库（单头文件 `include/vendor/nlohmann_json.hpp`），替代了早期版本的手写 JSON 解析器。原子写入策略不变：先序列化到 `.tmp` 文件，再 `rename` 覆盖。

@@ -44,8 +44,10 @@ struct QueryOptions {
 };
 
 struct RepoOptions {
-    std::string repo_path;   // for add
-    std::string repo_name;   // for remove
+    std::vector<Scope> scopes;     // scopes to operate on
+    std::string url;               // for add: git URL or local path
+    std::string name;              // for add (--name override) / for remove
+    std::string branch = "main";   // for add (--branch)
 };
 
 struct CliArgs {
@@ -64,8 +66,8 @@ struct CliArgs {
     // Only valid for PkgRemove / PkgSearch / PkgInfo
     std::optional<QueryOptions> query_opts;
 
-    // Only valid for RepoAdd / RepoRemove
-    std::optional<RepoOptions> repo_opts;
+    // Only valid for RepoAdd / RepoRemove / RepoUpdate / RepoList
+    RepoOptions repo_opts;
 };
 
 CliArgs parse(int argc, char** argv);

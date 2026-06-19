@@ -1,80 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ============================================================
 # EazyMake build script
-# Produces a single statically-linked ezmk executable.
-# ============================================================
+# Works on MSYS2 (Windows), Linux, and macOS with g++.
 
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
-SRC_DIR="$PROJECT_ROOT/src"
-INCLUDE_DIR="$PROJECT_ROOT/include"
-VENDOR_INCLUDE="$INCLUDE_DIR/vendor"
-VENDOR_SRC="$SRC_DIR/vendor"
-BUILD_DIR="$PROJECT_ROOT/build"
+cd "$(dirname "$0")"
 
-# ---- platform detection ----
+SRC="src/*.cpp src/vendor/*.c"
+INCLUDES="-I include/ -I include/vendor/"
+OUTPUT="ezmk"
+CXX="${CXX:-g++}"
+CXXFLAGS="${CXXFLAGS:--std=c++17}"
+
+# Platform-specific settings
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        EXE_SUFFIX=".exe"
-        OBJ_SUFFIX=".obj"
-        PLATFORM_LIBS="-lwinhttp -lws2_32"
+        # MSYS2 / Windows
+        LIBS="-lwinhttp"
+        LDFLAGS="-static"
         ;;
     Linux|Darwin)
-        EXE_SUFFIX=""
-        OBJ_SUFFIX=".o"
-        PLATFORM_LIBS=""
+        LIBS=""
+        LDFLAGS="-static"
         ;;
     *)
-        echo "Unsupported platform: $(uname -s)" >&2
-        exit 1
+        echo "Warning: unknown platform, trying generic build" >&2
+        LIBS=""
+        LDFLAGS=""
         ;;
 esac
 
-OUTPUT="$BUILD_DIR/ezmk$EXE_SUFFIX"
+echo "=== Building EazyMake ==="
+echo "Compiler: $CXX"
+echo "Flags:    $CXXFLAGS"
 
-# ---- compiler detection ----
-CXX="${CXX:-g++}"
-if ! command -v "$CXX" &>/dev/null; then
-    echo "Error: $CXX not found. Install g++ (MSYS2: pacman -S mingw-w64-x86_64-gcc)." >&2
-    exit 1
-fi
+$CXX $CXXFLAGS $SRC $INCLUDES -o "$OUTPUT" $LIBS $LDFLAGS
 
-# ---- flags ----
-CXXFLAGS="-std=c++17 -Wall -Wextra -O2"
-LDFLAGS="-static"
-
-# Collect include paths that actually exist
-INCLUDES=("-I$INCLUDE_DIR")
-[ -d "$VENDOR_INCLUDE" ] && INCLUDES+=("-I$VENDOR_INCLUDE")
-
-# ---- collect source files ----
-SOURCES=()
-for d in "$SRC_DIR" "$VENDOR_SRC"; do
-    if [ -d "$d" ]; then
-        for f in "$d"/*.cpp "$d"/*.c; do
-            [ -f "$f" ] && SOURCES+=("$f")
-        done
-    fi
-done
-
-if [ ${#SOURCES[@]} -eq 0 ]; then
-    echo "Error: no source files found in src/ or src/vendor/" >&2
-    exit 1
-fi
-
-# ---- compile ----
-mkdir -p "$BUILD_DIR"
-
-echo "=== EazyMake Build ==="
-echo "Compiler : $CXX"
-echo "Sources  : ${SOURCES[*]}"
-echo "Output   : $OUTPUT"
-echo ""
-
-set -x
-"$CXX" $CXXFLAGS "${INCLUDES[@]}" "${SOURCES[@]}" $LDFLAGS $PLATFORM_LIBS -o "$OUTPUT"
-set +x
-
-echo ""
-echo "Build successful: $OUTPUT"
+echo "=== Build successful: $OUTPUT ==="

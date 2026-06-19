@@ -1,74 +1,137 @@
 # EazyMake
 
-一个简单的C/C++构建工具
-基于GCC-g++(Windows下可以使用MSYS2环境)
-包管理使用即时编译
+A simple C/C++ build tool — `ezmk`. Based on GCC/g++ (MSYS2 on Windows, or native on Linux).
 
-(本工具只专注于易于使用,想要复杂功能可以用CMake)
+**Design philosophy:** ease of use over feature richness. For complex builds, use CMake.
 
----
+## Quick start
 
-## 命令行
+### Build EazyMake itself
 
 ```bash
-# 基本项目管理
-ezmk new <project_name> # 创建项目
-ezmk build [--disable-cache] # 构建项目
-ezmk run [--disable-cache] # 构建并运行
-ezmk claer # 清理缓存和临时文件
+# Via helper script
+bash build.sh
 
-# 包管理 -p(project) -u(user) -g(globl)
-ezmk install [-p|-u|-g] <pkg_file> # 安装包文件,作用域参数默认为 -p
-ezmk remove [-p|-u|-g] <pkg> # 移除包,作用域参数默认为 -pug
-ezmk search [-p|-u|-g] <pkg> # 查找包,作用域参数默认为 -pug
-ezmk info [-p|-u|-g] <pkg> # 查看包信息,作用域参数默认为 -pug
+# Or manually — MSYS2 / Windows
+g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -lwinhttp -static
+
+# Linux
+g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -static
 ```
 
----
+### Create and build a project
 
-## EazyMake 默认生成项目结构
-
-```
-<project_dir>/
-    .ezmk/
-        pkg/
-            <pkg_dirs>/
-        temp/ # 该目录及子目录,子文件,不用于构建时识别项目
-            *.*
-        cache/  # 该目录及子目录,子文件,不用于构建时识别项目
-            record.json
-            *.*
-    include/
-        *.h
-        *.hpp
-    src/
-        *.c
-        *.cpp
-        *.cxx
-        main.cpp
-    build/
-    ezmk.toml
-    README.md # 不用于构建时识别项目
+```bash
+ezmk project new hello          # scaffold hello/
+cd hello
+ezmk project build               # compile + link
+ezmk project run                 # build + run
 ```
 
-## EazyMake 包结构
+### Install packages
+
+```bash
+# From a local file
+ezmk pkg install -p ./foo-0.1.0.zip
+
+# From a URL
+ezmk pkg install -p https://example.com/packages/bar-1.2.0.tar.gz
+
+# By name (requires registered repo)
+ezmk repo add -p git@github.com:user/ezmk-repo.git --name my-repo
+ezmk repo update
+ezmk pkg install -p foo
+```
+
+## CLI reference
+
+### `project` — build your code
+
+| Command | Description |
+|---|---|
+| `ezmk project new <name> [--type executable\|static\|shared]` | Scaffold a new project |
+| `ezmk project build [--disable-cache]` | Incremental build |
+| `ezmk project run [--disable-cache]` | Build and execute |
+| `ezmk project clean` | Remove cache and temp files |
+
+### `pkg` — manage packages
+
+| Command | Description |
+|---|---|
+| `ezmk pkg install [-p\|-u\|-g] <file_or_url_or_name>` | Install a package |
+| `ezmk pkg remove [-p\|-u\|-g] <name>` | Remove a package |
+| `ezmk pkg search [-p\|-u\|-g] <name>` | Search for a package |
+| `ezmk pkg info [-p\|-u\|-g] <name>` | Show package details |
+
+### `repo` — manage repositories
+
+| Command | Description |
+|---|---|
+| `ezmk repo add [-p\|-u\|-g] <git_url_or_path> [--name <n>] [--branch <b>]` | Register and clone |
+| `ezmk repo remove [-p\|-u\|-g] <name>` | Unregister and delete cache |
+| `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` to refresh |
+| `ezmk repo list [-p\|-u\|-g]` | List registered repos |
+
+### Scope flags
+
+| Flag | Scope | Install path |
+|---|---|---|
+| `-p` | Project | `<project>/.ezmk/pkg/` |
+| `-u` | User | `~/.local/ezmk/pkg/` |
+| `-g` | Global | `<ezmk_install_dir>/pkg/` |
+
+`install` and `repo add` accept only one scope flag; others accept combinations like `-pug`.
+
+## Project structure
 
 ```
-<pkg_dir>/
-    include/
-        *.h
-        *.hpp
-    src/
-        *.c
-        *.cpp
-        *.cxx
-    ezmk.toml
+my_project/
+  .ezmk/
+    pkg/            # installed packages
+    temp/           # temp files (auto-cleaned)
+    cache/          # build cache (record.json + obj/)
+    repo/           # repo registry + cloned repos
+      list.toml
+      .cache/
+  include/          # project headers (*.h, *.hpp)
+  src/              # project sources (*.c, *.cpp, *.cxx)
+  build/            # build output
+  ezmk.toml         # project configuration
 ```
 
-包文件即为以上目录的zip或tar.gz包
-安装包时(如果符合以上包结构)会复制所有压缩包中的文件,不仅仅是以上列举的文件
+## Configuration (`ezmk.toml`)
 
----
+```toml
+[project]
+name = "myapp"
+type = "executable"     # executable | static | shared
+version = "0.1.0"
+language = "C++17"      # C++17 | C++20 | C11 | ...
 
-其他说明参见`docs/*.md`
-注: `docs/@*.md`为规范AI代码的风格而写,使用者阅读作用不大
+[compile]
+flags = ["-Wall", "-Wextra", "-O2"]
+include_dirs = ["include"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = ["pthread"]
+
+[depends]
+lib = ["foo", "bar"]
+```
+
+## Repository
+
+A repo is a **git repository** containing `index.toml` + `packages/`. `ezmk repo add` clones; `ezmk repo update` does `git pull`. Local directories also supported. See `docs/repo.md`.
+
+## Design docs
+
+| Document | Topic |
+|---|---|
+| `docs/config_file.md` | Full `ezmk.toml` specification |
+| `docs/pkg.md` | Package format and lifecycle |
+| `docs/repo.md` | Git-based repository system |
+| `docs/@cache.md` | Incremental build cache |
+| `docs/@safety.md` | Safety invariants |
+| `plan.md` | Current milestone plan + progress |
