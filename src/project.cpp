@@ -40,6 +40,17 @@ int main(int argc, char **argv){
     // README.md (empty)
     util::file_write(root / "README.md", "");
 
+    // .gitignore
+    std::string gitignore = R"(# EazyMake build artifacts
+build/
+.ezmk/
+*.o
+*.obj
+*.tmp.o
+*.tmp.obj
+)";
+    util::file_write(root / ".gitignore", gitignore);
+
     util::info("Project created at: " + root.string());
 }
 

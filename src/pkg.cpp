@@ -6,6 +6,8 @@
 #include "ezmk/util.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <chrono>
 #include <ctime>
 #include <deque>
@@ -53,11 +55,66 @@ std::vector<fs::path> pkg_search_dirs(const std::vector<cli::Scope>& scopes) {
 // Helpers
 // ===================================================================
 
-static bool confirm(std::string_view msg) {
+static bool confirm(std::string_view msg, bool assume_yes = false) {
+    if (assume_yes) {
+        util::info(std::string(msg) + " [auto-yes]");
+        return true;
+    }
     std::cerr << "[ezmk] " << msg << " [y/N] ";
     std::string line;
     std::getline(std::cin, line);
     return line == "y" || line == "Y" || line == "yes";
+}
+
+// Detect the platform-appropriate install script in the script/ directory.
+// Returns the path if found, empty path otherwise.
+static fs::path detect_install_script(const fs::path& pkg_root,
+                                       std::string_view basename) {
+    auto script_dir = pkg_root / "script";
+    if (!util::file_exists(script_dir)) return {};
+
+#ifdef EZMK_WIN
+    // Windows: .ps1 first, then .bat
+    fs::path ps1 = script_dir / (std::string(basename) + ".ps1");
+    if (util::file_exists(ps1)) return ps1;
+    fs::path bat = script_dir / (std::string(basename) + ".bat");
+    if (util::file_exists(bat)) return bat;
+#else
+    // Linux: .sh
+    fs::path sh = script_dir / (std::string(basename) + ".sh");
+    if (util::file_exists(sh)) return sh;
+#endif
+    return {};
+}
+
+// Run an install script with user review + confirmation.
+// Returns true if execution succeeded or was skipped (continue install).
+// Returns false if user chose to abort.
+static bool run_install_script(const fs::path& script, const fs::path& cwd,
+                                bool assume_yes, std::string_view label) {
+    std::string desc = std::string(label) + " " + script.filename().string();
+
+    util::info("Found " + desc);
+    util::open_in_editor(script);
+
+    if (!confirm(std::string("Execute ") + desc + "?", assume_yes)) {
+        util::info("Skipping " + desc);
+        return true; // skip but continue
+    }
+
+    util::info("Running " + desc + "...");
+    auto res = util::run_script(script, cwd);
+    if (res.exit_code != 0) {
+        std::string err_msg = std::string(label) + " script failed (exit " +
+                              std::to_string(res.exit_code) + ")";
+        if (!res.err.empty()) util::error(res.err);
+        if (!confirm(err_msg + ". Continue installation?", assume_yes)) {
+            return false; // abort
+        }
+    } else {
+        util::info(std::string(label) + " script completed successfully");
+    }
+    return true;
 }
 
 // Validate a directory is a proper EazyMake package
@@ -98,6 +155,17 @@ fs::path compile_package(const fs::path& pkg_dir,
 
     fs::path lib = build_dir / ("lib" + name + ".a");
 
+    // Clean stale temps from previous crashed builds
+    {
+        std::error_code ec;
+        for (auto& e : fs::directory_iterator(build_dir, ec)) {
+            auto& p = e.path();
+            if (p.extension() == ".tmp") {
+                fs::remove(p, ec);
+            }
+        }
+    }
+
     // Load package cache
     fs::path cache_path = build_dir / ".pkg_cache.json";
     auto record = cache::load_record(cache_path);
@@ -119,10 +187,12 @@ fs::path compile_package(const fs::path& pkg_dir,
     for (auto& src : sources) {
         fs::path obj = build_dir / src.filename();
         obj.replace_extension(EZMK_OBJ_SUFFIX);
+        fs::path obj_tmp = build_dir / src.filename();
+        obj_tmp.replace_extension(".tmp" EZMK_OBJ_SUFFIX);
         fs::path depfile = build_dir / src.filename();
         depfile.replace_extension(".d");
 
-        // Check cache
+        // Check cache — cached .o is already valid (written atomically last time)
         auto cached = cache::check_cache(src, cfg.compile, record, pkg_dir);
         if (cached && util::file_exists(obj)) {
             objects.push_back(obj);
@@ -130,7 +200,7 @@ fs::path compile_package(const fs::path& pkg_dir,
             continue;
         }
 
-        // Cache miss: compile
+        // Cache miss: compile to temp file
         ++cache_misses;
         auto lang = config::parse_language(cfg.project.language);
         std::ostringstream cmd;
@@ -146,24 +216,48 @@ fs::path compile_package(const fs::path& pkg_dir,
             cmd << "-I\"" << inc.string() << "\" ";
         }
         cmd << "-MMD -MF \"" << depfile.string() << "\" ";
-        cmd << "\"" << src.string() << "\" -o \"" << obj.string() << "\"";
+        cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
 
         auto res = util::run_command(cmd.str());
         if (res.exit_code != 0) {
             util::error("compilation failed for " + src.string());
             util::error(res.err);
+            // Remove partial temp file
+            std::error_code ec;
+            fs::remove(obj_tmp, ec);
             throw std::runtime_error("failed to compile package: " + name);
+        }
+
+        // Atomically rename temp to final
+        {
+            std::error_code ec;
+            fs::rename(obj_tmp, obj, ec);
+            if (ec) {
+                fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
+                fs::remove(obj_tmp, ec);
+            }
         }
         objects.push_back(obj);
 
         // Update cache entry
         auto rel_src = fs::relative(src, pkg_dir).generic_string();
         auto& entry = record.files[rel_src];
+
+        // Check if dependency path set changed (include structure change)
+        auto new_deps = cache::parse_depfile_and_hash(depfile);
+        if (!record.files.empty()) {
+            auto old_it = record.files.find(rel_src);
+            if (old_it != record.files.end() &&
+                !cache::same_dependency_paths(old_it->second.dependencies, new_deps)) {
+                util::info("      include structure changed for " + rel_src);
+            }
+        }
+
         entry.source_hash = crypto::sha256_file(src);
         entry.object_file = fs::relative(obj, pkg_dir).generic_string();
         entry.compiler = "g++";
         entry.compile_opts = cfg.compile.flags;
-        entry.dependencies = cache::parse_depfile_and_hash(depfile);
+        entry.dependencies = std::move(new_deps);
         // Normalize to pkg_dir-relative paths so cache survives package relocation
         for (auto& dep : entry.dependencies) {
             fs::path dp(dep.path);
@@ -200,16 +294,34 @@ fs::path compile_package(const fs::path& pkg_dir,
         all_objs.push_back(obj);
     }
 
+    // Archive to temp file, then atomic rename
+    fs::path lib_tmp = build_dir / ("lib" + name + ".a.tmp");
+    {
+        std::error_code ec;
+        fs::remove(lib_tmp, ec);
+    }
+
     std::ostringstream ar_cmd;
-    ar_cmd << "ar rcs \"" << lib.string() << "\"";
+    ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
     for (auto& o : all_objs) {
         ar_cmd << " \"" << o.string() << "\"";
     }
 
     auto ar_res = util::run_command(ar_cmd.str());
     if (ar_res.exit_code != 0) {
+        std::error_code ec;
+        fs::remove(lib_tmp, ec);
         util::error(ar_res.err);
         throw std::runtime_error("failed to create archive for: " + name);
+    }
+
+    {
+        std::error_code ec;
+        fs::rename(lib_tmp, lib, ec);
+        if (ec) {
+            fs::copy_file(lib_tmp, lib, fs::copy_options::overwrite_existing, ec);
+            fs::remove(lib_tmp, ec);
+        }
     }
 
     return lib;
@@ -278,7 +390,9 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
 // Install
 // ===================================================================
 
-void install(const std::string& pkg_file, cli::Scope scope) {
+void install(const std::string& pkg_file, cli::Scope scope,
+             std::string_view expected_sha256,
+             bool assume_yes) {
     fs::path dest_dir = pkg_install_dir(scope);
 
     // Determine if it's a URL or local file
@@ -315,27 +429,54 @@ void install(const std::string& pkg_file, cli::Scope scope) {
         if (!util::file_exists(archive_path)) {
             // Not a local file or URL — try searching registered repos
             util::info("Searching registered repos for '" + pkg_file + "'...");
-            archive_path = repo::search_package(pkg_file, {
+            auto search_result = repo::search_package(pkg_file, {
                 cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
-            if (archive_path.empty() || !util::file_exists(archive_path)) {
+            if (search_result.archive_path.empty() ||
+                !util::file_exists(search_result.archive_path)) {
                 util::fatal("package not found: " + pkg_file);
+            }
+            archive_path = search_result.archive_path;
+            // Use sha256 from index.toml if user didn't provide one explicitly
+            if (expected_sha256.empty() && !search_result.sha256.empty()) {
+                expected_sha256 = search_result.sha256;
             }
             util::info("Found in repo: " + archive_path.string());
         }
     }
 
+    // SHA-256 verification
+    if (!expected_sha256.empty()) {
+        util::info("Verifying SHA-256...");
+        std::string actual = crypto::sha256_file(archive_path);
+        // Case-insensitive comparison
+        std::string expected(expected_sha256);
+        std::string actual_lower = actual;
+        for (auto& c : expected) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : actual_lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (actual_lower != expected) {
+            util::fatal(
+                std::string("SHA-256 mismatch for ") + pkg_file +
+                "\n  expected: " + std::string(expected_sha256) +
+                "\n  actual:   " + actual);
+        }
+        util::info("  SHA-256 OK");
+    }
+
     // Safety: global install confirmation
     if (scope == cli::Scope::Global) {
-        if (!confirm("Global install requires confirmation. Continue?")) {
+        if (!confirm("Global install requires confirmation. Continue?", assume_yes)) {
             util::info("Install cancelled");
             return;
         }
     }
 
-    // Extract to temp staging area (use random suffix to avoid collisions)
-    static std::mt19937 rng(static_cast<unsigned>(
-        std::chrono::system_clock::now().time_since_epoch().count()));
-    fs::path stage = fs::temp_directory_path() / ("ezmk_pkg_" + std::to_string(rng()));
+    // Extract to temp staging area — use PID + high-res counter to avoid collisions
+    static std::atomic<uint64_t> counter{0};
+    auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    fs::path stage = fs::temp_directory_path() /
+        ("ezmk_pkg_" + std::to_string(now_us) + "_" +
+         std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
     fs::create_directories(stage);
 
     try {
@@ -361,10 +502,21 @@ void install(const std::string& pkg_file, cli::Scope scope) {
         auto pkg_cfg = config::parse_config(pkg_root / "ezmk.toml");
         std::string pkg_name = pkg_cfg.project.name;
 
+        // Preinstall hook
+        fs::path preinstall_script = detect_install_script(pkg_root, "preinstall");
+        if (!preinstall_script.empty()) {
+            if (!run_install_script(preinstall_script, dest_dir / pkg_name,
+                                    assume_yes, "preinstall")) {
+                util::info("Install cancelled by user after preinstall script failure");
+                util::remove_all(stage);
+                return;
+            }
+        }
+
         // Check for existing install
         fs::path install_path = dest_dir / pkg_name;
         if (util::file_exists(install_path)) {
-            if (!confirm("Package '" + pkg_name + "' already exists at " + install_path.string() + ". Overwrite?")) {
+            if (!confirm("Package '" + pkg_name + "' already exists at " + install_path.string() + ". Overwrite?", assume_yes)) {
                 util::info("Install cancelled");
                 util::remove_all(stage);
                 return;
@@ -438,6 +590,16 @@ void install(const std::string& pkg_file, cli::Scope scope) {
         util::info("Installing to " + install_path.string());
         util::copy_recursive(pkg_root, install_path);
 
+        // Postinstall hook
+        fs::path postinstall_script = detect_install_script(install_path, "postinstall");
+        if (!postinstall_script.empty()) {
+            if (!run_install_script(postinstall_script, install_path,
+                                    assume_yes, "postinstall")) {
+                util::info("Install cancelled by user after postinstall script failure");
+                // Installation files are already in place; leave them
+            }
+        }
+
         util::info("Package '" + pkg_name + "' installed successfully");
 
     } catch (...) {
@@ -503,11 +665,17 @@ namespace {
         auto ftime = fs::last_write_time(p, ec);
         if (ec) return "(unknown)";
 
-        // Convert to system_clock time
-        auto sctp = std::chrono::time_point_cast<
-            std::chrono::system_clock::duration>(
-            ftime - fs::file_time_type::clock::now()
-            + std::chrono::system_clock::now());
+        // C++20: use clock_cast; pre-C++20 fallback
+#if __cplusplus >= 202002L
+        auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+#else
+        // Convert file_time to system_clock by going through time_t
+        auto sctp = std::chrono::system_clock::from_time_t(
+            std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                    ftime - fs::file_time_type::clock::now()
+                    + std::chrono::system_clock::now())));
+#endif
         auto tt = std::chrono::system_clock::to_time_t(sctp);
         auto* tm = std::localtime(&tt);
         char buf[32];
@@ -540,6 +708,18 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
             std::cout << "  Dependencies:";
             if (cfg.depends.libs.empty()) std::cout << " (none)";
             for (auto& d : cfg.depends.libs) std::cout << " " << d;
+            std::cout << "\n";
+            std::cout << "  Link flags:";
+            for (auto& f : cfg.link.flags) std::cout << " " << f;
+            if (cfg.link.flags.empty()) std::cout << " (none)";
+            std::cout << "\n";
+            std::cout << "  Link dirs:";
+            for (auto& d : cfg.link.link_dirs) std::cout << " " << d;
+            if (cfg.link.link_dirs.empty()) std::cout << " (none)";
+            std::cout << "\n";
+            std::cout << "  System targets:";
+            for (auto& t : cfg.link.system_targets) std::cout << " " << t;
+            if (cfg.link.system_targets.empty()) std::cout << " (none)";
             std::cout << "\n";
 
             // Show built artifacts

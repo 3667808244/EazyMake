@@ -64,14 +64,19 @@ std::string file_read(const fs::path& p) {
     return s;
 }
 
-void file_write(const fs::path& p, std::string_view content) {
+bool file_write(const fs::path& p, std::string_view content) {
     fs::create_directories(p.parent_path());
     std::ofstream f(p, std::ios::binary | std::ios::trunc);
     if (!f) {
         error(std::string("cannot write: ") + p.string());
-        return;
+        return false;
     }
-    f.write(content.data(), content.size());
+    f.write(content.data(), static_cast<std::streamsize>(content.size()));
+    if (!f) {
+        error(std::string("write failed: ") + p.string());
+        return false;
+    }
+    return true;
 }
 
 void create_directories(const fs::path& p) {
@@ -398,8 +403,16 @@ void download(std::string_view url_sv, const fs::path& dest) {
     WinHttpCloseHandle(hSession);
 
 #else
-    // Fallback: use curl command
-    std::string cmd = "curl -sL -o '" + dest.string() + "' '" + url + "'";
+    // Fallback: use curl command — escape single quotes in paths
+    auto escape_sq = [](const std::string& s) -> std::string {
+        std::string r;
+        for (char c : s) {
+            if (c == '\'') r += "'\\''";
+            else r += c;
+        }
+        return r;
+    };
+    std::string cmd = "curl -sL -o '" + escape_sq(dest.string()) + "' '" + escape_sq(url) + "'";
     auto res = run_command(cmd);
     if (res.exit_code != 0) {
         throw std::runtime_error("download failed: " + res.err);
@@ -457,17 +470,46 @@ ProcResult run_command(const std::string& cmd) {
     CloseHandle(hReadOut);
     CloseHandle(hReadErr);
 #else
-    // Use popen + redirect stderr
-    std::string cmd2 = cmd + " 2>&1";
-    FILE* pipe = popen(cmd2.c_str(), "r");
-    if (!pipe) return result;
-
-    char buf[4096];
-    while (fgets(buf, sizeof(buf), pipe)) {
-        result.out += buf;
+    // Use temporary files to capture stdout and stderr separately
+    char out_tmp[] = "/tmp/ezmk_stdout_XXXXXX";
+    char err_tmp[] = "/tmp/ezmk_stderr_XXXXXX";
+    int out_fd = mkstemp(out_tmp);
+    int err_fd = mkstemp(err_tmp);
+    if (out_fd < 0 || err_fd < 0) {
+        if (out_fd >= 0) close(out_fd);
+        if (err_fd >= 0) close(err_fd);
+        return result;
     }
-    result.exit_code = pclose(pipe);
-    if (WIFEXITED(result.exit_code)) result.exit_code = WEXITSTATUS(result.exit_code);
+
+    std::string cmd2 = cmd + " 1>/tmp/ezmk_stdout_" + std::string(out_tmp + 16) +
+                       " 2>/tmp/ezmk_stderr_" + std::string(err_tmp + 16);
+    int rc = std::system(cmd2.c_str());
+    if (WIFEXITED(rc)) result.exit_code = WEXITSTATUS(rc);
+    else result.exit_code = rc;
+
+    // Read stdout
+    {
+        std::ifstream fout(out_tmp);
+        if (fout) {
+            std::ostringstream ss;
+            ss << fout.rdbuf();
+            result.out = ss.str();
+        }
+    }
+    // Read stderr
+    {
+        std::ifstream ferr(err_tmp);
+        if (ferr) {
+            std::ostringstream ss;
+            ss << ferr.rdbuf();
+            result.err = ss.str();
+        }
+    }
+
+    close(out_fd);
+    close(err_fd);
+    unlink(out_tmp);
+    unlink(err_tmp);
 #endif
     return result;
 }
@@ -514,6 +556,79 @@ std::string git_last_commit_time(const fs::path& repo_dir) {
     auto s = res.out;
     while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
     return s;
+}
+
+// ===================================================================
+// Editor & script execution
+// ===================================================================
+
+std::string find_editor() {
+#ifdef EZMK_WIN
+    // Check if notepad exists (it always should on Windows)
+    return "notepad";
+#else
+    // Try editors in order: vim, nano, emacs
+    for (const char* editor : {"vim", "nano", "emacs"}) {
+        std::string cmd = std::string("command -v ") + editor + " > /dev/null 2>&1";
+        if (std::system(cmd.c_str()) == 0) {
+            return editor;
+        }
+    }
+    return {}; // none found
+#endif
+}
+
+void open_in_editor(const fs::path& file) {
+    std::string editor = find_editor();
+    if (editor.empty()) {
+        warn("no text editor found (tried vim, nano, emacs). Review skipped.");
+        return;
+    }
+    info(std::string("Opening ") + file.string() + " in " + editor + "...");
+#ifdef EZMK_WIN
+    std::string cmd = "notepad \"" + file.string() + "\"";
+#else
+    std::string cmd = editor + " \"" + file.string() + "\" < /dev/tty > /dev/tty 2>&1";
+#endif
+    auto res = run_command(cmd);
+    if (res.exit_code != 0 && !res.err.empty()) {
+        warn(std::string("editor returned error: ") + res.err);
+    }
+}
+
+ProcResult run_script(const fs::path& script, const fs::path& cwd) {
+    auto ext = script.extension().string();
+    std::ostringstream cmd;
+
+    // Change to cwd, run script, restore
+    if (ext == ".sh") {
+#ifdef EZMK_WIN
+        cmd << "bash ";
+#else
+        cmd << "bash ";
+#endif
+        cmd << "\"" << script.string() << "\"";
+    } else if (ext == ".ps1") {
+        cmd << "powershell -ExecutionPolicy Bypass -File \""
+            << script.string() << "\"";
+    } else if (ext == ".bat") {
+        cmd << "cmd /c \"" << script.string() << "\"";
+    } else {
+        ProcResult bad;
+        bad.exit_code = 1;
+        bad.err = "unsupported script extension: " + ext;
+        return bad;
+    }
+
+    // Build command with cd
+    std::ostringstream full_cmd;
+#ifdef EZMK_WIN
+    full_cmd << "cd /d \"" << cwd.string() << "\" && " << cmd.str();
+#else
+    full_cmd << "cd \"" << cwd.string() << "\" && " << cmd.str();
+#endif
+
+    return run_command(full_cmd.str());
 }
 
 // ===================================================================

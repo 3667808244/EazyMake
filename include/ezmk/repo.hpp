@@ -48,9 +48,16 @@ void list(const std::vector<cli::Scope>& scopes);
 
 // ---- pkg integration ----
 
+// Result of searching a package in registered repos.
+struct PkgSearchResult {
+    fs::path archive_path;   // path to the package archive
+    std::string sha256;      // from index.toml, empty if not provided
+};
+
 // Search registered repos (in scope order) for a package by name.
-// Returns the filesystem path to the package archive if found, empty path otherwise.
-fs::path search_package(std::string_view pkg_name,
-                        const std::vector<cli::Scope>& scopes);
+// Returns the archive path and optional sha256 from index.toml.
+// If not found, archive_path is empty.
+PkgSearchResult search_package(std::string_view pkg_name,
+                               const std::vector<cli::Scope>& scopes);
 
 } // namespace ezmk::repo

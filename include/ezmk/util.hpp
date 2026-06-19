@@ -38,7 +38,7 @@ void error(std::string_view msg);
 // ---- Filesystem ----
 bool file_exists(const fs::path& p);
 std::string file_read(const fs::path& p);
-void file_write(const fs::path& p, std::string_view content);
+bool file_write(const fs::path& p, std::string_view content);
 void create_directories(const fs::path& p);
 void remove_all(const fs::path& p);
 void copy_recursive(const fs::path& from, const fs::path& to);
@@ -86,6 +86,22 @@ bool git_pull(const fs::path& repo_dir, std::string_view branch = "main");
 // Get the ISO 8601 timestamp of the last commit in a git repo.
 // Returns empty string on failure.
 std::string git_last_commit_time(const fs::path& repo_dir);
+
+// ---- Editor & script execution ----
+
+// Find the best available system text editor.
+// Windows: "notepad".  Linux: first found of vim, nano, emacs.
+// Returns empty string if no editor is available.
+std::string find_editor();
+
+// Open a file in the system editor (blocking — waits for editor to close).
+// Falls back to printing a warning if no editor is available.
+void open_in_editor(const fs::path& file);
+
+// Run an install script with the appropriate interpreter.
+// Supported extensions: .sh (bash), .ps1 (powershell), .bat (cmd /c).
+// cwd: working directory for the script.
+ProcResult run_script(const fs::path& script, const fs::path& cwd);
 
 // ---- Cross-platform ----
 // Make a path use forward slashes (MSYS2-compatible)

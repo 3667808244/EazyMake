@@ -134,7 +134,24 @@ static CliArgs parse_pkg_args(int argc, char** argv) {
         InstallOptions opts;
         std::string pkg_file;
         std::vector<Scope> scopes;
-        parse_scope_and_value(argc, argv, scopes, pkg_file, true, "ezmk pkg install");
+
+        // Parse scope flags, positional arg, and optional flags
+        for (int i = 3; i < argc; ++i) {
+            std::vector<Scope> parsed;
+            if (parse_scope_flags(argv[i], parsed, true)) {
+                for (auto s : parsed) scopes.push_back(s);
+            } else if (std::strcmp(argv[i], "--sha256") == 0) {
+                if (i + 1 >= argc) util::fatal("'--sha256' requires a value");
+                opts.sha256 = argv[++i];
+            } else if (std::strcmp(argv[i], "-y") == 0 || std::strcmp(argv[i], "--yes") == 0) {
+                opts.assume_yes = true;
+            } else {
+                if (!pkg_file.empty()) {
+                    util::fatal("'ezmk pkg install' takes only one package argument");
+                }
+                pkg_file = argv[i];
+            }
+        }
 
         if (pkg_file.empty()) {
             util::fatal("'ezmk pkg install' requires a package file or URL");
@@ -298,7 +315,7 @@ Usage:
   ezmk project clean                          Clean cache and temp files
 
 Package management:
-  ezmk pkg install [-p|-u|-g] <pkg_file_or_url>  Install a package (default: -p)
+  ezmk pkg install [-p|-u|-g] [--sha256 <hash>] [-y] <pkg_file_or_url>
   ezmk pkg remove  [-p|-u|-g] <pkg>              Remove a package (default: -pug)
   ezmk pkg search  [-p|-u|-g] <pkg>              Search for a package (default: -pug)
   ezmk pkg info    [-p|-u|-g] <pkg>              Show package info (default: -pug)
@@ -314,6 +331,10 @@ Scope flags:
   -u    User scope
   -g    Global scope
   Flags can be combined, e.g. -pug
+
+Install flags:
+  --sha256 <hash>   Verify package archive against expected SHA-256
+  -y, --yes         Skip all interactive prompts (for CI/scripts)
 )";
 }
 

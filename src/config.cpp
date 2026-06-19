@@ -49,9 +49,9 @@ LanguageInfo parse_language(std::string_view language) {
 
     // Map version string to -std= flag
     static const std::map<std::string, std::string> ver_map = {
-        {"89", "89"}, {"99", "99"},
-        {"11", "11"}, {"14", "14"},
-        {"17", "17"}, {"20", "20"}, {"23", "23"},
+        {"89", "89"}, {"98", "98"}, {"99", "99"},
+        {"03", "03"}, {"11", "11"}, {"14", "14"},
+        {"17", "17"}, {"20", "20"}, {"23", "23"}, {"26", "26"},
     };
 
     auto it = ver_map.find(std::string(ver_str));

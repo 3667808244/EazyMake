@@ -85,16 +85,28 @@ void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
     auto path = list_toml_path(scope);
     fs::create_directories(path.parent_path());
 
+    // Escape special characters in TOML basic strings
+    auto esc = [](const std::string& s) -> std::string {
+        std::string r;
+        for (char c : s) {
+            if (c == '\\') r += "\\\\";
+            else if (c == '"') r += "\\\"";
+            else if (c == '\n') r += "\\n";
+            else r += c;
+        }
+        return r;
+    };
+
     std::ostringstream out;
     for (auto& e : entries) {
         out << "[[repos]]\n";
-        out << "name = \"" << e.name << "\"\n";
-        out << "url = \"" << e.url << "\"\n";
-        out << "type = \"" << e.type << "\"\n";
+        out << "name = \"" << esc(e.name) << "\"\n";
+        out << "url = \"" << esc(e.url) << "\"\n";
+        out << "type = \"" << esc(e.type) << "\"\n";
         if (e.type == "git") {
-            out << "branch = \"" << e.branch << "\"\n";
+            out << "branch = \"" << esc(e.branch) << "\"\n";
         }
-        out << "last_update = \"" << e.last_update << "\"\n";
+        out << "last_update = \"" << esc(e.last_update) << "\"\n";
         out << "\n";
     }
 
@@ -162,10 +174,10 @@ static void validate_local_repo(const fs::path& dir) {
     }
 }
 
-// Read a package's file path from a repo's index.toml.
-// Returns the package archive path relative to the repo root.
-static std::string read_pkg_file_from_index(const fs::path& repo_dir,
-                                             std::string_view pkg_name) {
+// Read a package's file path and sha256 from a repo's index.toml.
+// Returns {file_path, sha256} where sha256 may be empty if not provided.
+static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
+                                            std::string_view pkg_name) {
     auto index_path = repo_dir / "index.toml";
     if (!util::file_exists(index_path)) return {};
 
@@ -176,6 +188,7 @@ static std::string read_pkg_file_from_index(const fs::path& repo_dir,
 
         std::string best_file;
         std::string best_version;
+        std::string best_sha256;
 
         for (size_t i = 0; i < pkgs->size(); ++i) {
             auto tbl = (*pkgs)[i].as_table();
@@ -190,18 +203,26 @@ static std::string read_pkg_file_from_index(const fs::path& repo_dir,
 
             std::string ver_str = ver ? *ver : "0.0.0";
             // Numeric version comparison — splits on '.' and compares each segment.
+            // Non-numeric segments (e.g. "beta", "alpha") are treated as 0.
             auto num_cmp = [](std::string_view a, std::string_view b) -> int {
+                auto parse_seg = [](std::string_view s) -> unsigned long {
+                    try {
+                        return std::stoul(std::string(s));
+                    } catch (...) {
+                        return 0; // non-numeric → 0
+                    }
+                };
                 size_t pa = 0, pb = 0;
                 while (pa < a.size() || pb < b.size()) {
                     unsigned long va = 0, vb = 0;
                     if (pa < a.size()) {
                         size_t dot = a.find('.', pa);
-                        va = std::stoul(std::string(a.substr(pa, dot - pa)));
+                        va = parse_seg(a.substr(pa, dot - pa));
                         pa = (dot == std::string::npos) ? a.size() : dot + 1;
                     }
                     if (pb < b.size()) {
                         size_t dot = b.find('.', pb);
-                        vb = std::stoul(std::string(b.substr(pb, dot - pb)));
+                        vb = parse_seg(b.substr(pb, dot - pb));
                         pb = (dot == std::string::npos) ? b.size() : dot + 1;
                     }
                     if (va != vb) return va > vb ? 1 : -1;
@@ -211,10 +232,12 @@ static std::string read_pkg_file_from_index(const fs::path& repo_dir,
             if (best_file.empty() || num_cmp(ver_str, best_version) > 0) {
                 best_version = ver_str;
                 best_file = *file;
+                auto sha = (*tbl)["sha256"].value<std::string>();
+                best_sha256 = sha ? *sha : "";
             }
         }
 
-        return best_file;
+        return {repo_dir / best_file, best_sha256};
     } catch (...) {
         return {};
     }
@@ -439,8 +462,8 @@ void list(const std::vector<cli::Scope>& scopes) {
 // pkg integration: search for a package in registered repos
 // ===================================================================
 
-fs::path search_package(std::string_view pkg_name,
-                        const std::vector<cli::Scope>& scopes) {
+PkgSearchResult search_package(std::string_view pkg_name,
+                               const std::vector<cli::Scope>& scopes) {
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
         for (auto& e : entries) {
@@ -453,12 +476,10 @@ fs::path search_package(std::string_view pkg_name,
 
             if (!util::file_exists(repo_dir)) continue;
 
-            auto pkg_file = read_pkg_file_from_index(repo_dir, pkg_name);
-            if (!pkg_file.empty()) {
-                fs::path archive = repo_dir / pkg_file;
-                if (util::file_exists(archive)) {
-                    return archive;
-                }
+            auto result = read_pkg_from_index(repo_dir, pkg_name);
+            if (!result.archive_path.empty() &&
+                util::file_exists(result.archive_path)) {
+                return result;
             }
         }
     }

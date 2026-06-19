@@ -17,7 +17,11 @@ std::vector<fs::path> pkg_search_dirs(const std::vector<cli::Scope>& scopes);
 
 // ---- Package operations ----
 // Install a package from a local file or URL into the given scope.
-void install(const std::string& pkg_file, cli::Scope scope);
+// expected_sha256: if non-empty, verify archive hash before extracting.
+// assume_yes: skip all interactive prompts (for CI/scripts).
+void install(const std::string& pkg_file, cli::Scope scope,
+             std::string_view expected_sha256 = {},
+             bool assume_yes = false);
 
 // Remove a package: search scopes in order, delete the first match.
 void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);

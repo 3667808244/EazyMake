@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 SRC="src/*.cpp src/vendor/*.c"
 INCLUDES="-I include/ -I include/vendor/"
-OUTPUT="ezmk"
+OUTPUT="build/ezmk"
 CXX="${CXX:-g++}"
 CXXFLAGS="${CXXFLAGS:--std=c++17}"
 

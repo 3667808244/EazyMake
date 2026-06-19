@@ -1,6 +1,7 @@
 #include "ezmk/crypto.hpp"
 
 #include <array>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 
@@ -61,58 +62,114 @@ void sha256_transform(uint32_t state[8], const uint8_t block[64]) {
 
 } // anonymous namespace
 
-std::string sha256(std::string_view data) {
-    uint32_t state[8] = {
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-    };
+// ===================================================================
+// Streaming SHA-256
+// ===================================================================
 
-    const auto* bytes = reinterpret_cast<const uint8_t*>(data.data());
-    size_t len = data.size();
+Sha256Stream::Sha256Stream()
+    : buf_len_(0), total_bits_(0) {
+    state_[0] = 0x6a09e667; state_[1] = 0xbb67ae85;
+    state_[2] = 0x3c6ef372; state_[3] = 0xa54ff53a;
+    state_[4] = 0x510e527f; state_[5] = 0x9b05688c;
+    state_[6] = 0x1f83d9ab; state_[7] = 0x5be0cd19;
+}
 
-    size_t i = 0;
-    for (; i + 64 <= len; i += 64) {
-        sha256_transform(state, bytes + i);
+void Sha256Stream::update(const void* data, size_t len) {
+    const auto* bytes = static_cast<const uint8_t*>(data);
+    total_bits_ += static_cast<uint64_t>(len) * 8;
+
+    // If there's buffered data, fill the buffer first
+    if (buf_len_ > 0) {
+        size_t to_fill = 64 - buf_len_;
+        if (len < to_fill) {
+            std::memcpy(buf_ + buf_len_, bytes, len);
+            buf_len_ += len;
+            return;
+        }
+        std::memcpy(buf_ + buf_len_, bytes, to_fill);
+        sha256_transform(state_, buf_);
+        bytes += to_fill;
+        len -= to_fill;
+        buf_len_ = 0;
     }
 
+    // Process full 64-byte blocks
+    while (len >= 64) {
+        sha256_transform(state_, bytes);
+        bytes += 64;
+        len -= 64;
+    }
+
+    // Buffer remaining
+    if (len > 0) {
+        std::memcpy(buf_, bytes, len);
+        buf_len_ = len;
+    }
+}
+
+void Sha256Stream::finalize_raw(uint8_t out[32]) {
+    // Padding
     uint8_t last[128];
-    size_t remaining = len - i;
-    std::memcpy(last, bytes + i, remaining);
+    size_t remaining = buf_len_;
+    std::memcpy(last, buf_, remaining);
     last[remaining] = 0x80;
     remaining++;
 
-    size_t total_bits = len * 8;
     if (remaining <= 56) {
         std::memset(last + remaining, 0, 64 - remaining);
     } else {
         std::memset(last + remaining, 0, 128 - remaining);
-        sha256_transform(state, last);
+        sha256_transform(state_, last);
         std::memset(last, 0, 64);
     }
 
+    // Append bit length as 64-bit big-endian
     for (int j = 0; j < 8; ++j) {
-        last[56 + j] = static_cast<uint8_t>(total_bits >> (56 - j * 8));
+        last[56 + j] = static_cast<uint8_t>(total_bits_ >> (56 - j * 8));
     }
-    sha256_transform(state, last);
+    sha256_transform(state_, last);
 
+    for (int i = 0; i < 8; ++i) {
+        uint32_t s = state_[i];
+        out[i * 4]     = static_cast<uint8_t>(s >> 24);
+        out[i * 4 + 1] = static_cast<uint8_t>(s >> 16);
+        out[i * 4 + 2] = static_cast<uint8_t>(s >> 8);
+        out[i * 4 + 3] = static_cast<uint8_t>(s);
+    }
+}
+
+std::string Sha256Stream::finalize() {
+    uint8_t raw[32];
+    finalize_raw(raw);
     std::string hex;
     hex.reserve(64);
-    for (uint32_t s : state) {
-        for (int j = 24; j >= 0; j -= 8) {
-            hex += "0123456789abcdef"[(s >> j) & 0xf];
-        }
+    for (int i = 0; i < 32; ++i) {
+        hex += "0123456789abcdef"[raw[i] >> 4];
+        hex += "0123456789abcdef"[raw[i] & 0xf];
     }
     return hex;
 }
 
+// ===================================================================
+// Convenience wrappers
+// ===================================================================
+
+std::string sha256(std::string_view data) {
+    Sha256Stream s;
+    s.update(data.data(), data.size());
+    return s.finalize();
+}
+
 std::string sha256_file(const std::filesystem::path& p) {
-    std::ifstream f(p, std::ios::binary | std::ios::ate);
+    std::ifstream f(p, std::ios::binary);
     if (!f) return {};
-    auto sz = f.tellg();
-    f.seekg(0);
-    std::string data(static_cast<size_t>(sz), '\0');
-    f.read(data.data(), sz);
-    return sha256(data);
+
+    Sha256Stream s;
+    char buf[65536]; // 64 KiB chunks
+    while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
+        s.update(buf, static_cast<size_t>(f.gcount()));
+    }
+    return s.finalize();
 }
 
 } // namespace ezmk::crypto

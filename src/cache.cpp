@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <set>
 #include <fstream>
 #include <stdexcept>
 
@@ -13,6 +14,15 @@ namespace ezmk::cache {
 // ===================================================================
 // Helpers
 // ===================================================================
+
+bool same_dependency_paths(const std::vector<DepEntry>& old_deps,
+                            const std::vector<DepEntry>& new_deps) {
+    if (old_deps.size() != new_deps.size()) return false;
+    std::set<std::string> old_paths, new_paths;
+    for (auto& d : old_deps) old_paths.insert(d.path);
+    for (auto& d : new_deps) new_paths.insert(d.path);
+    return old_paths == new_paths;
+}
 
 std::string iso_time() {
     auto t = std::time(nullptr);
@@ -92,9 +102,20 @@ std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile) {
     std::string content = util::file_read(depfile);
     if (content.empty()) return deps;
 
-    // Normalize CRLF → LF
-    for (size_t i = 0; i < content.size(); ++i) {
-        if (content[i] == '\r') content[i] = '\n';
+    // Normalize CRLF → LF: only skip \r when followed by \n
+    // This preserves bare \r characters that are not line endings.
+    {
+        std::string normalized;
+        normalized.reserve(content.size());
+        for (size_t i = 0; i < content.size(); ++i) {
+            if (content[i] == '\r' && i + 1 < content.size() && content[i + 1] == '\n') {
+                normalized += '\n';
+                ++i; // skip the \n
+            } else {
+                normalized += content[i];
+            }
+        }
+        content = std::move(normalized);
     }
 
     // Join continuation lines: remove "\\\n"

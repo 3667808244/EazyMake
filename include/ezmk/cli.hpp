@@ -35,7 +35,9 @@ struct BuildOptions {
 
 struct InstallOptions {
     Scope scope = Scope::Project;
-    std::string pkg_file; // local path or URL
+    std::string pkg_file;    // local path or URL
+    std::string sha256;      // optional: expected SHA-256 for verification
+    bool assume_yes = false; // -y: skip all interactive prompts
 };
 
 struct QueryOptions {

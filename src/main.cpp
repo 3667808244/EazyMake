@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
             break;
 
         case ezmk::cli::Command::Version:
-            std::cout << "EazyMake 0.1.3" << std::endl;
+            std::cout << "EazyMake 0.1.4" << std::endl;
             break;
 
         case ezmk::cli::Command::ProjectBuild: {
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::PkgInstall: {
             auto& opts = *args.install_opts;
-            ezmk::pkg::install(opts.pkg_file, opts.scope);
+            ezmk::pkg::install(opts.pkg_file, opts.scope, opts.sha256, opts.assume_yes);
             break;
         }
 

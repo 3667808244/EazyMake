@@ -69,4 +69,9 @@ void clear_cache();
 // Current time in ISO 8601 format (for cache entries).
 std::string iso_time();
 
+// Compare two dependency lists by path set (ignoring hashes).
+// Returns true if the path sets are identical.
+bool same_dependency_paths(const std::vector<DepEntry>& old_deps,
+                            const std::vector<DepEntry>& new_deps);
+
 } // namespace ezmk::cache

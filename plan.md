@@ -1,252 +1,286 @@
-# EazyMake 0.1.3 更新计划
+# EazyMake 0.1.4 更新计划
+
+> 0.1.3 已完成 pkg/repo 子命令，0.1.4 聚焦于构建健壮性、包编译链路完善和安装安全性。
 
 ---
 
-## 1. 实现 `repo` 子命令
+## 1. 编译产物原子写入
 
-CLI 解析已完成（`cli.cpp`），`main.cpp` 中目前是占位桩。需要新建 `src/repo.cpp` + `include/ezmk/repo.hpp` 实现核心逻辑。
+### 背景
 
-### 1.1 仓库模型
+当前 `record.json` 已通过"写 `.tmp` 再 `rename`"实现原子写入（`cache.cpp:227-239`），但 `.o` / `.obj` 文件和 `.a` 归档文件由 GCC/ar 直接写入目标路径，若构建中途中断（Ctrl+C、断电），残留的半截文件会在下次构建时被当作"有效缓存"命中，导致链接失败或静默生成错误二进制。
 
-EazyMake 的仓库是一个 **git 仓库**，包含 `index.toml`（元数据 + 包索引）和 `packages/` 目录（包归档文件）。用户通过 `ezmk repo add <git_url>` 注册仓库，工具自动 `git clone` 到本地缓存。
+### 任务
 
-```
-<repo>.git/
-  index.toml           # 仓库元数据 + 包索引
-  packages/
-    foo-0.1.0.zip
-    bar-1.2.0.tar.gz
-    bar-1.1.0.tar.gz
-    ...
-```
+#### 1.1 项目构建 `.o` 原子写入
 
-**为什么用 git：**
-- 天然支持版本控制——`git pull` 增量更新索引和包文件，无需重新下载整个仓库
-- 分布式托管——GitHub、GitLab、Gitee、自建 Git 服务器都可以作为仓库源
-- 无需专用服务端——`git clone` 就是获取仓库的全部操作
-- git tag 可用于标记稳定版本快照
+**涉及文件**: `src/build.cpp`（`build_project`）、`src/cache.cpp`
 
-### 1.2 `index.toml` 格式
+- 编译时指定 `-o` 到临时文件（如 `main.cpp.tmp.o`）
+- 编译成功 → `rename` 覆盖正式 `.o`
+- 编译失败 → 删除临时文件，不影响已有 `.o`
+- `record.json` 条目同样在编译成功后才更新（当前已在 `save_record` 中原子化，但要确保只在编译成功后写入对应条目——目前是逐文件更新 record 后统一 save，可保持但需保证 .o 原子性）
 
-```toml
-[repo]
-name = "my-repo"
-description = "My project's package repository"
+#### 1.2 包编译 `.o` 和 `.a` 原子写入
 
-# 每个包一个 section
-[[packages]]
-name = "foo"
-version = "0.1.0"
-file = "packages/foo-0.1.0.zip"
-sha256 = "a1b2c3..."
+**涉及文件**: `src/pkg.cpp`（`compile_package`）
 
-[[packages]]
-name = "bar"
-version = "1.2.0"
-file = "packages/bar-1.2.0.tar.gz"
-sha256 = "d4e5f6..."
+- 同 1.1，编译 `.o` 到临时文件再 rename
+- `ar rcs` 创建 `.a` 时先输出到 `build/lib<name>.a.tmp`，成功后再 rename
+- 包缓存记录 `.pkg_cache.json` 同理（当前已原子写入，无需改动）
 
-[[packages]]
-name = "bar"
-version = "1.1.0"
-file = "packages/bar-1.1.0.tar.gz"
-sha256 = "g7h8i9..."
-```
+#### 1.3 构建中途失败的清理策略
 
-### 1.3 仓库注册信息与本地缓存
+- 启动构建前扫描并清理 `.ezmk/temp/` 和 `build/` 下的 `*.tmp.*` 残留文件
+- 避免上次崩溃的临时文件污染本次构建
 
-已注册的仓库列表保存在：
-- **全局**：`<ezmk_install_dir>/repo/list.toml`
-- **用户**：`~/.local/ezmk/repo/list.toml`
-- **项目**：`.ezmk/repo/list.toml`
-
-`list.toml` 格式：
-
-```toml
-[[repos]]
-name = "my-repo"
-url = "git@github.com:user/ezmk-repo.git"    # git clone URL
-branch = "main"                                # 跟踪的分支（默认 main）
-last_update = "2026-06-19T12:00:00Z"
-
-[[repos]]
-name = "community"
-url = "https://gitee.com/example/ezmk-repo.git"
-branch = "main"
-last_update = ""
-```
-
-**本地缓存路径**（`git clone` 的目标目录）：
-
-| 作用域 | 本地缓存路径 |
-|---|---|
-| 全局 | `<ezmk_install_dir>/repo/.cache/<repo_name>/` |
-| 用户 | `~/.local/ezmk/repo/.cache/<repo_name>/` |
-| 项目 | `.ezmk/repo/.cache/<repo_name>/` |
-
-每个仓库 clone 到对应作用域的 `.cache/` 下，以仓库名称为子目录。`ezmk repo update` 在此目录执行 `git pull`。
-
-### 1.4 子命令行为
-
-| 命令 | 行为 |
-|---|---|
-| `ezmk repo add [-p\|-u\|-g] <git_url> [--name <name>] [--branch <branch>]` | 注册仓库并 `git clone` 到本地缓存。`--name` 省略时从 URL 推断（取路径末尾，去掉 `.git`）。`--branch` 默认 `main`。默认作用域 `-p` |
-| `ezmk repo remove [-p\|-u\|-g] <name>` | 移除注册并删除本地缓存目录。默认 `-pug`（所有作用域） |
-| `ezmk repo update [-p\|-u\|-g] [<name>]` | 在本地缓存目录执行 `git pull` 拉取最新。`<name>` 省略时更新所有。默认 `-pug` |
-| `ezmk repo list [-p\|-u\|-g]` | 列出已注册仓库（名称、git URL、分支、最后更新时间）。默认 `-pug` |
-
-### 1.5 与 `pkg install` 集成
-
-`ezmk pkg install -p <pkg_name>` 的新查找顺序：
-1. 当前目录的本地路径 / 显式 URL（和现在一样）
-2. 已注册仓库的本地缓存中按名称搜索（按项目 → 用户 → 全局顺序查找 repo，在 clone 的 `index.toml` 中查找包名）
-3. 仍未找到 → 报错
-
-此集成是 0.1.3 的关键目标——注册仓库后只需包名即可安装。
-
-### 1.6 本地路径仓库兼容
-
-为方便本地开发和离线使用，也支持本地目录作为仓库源（不需要是 git 仓库）：
-
-```
-ezmk repo add -p /path/to/local/repo --name local-dev
-```
-
-此时：
-- `add`：只记录路径，不 clone（本身就是本地目录）
-- `update`：直接读取本地目录的 `index.toml`，无需网络
-- git 仓库和本地目录在 `list.toml` 中用 `type` 字段区分：`type = "git"` 或 `type = "local"`
-
-### 1.7 实现要点
-
-- **新增文件**：`src/repo.cpp`、`include/ezmk/repo.hpp`
-- **依赖**：需要系统安装 `git` 命令行工具在 PATH 中
-- `main.cpp`：用 `ezmk::repo::add/remove/update/list` 替换占位桩
-- `pkg.cpp`：在 `install` 查找逻辑中增加仓库搜索回退（读取本地缓存中的 `index.toml`）
-- `util.cpp`：新增 `git_clone(url, dest, branch)`、`git_pull(dest)`、`git_last_commit_time(dest)` 辅助函数
-- 安全：`index.toml` 中提供 `sha256` 的包，安装时校验
-- `list.toml` 增加 `type` 字段（`"git"` / `"local"`），与 0.1.2 的 `RepoOptions` 兼容
+> ✅ **已完成 (1.1 + 1.2 + 1.3)**: 项目构建和包编译均通过 `.tmp.o` / `.a.tmp` 实现原子写入；link 产物（.a/.dll/.so/.exe）也先写 `.tmp` 再 rename；构建前清理残留 tmp 文件。涉及文件: `build.cpp`, `pkg.cpp`。
 
 ---
 
-## 2. 代码整理
+## 2. 包编译选项与链接选项传播
 
-当前代码已经能工作，但存在可维护性问题，0.1.3 应逐步改善。
+### 背景
 
-### 2.1 CLI 解析重构（`src/cli.cpp`）
+包的 `ezmk.toml` 已有完整的 `[compile]` 和 `[link]` 节，且 `config.cpp` 已能解析。但在项目构建链路 (`build.cpp`) 中，只收集了包的 `.a` 归档和 `include/` 路径，**未读取包的 `[link]` 配置**。这意味着包声明依赖的系统库（如 `pthread`、`m`）或自定义链接标志不会传递到最终链接命令。
 
-**问题**：`parse()` 函数 ~235 行，深度嵌套 `if/else`，难以新增子命令。
+### 任务
 
-**方案**：按命令组分拆为独立函数：
-```
-parse_project_args(argc, argv) → CliArgs
-parse_pkg_args(argc, argv)     → CliArgs
-parse_repo_args(argc, argv)    → CliArgs
-```
-`parse()` 只做命令组路由。同时引入 `--help` 子命令支持（`ezmk pkg --help`）。
+#### 2.1 收集包的链接选项
 
-### 2.2 工具模块拆分（`src/util.cpp` → 多文件）
+**涉及文件**: `src/build.cpp`（`build_project`）、`src/pkg.cpp`
 
-**问题**：`util.cpp` 606 行，包含日志、文件系统、SHA-256、压缩解压、HTTP 下载、进程管理六种职责。
+- 新增辅助函数 `pkg::collect_link_options(const fs::path& pkg_dir)` → 返回包的 `LinkSection`
+  - 或直接在 `build_project` 中遍历 `.ezmk/pkg/` 时读取每个包的 `ezmk.toml`，合并 `link.flags`、`link.link_dirs`、`link.system_targets`
+- 合并策略：项目自身选项优先，包选项追加（去重可由链接器处理）
+- 注意：依赖包的编译选项（`compile.flags`、`compile.include_dirs`）在包编译阶段已使用，无需重复传播
 
-**方案**：不急于拆成多个编译单元（避免过早抽象），但至少在 `util.cpp` 内部用清晰的 section 注释分区，并将 SHA-256 独立为 `src/crypto.cpp` + `include/ezmk/crypto.hpp`，因为它有 ~150 行纯算法代码。
+#### 2.2 依赖包的 include 路径自动收集
 
-备选：如果后续有更多算法需求（MD5、CRC32），`crypto` 模块可以直接扩展。
+当前的 `extra_includes` 只收集 `.ezmk/pkg/<name>/include/`，但包可能在 `compile.include_dirs` 中声明额外路径（如 `include/internal`）。需要一并收集。
 
-### 2.3 JSON 解析替换（`src/cache.cpp`）
+**涉及文件**: `src/build.cpp`
 
-**问题**：`cache.cpp` 包含 ~170 行手写 JSON 解析器，仅用于读 `record.json`。脆弱、难扩展。
+- 在遍历 `.ezmk/pkg/` 时，解析每个包的 `ezmk.toml`，收集 `compile.include_dirs` 中相对于包根目录的路径
 
-**方案**：引入单个头文件 JSON 库（如 [nlohmann/json](https://github.com/nlohmann/json) 的 `json.hpp`）放到 `include/vendor/`，替换手写解析器和序列化器。这样：
-- 删除 `json_escape`、`json_to_record`、`record_to_json`、`json_skip_*`、`json_read_string`、`json_expect`、`json_skip_value` 等 ~200 行临时代码
-- 缓存记录的读写变成 ~30 行
-- `repo` 模块的 `index.toml` 已经是 TOML（用 toml++），不需要 JSON，但缓存格式保持一致可读性更好
+#### 2.3 `ezmk pkg info` 展示完整链接信息
 
-如果不想引入新依赖，也可以用 toml++ 将 `record.json` 改为 `record.toml`——toml++ 已经在项目里。
+**涉及文件**: `src/pkg.cpp`（`info` 函数）
 
-### 2.4 `using namespace` 清理
+- 在现有输出中增加：
+  - `Link flags:`（包的 `link.flags`）
+  - `Link dirs:`（包的 `link.link_dirs`）
+  - `System targets:`（包的 `link.system_targets`）
+- 当包作为依赖被项目链接时，这些信息对排查链接错误很有价值
 
-**问题**：所有 `.hpp` 头部都有 `namespace fs = std::filesystem;`，会污染任何包含这些头文件的翻译单元。
-
-**方案**：将 `namespace fs = std::filesystem;` 从头文件移到 `.cpp` 实现文件中（或移到 `namespace ezmk::xxx { }` 内部）。头文件中使用完整的 `std::filesystem::`。
-
-### 2.5 错误处理增强
-
-**问题**：很多地方用 `util::fatal()` 直接 `exit(1)`，但调用栈中间可能有临时文件未清理。
-
-**方案**：
-- 将 `fatal` 改为抛 `ezmk::error` 异常（继承 `std::runtime_error`）
-- `main()` 的 catch 块统一清理 `.ezmk/temp/` 临时目录
-- 保留 `fatal` 仅用于无法恢复的场景（如编译器未找到）
-
-### 2.6 包管理模块整理（`src/pkg.cpp`）
-
-**问题**：557 行混合了安装、卸载、搜索、信息、依赖解析、编译六种职责。
-
-**方案**（低优先级，可延后到 0.1.4）：
-- `install` 逻辑保持，但将依赖解析（拓扑排序）独立为 `internal::resolve_deps()`
-- 也可以不做——当前规模尚可，过早拆分反而增加复杂度
+> ✅ **已完成 (2.1 + 2.2 + 2.3)**: `build_project` 遍历 `.ezmk/pkg/` 时解析每个包的 `ezmk.toml`，收集 `link.flags`/`link_dirs`/`system_targets` 合并到项目链接命令；收集 `compile.include_dirs` 中额外路径作为 `-I`；`ezmk pkg info` 新增 `Link flags:`/`Link dirs:`/`System targets:` 输出。涉及文件: `build.cpp`, `pkg.cpp`。
 
 ---
 
-## 3. 文档完善
+## 3. SHA-256 校验（仓库安装安全）
 
-### 3.1 `docs/repo.md`
+### 背景
 
-仓库系统的设计文档，描述仓库结构、`index.toml` 格式、子命令用法、与 `pkg` 的集成方式。
+`docs/@safety.md` 规定："从 URL 下载包时，若仓库 `index.toml` 提供了 `sha256`，必须校验"。当前 `repo.cpp` 的 `read_pkg_file_from_index` 可读取 `sha256` 但忽略该字段，`pkg::install` 也未校验。这是安全合规缺口。
 
-### 3.2 更新 `CLAUDE.md`
+### 任务
 
-新增 `repo` 子命令到 CLI 表格。
+#### 3.1 SHA-256 校验实现
+
+**涉及文件**: `src/pkg.cpp`（`install`）、`src/repo.cpp`、`include/ezmk/pkg.hpp`
+
+- 在 `pkg::install` 中，下载/获取归档后、解压前，计算文件 SHA-256
+- 若归档来自仓库（通过 `search_package` 获取），从 `index.toml` 读取对应的 `sha256` 字段并比对
+- 校验失败 → 报错并清理临时文件，阻止安装
+- 若仓库未提供 `sha256` → 跳过校验（向后兼容）
+- 需要调整 `search_package` 的返回值以携带 `sha256`（或新增重载/输出参数）
+
+#### 3.2 用户提供的 URL/本地文件也可带校验
+
+- `ezmk pkg install` 增加可选 `--sha256 <hash>` 参数
+- 若提供，安装时校验归档哈希
+- **涉及文件**: `src/cli.cpp`（`parse_pkg_args`）、`include/ezmk/cli.hpp`（`InstallOptions` 增加字段）
+
+> ✅ **已完成 (3.1 + 3.2)**: `search_package` 返回 `PkgSearchResult{archive_path, sha256}`；`pkg::install` 在解压前校验 SHA-256；`read_pkg_from_index` 从 `index.toml` 提取 `sha256` 字段；CLI 支持 `--sha256 <hash>` 和 `-y`/`--yes` 标志。涉及文件: `repo.hpp`, `repo.cpp`, `pkg.hpp`, `pkg.cpp`, `cli.hpp`, `cli.cpp`, `main.cpp`。
 
 ---
 
-## 4. 版本发布
+## 4. preinstall / postinstall 钩子脚本
 
-- 版本号：`0.1.3`
-- 更新 `main.cpp` 中的版本字符串
-- commit message: `0.1.3: repo subcommand implementation and code cleanup`
+### 背景
+
+包文件结构中在 `script/` 目录下增加两个可选脚本，按平台选择对应文件：
+
+| 平台 | preinstall | postinstall | 说明 |
+|------|-----------|-------------|------|
+| Linux | `script/preinstall.sh` | `script/postinstall.sh` | bash 执行 |
+| Windows | `script/preinstall.ps1`（优先）或 `script/preinstall.bat` | `script/postinstall.ps1`（优先）或 `script/postinstall.bat` | PowerShell / cmd 执行 |
+
+- 包可同时提供多平台脚本（如 `.sh` + `.ps1`），工具按当前平台选择对应文件
+- Windows 下 `.ps1` 优先于 `.bat`，`.ps1` 不存在时回退到 `.bat`
+
+### 任务
+
+#### 4.1 脚本检测与交互确认
+
+**涉及文件**: `src/pkg.cpp`（`install`）
+
+- 解压后、编译前检测 `script/` 目录下是否存在 preinstall 脚本：
+  - **Linux**: 检测 `script/preinstall.sh`
+  - **Windows**: 优先检测 `script/preinstall.ps1`，不存在则检测 `script/preinstall.bat`
+  - 若存在 → 使用系统编辑器打开脚本供审查，编辑器退出后交互式询问 `Execute preinstall.<ext> for <pkg>? [y/N]`
+  - 用户确认 → `cwd` 切换到安装目标目录（`dest_dir/<pkg_name>`），执行脚本：
+    - Linux `.sh`: `bash <脚本路径>`
+    - Windows `.ps1`: `powershell -ExecutionPolicy Bypass -File <脚本路径>`
+    - Windows `.bat`: `cmd /c <脚本路径>`
+  - 用户拒绝 → 跳过，继续安装流程
+  - 脚本执行失败 → 询问 `preinstall script failed. Continue installation? [y/N]`
+- 编译安装后检测 postinstall 脚本（`.sh` / `.ps1` / `.bat` 同理）
+  - 同理交互确认，`cwd` 为已安装的目录
+  - 执行失败不阻断安装完成通知，但需警告
+
+#### 4.2 安全考量
+
+- 脚本以当前用户权限执行，不提升权限
+- 在执行前使用系统编辑器打开脚本供用户审查：
+  - Windows: `notepad <脚本路径>`
+  - Linux: 按顺序尝试 `vim` → `nano` → `emacs`，使用首个可用的编辑器
+  - 编辑器退出后询问用户是否确认执行
+- 全局安装 (`-g`) 的脚本执行需要二次确认（叠加全局安装的已有确认）
+- Linux 下未找到 `bash` 时，警告并跳过，不阻断安装
+- 新增 `--yes` / `-y` 标志跳过所有交互（自动执行脚本），用于 CI 场景
+
+#### 4.3 CI/非交互支持
+
+**涉及文件**: `src/cli.cpp`、`include/ezmk/cli.hpp`、`src/pkg.cpp`
+
+- `InstallOptions` 增加 `bool assume_yes = false`
+- `ezmk pkg install -p <pkg> -y` 自动确认所有提示（包括脚本执行和覆盖确认）
+
+> ✅ **已完成 (4.1 + 4.2 + 4.3)**: `detect_install_script` 在 `script/` 目录下按平台检测 `.sh`/`.ps1`/`.bat` 脚本；`run_install_script` 编辑器审查 → 交互确认 → 执行；`-y`/`--yes` 全局跳过所有确认；`util::find_editor`/`open_in_editor`/`run_script` 新增工具函数。涉及文件: `pkg.cpp`, `pkg.hpp`, `main.cpp`, `cli.cpp`, `cli.hpp`, `util.hpp`, `util.cpp`。
 
 ---
 
-## 5. 实现进度
+## 5. 缓存记录一致性强化（补充）
 
-### ✅ 已完成（2026-06-19）
+### 背景
 
-| 任务 | 状态 | 说明 |
-|---|---|---|
-| `docs/repo.md` | ✅ | git-based 仓库设计文档 |
-| `include/ezmk/repo.hpp` | ✅ | 仓库模块头文件：`RepoEntry` 结构体、`add/remove/update/list` 声明、`search_package` 集成接口 |
-| `src/repo.cpp` | ✅ | 仓库核心实现：`load_repo_list`/`save_repo_list`（toml++ 读写 `list.toml`）、`add`（git clone + 注册）、`remove`（删缓存 + 注销）、`update`（git pull）、`list`（打印）、`search_package`（按名搜索包） |
-| CLI 类型更新 (`cli.hpp`) | ✅ | `RepoOptions` 增加 `scopes`、`url`、`name`、`branch` 字段；移除 `std::optional` |
-| CLI 解析更新 (`cli.cpp`) | ✅ | repo 四个子命令支持 `-p/-u/-g` 作用域参数、`--name`、`--branch` 选项；更新 `print_usage` 帮助文本 |
-| Git 辅助函数 (`util.hpp/cpp`) | ✅ | `git_available()`、`git_clone()`、`git_pull()`、`git_last_commit_time()` |
-| `main.cpp` 集成 | ✅ | 替换 repo 占位桩为实际调用；引入 `ezmk/repo.hpp`；版本号更新为 `0.1.3` |
-| `pkg.cpp` 集成 | ✅ | `install` 增加仓库搜索回退：非本地文件/URL 时在已注册仓库中按名称搜索 |
-| `CLAUDE.md` 更新 | ✅ | 新增 Repository management 章节、更新 CLI 表格、修正构建命令 |
+当前 `cache::check_cache` 通过头文件哈希逐项比对来判断缓存有效性，但当头文件被删除（源文件不再依赖它）时，旧记录中的依赖项仍存在但不会被检测到"增加/删除"变化。需要在编译后对比新旧依赖集合。
 
-| 2.1 CLI 解析重构 | ✅ | `parse()` 拆分为 `parse_project_args` / `parse_pkg_args` / `parse_repo_args` + 共享辅助 `parse_scope_and_value`。`parse()` 从 361 行减至 320 行，顶层变为 5 行路由 |
-| 2.2 SHA-256 独立 | ✅ | 抽取 `src/crypto.cpp` + `include/ezmk/crypto.hpp`，`util.cpp` 减少 118 行 |
-| 2.3 JSON 替换 | ✅ | 引入 nlohmann/json (`include/vendor/nlohmann_json.hpp`)，删除手写 JSON 解析器 ~160 行，`cache.cpp` 从 406 行减至 246 行 |
-| 2.4 `namespace fs` 清理 | ✅ | 7 个头文件的 `namespace fs = std::filesystem;` 全部从文件作用域移入各命名空间内部 |
-| 2.5 错误处理增强 | ✅ | `fatal()` 从 `exit(1)` 改为 `throw ezmk::fatal_error`；`main()` 捕获后清理 `.ezmk/temp/` |
-| 版本比较修复 | ✅ | `repo.cpp` 版本比较从字符串字典序改为按 `.` 拆分后逐段数值比较 |
+### 任务
 
-### ⏳ 待完成（0.1.4）
+#### 5.1 依赖集合变化检测
 
-| 任务 | 优先级 | 说明 |
-|---|---|---|
-| pkg.cpp 整理 | 低 | 依赖解析独立、模块职责分离 |
-| 缓存原子写入包编译 | 中 | `pkg.cpp` 中 `compile_package` 也应使用原子写入 |
-| 测试框架 | 低 | 引入单元测试 |
+**涉及文件**: `src/cache.cpp`（`check_cache`）
 
-### 新增/变更文件清单
+- 缓存命中条件增加：当前编译产出的依赖文件路径集合必须与记录中的一致（数量和路径名）
+- 如果路径集合有增减 → 缓存失效
+- 实现方式：重新编译时（cache miss）在更新 record 前比较新旧 `dependencies` 的 path 集合，若仅有哈希变化则更新，若有路径变化则将集合变化也作为缓存键
 
-```
-include/ezmk/crypto.hpp       — SHA-256 模块头文件
-include/ezmk/repo.hpp          — 仓库模块头文件
-include/vendor/nlohmann_json.hpp — nlohmann/json 单头文件
-src/crypto.cpp                 — SHA-256 实现
-src/repo.cpp                   — 仓库模块实现
-docs/repo.md                   — 仓库设计文档
-```
+> **注**: 此改动较小，可合入上面第 1 节的改动中一并完成。
+
+> ✅ **已完成 (5.1)**: `cache::same_dependency_paths` 比较新旧依赖路径集合；`build.cpp` 和 `pkg.cpp` 在 cache miss 重编译后检测 include 结构变化并输出诊断信息。涉及文件: `cache.hpp`, `cache.cpp`, `build.cpp`, `pkg.cpp`。
+
+---
+
+## 6. 实现顺序建议
+
+| 优先级 | 条目 | 理由 |
+|--------|------|------|
+| P0 | 3. SHA-256 校验 ✅ | 安全合规缺口，`@safety.md` 已要求（已完成） |
+| P0 | 1. 编译产物原子写入 ✅ | 构建健壮性基础（已完成） |
+| P1 | 2. 包链接选项传播 ✅ | 功能完整性，影响多包项目（已完成） |
+| P1 | 4. preinstall/postinstall 钩子 ✅ | 新功能，提升包管理能力（已完成） |
+| P2 | 5. 缓存依赖集合检测 ✅ | 边界情况修正，影响面小（已完成） |
+
+---
+
+## 涉及文件总览
+
+| 文件 | 改动类型 |
+|------|----------|
+| `src/build.cpp` | 原子写入、链接选项收集、include 路径收集 |
+| `src/pkg.cpp` | 原子写入、SHA-256 校验、钩子脚本、info 增强 |
+| `src/cache.cpp` | 依赖集合变化检测 |
+| `src/cli.cpp` | `--sha256` / `-y` 参数解析 |
+| `src/repo.cpp` | `search_package` 返回 sha256 |
+| `include/ezmk/cli.hpp` | `InstallOptions` 字段扩展 |
+| `include/ezmk/pkg.hpp` | 新增辅助函数声明 |
+
+---
+
+# EazyMake 0.1.5 代码质量修复
+
+> 基于 0.1.4 代码审查，按严重程度修复所有发现的问题。
+
+## Critical
+
+### C1. SHA-256 位长度编码 UB ✅ [`crypto.cpp`]
+
+**修复**: 使用 `uint64_t` 存储位计数，添加 `<cstdint>`。
+
+### C2. curl 命令注入 ✅ [`util.cpp`]
+
+**修复**: 单引号转义为 `'\''` 模式。
+
+### C3. CRLF 转换破坏数据 ✅ [`cache.cpp`]
+
+**修复**: 仅跳过 `\r\n` 对中的 `\r`，保留独立 `\r`。
+
+### C4. 临时目录名碰撞 ✅ [`pkg.cpp`]
+
+**修复**: 使用 `high_resolution_clock` + `atomic<uint64_t>` 计数器生成唯一名称。
+
+### C5. SHA-256 全量加载 ✅ [`crypto.cpp`]
+
+**修复**: 新增 `Sha256Stream` 类支持流式哈希；`sha256_file` 改为 64KiB 分块读取。
+
+---
+
+## Medium
+
+### M1. 编译循环 DRY 重构 [`build.cpp`, `pkg.cpp`]
+
+**问题**: `build_project` 和 `compile_package` 编译循环约 80% 重复。
+
+**修复**: 提取共享编译逻辑到 `cache::compile_source()`。
+
+### M2. 文件时间转换 bug ✅ [`pkg.cpp`]
+
+**修复**: C++20 使用 `clock_cast`；C++17 回退到 `from_time_t(to_time_t(...))` 正确转换。
+
+### M3. Linux 下 stdout/stderr 合并 ✅ [`util.cpp`]
+
+**修复**: 使用 `mkstemp` 临时文件分别捕获 stdout 和 stderr，用完后 `unlink`。
+
+### M4. `std::stoul` 异常 ✅ [`repo.cpp`]
+
+**修复**: 用 `try-catch` 包裹 `stoul`，非数字段视为 0。
+
+### M5. `file_write` 静默失败 ✅ [`util.hpp`, `util.cpp`]
+
+**修复**: 返回 `bool`，增加写入成功后的 stream 状态检查。
+
+### M6. TOML 序列化转义 ✅ [`repo.cpp`]
+
+**修复**: 对 `"`、`\`、`\n` 进行转义。
+
+---
+
+## Low
+
+### L1. 缺少 `.gitignore` 生成 ✅ [`project.cpp`]
+
+### L2. 编译器名硬编码 → 推迟到 0.1.6（需支持 clang 等）
+
+### L3. `.d` 文件路径含冒号 → 极边缘情况，暂不修复
+
+### L4. `rename` 失败静默降级日志 ✅ [`build.cpp`]
+
+### L5. 缺少 C++98/C++03/C26 标准版本 ✅ [`config.cpp`]
+
+### L6. shell 注入风险（Linux 路径）→ M3 已解决 run_command 层面
+
+### L7. 变量名遮蔽 → 低优先，推迟
+
+### M1. 编译循环 DRY 重构 → 推迟到 0.1.6（较大重构）
