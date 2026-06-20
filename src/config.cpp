@@ -80,7 +80,14 @@ EzConfig parse_config(const fs::path& toml_path) {
     }
 
     // toml++ with exceptions: throws on parse error, returns table on success
-    auto root = toml::parse_file(toml_path.string());
+    toml::table root;
+    try {
+        root = toml::parse_file(toml_path.string());
+    } catch (const toml::parse_error& e) {
+        // e.what() includes file path, line, and column info
+        throw std::runtime_error(
+            std::string("failed to parse ") + toml_path.string() + ":\n  " + e.what());
+    }
 
     // [project]
     if (auto proj = root["project"].as_table()) {
@@ -163,7 +170,9 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     content += "[depends]\n";
     content += "lib = []\n";
 
-    util::file_write(toml_path, content);
+    if (!util::file_write(toml_path, content)) {
+        throw std::runtime_error("failed to write config file: " + toml_path.string());
+    }
 }
 
 } // namespace ezmk::config

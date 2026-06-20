@@ -1,6 +1,6 @@
 # 默认创建文件
 
-`ezmk project new <name>` 生成以下文件。
+`ezmk project new <name> [--type <type>] [--disable-git-init] [--disable-gitignore]` 生成以下文件。
 
 ---
 
@@ -39,5 +39,54 @@ lib = []
 
 ---
 
+## `<project_dir>/.gitignore`
+
+自动生成（可通过 `--disable-gitignore` 跳过）：
+
+```gitignore
+# EazyMake build artifacts
+build/
+.ezmk/
+*.o
+*.obj
+*.tmp.o
+*.tmp.obj
+```
+
+---
+
 ## `<project_dir>/README.md`
-不添加内容只创建
+不添加内容只创建空文件。
+
+---
+
+## Git 初始化（0.1.5+）
+
+创建项目后自动执行 `git init`（如果系统中 git 可用）。可通过 `--disable-git-init` 跳过。
+
+---
+
+## 可选参数
+
+| 参数 | 说明 |
+|------|------|
+| `--type <type>` | 项目类型：`executable`（默认）、`static`、`shared` |
+| `--disable-git-init` | 跳过 `git init` |
+| `--disable-gitignore` | 跳过 `.gitignore` 生成 |
+
+## 生成的目录结构
+
+```
+<project_dir>/
+  .ezmk/
+    pkg/
+    temp/
+    cache/
+  include/
+  src/
+    main.cpp
+  build/
+  ezmk.toml
+  .gitignore
+  README.md
+```

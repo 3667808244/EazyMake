@@ -9,11 +9,11 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <deque>
 #include <iostream>
 #include <map>
-#include <random>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -180,119 +180,40 @@ fs::path compile_package(const fs::path& pkg_dir,
         record.files.clear();
     }
 
-    std::vector<fs::path> objects;
-    int cache_hits = 0;
-    int cache_misses = 0;
+    // ---- Unified compile phase ----
+    auto lang = config::parse_language(cfg.project.language);
 
-    for (auto& src : sources) {
-        fs::path obj = build_dir / src.filename();
-        obj.replace_extension(EZMK_OBJ_SUFFIX);
-        fs::path obj_tmp = build_dir / src.filename();
-        obj_tmp.replace_extension(".tmp" EZMK_OBJ_SUFFIX);
-        fs::path depfile = build_dir / src.filename();
-        depfile.replace_extension(".d");
+    cache::CompileInput cin;
+    cin.sources = std::move(sources);
+    cin.obj_dir = build_dir;
+    cin.dep_dir = build_dir;
+    cin.proj_root = pkg_dir;
+    cin.compile = cfg.compile;
+    cin.lang = lang;
+    cin.extra_includes = dep_includes;
+    cin.cache_obj_dir = build_dir;   // package: obj_dir == cache_obj_dir
+    cin.disable_cache = false;       // packages always use cache
+    cin.use_pic = false;             // packages are always static libs
 
-        // Check cache — cached .o is already valid (written atomically last time)
-        auto cached = cache::check_cache(src, cfg.compile, record, pkg_dir);
-        if (cached && util::file_exists(obj)) {
-            objects.push_back(obj);
-            ++cache_hits;
-            continue;
-        }
-
-        // Cache miss: compile to temp file
-        ++cache_misses;
-        auto lang = config::parse_language(cfg.project.language);
-        std::ostringstream cmd;
-        cmd << lang.compiler << " " << lang.std_flag << " -c ";
-        for (auto& f : cfg.compile.flags) cmd << f << " ";
-        cmd << "-I\"" << (pkg_dir / "include").string() << "\" ";
-        for (auto& d : cfg.compile.include_dirs) {
-            fs::path resolved = d;
-            if (resolved.is_relative()) resolved = pkg_dir / resolved;
-            cmd << "-I\"" << resolved.string() << "\" ";
-        }
-        for (auto& inc : dep_includes) {
-            cmd << "-I\"" << inc.string() << "\" ";
-        }
-        cmd << "-MMD -MF \"" << depfile.string() << "\" ";
-        cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
-
-        auto res = util::run_command(cmd.str());
-        if (res.exit_code != 0) {
-            util::error("compilation failed for " + src.string());
-            util::error(res.err);
-            // Remove partial temp file
-            std::error_code ec;
-            fs::remove(obj_tmp, ec);
-            throw std::runtime_error("failed to compile package: " + name);
-        }
-
-        // Atomically rename temp to final
-        {
-            std::error_code ec;
-            fs::rename(obj_tmp, obj, ec);
-            if (ec) {
-                fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
-                fs::remove(obj_tmp, ec);
-            }
-        }
-        objects.push_back(obj);
-
-        // Update cache entry
-        auto rel_src = fs::relative(src, pkg_dir).generic_string();
-        auto& entry = record.files[rel_src];
-
-        // Check if dependency path set changed (include structure change)
-        auto new_deps = cache::parse_depfile_and_hash(depfile);
-        if (!record.files.empty()) {
-            auto old_it = record.files.find(rel_src);
-            if (old_it != record.files.end() &&
-                !cache::same_dependency_paths(old_it->second.dependencies, new_deps)) {
-                util::info("      include structure changed for " + rel_src);
-            }
-        }
-
-        entry.source_hash = crypto::sha256_file(src);
-        entry.object_file = fs::relative(obj, pkg_dir).generic_string();
-        entry.compiler = "g++";
-        entry.compile_opts = cfg.compile.flags;
-        entry.dependencies = std::move(new_deps);
-        // Normalize to pkg_dir-relative paths so cache survives package relocation
-        for (auto& dep : entry.dependencies) {
-            fs::path dp(dep.path);
-            if (dp.is_absolute()) {
-                auto rel = fs::relative(dp, pkg_dir);
-                if (!rel.empty() && rel.string().find("..") == std::string::npos) {
-                    dep.path = rel.generic_string();
-                }
-            }
-        }
-        entry.last_build_time = cache::iso_time();
-    }
+    auto comp_result = cache::compile_sources(cin, record);
 
     // Save cache
     cache::save_record(record, cache_path);
 
-    if (cache_hits > 0 || cache_misses > 0) {
+    if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
         std::string summary = "    ";
-        if (cache_hits > 0) summary += std::to_string(cache_hits) + " cached, ";
-        summary += std::to_string(cache_misses) + " compiled";
+        if (comp_result.cache_hits > 0) summary += std::to_string(comp_result.cache_hits) + " cached, ";
+        summary += std::to_string(comp_result.cache_misses) + " compiled";
         util::info(summary);
     }
 
     // Archive (skip if nothing changed and .a exists)
-    if (cache_misses == 0 && util::file_exists(lib)) {
+    if (comp_result.cache_misses == 0 && util::file_exists(lib)) {
         return lib;
     }
 
-    // Collect all objects (both cached and newly compiled)
-    std::vector<fs::path> all_objs;
-    for (auto& src : sources) {
-        fs::path obj = build_dir / src.filename();
-        obj.replace_extension(EZMK_OBJ_SUFFIX);
-        all_objs.push_back(obj);
-    }
+    // Use the actual object paths returned by compile_sources
+    // (handles nested source directories correctly, unlike filename-based reconstruction)
 
     // Archive to temp file, then atomic rename
     fs::path lib_tmp = build_dir / ("lib" + name + ".a.tmp");
@@ -303,7 +224,7 @@ fs::path compile_package(const fs::path& pkg_dir,
 
     std::ostringstream ar_cmd;
     ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
-    for (auto& o : all_objs) {
+    for (auto& o : comp_result.objects) {
         ar_cmd << " \"" << o.string() << "\"";
     }
 
@@ -457,7 +378,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
             util::fatal(
                 std::string("SHA-256 mismatch for ") + pkg_file +
                 "\n  expected: " + std::string(expected_sha256) +
-                "\n  actual:   " + actual);
+                "\n  actual:   " + actual +
+                "\n  Use --sha256 to provide the correct hash, or -y to skip verification.");
         }
         util::info("  SHA-256 OK");
     }

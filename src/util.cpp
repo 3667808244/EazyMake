@@ -36,13 +36,90 @@ namespace ezmk::util {
 // Logging
 // ===================================================================
 
-void info(std::string_view msg)  { std::cerr << "[ezmk] " << msg << "\n"; }
-void warn(std::string_view msg)  { std::cerr << "[ezmk warn] " << msg << "\n"; }
-void error(std::string_view msg) { std::cerr << "[ezmk error] " << msg << "\n"; }
+void info(std::string_view msg)  {
+    if (supports_color())
+        std::cerr << color::green << "[ezmk] " << color::reset << msg << "\n";
+    else
+        std::cerr << "[ezmk] " << msg << "\n";
+}
+void warn(std::string_view msg)  {
+    if (supports_color())
+        std::cerr << color::yellow << "[ezmk warn] " << color::reset << msg << "\n";
+    else
+        std::cerr << "[ezmk warn] " << msg << "\n";
+}
+void error(std::string_view msg) {
+    if (supports_color())
+        std::cerr << color::red << "[ezmk error] " << color::reset << msg << "\n";
+    else
+        std::cerr << "[ezmk error] " << msg << "\n";
+}
 
 void fatal(std::string_view msg) {
-    std::cerr << "[ezmk fatal] " << msg << "\n";
+    if (supports_color())
+        std::cerr << color::red << "[ezmk fatal] " << color::reset << msg << "\n";
+    else
+        std::cerr << "[ezmk fatal] " << msg << "\n";
     throw ezmk::fatal_error(msg);
+}
+
+// ===================================================================
+// Color support
+// ===================================================================
+
+namespace color {
+    const char* reset = "\033[0m";
+    const char* green = "\033[32m";
+    const char* yellow = "\033[33m";
+    const char* red = "\033[31m";
+    const char* cyan = "\033[36m";
+    const char* bold = "\033[1m";
+    const char* dim = "\033[2m";
+}
+
+static bool g_console_initialized = false;
+
+void init_console() {
+    if (g_console_initialized) return;
+    g_console_initialized = true;
+
+#ifdef EZMK_WIN
+    // Enable VT100 processing on Windows 10+
+    HANDLE hOut = GetStdHandle(STD_ERROR_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE && hOut != nullptr) {
+        DWORD mode = 0;
+        if (GetConsoleMode(hOut, &mode)) {
+            mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(hOut, mode);
+        }
+    }
+#endif
+}
+
+bool supports_color() {
+    // Respect NO_COLOR convention: https://no-color.org/
+    const char* no_color = std::getenv("NO_COLOR");
+    if (no_color && no_color[0] != '\0') return false;
+
+    // Check if stderr is a terminal
+#ifdef EZMK_WIN
+    HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+    if (hErr == INVALID_HANDLE_VALUE || hErr == nullptr) return false;
+    DWORD mode = 0;
+    return GetConsoleMode(hErr, &mode) != 0;
+#else
+    return isatty(STDERR_FILENO);
+#endif
+}
+
+std::string color_msg(const char* color, std::string_view msg) {
+    if (!supports_color()) return std::string(msg);
+    std::string result;
+    result.reserve(strlen(color) + msg.size() + strlen(color::reset) + 1);
+    result += color;
+    result += msg;
+    result += color::reset;
+    return result;
 }
 
 // ===================================================================
@@ -380,6 +457,33 @@ void download(std::string_view url_sv, const fs::path& dest) {
     }
 
     ok = WinHttpReceiveResponse(hRequest, nullptr);
+    if (!ok) {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        throw std::runtime_error("WinHttpReceiveResponse failed");
+    }
+
+    // Check HTTP status code — reject non-2xx responses
+    {
+        DWORD statusCode = 0;
+        DWORD statusCodeSize = sizeof(statusCode);
+        if (WinHttpQueryHeaders(hRequest,
+                WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                WINHTTP_HEADER_NAME_BY_INDEX,
+                &statusCode, &statusCodeSize, WINHTTP_NO_HEADER_INDEX)) {
+            if (statusCode < 200 || statusCode >= 300) {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error(
+                    "download failed: HTTP " + std::to_string(statusCode) +
+                    " for " + std::string(url_sv));
+            }
+        }
+        // If QueryHeaders fails, continue anyway (conservative — the server
+        // might not support this query, but we already have a response)
+    }
 
     // Read response
     fs::create_directories(dest.parent_path());
@@ -403,7 +507,8 @@ void download(std::string_view url_sv, const fs::path& dest) {
     WinHttpCloseHandle(hSession);
 
 #else
-    // Fallback: use curl command — escape single quotes in paths
+    // Fallback: use curl command — escape single quotes in both URL and dest path.
+    // Single-quote style: break out of quotes, insert escaped quote, re-enter quotes.
     auto escape_sq = [](const std::string& s) -> std::string {
         std::string r;
         for (char c : s) {
@@ -412,7 +517,9 @@ void download(std::string_view url_sv, const fs::path& dest) {
         }
         return r;
     };
-    std::string cmd = "curl -sL -o '" + escape_sq(dest.string()) + "' '" + escape_sq(url) + "'";
+    std::string escaped_url = escape_sq(url);
+    std::string escaped_dest = escape_sq(dest.string());
+    std::string cmd = "curl -sL -o '" + escaped_dest + "' '" + escaped_url + "'";
     auto res = run_command(cmd);
     if (res.exit_code != 0) {
         throw std::runtime_error("download failed: " + res.err);
@@ -525,8 +632,9 @@ bool git_available() {
 
 bool git_clone(const std::string& url, const fs::path& dest, std::string_view branch) {
     std::ostringstream cmd;
-    cmd << "git clone --branch " << branch
-        << " \"" << url << "\" \"" << dest.string() << "\"";
+    cmd << "git clone --branch " << escape_shell_arg(branch)
+        << " \"" << escape_shell_arg(url) << "\" \""
+        << escape_shell_arg(dest.string()) << "\"";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) {
         error(std::string("git clone failed: ") + res.err);
@@ -537,7 +645,8 @@ bool git_clone(const std::string& url, const fs::path& dest, std::string_view br
 
 bool git_pull(const fs::path& repo_dir, std::string_view branch) {
     std::ostringstream cmd;
-    cmd << "git -C \"" << repo_dir.string() << "\" pull origin " << branch;
+    cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
+        << "\" pull origin " << escape_shell_arg(branch);
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) {
         error(std::string("git pull failed: ") + res.err);
@@ -548,7 +657,7 @@ bool git_pull(const fs::path& repo_dir, std::string_view branch) {
 
 std::string git_last_commit_time(const fs::path& repo_dir) {
     std::ostringstream cmd;
-    cmd << "git -C \"" << repo_dir.string()
+    cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
         << "\" log -1 --format=%cI";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) return {};
@@ -586,9 +695,9 @@ void open_in_editor(const fs::path& file) {
     }
     info(std::string("Opening ") + file.string() + " in " + editor + "...");
 #ifdef EZMK_WIN
-    std::string cmd = "notepad \"" + file.string() + "\"";
+    std::string cmd = "notepad \"" + escape_shell_arg(file.string()) + "\"";
 #else
-    std::string cmd = editor + " \"" + file.string() + "\" < /dev/tty > /dev/tty 2>&1";
+    std::string cmd = editor + " \"" + escape_shell_arg(file.string()) + "\" < /dev/tty > /dev/tty 2>&1";
 #endif
     auto res = run_command(cmd);
     if (res.exit_code != 0 && !res.err.empty()) {
@@ -607,12 +716,12 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
 #else
         cmd << "bash ";
 #endif
-        cmd << "\"" << script.string() << "\"";
+        cmd << "\"" << escape_shell_arg(script.string()) << "\"";
     } else if (ext == ".ps1") {
         cmd << "powershell -ExecutionPolicy Bypass -File \""
-            << script.string() << "\"";
+            << escape_shell_arg(script.string()) << "\"";
     } else if (ext == ".bat") {
-        cmd << "cmd /c \"" << script.string() << "\"";
+        cmd << "cmd /c \"" << escape_shell_arg(script.string()) << "\"";
     } else {
         ProcResult bad;
         bad.exit_code = 1;
@@ -623,9 +732,9 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
     // Build command with cd
     std::ostringstream full_cmd;
 #ifdef EZMK_WIN
-    full_cmd << "cd /d \"" << cwd.string() << "\" && " << cmd.str();
+    full_cmd << "cd /d \"" << escape_shell_arg(cwd.string()) << "\" && " << cmd.str();
 #else
-    full_cmd << "cd \"" << cwd.string() << "\" && " << cmd.str();
+    full_cmd << "cd \"" << escape_shell_arg(cwd.string()) << "\" && " << cmd.str();
 #endif
 
     return run_command(full_cmd.str());
@@ -641,6 +750,17 @@ std::string native_path(const fs::path& p) {
     std::replace(s.begin(), s.end(), '/', '\\');
 #endif
     return s;
+}
+
+std::string escape_shell_arg(std::string_view s) {
+    std::string r;
+    r.reserve(s.size() + 8); // small reserve for occasional escapes
+    for (char c : s) {
+        if (c == '"' || c == '\\' || c == '`' || c == '$')
+            r += '\\';
+        r += c;
+    }
+    return r;
 }
 
 } // namespace ezmk::util

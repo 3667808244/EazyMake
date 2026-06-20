@@ -1,9 +1,0 @@
-=== EazyMake Build ===
-Compiler : g++
-Sources  : /home/egglzh/cpp/project/EazyMake/src/build.cpp /home/egglzh/cpp/project/EazyMake/src/cache.cpp /home/egglzh/cpp/project/EazyMake/src/cli.cpp /home/egglzh/cpp/project/EazyMake/src/config.cpp /home/egglzh/cpp/project/EazyMake/src/main.cpp /home/egglzh/cpp/project/EazyMake/src/pkg.cpp /home/egglzh/cpp/project/EazyMake/src/project.cpp /home/egglzh/cpp/project/EazyMake/src/util.cpp /home/egglzh/cpp/project/EazyMake/src/vendor/miniz.c /home/egglzh/cpp/project/EazyMake/src/vendor/miniz_tdef.c /home/egglzh/cpp/project/EazyMake/src/vendor/miniz_tinfl.c /home/egglzh/cpp/project/EazyMake/src/vendor/miniz_zip.c
-Output   : /home/egglzh/cpp/project/EazyMake/build/ezmk
-
-+ g++ -std=c++17 -Wall -Wextra -O2 -I/home/egglzh/cpp/project/EazyMake/include -I/home/egglzh/cpp/project/EazyMake/include/vendor /home/egglzh/cpp/project/EazyMake/src/build.cpp /home/egglzh/cpp/project/EazyMake/src/cache.cpp /home/egglzh/cpp/project/EazyMake/src/cli.cpp /home/egglzh/cpp/project/EazyMake/src/config.cpp /home/egglzh/cpp/project/EazyMake/src/main.cpp /home/egglzh/cpp/project/EazyMake/src/pkg.cpp /home/egglzh/cpp/project/EazyMake/src/project.cpp /home/egglzh/cpp/project/EazyMake/src/util.cpp /home/egglzh/cpp/project/EazyMake/src/vendor/miniz.c /home/egglzh/cpp/project/EazyMake/src/vendor/miniz_tdef.c /home/egglzh/cpp/project/EazyMake/src/vendor/miniz_tinfl.c /home/egglzh/cpp/project/EazyMake/src/vendor/miniz_zip.c -static -o /home/egglzh/cpp/project/EazyMake/build/ezmk
-+ set +x
-
-Build successful: /home/egglzh/cpp/project/EazyMake/build/ezmk

@@ -35,6 +35,24 @@ void warn(std::string_view msg);
 void error(std::string_view msg);
 [[noreturn]] void fatal(std::string_view msg);  // throws ezmk::fatal_error
 
+// ---- Color support (VT100/ANSI) ----
+// Call once at startup to enable VT100 processing on Windows.
+void init_console();
+// Returns true if the output stream supports ANSI color codes.
+bool supports_color();
+// Wrap a message in color codes (no-op if color is not supported).
+std::string color_msg(const char* color, std::string_view msg);
+// ANSI escape codes for colored output.
+namespace color {
+    extern const char* reset;
+    extern const char* green;
+    extern const char* yellow;
+    extern const char* red;
+    extern const char* cyan;
+    extern const char* bold;
+    extern const char* dim;
+}
+
 // ---- Filesystem ----
 bool file_exists(const fs::path& p);
 std::string file_read(const fs::path& p);
@@ -106,5 +124,11 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd);
 // ---- Cross-platform ----
 // Make a path use forward slashes (MSYS2-compatible)
 std::string native_path(const fs::path& p);
+
+// ---- Shell safety ----
+// Escape a string for safe use inside double-quoted shell arguments.
+// Escapes: " \ ` $
+// This prevents command injection when constructing shell commands with paths/URLs.
+std::string escape_shell_arg(std::string_view s);
 
 } // namespace ezmk::util

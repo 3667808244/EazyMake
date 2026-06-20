@@ -3,6 +3,10 @@ set -euo pipefail
 
 # EazyMake build script
 # Works on MSYS2 (Windows), Linux, and macOS with g++.
+#
+# Usage:
+#   bash build.sh          # Normal build
+#   bash build.sh -v       # Verbose (show full compile command and flags)
 
 cd "$(dirname "$0")"
 
@@ -11,6 +15,20 @@ INCLUDES="-I include/ -I include/vendor/"
 OUTPUT="build/ezmk"
 CXX="${CXX:-g++}"
 CXXFLAGS="${CXXFLAGS:--std=c++17}"
+
+# Parse flags
+VERBOSE=false
+for arg in "$@"; do
+    case "$arg" in
+        -v|--verbose) VERBOSE=true ;;
+        -h|--help)
+            echo "Usage: bash build.sh [-v|--verbose]"
+            echo "  -v, --verbose  Show full compile command"
+            exit 0
+            ;;
+        *) echo "Unknown flag: $arg"; exit 1 ;;
+    esac
+done
 
 # Platform-specific settings
 case "$(uname -s)" in
@@ -30,9 +48,19 @@ case "$(uname -s)" in
         ;;
 esac
 
-echo "=== Building EazyMake ==="
-echo "Compiler: $CXX"
-echo "Flags:    $CXXFLAGS"
+if $VERBOSE; then
+    echo "=== Building EazyMake ==="
+    echo "Compiler: $CXX"
+    echo "Flags:    $CXXFLAGS"
+    echo "Sources:  $SRC"
+    echo "Includes: $INCLUDES"
+    echo "Libs:     $LIBS"
+    echo "LDFlags:  $LDFLAGS"
+    echo "Output:   $OUTPUT"
+    echo ""
+fi
+
+mkdir -p build
 
 $CXX $CXXFLAGS $SRC $INCLUDES -o "$OUTPUT" $LIBS $LDFLAGS
 

@@ -19,6 +19,7 @@ enum class Command {
     RepoUpdate,
     RepoRemove,
     RepoList,
+    Utils,
     Version,
     Help,
 };
@@ -31,6 +32,7 @@ enum class Scope {
 
 struct BuildOptions {
     bool disable_cache = false;
+    bool verbose = false;
 };
 
 struct InstallOptions {
@@ -58,6 +60,8 @@ struct CliArgs {
     // Only valid for ProjectNew
     std::optional<std::string> project_name;
     std::string project_type = "executable";   // --type flag
+    bool disable_git_init = false;             // --disable-git-init
+    bool disable_gitignore = false;            // --disable-gitignore
 
     // Only valid for ProjectBuild / ProjectRun
     BuildOptions build_opts;
@@ -70,6 +74,10 @@ struct CliArgs {
 
     // Only valid for RepoAdd / RepoRemove / RepoUpdate / RepoList
     RepoOptions repo_opts;
+
+    // Only valid for Utils
+    std::string utils_name;
+    std::vector<std::string> utils_args;
 };
 
 CliArgs parse(int argc, char** argv);

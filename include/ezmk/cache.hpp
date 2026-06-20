@@ -17,7 +17,7 @@ struct DepEntry {
 
 struct FileEntry {
     std::string source_hash;
-    std::string object_file;    // relative path under .ezmk/cache/obj/
+    std::string object_file;    // relative path under cache obj dir
     std::string compiler;
     std::vector<std::string> compile_opts;
     std::vector<DepEntry> dependencies;
@@ -29,6 +29,36 @@ struct CacheRecord {
     std::string compile_options_signature;
     std::map<std::string, FileEntry> files; // keyed by source path relative to project root
 };
+
+// ===================================================================
+// Unified compile interface (0.1.5 DRY refactoring)
+// ===================================================================
+
+struct CompileInput {
+    std::vector<fs::path> sources;           // source files to compile
+    fs::path obj_dir;                        // where .o files go during build
+    fs::path dep_dir;                        // where .d dependency files go
+    fs::path proj_root;                      // project/package root (for relative cache keys)
+    config::CompileSection compile;          // compile options
+    config::LanguageInfo lang;               // compiler + std flag
+    std::vector<fs::path> extra_includes;    // extra -I dirs (dependency packages)
+    fs::path cache_obj_dir;                  // where cached .o files are stored permanently
+    bool disable_cache = false;              // --disable-cache
+    bool use_pic = false;                    // -fPIC for shared libs
+    bool verbose = false;                    // --verbose: print compile commands & cache details
+};
+
+struct CompileResult {
+    std::vector<fs::path> objects;   // compiled .o/.obj paths (in obj_dir)
+    int cache_hits = 0;
+    int cache_misses = 0;
+};
+
+// Unified compile loop: for each source, check cache or compile to temp + atomic rename.
+// Updates `record` in place with new cache entries. Caller loads/saves the record.
+// Dep paths are normalized: absolute paths under proj_root become relative (so package
+// caches survive relocation); system headers outside proj_root stay absolute.
+CompileResult compile_sources(const CompileInput& in, CacheRecord& record);
 
 // Parse .d file (gcc -MMD output) and hash every listed header.
 // Returns vector of {path, sha256} for each dependency.

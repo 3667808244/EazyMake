@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <ctime>
 #include <set>
-#include <fstream>
+#include <sstream>
 #include <stdexcept>
 
 namespace ezmk::cache {
@@ -148,7 +148,7 @@ std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile) {
     for (size_t i = 0; i < tokens.size(); ++i) {
         auto& tok = tokens[i];
         // Target: ends with ':' (could be the first token or have colon at end)
-        if (tok.back() == ':') continue;
+        if (!tok.empty() && tok.back() == ':') continue;
         // Skip empty or lone backslash artifacts
         if (tok.empty() || tok == "\\") continue;
 
@@ -262,6 +262,219 @@ void save_record(const CacheRecord& record, const fs::path& json_path) {
 
 void clear_cache() {
     util::remove_all(cache_dir());
+}
+
+// ===================================================================
+// Unified compile loop (0.1.5 DRY refactoring)
+// ===================================================================
+
+CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
+    CompileResult result;
+
+    for (auto& src : in.sources) {
+        // Compute paths
+        auto rel = fs::relative(src, in.proj_root);
+        fs::path obj = in.obj_dir / rel;
+        obj.replace_extension(EZMK_OBJ_SUFFIX);
+        fs::path obj_tmp = in.obj_dir / rel;
+        obj_tmp.replace_extension(".tmp" EZMK_OBJ_SUFFIX);
+        fs::path dep = in.dep_dir / rel;
+        dep.replace_extension(".d");
+
+        fs::path cache_obj = in.cache_obj_dir / rel;
+        cache_obj.replace_extension(EZMK_OBJ_SUFFIX);
+
+        fs::create_directories(obj.parent_path());
+        fs::create_directories(cache_obj.parent_path());
+
+        // Check cache (unless disabled)
+        bool cache_hit = false;
+        if (!in.disable_cache) {
+            auto cached = check_cache(src, in.compile, record, in.proj_root);
+            if (cached) {
+                auto cache_src = *cached;
+                bool same_dir = (fs::absolute(in.cache_obj_dir) == fs::absolute(in.obj_dir));
+                if (same_dir && util::file_exists(cache_src)) {
+                    result.objects.push_back(cache_src);
+                    ++result.cache_hits;
+                    cache_hit = true;
+                    if (in.verbose) {
+                        auto& entry = record.files[fs::relative(src, in.proj_root).generic_string()];
+                        util::info(util::color_msg(util::color::cyan,
+                            "  [cached] " + fs::relative(src, in.proj_root).string() +
+                            "  (source hash matches, " +
+                            std::to_string(entry.dependencies.size()) + " headers unchanged)"));
+                    }
+                } else if (!same_dir && util::file_exists(cache_src)) {
+                    std::error_code ec;
+                    fs::copy_file(cache_src, obj_tmp, fs::copy_options::overwrite_existing, ec);
+                    if (!ec) {
+                        fs::rename(obj_tmp, obj, ec);
+                        if (!ec) {
+                            result.objects.push_back(obj);
+                            ++result.cache_hits;
+                            cache_hit = true;
+                            if (in.verbose) {
+                                auto& entry = record.files[fs::relative(src, in.proj_root).generic_string()];
+                                util::info(util::color_msg(util::color::cyan,
+                                    "  [cached] " + fs::relative(src, in.proj_root).string() +
+                                    "  (source hash matches, " +
+                                    std::to_string(entry.dependencies.size()) + " headers unchanged)"));
+                            }
+                        }
+                    }
+                    if (!cache_hit) {
+                        fs::remove(obj_tmp, ec);
+                    }
+                }
+            }
+            // Verbose: explain cache miss
+            if (!cache_hit && in.verbose) {
+                auto rel_src = fs::relative(src, in.proj_root).generic_string();
+                auto it = record.files.find(rel_src);
+                if (it == record.files.end()) {
+                    util::info("  cache miss: no previous record for " + rel_src);
+                } else {
+                    std::string cur_hash = crypto::sha256_file(src);
+                    if (cur_hash != it->second.source_hash) {
+                        util::info("  cache miss: source hash changed — " + rel_src);
+                    } else {
+                        auto cur_sig = compile_options_signature(in.compile);
+                        if (cur_sig != record.compile_options_signature) {
+                            util::info("  cache miss: compile options signature changed");
+                        } else {
+                            // Check which header changed
+                            for (auto& dep : it->second.dependencies) {
+                                fs::path dp(dep.path);
+                                if (dp.is_relative()) dp = in.proj_root / dp;
+                                std::string hdr_hash = crypto::sha256_file(dp);
+                                if (hdr_hash != dep.hash) {
+                                    util::info("  cache miss: header hash changed — " + dep.path);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (cache_hit) continue;
+
+        // Cache miss: compile to temp file
+        ++result.cache_misses;
+
+        // Build compile command
+        std::ostringstream cmd;
+        cmd << in.lang.compiler << " " << in.lang.std_flag << " -c ";
+        for (auto& f : in.compile.flags) {
+            cmd << f << " ";
+        }
+        if (in.use_pic) {
+            cmd << "-fPIC ";
+        }
+
+        // Default include: proj_root/include (fixes bug 7.1: was fs::current_path())
+        auto def_inc = in.proj_root / "include";
+        if (util::file_exists(def_inc)) {
+            cmd << "-I\"" << def_inc.string() << "\" ";
+        }
+
+        for (auto& d : in.compile.include_dirs) {
+            fs::path resolved = d;
+            if (resolved.is_relative()) resolved = in.proj_root / resolved;
+            cmd << "-I\"" << resolved.string() << "\" ";
+        }
+        for (auto& inc : in.extra_includes) {
+            cmd << "-I\"" << inc.string() << "\" ";
+        }
+
+        cmd << "-MMD -MF \"" << dep.string() << "\" ";
+        cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
+
+        if (in.verbose) {
+            util::info("  Compiling " + fs::relative(src, in.proj_root).string());
+            util::info(util::color_msg(util::color::dim, "    cmd: " + cmd.str()));
+        }
+
+        auto res = util::run_command(cmd.str());
+        if (res.exit_code != 0) {
+            util::error("compilation failed for " + src.string() +
+                        " (exit code " + std::to_string(res.exit_code) + ")");
+            if (!res.err.empty()) util::error(res.err);
+            if (!res.out.empty()) util::error(res.out);
+            // Show the full command so user can reproduce
+            util::error("  cmd: " + cmd.str());
+            // Remove partial temp file
+            std::error_code ec;
+            fs::remove(obj_tmp, ec);
+            throw ezmk::fatal_error("build failed");
+        }
+
+        // Atomically rename temp to final
+        {
+            std::error_code ec;
+            fs::rename(obj_tmp, obj, ec);
+            if (ec) {
+                // Fallback: copy + remove
+                fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
+                fs::remove(obj_tmp, ec);
+            }
+        }
+        result.objects.push_back(obj);
+
+        // Copy compiled .o to cache (atomic: copy to tmp then rename)
+        {
+            std::error_code ec;
+            fs::path cache_tmp = cache_obj;
+            cache_tmp += ".tmp";
+            fs::copy_file(obj, cache_tmp, fs::copy_options::overwrite_existing, ec);
+            if (!ec) {
+                fs::rename(cache_tmp, cache_obj, ec);
+                if (ec) {
+                    // Fallback
+                    fs::copy_file(obj, cache_obj, fs::copy_options::overwrite_existing, ec);
+                }
+            }
+        }
+
+        // Update cache record
+        auto rel_src = rel.generic_string();
+        auto& entry = record.files[rel_src];
+
+        // Parse depfile and hash all headers
+        auto new_deps = parse_depfile_and_hash(dep);
+
+        // Normalize dep paths: absolute paths under proj_root → relative
+        // (so package caches survive relocation; system headers stay absolute)
+        for (auto& d : new_deps) {
+            fs::path dp(d.path);
+            if (dp.is_absolute()) {
+                auto r = fs::relative(dp, in.proj_root);
+                if (!r.empty() && r.string().find("..") == std::string::npos) {
+                    d.path = r.generic_string();
+                }
+            }
+        }
+
+        // Check if dependency path set changed (include structure change)
+        if (!record.files.empty()) {
+            auto old_it = record.files.find(rel_src);
+            if (old_it != record.files.end() &&
+                !same_dependency_paths(old_it->second.dependencies, new_deps)) {
+                util::info("    include structure changed for " + rel_src);
+            }
+        }
+
+        entry.source_hash = crypto::sha256_file(src);
+        entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
+        entry.compiler = in.lang.compiler;  // fixes bug 7.2: was hardcoded "g++" in pkg.cpp
+        entry.compile_opts = in.compile.flags;
+        entry.dependencies = std::move(new_deps);
+        entry.last_build_time = iso_time();
+    }
+
+    return result;
 }
 
 } // namespace ezmk::cache

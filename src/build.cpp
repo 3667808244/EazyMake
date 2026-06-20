@@ -3,8 +3,6 @@
 #include "ezmk/crypto.hpp"
 #include "ezmk/util.hpp"
 
-#include <cstdlib>
-#include <ctime>
 #include <sstream>
 
 namespace ezmk::build {
@@ -17,46 +15,6 @@ static fs::path find_compiler(const config::LanguageInfo& lang) {
 #else
     return fs::path(lang.compiler);
 #endif
-}
-
-static std::string make_compile_cmd(const fs::path& src,
-                                    const fs::path& obj,
-                                    const fs::path& depfile,
-                                    const config::CompileSection& compile,
-                                    const config::LanguageInfo& lang,
-                                    const std::vector<fs::path>& extra_includes,
-                                    const fs::path& proj_root,
-                                    bool use_pic = false) {
-    std::ostringstream cmd;
-    cmd << lang.compiler << " " << lang.std_flag << " -c ";
-    cmd << "\"" << src.string() << "\" -o \"" << obj.string() << "\"";
-
-    for (auto& f : compile.flags) {
-        cmd << " " << f;
-    }
-
-    if (use_pic) {
-        cmd << " -fPIC";
-    }
-
-    // Default include: project include/
-    auto def_inc = fs::current_path() / "include";
-    if (util::file_exists(def_inc)) {
-        cmd << " -I\"" << def_inc.string() << "\"";
-    }
-
-    for (auto& d : compile.include_dirs) {
-        fs::path resolved = d;
-        if (resolved.is_relative()) resolved = proj_root / resolved;
-        cmd << " -I\"" << resolved.string() << "\"";
-    }
-    for (auto& d : extra_includes) {
-        cmd << " -I\"" << d.string() << "\"";
-    }
-
-    cmd << " -MMD -MF \"" << depfile.string() << "\"";
-
-    return cmd.str();
 }
 
 static std::string make_link_cmd(const std::vector<fs::path>& objs,
@@ -107,7 +65,10 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     auto ver = util::run_command(gxx.string() + " --version 2>&1");
     if (ver.exit_code != 0) {
         util::fatal("compiler not found: " + gxx.string() +
-                    "\n  Install g++ (MSYS2: pacman -S mingw-w64-x86_64-gcc)");
+                    "\n  Windows (MSYS2): pacman -S mingw-w64-x86_64-gcc" +
+                    "\n  Linux (Debian):   apt install g++" +
+                    "\n  Linux (RHEL):     dnf install gcc-c++" +
+                    "\n  macOS:            brew install gcc");
     }
 
     fs::path proj_root = fs::current_path();
@@ -137,7 +98,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     fs::create_directories(cache_obj_dir);
 
     // Load cache
-    cache::CacheRecord record = cache::load_record();
+    auto record = cache::load_record();
 
     // Update / set global compile options signature
     auto cur_sig = cache::compile_options_signature(cfg.compile);
@@ -221,7 +182,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         }
     }
 
-    // Compile phase — clean stale temps from previous crashed builds
+    // Clean stale temps from previous crashed builds
     {
         std::error_code ec;
         for (auto& e : fs::directory_iterator(temp_dir, ec)) {
@@ -233,124 +194,33 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         }
     }
 
-    std::vector<fs::path> objects;
-    int cache_hits = 0;
-    int cache_misses = 0;
+    // ---- Unified compile phase ----
+    cache::CompileInput cin;
+    cin.sources = std::move(sources);
+    cin.obj_dir = temp_dir;
+    cin.dep_dir = temp_dir;
+    cin.proj_root = proj_root;
+    cin.compile = cfg.compile;
+    cin.lang = lang;
+    cin.extra_includes = extra_includes;
+    cin.cache_obj_dir = cache_obj_dir;
+    cin.disable_cache = opts.disable_cache;
+    cin.use_pic = use_pic;
+    cin.verbose = opts.verbose;
 
-    for (auto& src : sources) {
-        auto rel = fs::relative(src, proj_root);
-        fs::path obj = temp_dir / rel;
-        obj.replace_extension(EZMK_OBJ_SUFFIX);
-        fs::path obj_tmp = temp_dir / rel;
-        obj_tmp.replace_extension(".tmp" EZMK_OBJ_SUFFIX);
-        fs::path dep = temp_dir / rel;
-        dep.replace_extension(".d");
-
-        fs::path cache_obj = cache_obj_dir / rel;
-        cache_obj.replace_extension(EZMK_OBJ_SUFFIX);
-
-        fs::create_directories(obj.parent_path());
-        fs::create_directories(cache_obj.parent_path());
-
-        // Check cache (unless disabled)
-        if (!opts.disable_cache) {
-            auto cached = cache::check_cache(src, cfg.compile, record);
-            if (cached && util::file_exists(*cached)) {
-                std::error_code ec;
-                // Copy to temp then rename for atomicity
-                fs::copy_file(*cached, obj_tmp, fs::copy_options::overwrite_existing, ec);
-                if (!ec) {
-                    fs::rename(obj_tmp, obj, ec);
-                    if (ec) {
-                        util::warn("rename failed for cache hit, falling back to recompile: " +
-                                   obj.string() + " (" + ec.message() + ")");
-                    }
-                }
-                if (!ec) {
-                    objects.push_back(obj);
-                    ++cache_hits;
-                    util::info("  [cached] " + rel.string());
-                    continue;
-                }
-                // Clean up on failure
-                fs::remove(obj_tmp, ec);
-            }
-        }
-
-        // Cache miss: compile to temp file
-        ++cache_misses;
-        util::info("  Compiling " + rel.string());
-        std::string cmd = make_compile_cmd(src, obj_tmp, dep, cfg.compile, lang,
-                                           extra_includes, proj_root, use_pic);
-        auto res = util::run_command(cmd);
-        if (res.exit_code != 0) {
-            util::error("compilation failed for " + src.string());
-            if (!res.err.empty()) util::error(res.err);
-            if (!res.out.empty()) util::error(res.out);
-            // Remove partial temp file
-            std::error_code ec;
-            fs::remove(obj_tmp, ec);
-            util::fatal("build failed");
-        }
-
-        // Compilation succeeded — atomically rename temp to final
-        {
-            std::error_code ec;
-            fs::rename(obj_tmp, obj, ec);
-            if (ec) {
-                // Fallback: copy + remove
-                fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
-                fs::remove(obj_tmp, ec);
-            }
-        }
-        objects.push_back(obj);
-
-        // Copy compiled .o to cache (atomic: copy to tmp then rename)
-        {
-            std::error_code ec;
-            fs::path cache_tmp = cache_obj;
-            cache_tmp += ".tmp";
-            fs::copy_file(obj, cache_tmp, fs::copy_options::overwrite_existing, ec);
-            if (!ec) {
-                fs::rename(cache_tmp, cache_obj, ec);
-                if (ec) {
-                    // Fallback
-                    fs::copy_file(obj, cache_obj, fs::copy_options::overwrite_existing, ec);
-                }
-            }
-        }
-
-        // Update cache record
-        auto rel_src = rel.generic_string();
-        auto& entry = record.files[rel_src];
-
-        // Check if dependency path set changed (include structure change)
-        auto new_deps = cache::parse_depfile_and_hash(dep);
-        if (!record.files.empty()) {
-            auto old_it = record.files.find(rel_src);
-            if (old_it != record.files.end() &&
-                !cache::same_dependency_paths(old_it->second.dependencies, new_deps)) {
-                util::info("    include structure changed for " + rel_src);
-            }
-        }
-
-        entry.source_hash = crypto::sha256_file(src);
-        entry.object_file = fs::relative(cache_obj, proj_root).generic_string();
-        entry.compiler = lang.compiler;
-        entry.compile_opts = cfg.compile.flags;
-        entry.dependencies = std::move(new_deps);
-        entry.last_build_time = cache::iso_time();
-    }
+    auto comp_result = cache::compile_sources(cin, record);
 
     // Save updated cache record
     cache::save_record(record);
 
-    if (cache_hits > 0 || cache_misses > 0) {
+    if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
         std::string summary = "  ";
-        if (cache_hits > 0) summary += std::to_string(cache_hits) + " cached, ";
-        summary += std::to_string(cache_misses) + " compiled";
+        if (comp_result.cache_hits > 0) summary += std::to_string(comp_result.cache_hits) + " cached, ";
+        summary += std::to_string(comp_result.cache_misses) + " compiled";
         util::info(summary);
     }
+
+    auto& objects = comp_result.objects;
 
     // Merge package link options into project link config
     config::LinkSection merged_link = cfg.link;
@@ -380,7 +250,9 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         if (ar_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
-            util::error("archive creation failed");
+            util::error("archive creation failed (exit code " +
+                        std::to_string(ar_res.exit_code) + ")");
+            util::error("  cmd: " + ar_cmd.str());
             if (!ar_res.err.empty()) util::error(ar_res.err);
             util::fatal("build failed");
         }
@@ -411,11 +283,14 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         util::info("  Linking " + lib.filename().string());
         std::string link_cmd = make_link_cmd(objects, pkg_archives, lib_tmp,
                                              merged_link, lang, true);
+        if (opts.verbose) util::info("    cmd: " + link_cmd);
         auto link_res = util::run_command(link_cmd);
         if (link_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
-            util::error("link failed");
+            util::error("link failed (exit code " +
+                        std::to_string(link_res.exit_code) + ")");
+            util::error("  cmd: " + link_cmd);
             if (!link_res.err.empty()) util::error(link_res.err);
             if (!link_res.out.empty()) util::error(link_res.out);
             util::fatal("build failed");
@@ -447,11 +322,14 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     util::info("  Linking " + exe.filename().string());
     std::string link_cmd = make_link_cmd(objects, pkg_archives, exe_tmp,
                                          merged_link, lang);
+    if (opts.verbose) util::info("    cmd: " + link_cmd);
     auto link_res = util::run_command(link_cmd);
     if (link_res.exit_code != 0) {
         std::error_code ec;
         fs::remove(exe_tmp, ec);
-        util::error("link failed");
+        util::error("link failed (exit code " +
+                    std::to_string(link_res.exit_code) + ")");
+        util::error("  cmd: " + link_cmd);
         if (!link_res.err.empty()) util::error(link_res.err);
         if (!link_res.out.empty()) util::error(link_res.out);
         util::fatal("build failed");

@@ -11,6 +11,8 @@
 #include <iostream>
 
 int main(int argc, char** argv) {
+    ezmk::util::init_console();
+
     try {
         auto args = ezmk::cli::parse(argc, argv);
 
@@ -21,11 +23,12 @@ int main(int argc, char** argv) {
             break;
 
         case ezmk::cli::Command::ProjectNew:
-            ezmk::project::create_project(*args.project_name, args.project_type);
+            ezmk::project::create_project(*args.project_name, args.project_type,
+                                          args.disable_git_init, args.disable_gitignore);
             break;
 
         case ezmk::cli::Command::Version:
-            std::cout << "EazyMake 0.1.4" << std::endl;
+            std::cout << "EazyMake 0.1.5" << std::endl;
             break;
 
         case ezmk::cli::Command::ProjectBuild: {
@@ -98,6 +101,12 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::RepoList:
             ezmk::repo::list(args.repo_opts.scopes);
+            break;
+
+        case ezmk::cli::Command::Utils:
+            ezmk::util::info(
+                "utils subcommand is reserved for future use. "
+                "Requested: '" + args.utils_name + "'");
             break;
 
         } // switch

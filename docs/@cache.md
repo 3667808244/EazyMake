@@ -97,6 +97,22 @@
 - 忽略 `record.json`，所有源文件重新编译。
 - 编译完成后**覆盖**更新缓存（这样下次启用缓存时可受益）。也可选择不更新，但更新更合理。
 
+## 缓存调试（`--verbose`）
+
+`ezmk build --verbose` / `ezmk build -v` 会打印每个源文件的缓存判断详情：
+
+- **命中时**：输出 `[cached]` + 匹配的源文件哈希和头文件数量
+- **未命中时**：输出具体原因（源码哈希变化 / 编译选项签名变化 / 某个头文件哈希变化 / 依赖路径集合变化 / 缓存记录缺失）
+
+示例输出：
+```
+[ezmk]   [cached] src/utils.cpp
+[ezmk]     cache hit: source hash matches, all 5 headers unchanged
+[ezmk]   Compiling src/main.cpp
+[ezmk]     cache miss: header hash changed — include/foo.h
+[ezmk]     cmd: g++ -std=c++17 -c "src/main.cpp" -o ".ezmk/temp/main.o" ...
+```
+
 ## 增量构建的原子性
 构建过程中若中途失败，不应破坏缓存一致性。做法：
 - 编译新目标文件时先写入临时文件（如 `.tmp.o`），编译成功后再原子替换旧文件。
