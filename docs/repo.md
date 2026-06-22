@@ -11,21 +11,22 @@ EazyMake 的仓库是一个 **git 仓库**。用户通过 `ezmk repo add <git_ur
 ```
 <repo>.git/
   index.toml           # 仓库元数据 + 包索引（必需）
-  packages/            # 包归档文件存放目录
+  packages/            # 包归档文件存放目录（含普通库包和 utils 工具包）
     foo-0.1.0.zip
     bar-1.2.0.tar.gz
     bar-1.1.0.tar.gz
+    ezmk-cc-0.1.0.zip  # utils 工具包也是普通包，放在 packages/ 下
     ...
 ```
 
 ### 设计理由
 
-| 特性 | git 方案 | 静态目录方案 |
-|---|---|---|
-| 增量更新 | `git pull`，只拉取差异 | 重新下载整个 `index.toml` |
-| 版本管理 | git log / tag 天然追溯 | 需自行维护版本文件 |
-| 托管 | GitHub、GitLab、Gitee、自建 | 需要文件服务器 |
-| 离线 | clone 后本地即可用 | 同样可以，但获取过程需手动 |
+| 特性     | git 方案                    | 静态目录方案               |
+| -------- | --------------------------- | -------------------------- |
+| 增量更新 | `git pull`，只拉取差异      | 重新下载整个 `index.toml`  |
+| 版本管理 | git log / tag 天然追溯      | 需自行维护版本文件         |
+| 托管     | GitHub、GitLab、Gitee、自建 | 需要文件服务器             |
+| 离线     | clone 后本地即可用          | 同样可以，但获取过程需手动 |
 
 ---
 
@@ -53,23 +54,29 @@ name = "bar"
 version = "1.1.0"
 file = "packages/bar-1.1.0.tar.gz"
 sha256 = "g7h8i9j0k1l2..."
+
+[[packages]]
+name = "ezmk-cc"
+version = "0.1.0"
+file = "packages/ezmk-cc-0.1.0.zip"
+sha256 = "hsiqno182bl2..."
 ```
 
 ### `[repo]` section
 
-| 字段 | 类型 | 必须 | 说明 |
-|---|---|---|---|
-| `name` | string | 是 | 仓库名称，用于注册后的标识 |
-| `description` | string | 否 | 仓库描述，`ezmk repo list` 展示 |
+| 字段          | 类型   | 必须 | 说明                            |
+| ------------- | ------ | ---- | ------------------------------- |
+| `name`        | string | 是   | 仓库名称，用于注册后的标识      |
+| `description` | string | 否   | 仓库描述，`ezmk repo list` 展示 |
 
 ### `[[packages]]` section（可重复）
 
-| 字段 | 类型 | 必须 | 说明 |
-|---|---|---|---|
-| `name` | string | 是 | 包名称 |
-| `version` | string | 是 | 包版本，建议 SemVer |
-| `file` | string | 是 | 包归档相对于仓库根目录的路径 |
-| `sha256` | string | 否 | 归档的 SHA-256 校验值（建议提供） |
+| 字段      | 类型   | 必须 | 说明                              |
+| --------- | ------ | ---- | --------------------------------- |
+| `name`    | string | 是   | 包名称                            |
+| `version` | string | 是   | 包版本，建议 SemVer               |
+| `file`    | string | 是   | 包归档相对于仓库根目录的路径      |
+| `sha256`  | string | 否   | 归档的 SHA-256 校验值（建议提供） |
 
 同一包的多个版本通过重复 `[[packages]]`、`name` 相同而 `version` 不同来表示。`pkg install` 默认安装最新版本。
 
@@ -81,11 +88,11 @@ sha256 = "g7h8i9j0k1l2..."
 
 已注册的仓库列表存储路径：
 
-| 作用域 | 路径 |
-|---|---|
-| 全局 | `<ezmk_install_dir>/repo/list.toml` |
-| 用户 | `~/.local/ezmk/repo/list.toml` |
-| 项目 | `<project_dir>/.ezmk/repo/list.toml` |
+| 作用域 | 路径                                 |
+| ------ | ------------------------------------ |
+| 全局   | `<ezmk_install_dir>/repo/list.toml`  |
+| 用户   | `~/.local/ezmk/repo/list.toml`       |
+| 项目   | `<project_dir>/.ezmk/repo/list.toml` |
 
 格式：
 
@@ -111,23 +118,23 @@ type = "local"
 last_update = "2026-06-19T10:00:00Z"
 ```
 
-| 字段 | 说明 |
-|---|---|
-| `name` | 仓库唯一标识名 |
-| `url` | git clone URL（`type = "git"`）或本地目录路径（`type = "local"`） |
-| `type` | `"git"` 或 `"local"` |
-| `branch` | 跟踪的分支，`type = "git"` 时有效，默认 `main` |
-| `last_update` | 最后一次 `update` 的时间 |
+| 字段          | 说明                                                              |
+| ------------- | ----------------------------------------------------------------- |
+| `name`        | 仓库唯一标识名                                                    |
+| `url`         | git clone URL（`type = "git"`）或本地目录路径（`type = "local"`） |
+| `type`        | `"git"` 或 `"local"`                                              |
+| `branch`      | 跟踪的分支，`type = "git"` 时有效，默认 `main`                    |
+| `last_update` | 最后一次 `update` 的时间                                          |
 
 ### 本地缓存路径
 
 `git clone` 的目标目录：
 
-| 作用域 | 缓存路径 |
-|---|---|
-| 全局 | `<ezmk_install_dir>/repo/.cache/<repo_name>/` |
-| 用户 | `~/.local/ezmk/repo/.cache/<repo_name>/` |
-| 项目 | `<project_dir>/.ezmk/repo/.cache/<repo_name>/` |
+| 作用域 | 缓存路径                                       |
+| ------ | ---------------------------------------------- |
+| 全局   | `<ezmk_install_dir>/repo/.cache/<repo_name>/`  |
+| 用户   | `~/.local/ezmk/repo/.cache/<repo_name>/`       |
+| 项目   | `<project_dir>/.ezmk/repo/.cache/<repo_name>/` |
 
 对于 `type = "local"` 的仓库，没有 `.cache/` 目录——直接使用 `url` 指向的本地路径。
 
@@ -143,14 +150,14 @@ last_update = "2026-06-19T10:00:00Z"
 ezmk repo add [-p|-u|-g] <url> [--name <name>] [--branch <branch>]
 ```
 
-| 参数 | 说明 |
-|---|---|
-| `-p` | 项目作用域（默认） |
-| `-u` | 用户作用域 |
-| `-g` | 全局作用域 |
-| `<url>` | git clone URL（如 `https://github.com/user/repo.git`）或本地目录路径 |
-| `--name <name>` | 仓库名称（可选）。省略时从 URL 推断：取路径末尾，去掉 `.git` |
-| `--branch <branch>` | 跟踪的分支，仅对 git 仓库有效，默认 `main` |
+| 参数                | 说明                                                                 |
+| ------------------- | -------------------------------------------------------------------- |
+| `-p`                | 项目作用域（默认）                                                   |
+| `-u`                | 用户作用域                                                           |
+| `-g`                | 全局作用域                                                           |
+| `<url>`             | git clone URL（如 `https://github.com/user/repo.git`）或本地目录路径 |
+| `--name <name>`     | 仓库名称（可选）。省略时从 URL 推断：取路径末尾，去掉 `.git`         |
+| `--branch <branch>` | 跟踪的分支，仅对 git 仓库有效，默认 `main`                           |
 
 **示例**：
 
@@ -188,11 +195,11 @@ ezmk repo add -g https://gitee.com/org/public-repo.git
 ezmk repo remove [-p|-u|-g] <name>
 ```
 
-| 参数 | 说明 |
-|---|---|
-| `-p` | 项目作用域 |
-| `-u` | 用户作用域 |
-| `-g` | 全局作用域 |
+| 参数     | 说明             |
+| -------- | ---------------- |
+| `-p`     | 项目作用域       |
+| `-u`     | 用户作用域       |
+| `-g`     | 全局作用域       |
 | `<name>` | 要移除的仓库名称 |
 
 - 默认作用域：`-pug`（在所有作用域中查找并移除第一个匹配项）
@@ -214,10 +221,10 @@ ezmk repo remove -g community      # 仅全局作用域
 ezmk repo update [-p|-u|-g] [<name>]
 ```
 
-| 参数 | 说明 |
-|---|---|
-| `[-p\|-u\|-g]` | 作用域，默认 `-pug` |
-| `<name>` | 仓库名称（可选）。省略时更新所有已注册仓库 |
+| 参数           | 说明                                       |
+| -------------- | ------------------------------------------ |
+| `[-p\|-u\|-g]` | 作用域，默认 `-pug`                        |
+| `<name>`       | 仓库名称（可选）。省略时更新所有已注册仓库 |
 
 **行为**：
 1. **git 仓库**（`type = "git"`）：
@@ -243,8 +250,8 @@ ezmk repo update -p my-repo        # 仅更新项目作用域的 my-repo
 ezmk repo list [-p|-u|-g]
 ```
 
-| 参数 | 说明 |
-|---|---|
+| 参数           | 说明                    |
+| -------------- | ----------------------- |
 | `[-p\|-u\|-g]` | 筛选作用域，默认 `-pug` |
 
 **示例输出**：
@@ -298,26 +305,26 @@ ezmk pkg install -p foo
 
 ## 安全
 
-| 场景 | 措施 |
-|---|---|
-| 全局仓库注册 | 无需二次确认（clone 本身不是安装） |
-| 全局作用域安装包 | 必须二次确认（已有 `pkg install -g` 的确认机制） |
+| 场景                   | 措施                                              |
+| ---------------------- | ------------------------------------------------- |
+| 全局仓库注册           | 无需二次确认（clone 本身不是安装）                |
+| 全局作用域安装包       | 必须二次确认（已有 `pkg install -g` 的确认机制）  |
 | 远程仓库 `sha256` 校验 | 若 `index.toml` 中提供了 `sha256`，安装时必须匹配 |
-| git clone 失败 | 清除不完整的缓存目录，报错 |
-| `git pull` 失败 | 警告，使用已有缓存继续 |
+| git clone 失败         | 清除不完整的缓存目录，报错                        |
+| `git pull` 失败        | 警告，使用已有缓存继续                            |
 
 ---
 
 ## 目录约定总览
 
-| 路径 | 说明 |
-|---|---|
-| `<ezmk_install_dir>/repo/list.toml` | 全局仓库注册表 |
+| 路径                                     | 说明                |
+| ---------------------------------------- | ------------------- |
+| `<ezmk_install_dir>/repo/list.toml`      | 全局仓库注册表      |
 | `<ezmk_install_dir>/repo/.cache/<name>/` | 全局仓库 clone 缓存 |
-| `~/.local/ezmk/repo/list.toml` | 用户仓库注册表 |
-| `~/.local/ezmk/repo/.cache/<name>/` | 用户仓库 clone 缓存 |
-| `.ezmk/repo/list.toml` | 项目仓库注册表 |
-| `.ezmk/repo/.cache/<name>/` | 项目仓库 clone 缓存 |
+| `~/.local/ezmk/repo/list.toml`           | 用户仓库注册表      |
+| `~/.local/ezmk/repo/.cache/<name>/`      | 用户仓库 clone 缓存 |
+| `.ezmk/repo/list.toml`                   | 项目仓库注册表      |
+| `.ezmk/repo/.cache/<name>/`              | 项目仓库 clone 缓存 |
 
 ---
 

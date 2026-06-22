@@ -72,6 +72,14 @@ ezmk pkg install -p foo
 | `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` to refresh |
 | `ezmk repo list [-p\|-u\|-g]` | List registered repos |
 
+### `utils` — run tools (0.2.0+)
+
+| Command | Description |
+|---|---|
+| `ezmk utils <name> [args...]` | Run a Lua-based tool from an installed utils package |
+
+Utils tools are packages (type = "utils") installed via `ezmk pkg install`. See `docs/utils.md`.
+
 ### Scope flags
 
 | Flag | Scope | Install path |
@@ -132,6 +140,7 @@ A repo is a **git repository** containing `index.toml` + `packages/`. `ezmk repo
 | `docs/config_file.md` | Full `ezmk.toml` specification |
 | `docs/pkg.md` | Package format and lifecycle |
 | `docs/repo.md` | Git-based repository system |
+| `docs/utils.md` | Lua-based plugin tool system |
 | `docs/@cache.md` | Incremental build cache |
 | `docs/@safety.md` | Safety invariants |
-| `plan.md` | Current milestone plan + progress |
+| `plans/` | Version milestone plans |

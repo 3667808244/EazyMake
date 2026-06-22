@@ -4,6 +4,8 @@
 
 ## 包结构
 
+普通库包：
+
 ```
 <pkg_dir>/
     include/
@@ -16,9 +18,31 @@
     ezmk.toml
 ```
 
+utils 工具包（`type = "utils"`，详见 `docs/utils.md`）：
+
+```
+<utils_pkg>/
+    ezmk.toml         # type = "utils"
+    utils/            # Lua 脚本（必需）
+        <name>.lua
+    include/          # 可选
+    src/              # 可选
+```
+
 ---
 
 ## 包配置`ezmk.toml`
+
+### `[project]` 节
+
+`type` 字段支持以下取值：
+
+| 值 | 说明 |
+|---|---|
+| `"executable"` | 可执行文件（默认） |
+| `"static"` | 静态库 |
+| `"shared"` | 动态库 |
+| `"utils"` | 工具包（提供 `ezmk utils` 子命令，基于 Lua） |
 
 ### `depends` 节
 
@@ -40,7 +64,11 @@
 
 ## 包编译
 
-每个包都会按照依赖链逐个编译为`*.a`文件
+每个普通库包都会按照依赖链逐个编译为 `*.a` 文件。
+
+对于 `type = "utils"` 的工具包：
+- 若包含 `src/`：编译 `src/` → `build/*.a`，同时注册 `utils/` 下的 Lua 工具
+- 若不包含 `src/`：跳过编译，仅解压并注册 Lua 工具
 
 如果循环依赖或包不存在抛出错误
 

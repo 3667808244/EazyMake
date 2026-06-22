@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS2 on Windows). It prioritizes ease of use over feature richness — for complex builds, use CMake.
 
-Design specifications live in `docs/`. Source code is under active development; see `plan.md` for the current milestone.
+Design specifications live in `docs/`. Source code is under active development; see `plans/` for the current and upcoming milestones.
 
 ## Build & test commands
 
 - Build EazyMake itself: `g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -lwinhttp -static` (MSYS2)
 - On Linux: `g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -static`
 - Or use the convenience script: `bash build.sh`
-- No test framework chosen yet.
+- Test framework: Catch2 (planned for 0.1.6, see `plans/0.1.6.md`).
 
 ## Architecture (from design docs)
 
@@ -33,7 +33,7 @@ Design specifications live in `docs/`. Source code is under active development; 
 | `ezmk repo remove [-p\|-u\|-g] <name>` | Unregister a repo and delete its cache |
 | `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` the repo cache (or re-read local dir) |
 | `ezmk repo list [-p\|-u\|-g]` | List registered repos with URL, branch, last update |
-| `ezmk utils <util_name> [args]` | Reserved for future utility tools (0.1.5: placeholder) |
+| `ezmk utils <util_name> [args]` | Run a Lua-based utility tool from an installed utils package (0.2.0+) |
 
 Scope flags: `-p` (project), `-u` (user), `-g` (global). `install` only supports one scope; others accept combined flags like `-pug`.
 
@@ -62,15 +62,16 @@ New project flags: `--disable-git-init` skips `git init`; `--disable-gitignore` 
 
 ### Configuration (`ezmk.toml`)
 
-Four sections:
-- `[project]` — `name` (string), `type` (`"executable"` / `"static"` / `"shared"`), `version` (string, required), `language` (string, default `"C++17"`, format `<语言><版本>`)
+Five sections:
+- `[project]` — `name` (string), `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (string, required), `language` (string, default `"C++17"`, format `<语言><版本>`)
 - `[compile]` — `flags` (array), `include_dirs` (array, default `["include"]`, `-I` paths)
 - `[link]` — `flags` (array), `link_dirs` (array, `-L` paths), `system_target` (array of system libs to link)
 - `[depends]` — `lib` (array of dependency library names)
+- `[utils]` — `tools` (array of tool names, only for `type = "utils"` packages; see `docs/utils.md`)
 
 ### Package management (see `docs/pkg.md`)
 
-Packages are `.zip` or `.tar.gz` archives with the same structure as a project (`include/`, `src/`, `ezmk.toml`). Each package is compiled to a `*.a` static library following its dependency chain. Circular dependencies or missing packages are errors.
+Packages are `.zip` or `.tar.gz` archives with the same structure as a project (`include/`, `src/`, `ezmk.toml`). Each package is compiled to a `*.a` static library following its dependency chain. `type = "utils"` packages additionally provide Lua-based tools via `ezmk utils` (see `docs/utils.md`). Circular dependencies or missing packages are errors.
 
 Install paths by scope:
 - Global: `<ezmk_install_dir>/pkg/`

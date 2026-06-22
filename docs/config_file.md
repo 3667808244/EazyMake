@@ -7,7 +7,7 @@
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `name` | string | 是 | — | 项目名称 |
-| `type` | string | 否 | `"executable"` | 项目类型：`"executable"` / `"static"` / `"shared"` |
+| `type` | string | 否 | `"executable"` | 项目类型：`"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | 是 | — | 项目版本，建议 SemVer 格式（如 `"0.1.0"`） |
 | `language` | string | 否 | `"C++17"` | 语言标准，格式为 `<语言><版本>`，如 `"C++17"`、`"C11"` |
 
@@ -18,6 +18,7 @@
 | `"executable"` | 可执行文件 | 是 |
 | `"static"` | 静态库 `lib<name>.a` | 否 |
 | `"shared"` | 动态库 `lib<name>.dll` / `lib<name>.so` | 否 |
+| `"utils"` | 工具包（无编译产物，或 `lib<name>.a`） | 否 |
 
 ### `language` 格式
 
@@ -60,7 +61,28 @@
 
 ---
 
+## `utils` 节 [version >= 0.2.0]
+
+仅当 `[project].type = "utils"` 时有效。
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `tools` | string[] | 是 | — | 本包提供的工具名列表，每个对应 `utils/<name>.lua` |
+
+示例：
+
+```toml
+[utils]
+tools = ["cc", "compile-commands"]
+```
+
+详见 `docs/utils.md`。
+
+---
+
 ## 完整示例
+
+### 普通项目
 
 ```toml
 [project]
@@ -80,4 +102,16 @@ system_target = ["pthread"]
 
 [depends]
 lib = ["foo", "bar"]
+```
+
+### utils 工具包
+
+```toml
+[project]
+name = "ezmk-cc"
+version = "0.1.0"
+type = "utils"
+
+[utils]
+tools = ["cc", "compile-commands"]
 ```
