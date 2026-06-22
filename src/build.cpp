@@ -64,11 +64,14 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     auto gxx = find_compiler(lang);
     auto ver = util::run_command(gxx.string() + " --version 2>&1");
     if (ver.exit_code != 0) {
-        util::fatal("compiler not found: " + gxx.string() +
-                    "\n  Windows (MSYS2): pacman -S mingw-w64-x86_64-gcc" +
-                    "\n  Linux (Debian):   apt install g++" +
-                    "\n  Linux (RHEL):     dnf install gcc-c++" +
-                    "\n  macOS:            brew install gcc");
+        // Platform-specific install instructions (untranslated) + fatal
+        std::string msg = ezmk::i18n::fmt(ezmk::i18n::I18nKey::compiler_not_found,
+                                           {{"compiler", gxx.string()}});
+        msg += "\n  Windows (MSYS2): pacman -S mingw-w64-x86_64-gcc";
+        msg += "\n  Linux (Debian):   apt install g++";
+        msg += "\n  Linux (RHEL):     dnf install gcc-c++";
+        msg += "\n  macOS:            brew install gcc";
+        util::fatal(msg);
     }
 
     fs::path proj_root = fs::current_path();
@@ -79,19 +82,21 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
 
     // Check src/ exists
     if (!util::file_exists(src_dir)) {
-        util::fatal("src/ directory not found. Run 'ezmk project new' to create a project.");
+        util::fatal(ezmk::i18n::I18nKey::src_dir_missing);
     }
 
     // Check main.cpp requirement for executable
     if (cfg.project.type == "executable") {
         if (!util::file_exists(src_dir / "main.cpp") &&
             !util::file_exists(src_dir / "main.c")) {
-            util::fatal("src/main.cpp is required for executable project type");
+            util::fatal(ezmk::i18n::I18nKey::main_missing);
         }
     }
 
-    util::info("Building " + cfg.project.name + " (" + cfg.project.type + ", " +
-               cfg.project.language + ")...");
+    util::info(ezmk::i18n::I18nKey::building,
+               {{"name", cfg.project.name},
+                {"type", cfg.project.type},
+                {"lang", cfg.project.language}});
 
     fs::create_directories(temp_dir);
     fs::create_directories(build_dir);
@@ -104,7 +109,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     auto cur_sig = cache::compile_options_signature(cfg.compile);
     if (record.compile_options_signature != cur_sig) {
         if (!record.compile_options_signature.empty()) {
-            util::info("  Compile options changed, invalidating all caches");
+            util::info(ezmk::i18n::I18nKey::compile_options_changed);
         }
         record.compile_options_signature = cur_sig;
         record.files.clear();
@@ -112,7 +117,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
 
     auto sources = util::list_files(src_dir, {".c", ".cc", ".cpp", ".cxx"});
     if (sources.empty()) {
-        util::fatal("no source files found in src/");
+        util::fatal(ezmk::i18n::I18nKey::no_source_files);
     }
 
     // Need -fPIC for shared libraries
@@ -188,7 +193,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         for (auto& e : fs::directory_iterator(temp_dir, ec)) {
             auto& p = e.path();
             if (p.extension() == ".tmp") {
-                util::warn("removing stale temp: " + p.string());
+                util::warn(ezmk::i18n::I18nKey::clean_stale, {{"path", p.string()}});
                 fs::remove(p, ec);
             }
         }
@@ -214,10 +219,9 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     cache::save_record(record);
 
     if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
-        std::string summary = "  ";
-        if (comp_result.cache_hits > 0) summary += std::to_string(comp_result.cache_hits) + " cached, ";
-        summary += std::to_string(comp_result.cache_misses) + " compiled";
-        util::info(summary);
+        util::info(ezmk::i18n::I18nKey::cache_summary,
+                   {{"cached", std::to_string(comp_result.cache_hits)},
+                    {"compiled", std::to_string(comp_result.cache_misses)}});
     }
 
     auto& objects = comp_result.objects;
@@ -240,7 +244,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             fs::remove(lib_tmp, ec);
         }
 
-        util::info("  Archiving " + lib.filename().string());
+        util::info(ezmk::i18n::I18nKey::archiving, {{"target", lib.filename().string()}});
         std::ostringstream ar_cmd;
         ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
         for (auto& o : objects) {
@@ -250,17 +254,17 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         if (ar_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
-            util::error("archive creation failed (exit code " +
-                        std::to_string(ar_res.exit_code) + ")");
+            util::error(ezmk::i18n::I18nKey::archive_failed,
+                        {{"code", std::to_string(ar_res.exit_code)}});
             util::error("  cmd: " + ar_cmd.str());
             if (!ar_res.err.empty()) util::error(ar_res.err);
-            util::fatal("build failed");
+            util::fatal(ezmk::i18n::I18nKey::build_failed);
         }
         {
             std::error_code ec;
             fs::rename(lib_tmp, lib, ec);
         }
-        util::info("Build successful: " + lib.string());
+        util::info(ezmk::i18n::I18nKey::build_success, {{"path", lib.string()}});
         return lib;
     }
 
@@ -280,7 +284,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             fs::remove(lib_tmp, ec);
         }
 
-        util::info("  Linking " + lib.filename().string());
+        util::info(ezmk::i18n::I18nKey::linking, {{"target", lib.filename().string()}});
         std::string link_cmd = make_link_cmd(objects, pkg_archives, lib_tmp,
                                              merged_link, lang, true);
         if (opts.verbose) util::info("    cmd: " + link_cmd);
@@ -288,18 +292,18 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         if (link_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
-            util::error("link failed (exit code " +
-                        std::to_string(link_res.exit_code) + ")");
+            util::error(ezmk::i18n::I18nKey::link_failed,
+                        {{"code", std::to_string(link_res.exit_code)}});
             util::error("  cmd: " + link_cmd);
             if (!link_res.err.empty()) util::error(link_res.err);
             if (!link_res.out.empty()) util::error(link_res.out);
-            util::fatal("build failed");
+            util::fatal(ezmk::i18n::I18nKey::build_failed);
         }
         {
             std::error_code ec;
             fs::rename(lib_tmp, lib, ec);
         }
-        util::info("Build successful: " + lib.string());
+        util::info(ezmk::i18n::I18nKey::build_success, {{"path", lib.string()}});
         return lib;
     }
 
@@ -319,7 +323,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         fs::remove(exe_tmp, ec);
     }
 
-    util::info("  Linking " + exe.filename().string());
+    util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
     std::string link_cmd = make_link_cmd(objects, pkg_archives, exe_tmp,
                                          merged_link, lang);
     if (opts.verbose) util::info("    cmd: " + link_cmd);
@@ -327,19 +331,19 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     if (link_res.exit_code != 0) {
         std::error_code ec;
         fs::remove(exe_tmp, ec);
-        util::error("link failed (exit code " +
-                    std::to_string(link_res.exit_code) + ")");
+        util::error(ezmk::i18n::I18nKey::link_failed,
+                    {{"code", std::to_string(link_res.exit_code)}});
         util::error("  cmd: " + link_cmd);
         if (!link_res.err.empty()) util::error(link_res.err);
         if (!link_res.out.empty()) util::error(link_res.out);
-        util::fatal("build failed");
+        util::fatal(ezmk::i18n::I18nKey::build_failed);
     }
     {
         std::error_code ec;
         fs::rename(exe_tmp, exe, ec);
     }
 
-    util::info("Build successful: " + exe.string());
+    util::info(ezmk::i18n::I18nKey::build_success, {{"path", exe.string()}});
     return exe;
 }
 

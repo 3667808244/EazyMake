@@ -5,6 +5,9 @@
 #include <string_view>
 #include <vector>
 #include <filesystem>
+#include <map>
+
+#include "ezmk/i18n.hpp"
 
 namespace ezmk {
 
@@ -34,6 +37,13 @@ void info(std::string_view msg);
 void warn(std::string_view msg);
 void error(std::string_view msg);
 [[noreturn]] void fatal(std::string_view msg);  // throws ezmk::fatal_error
+
+// I18n-aware logging overloads — format a localized string by key + args,
+// then output with the same prefix/color conventions as the raw overloads.
+void info(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
+void warn(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
+void error(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
+[[noreturn]] void fatal(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
 
 // ---- Color support (VT100/ANSI) ----
 // Call once at startup to enable VT100 processing on Windows.

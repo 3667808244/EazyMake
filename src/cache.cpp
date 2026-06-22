@@ -301,9 +301,9 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                     if (in.verbose) {
                         auto& entry = record.files[fs::relative(src, in.proj_root).generic_string()];
                         util::info(util::color_msg(util::color::cyan,
-                            "  [cached] " + fs::relative(src, in.proj_root).string() +
-                            "  (source hash matches, " +
-                            std::to_string(entry.dependencies.size()) + " headers unchanged)"));
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::cache_hit,
+                                {{"file", fs::relative(src, in.proj_root).string()},
+                                 {"count", std::to_string(entry.dependencies.size())}})));
                     }
                 } else if (!same_dir && util::file_exists(cache_src)) {
                     std::error_code ec;
@@ -333,15 +333,17 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                 auto rel_src = fs::relative(src, in.proj_root).generic_string();
                 auto it = record.files.find(rel_src);
                 if (it == record.files.end()) {
-                    util::info("  cache miss: no previous record for " + rel_src);
+                    util::info(ezmk::i18n::I18nKey::cache_miss_record,
+                               {{"file", rel_src}});
                 } else {
                     std::string cur_hash = crypto::sha256_file(src);
                     if (cur_hash != it->second.source_hash) {
-                        util::info("  cache miss: source hash changed — " + rel_src);
+                        util::info(ezmk::i18n::I18nKey::cache_miss_source,
+                                   {{"file", rel_src}});
                     } else {
                         auto cur_sig = compile_options_signature(in.compile);
                         if (cur_sig != record.compile_options_signature) {
-                            util::info("  cache miss: compile options signature changed");
+                            util::info(ezmk::i18n::I18nKey::cache_miss_options);
                         } else {
                             // Check which header changed
                             for (auto& dep : it->second.dependencies) {
@@ -349,7 +351,8 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                                 if (dp.is_relative()) dp = in.proj_root / dp;
                                 std::string hdr_hash = crypto::sha256_file(dp);
                                 if (hdr_hash != dep.hash) {
-                                    util::info("  cache miss: header hash changed — " + dep.path);
+                                    util::info(ezmk::i18n::I18nKey::cache_miss_header,
+                                               {{"header", dep.path}});
                                     break;
                                 }
                             }
@@ -393,14 +396,16 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
         cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
 
         if (in.verbose) {
-            util::info("  Compiling " + fs::relative(src, in.proj_root).string());
+            util::info(ezmk::i18n::I18nKey::compiling,
+                       {{"file", fs::relative(src, in.proj_root).string()}});
             util::info(util::color_msg(util::color::dim, "    cmd: " + cmd.str()));
         }
 
         auto res = util::run_command(cmd.str());
         if (res.exit_code != 0) {
-            util::error("compilation failed for " + src.string() +
-                        " (exit code " + std::to_string(res.exit_code) + ")");
+            util::error(ezmk::i18n::I18nKey::compilation_failed,
+                        {{"file", src.string()},
+                         {"code", std::to_string(res.exit_code)}});
             if (!res.err.empty()) util::error(res.err);
             if (!res.out.empty()) util::error(res.out);
             // Show the full command so user can reproduce
@@ -408,7 +413,7 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
             // Remove partial temp file
             std::error_code ec;
             fs::remove(obj_tmp, ec);
-            throw ezmk::fatal_error("build failed");
+            throw ezmk::fatal_error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::build_failed));
         }
 
         // Atomically rename temp to final
@@ -462,7 +467,8 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
             auto old_it = record.files.find(rel_src);
             if (old_it != record.files.end() &&
                 !same_dependency_paths(old_it->second.dependencies, new_deps)) {
-                util::info("    include structure changed for " + rel_src);
+                util::info(ezmk::i18n::I18nKey::include_structure_changed,
+                           {{"file", rel_src}});
             }
         }
 

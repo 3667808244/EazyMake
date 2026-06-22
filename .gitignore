@@ -21,3 +21,6 @@ Desktop.ini
 *.exe
 
 stdout_in_linux_vm.txt
+
+plan.md
+src/locale_data.cpp

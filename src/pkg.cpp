@@ -57,7 +57,7 @@ std::vector<fs::path> pkg_search_dirs(const std::vector<cli::Scope>& scopes) {
 
 static bool confirm(std::string_view msg, bool assume_yes = false) {
     if (assume_yes) {
-        util::info(std::string(msg) + " [auto-yes]");
+        util::info(std::string(msg) + ezmk::i18n::get(ezmk::i18n::I18nKey::auto_yes));
         return true;
     }
     std::cerr << "[ezmk] " << msg << " [y/N] ";
@@ -94,25 +94,26 @@ static bool run_install_script(const fs::path& script, const fs::path& cwd,
                                 bool assume_yes, std::string_view label) {
     std::string desc = std::string(label) + " " + script.filename().string();
 
-    util::info("Found " + desc);
+    util::info(ezmk::i18n::I18nKey::found_script, {{"label", desc}});
     util::open_in_editor(script);
 
-    if (!confirm(std::string("Execute ") + desc + "?", assume_yes)) {
-        util::info("Skipping " + desc);
+    if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::exec_question, {{"label", desc}}), assume_yes)) {
+        util::info(ezmk::i18n::I18nKey::skipping, {{"label", desc}});
         return true; // skip but continue
     }
 
-    util::info("Running " + desc + "...");
+    util::info(ezmk::i18n::I18nKey::running_script, {{"label", desc}});
     auto res = util::run_script(script, cwd);
     if (res.exit_code != 0) {
-        std::string err_msg = std::string(label) + " script failed (exit " +
-                              std::to_string(res.exit_code) + ")";
+        std::string code_str = std::to_string(res.exit_code);
+        std::string err_msg = ezmk::i18n::fmt(ezmk::i18n::I18nKey::script_failed,
+                                               {{"label", std::string(label)}, {"code", code_str}});
         if (!res.err.empty()) util::error(res.err);
-        if (!confirm(err_msg + ". Continue installation?", assume_yes)) {
+        if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::confirm_continue, {{"msg", err_msg}}), assume_yes)) {
             return false; // abort
         }
     } else {
-        util::info(std::string(label) + " script completed successfully");
+        util::info(ezmk::i18n::I18nKey::script_completed, {{"label", std::string(label)}});
     }
     return true;
 }
@@ -301,7 +302,7 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
     }
 
     if (sorted.size() != pkg_dirs.size()) {
-        throw std::runtime_error("circular dependency detected");
+        throw std::runtime_error(ezmk::i18n::get(ezmk::i18n::I18nKey::circular_dep));
     }
 
     return sorted;
@@ -343,31 +344,31 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (fname.empty()) fname = "package.tar.gz";
         archive_path = tmp_dir / fname;
 
-        util::info("Downloading " + url + " ...");
+        util::info(ezmk::i18n::I18nKey::downloading, {{"url", url}});
         util::download(url, archive_path);
     } else {
         archive_path = input;
         if (!util::file_exists(archive_path)) {
             // Not a local file or URL — try searching registered repos
-            util::info("Searching registered repos for '" + pkg_file + "'...");
+            util::info(ezmk::i18n::I18nKey::searching_repos, {{"pkg", pkg_file}});
             auto search_result = repo::search_package(pkg_file, {
                 cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
             if (search_result.archive_path.empty() ||
                 !util::file_exists(search_result.archive_path)) {
-                util::fatal("package not found: " + pkg_file);
+                util::fatal(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_file}});
             }
             archive_path = search_result.archive_path;
             // Use sha256 from index.toml if user didn't provide one explicitly
             if (expected_sha256.empty() && !search_result.sha256.empty()) {
                 expected_sha256 = search_result.sha256;
             }
-            util::info("Found in repo: " + archive_path.string());
+            util::info(ezmk::i18n::I18nKey::found_in_repo, {{"path", archive_path.string()}});
         }
     }
 
     // SHA-256 verification
     if (!expected_sha256.empty()) {
-        util::info("Verifying SHA-256...");
+        util::info(ezmk::i18n::I18nKey::verifying);
         std::string actual = crypto::sha256_file(archive_path);
         // Case-insensitive comparison
         std::string expected(expected_sha256);
@@ -375,19 +376,18 @@ void install(const std::string& pkg_file, cli::Scope scope,
         for (auto& c : expected) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         for (auto& c : actual_lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (actual_lower != expected) {
-            util::fatal(
-                std::string("SHA-256 mismatch for ") + pkg_file +
-                "\n  expected: " + std::string(expected_sha256) +
-                "\n  actual:   " + actual +
-                "\n  Use --sha256 to provide the correct hash, or -y to skip verification.");
+            // Technical details first (untranslated), then fatal with translated message
+            util::error("  expected: " + std::string(expected_sha256));
+            util::error("  actual:   " + actual);
+            util::fatal(ezmk::i18n::I18nKey::sha256_mismatch, {{"pkg", pkg_file}});
         }
-        util::info("  SHA-256 OK");
+        util::info(ezmk::i18n::I18nKey::sha256_ok);
     }
 
     // Safety: global install confirmation
     if (scope == cli::Scope::Global) {
-        if (!confirm("Global install requires confirmation. Continue?", assume_yes)) {
-            util::info("Install cancelled");
+        if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::global_confirm), assume_yes)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled);
             return;
         }
     }
@@ -402,7 +402,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
     fs::create_directories(stage);
 
     try {
-        util::info("Extracting...");
+        util::info(ezmk::i18n::I18nKey::extracting);
         util::extract_archive(archive_path, stage);
 
         // The archive might have a top-level directory; find the actual package root
@@ -429,7 +429,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (!preinstall_script.empty()) {
             if (!run_install_script(preinstall_script, dest_dir / pkg_name,
                                     assume_yes, "preinstall")) {
-                util::info("Install cancelled by user after preinstall script failure");
+                util::info(ezmk::i18n::I18nKey::install_cancelled_user,
+                           {{"hook", "preinstall"}});
                 util::remove_all(stage);
                 return;
             }
@@ -438,8 +439,9 @@ void install(const std::string& pkg_file, cli::Scope scope,
         // Check for existing install
         fs::path install_path = dest_dir / pkg_name;
         if (util::file_exists(install_path)) {
-            if (!confirm("Package '" + pkg_name + "' already exists at " + install_path.string() + ". Overwrite?", assume_yes)) {
-                util::info("Install cancelled");
+            if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::overwrite_confirm,
+                         {{"pkg", pkg_name}, {"path", install_path.string()}}), assume_yes)) {
+                util::info(ezmk::i18n::I18nKey::install_cancelled);
                 util::remove_all(stage);
                 return;
             }
@@ -462,8 +464,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
                     cur_dir = dest_dir / cur;
                     if (!util::file_exists(cur_dir)) {
                         throw std::runtime_error(
-                            "dependency not found: '" + cur + "'. "
-                            "Install it first with: ezmk install <" + cur + ">");
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
+                                            {{"dep", cur}}));
                     }
                 }
 
@@ -476,8 +478,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
                             all_pkgs.push_back(dep_path);
                         } else {
                             throw std::runtime_error(
-                                "dependency not found: '" + dep + "'. "
-                                "Install it first with: ezmk install <" + dep + ">");
+                                ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
+                                                {{"dep", dep}}));
                         }
                     }
                 }
@@ -485,7 +487,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
         }
 
         // Dependency ordering + compilation
-        util::info("Resolving dependencies...");
+        util::info(ezmk::i18n::I18nKey::resolving_deps);
         auto order = resolve_dependency_order(all_pkgs);
 
         // Build name → dir map for resolving dependency include paths
@@ -503,13 +505,14 @@ void install(const std::string& pkg_file, cli::Scope scope,
                     dep_includes.push_back(it->second / "include");
                 }
             }
-            util::info("  Compiling " + cfg.project.name + "...");
+            util::info(ezmk::i18n::I18nKey::compiling_pkg,
+                       {{"name", cfg.project.name}});
             compile_package(dir, dep_includes);
         }
 
         // Copy to install directory
         fs::create_directories(dest_dir);
-        util::info("Installing to " + install_path.string());
+        util::info(ezmk::i18n::I18nKey::installing_to, {{"path", install_path.string()}});
         util::copy_recursive(pkg_root, install_path);
 
         // Postinstall hook
@@ -517,12 +520,13 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (!postinstall_script.empty()) {
             if (!run_install_script(postinstall_script, install_path,
                                     assume_yes, "postinstall")) {
-                util::info("Install cancelled by user after postinstall script failure");
+                util::info(ezmk::i18n::I18nKey::install_cancelled_user,
+                           {{"hook", "postinstall"}});
                 // Installation files are already in place; leave them
             }
         }
 
-        util::info("Package '" + pkg_name + "' installed successfully");
+        util::info(ezmk::i18n::I18nKey::installed, {{"pkg", pkg_name}});
 
     } catch (...) {
         // Clean up staging on error
@@ -543,12 +547,12 @@ void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
         fs::path dir = pkg_install_dir(scope);
         fs::path pkg_path = dir / pkg_name;
         if (util::file_exists(pkg_path)) {
-            util::info("Removing " + pkg_path.string());
+            util::info(ezmk::i18n::I18nKey::removing, {{"pkg", pkg_path.string()}});
             util::remove_all(pkg_path);
             return;
         }
     }
-    util::error("package not found: " + pkg_name);
+    util::error(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
 }
 
 // ===================================================================
@@ -662,7 +666,7 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
             return;
         }
     }
-    util::error("package not found: " + pkg_name);
+    util::error(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
 }
 
 } // namespace ezmk::pkg

@@ -15,7 +15,8 @@ void create_project(const std::string& name, const std::string& project_type,
         util::fatal("directory already exists: " + root.string());
     }
 
-    util::info("Creating project: " + name + " (" + project_type + ")");
+    util::info(ezmk::i18n::I18nKey::creating_project,
+               {{"name", name}, {"type", project_type}});
 
     // Directory structure
     fs::create_directories(root / "include");
@@ -58,24 +59,24 @@ build/
     // git init (can be disabled, only runs if git is available)
     if (!disable_git_init) {
         if (util::git_available()) {
-            util::info("Initializing git repository...");
+            util::info(ezmk::i18n::I18nKey::init_git);
             std::ostringstream cmd;
             cmd << "git init \""
                 << util::escape_shell_arg(root.string()) << "\"";
             auto res = util::run_command(cmd.str());
             if (res.exit_code == 0) {
-                util::info("Git repository initialized");
+                util::info(ezmk::i18n::I18nKey::git_initialized);
             } else {
-                util::warn("git init failed (exit code " +
-                           std::to_string(res.exit_code) + ")");
+                util::warn(ezmk::i18n::I18nKey::git_init_failed,
+                           {{"code", std::to_string(res.exit_code)}});
                 if (!res.err.empty()) util::warn(res.err);
             }
         } else {
-            util::info("git not found, skipping git init");
+            util::info(ezmk::i18n::I18nKey::git_not_found);
         }
     }
 
-    util::info("Project created at: " + root.string());
+    util::info(ezmk::i18n::I18nKey::project_created, {{"path", root.string()}});
 }
 
 } // namespace ezmk::project

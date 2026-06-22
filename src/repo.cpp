@@ -294,7 +294,7 @@ void add(const cli::RepoOptions& opts) {
 
         // Clone
         auto dest = cache_dir(scope, repo_name);
-        util::info("Cloning " + opts.url + " ...");
+        util::info(ezmk::i18n::I18nKey::cloning, {{"url", opts.url}});
         if (!util::git_clone(opts.url, dest, opts.branch)) {
             util::remove_all(dest);
             throw std::runtime_error("failed to clone repository");
@@ -309,7 +309,7 @@ void add(const cli::RepoOptions& opts) {
         }
 
         entry.last_update = util::git_last_commit_time(dest);
-        util::info("Repository '" + repo_name + "' registered successfully");
+        util::info(ezmk::i18n::I18nKey::repo_added, {{"name", repo_name}});
     } else {
         // Local directory
         entry.type = "local";
@@ -317,7 +317,7 @@ void add(const cli::RepoOptions& opts) {
 
         validate_local_repo(fs::path(opts.url));
         entry.last_update = now_iso();
-        util::info("Local repository '" + repo_name + "' registered");
+        util::info(ezmk::i18n::I18nKey::repo_added, {{"name", repo_name}});
     }
 
     entries.push_back(std::move(entry));
@@ -337,19 +337,20 @@ void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
                 if (it->type == "git") {
                     auto cd = cache_dir(scope, name);
                     if (util::file_exists(cd)) {
-                        util::info("Removing cache: " + cd.string());
+                        util::info(ezmk::i18n::I18nKey::removing_cache,
+                                   {{"path", cd.string()}});
                         util::remove_all(cd);
                     }
                 }
 
                 entries.erase(it);
                 save_repo_list(scope, entries);
-                util::info("Repository '" + std::string(name) + "' removed");
+                util::info(ezmk::i18n::I18nKey::repo_removed, {{"name", std::string(name)}});
                 return;
             }
         }
     }
-    util::error(std::string("repository not found: ") + std::string(name));
+    util::error(ezmk::i18n::I18nKey::repo_not_found, {{"name", std::string(name)}});
 }
 
 // ===================================================================
@@ -370,13 +371,13 @@ void update(const std::string& name, const std::vector<cli::Scope>& scopes) {
                 auto cd = cache_dir(scope, e.name);
                 if (!util::file_exists(cd)) {
                     // Cache missing — re-clone
-                    util::info("Re-cloning " + e.url + " ...");
+                    util::info(ezmk::i18n::I18nKey::re_cloning, {{"url", e.url}});
                     if (!util::git_clone(e.url, cd, e.branch)) {
                         util::warn("failed to re-clone '" + e.name + "', skipping");
                         continue;
                     }
                 } else {
-                    util::info("Updating " + e.name + " ...");
+                    util::info(ezmk::i18n::I18nKey::pulling, {{"name", e.name}});
                     if (!util::git_pull(cd, e.branch)) {
                         util::warn("failed to update '" + e.name + "', using cached version");
                         continue;
@@ -385,7 +386,7 @@ void update(const std::string& name, const std::vector<cli::Scope>& scopes) {
                 e.last_update = util::git_last_commit_time(cd);
             } else {
                 // Local: re-validate
-                util::info("Re-reading " + e.url + " ...");
+                util::info(ezmk::i18n::I18nKey::re_reading, {{"url", e.url}});
                 try {
                     validate_local_repo(fs::path(e.url));
                 } catch (const std::exception& ex) {
@@ -401,9 +402,9 @@ void update(const std::string& name, const std::vector<cli::Scope>& scopes) {
 
     if (!updated_any) {
         if (!name.empty()) {
-            util::error("repository not found: " + name);
+            util::error(ezmk::i18n::I18nKey::repo_not_found, {{"name", name}});
         } else {
-            util::info("No repositories registered");
+            util::info(ezmk::i18n::I18nKey::no_repos);
         }
     }
 }
@@ -454,7 +455,7 @@ void list(const std::vector<cli::Scope>& scopes) {
     }
 
     if (!found_any) {
-        util::info("No repositories registered. Use 'ezmk repo add' to register one.");
+        util::info(ezmk::i18n::I18nKey::no_repos);
     }
 }
 

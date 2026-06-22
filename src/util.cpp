@@ -63,6 +63,21 @@ void fatal(std::string_view msg) {
     throw ezmk::fatal_error(msg);
 }
 
+// ---- I18n-aware logging overloads ----
+
+void info(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {
+    info(ezmk::i18n::fmt(key, args));
+}
+void warn(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {
+    warn(ezmk::i18n::fmt(key, args));
+}
+void error(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {
+    error(ezmk::i18n::fmt(key, args));
+}
+void fatal(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {
+    fatal(ezmk::i18n::fmt(key, args));
+}
+
 // ===================================================================
 // Color support
 // ===================================================================
@@ -690,10 +705,11 @@ std::string find_editor() {
 void open_in_editor(const fs::path& file) {
     std::string editor = find_editor();
     if (editor.empty()) {
-        warn("no text editor found (tried vim, nano, emacs). Review skipped.");
+        warn(ezmk::i18n::I18nKey::no_editor);
         return;
     }
-    info(std::string("Opening ") + file.string() + " in " + editor + "...");
+    info(ezmk::i18n::I18nKey::opening_editor,
+         {{"file", file.string()}, {"editor", editor}});
 #ifdef EZMK_WIN
     std::string cmd = "notepad \"" + escape_shell_arg(file.string()) + "\"";
 #else
@@ -701,7 +717,7 @@ void open_in_editor(const fs::path& file) {
 #endif
     auto res = run_command(cmd);
     if (res.exit_code != 0 && !res.err.empty()) {
-        warn(std::string("editor returned error: ") + res.err);
+        warn(ezmk::i18n::I18nKey::editor_error, {{"msg", res.err}});
     }
 }
 
