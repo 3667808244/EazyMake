@@ -16,6 +16,10 @@
   #endif
   #include <windows.h>
   #include <winhttp.h>
+#elif defined(EZMK_MACOS)
+  #include <mach-o/dyld.h>
+  #include <unistd.h>
+  #include <sys/wait.h>
 #else
   #include <unistd.h>
   #include <sys/wait.h>
@@ -223,6 +227,12 @@ fs::path get_exe_dir() {
     char buf[MAX_PATH];
     DWORD len = GetModuleFileNameA(nullptr, buf, sizeof(buf));
     if (len > 0) return fs::path(std::string(buf, len)).parent_path();
+    return fs::current_path();
+#elif defined(EZMK_MACOS)
+    char buf[4096];
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) == 0)
+        return fs::path(std::string(buf)).parent_path();
     return fs::current_path();
 #else
     char buf[4096];
@@ -588,6 +598,9 @@ ProcResult run_command(const std::string& cmd) {
 
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
+    } else {
+        // CreateProcess failed — command not found or not executable
+        result.exit_code = 1;
     }
     CloseHandle(hReadOut);
     CloseHandle(hReadErr);

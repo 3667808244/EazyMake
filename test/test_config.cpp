@@ -83,6 +83,20 @@ TEST_CASE("parse_language: C versions", "[config]") {
     }
 }
 
+TEST_CASE("parse_language: LanguageInfo detected_compiler defaults", "[config]") {
+    using namespace ezmk::config;
+
+    SECTION("C++ language — detected_compiler is empty by default") {
+        auto info = parse_language("C++17");
+        REQUIRE(info.detected_compiler.empty());
+    }
+
+    SECTION("C language — detected_compiler is empty by default") {
+        auto info = parse_language("C11");
+        REQUIRE(info.detected_compiler.empty());
+    }
+}
+
 TEST_CASE("parse_language: invalid inputs", "[config]") {
     using namespace ezmk::config;
 

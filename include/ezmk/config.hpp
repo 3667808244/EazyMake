@@ -47,8 +47,9 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
 // Parse a language string like "C++17" into compiler name and -std= flag.
 // Returns {"g++", "-std=c++17"} for C++; {"gcc", "-std=c11"} for C.
 struct LanguageInfo {
-    std::string compiler;  // "g++" or "gcc"
-    std::string std_flag;  // e.g. "-std=c++17"
+    std::string compiler;            // default compiler from config ("g++" or "gcc")
+    std::string std_flag;            // e.g. "-std=c++17"
+    std::string detected_compiler;   // runtime-detected compiler, empty if not yet probed
 };
 LanguageInfo parse_language(std::string_view language);
 

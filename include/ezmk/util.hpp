@@ -22,12 +22,21 @@ public:
 // Platform detection
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
   #define EZMK_WIN 1
+#elif defined(__APPLE__)
+  #define EZMK_MACOS 1
+#elif defined(__linux__)
+  #define EZMK_LINUX 1
+#endif
+
+// Executable suffix (Windows only)
+#ifdef EZMK_WIN
   #define EZMK_EXE_SUFFIX ".exe"
-  #define EZMK_OBJ_SUFFIX ".obj"
 #else
   #define EZMK_EXE_SUFFIX ""
-  #define EZMK_OBJ_SUFFIX ".o"
 #endif
+
+// Object file suffix — all platforms use .o (MinGW g++ also produces .o)
+#define EZMK_OBJ_SUFFIX ".o"
 
 namespace ezmk::util {
 namespace fs = std::filesystem;

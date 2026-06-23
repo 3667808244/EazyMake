@@ -9,12 +9,90 @@ namespace ezmk::build {
 
 // ---- helpers ----
 
-static fs::path find_compiler(const config::LanguageInfo& lang) {
+std::string detect_compiler(const std::string& language) {
+    bool is_cxx = (language == "C++");
+
+    // Cache: probe only once per language per process
+    static std::string cached_cxx;
+    static std::string cached_c;
+    std::string& cached = is_cxx ? cached_cxx : cached_c;
+    if (!cached.empty()) return cached;
+
+    // 1. Check environment variable override ($CXX / $CC)
+    const char* env = is_cxx ? std::getenv("CXX") : std::getenv("CC");
+    if (env && env[0] != '\0') {
+        std::string candidate(env);
+        auto res = util::run_command(candidate + " --version 2>&1");
+        if (res.exit_code == 0) {
+            cached = candidate;
+            return cached;
+        }
+        util::warn(std::string("$") + (is_cxx ? "CXX" : "CC") +
+                   " is set to '" + candidate + "' but it is not executable — falling back to auto-detect");
+    }
+
+    // 2. Platform-specific candidate list
+    std::vector<std::string> candidates;
 #ifdef EZMK_WIN
-    return fs::path(lang.compiler + ".exe");
+    // Check for MSVC compiler (cl.exe) — inform but don't use yet
+    {
+        auto res = util::run_command("cl 2>&1");
+        if (res.exit_code == 0) {
+            util::info("MSVC compiler (cl.exe) detected. "
+                       "Full MSVC support is planned for v0.2.1. "
+                       "Using MinGW g++/clang++ instead.");
+        }
+    }
+    candidates = is_cxx
+        ? std::vector<std::string>{"g++", "clang++"}
+        : std::vector<std::string>{"gcc", "clang"};
 #else
-    return fs::path(lang.compiler);
+    // macOS and Linux share the same candidate list
+    candidates = is_cxx
+        ? std::vector<std::string>{"g++", "clang++", "c++"}
+        : std::vector<std::string>{"gcc", "clang", "cc"};
 #endif
+
+    // 3. Probe each candidate
+    for (auto& c : candidates) {
+        auto res = util::run_command(c + " --version 2>&1");
+        if (res.exit_code == 0) {
+#ifdef EZMK_MACOS
+            // Detect Apple Clang alias
+            if (res.out.find("Apple") != std::string::npos ||
+                res.out.find("apple") != std::string::npos) {
+                util::info(std::string("detected Apple Clang as '") + c + "'");
+            }
+#endif
+            cached = c;
+            return cached;
+        }
+    }
+
+    // 4. None found — fatal with platform-specific install instructions
+    std::string msg = "no C";
+    msg += (is_cxx ? "++" : "");
+    msg += " compiler found.\n\n";
+#ifdef EZMK_WIN
+    msg += "  Install MSYS2: https://www.msys2.org/\n";
+    msg += "  Then: pacman -S mingw-w64-x86_64-gcc";
+#elif defined(EZMK_MACOS)
+    msg += "  Option A: xcode-select --install  (Apple Clang)\n";
+    msg += "  Option B: brew install gcc          (GNU GCC)";
+#else // Linux
+    msg += "  Debian/Ubuntu: sudo apt install g++\n";
+    msg += "  RHEL/Fedora:   sudo dnf install gcc-c++\n";
+    msg += "  Arch:          sudo pacman -S gcc";
+#endif
+    util::fatal(msg);
+    return {}; // unreachable
+}
+
+static fs::path find_compiler(const config::LanguageInfo& lang) {
+    if (!lang.detected_compiler.empty())
+        return fs::path(lang.detected_compiler);
+    bool is_cxx = (lang.compiler == "g++");
+    return fs::path(detect_compiler(is_cxx ? "C++" : "C"));
 }
 
 static std::string make_link_cmd(const std::vector<fs::path>& objs,
@@ -24,7 +102,7 @@ static std::string make_link_cmd(const std::vector<fs::path>& objs,
                                  const config::LanguageInfo& lang,
                                  bool shared = false) {
     std::ostringstream cmd;
-    cmd << lang.compiler;
+    cmd << (lang.detected_compiler.empty() ? lang.compiler : lang.detected_compiler);
 
     for (auto& o : objs) {
         cmd << " \"" << o.string() << "\"";
@@ -60,19 +138,8 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     // Parse language → compiler + std flag
     auto lang = config::parse_language(cfg.project.language);
 
-    // Verify compiler
-    auto gxx = find_compiler(lang);
-    auto ver = util::run_command(gxx.string() + " --version 2>&1");
-    if (ver.exit_code != 0) {
-        // Platform-specific install instructions (untranslated) + fatal
-        std::string msg = ezmk::i18n::fmt(ezmk::i18n::I18nKey::compiler_not_found,
-                                           {{"compiler", gxx.string()}});
-        msg += "\n  Windows (MSYS2): pacman -S mingw-w64-x86_64-gcc";
-        msg += "\n  Linux (Debian):   apt install g++";
-        msg += "\n  Linux (RHEL):     dnf install gcc-c++";
-        msg += "\n  macOS:            brew install gcc";
-        util::fatal(msg);
-    }
+    // Detect best available compiler (respects $CXX/$CC, probes platform candidates)
+    lang.detected_compiler = detect_compiler(lang.compiler == "g++" ? "C++" : "C");
 
     fs::path proj_root = fs::current_path();
     fs::path src_dir = proj_root / "src";
