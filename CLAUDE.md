@@ -10,10 +10,11 @@ Design specifications live in `docs/`. Source code is under active development; 
 
 ## Build & test commands
 
-- Build EazyMake itself: `g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -lwinhttp -static` (MSYS2)
-- On Linux: `g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -static`
-- Or use the convenience script: `bash build.sh`
-- Test framework: Catch2 (planned for 0.1.6, see `plans/0.1.6.md`).
+- Build EazyMake: `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static` (MSYS2)
+- On Linux: `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -static`
+- Or use the convenience script: `bash build.sh` (generates locale data + version header, then builds)
+- Build and run tests: `g++ -std=c++17 test/test_*.cpp src/vendor/catch2_impl.cpp src/build.cpp src/cache.cpp src/cli.cpp src/config.cpp src/crypto.cpp src/i18n.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/util.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/test_ezmk -lwinhttp -static && ./build/test_ezmk`
+- Test framework: Catch2 v3 (header-only: `include/vendor/catch2.hpp` + `src/vendor/catch2_impl.cpp`)
 
 ## Architecture (from design docs)
 
@@ -105,3 +106,36 @@ Atomicity: write `.o` and `record.json` to temp files first, then `rename` to av
 
 - Global package installs require secondary confirmation
 - Installations that would overwrite existing files require secondary confirmation
+
+### Lua scripting & utils (0.2.0+)
+
+EazyMake embeds Lua 5.4.7 (static-linked). The `ezmk utils <name>` subcommand runs Lua-based tools from installed `type = "utils"` packages.
+
+**Lua sandbox safety:**
+- `io` and `os` standard libraries are removed at compile time (in `linit.c`)
+- Scripts use `ezmk.*` API functions for I/O and process execution
+- `ezmk.file_write()` denies writes outside the project root
+- Each script invocation gets a fresh sandbox environment table (no cross-script global pollution)
+
+**ezmk Lua API (22 functions):**
+| Category | Functions |
+|---|---|
+| Project info | `project_root()`, `project_name()`, `project_type()`, `project_config()`, `build_dir()` |
+| Compile options | `compile_flags()`, `include_dirs()`, `link_flags()`, `link_dirs()` |
+| Filesystem | `list_sources()`, `file_exists()`, `file_read()`, `file_write()` |
+| Process | `run()` → `{exit_code,stdout,stderr}`, `run_capture()` |
+| Logging | `info()`, `warn()`, `error()` |
+| Path tools | `pkg_dir()`, `temp_dir()`, `cache_dir()` |
+| JSON | `json_encode()`, `json_decode()` |
+
+**Built-in tool:** `ezmk-cc` — generates `compile_commands.json` (clangd-compatible) via `ezmk utils cc`.
+
+**Utils package structure:**
+```
+<utils_pkg>/
+  ezmk.toml          # type = "utils", [utils] section with tools = [...]
+  utils/
+    <name>.lua       # tools listed in ezmk.toml
+```
+
+**Script discovery order:** project scope (`.ezmk/pkg/*/utils/`) → user scope (`~/.local/ezmk/pkg/*/utils/`) → global scope (`<install_dir>/pkg/*/utils/`).

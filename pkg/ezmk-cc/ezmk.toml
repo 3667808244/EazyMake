@@ -1,0 +1,19 @@
+[project]
+name = "ezmk-cc"
+version = "0.1.0"
+type = "utils"
+
+[utils]
+tools = ["cc"]
+
+[compile]
+flags = []
+include_dirs = []
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []

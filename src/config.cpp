@@ -95,6 +95,13 @@ EzConfig parse_config(const fs::path& toml_path) {
             cfg.project.name = *name;
         }
         if (auto type = (*proj)["type"].value<std::string>()) {
+            // Validate type
+            if (*type != "executable" && *type != "static" &&
+                *type != "shared" && *type != "utils") {
+                throw std::runtime_error(
+                    "invalid project type '" + *type +
+                    "'; expected one of: executable, static, shared, utils");
+            }
             cfg.project.type = *type;
         }
         if (auto ver = (*proj)["version"].value<std::string>()) {

@@ -104,8 +104,13 @@ enum class I18nKey {
     // version
     version_output,
 
-    // utils
+    // utils / Lua
     utils_placeholder,
+    utils_not_found,
+    lua_init_failed,
+    lua_error,
+    lua_api_type_error,
+    lua_api_arg_count,
 
     // general
     fatal_prefix,

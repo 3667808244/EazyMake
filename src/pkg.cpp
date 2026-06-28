@@ -120,14 +120,23 @@ static bool run_install_script(const fs::path& script, const fs::path& cwd,
 
 // Validate a directory is a proper EazyMake package
 static void validate_pkg(const fs::path& dir) {
-    if (!util::file_exists(dir / "include")) {
-        throw std::runtime_error("package missing include/ directory: " + dir.string());
-    }
-    if (!util::file_exists(dir / "src")) {
-        throw std::runtime_error("package missing src/ directory: " + dir.string());
-    }
+    // ezmk.toml is always required
     if (!util::file_exists(dir / "ezmk.toml")) {
         throw std::runtime_error("package missing ezmk.toml: " + dir.string());
+    }
+
+    // Read config to determine package type
+    auto cfg = config::parse_config(dir / "ezmk.toml");
+    bool is_utils = (cfg.project.type == "utils");
+
+    // include/ and src/ are optional for utils packages (they may have only utils/ scripts)
+    if (!is_utils) {
+        if (!util::file_exists(dir / "include")) {
+            throw std::runtime_error("package missing include/ directory: " + dir.string());
+        }
+        if (!util::file_exists(dir / "src")) {
+            throw std::runtime_error("package missing src/ directory: " + dir.string());
+        }
     }
 }
 
@@ -498,6 +507,10 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
         for (auto& dir : order) {
             auto cfg = config::parse_config(dir / "ezmk.toml");
+            // Skip compilation for utils packages without source files
+            if (cfg.project.type == "utils" && !util::file_exists(dir / "src")) {
+                continue;
+            }
             std::vector<fs::path> dep_includes;
             for (auto& dep : cfg.depends.libs) {
                 auto it = name_to_dir.find(dep);

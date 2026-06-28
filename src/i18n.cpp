@@ -209,9 +209,19 @@ namespace ezmk::i18n
             case I18nKey::version_output:
                 return "version_output";
 
-            // utils
+            // utils / Lua
             case I18nKey::utils_placeholder:
                 return "utils_placeholder";
+            case I18nKey::utils_not_found:
+                return "utils_not_found";
+            case I18nKey::lua_init_failed:
+                return "lua_init_failed";
+            case I18nKey::lua_error:
+                return "lua_error";
+            case I18nKey::lua_api_type_error:
+                return "lua_api_type_error";
+            case I18nKey::lua_api_arg_count:
+                return "lua_api_arg_count";
 
             // general
             case I18nKey::fatal_prefix:
@@ -350,6 +360,11 @@ namespace ezmk::i18n
                 {"building", "Building {name} ({type}, {lang})..."},
                 {"build_success", "Build successful: {path}"},
                 {"version_output", "EazyMake {version}"},
+                {"utils_not_found", "unknown utils command: '{name}'\n  Install a utils package with 'ezmk pkg install'."},
+                {"lua_init_failed", "failed to initialize Lua runtime"},
+                {"lua_error", "Lua error: {msg}"},
+                {"lua_api_type_error", "bad argument #{n} to '{func}' ({expected}, got {got})"},
+                {"lua_api_arg_count", "bad argument count to '{func}' (expected {expected}, got {got})"},
             };
             g_current_lang = "en";
         }

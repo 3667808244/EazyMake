@@ -150,4 +150,11 @@ std::string native_path(const fs::path& p);
 // This prevents command injection when constructing shell commands with paths/URLs.
 std::string escape_shell_arg(std::string_view s);
 
+// ---- Utils / Lua plugin discovery ----
+
+// Search for a utils Lua script by name across all installed packages.
+// Scans project → user → global scopes, returns first matching .lua path.
+// Returns empty path if not found.
+fs::path find_utils_script(const std::string& name);
+
 } // namespace ezmk::util

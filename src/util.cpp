@@ -792,4 +792,54 @@ std::string escape_shell_arg(std::string_view s) {
     return r;
 }
 
+// ===================================================================
+// Utils / Lua plugin discovery
+// ===================================================================
+
+fs::path find_utils_script(const std::string& name) {
+    // Search for <name>.lua across project → user → global scope.
+    // Uses the same scope paths as pkg_install_dir() in pkg.cpp.
+
+    std::string script_file = name + ".lua";
+
+    // Helper: scan a directory for <pkg>/utils/<name>.lua
+    auto scan_dir = [&](const fs::path& pkg_root) {
+        if (!fs::exists(pkg_root)) return fs::path();
+        for (auto& pkg_entry : fs::directory_iterator(pkg_root)) {
+            if (!pkg_entry.is_directory()) continue;
+            auto candidate = pkg_entry.path() / "utils" / script_file;
+            if (fs::exists(candidate)) return candidate;
+        }
+        return fs::path();
+    };
+
+    // 1) Project scope
+    fs::path project_dir = fs::current_path() / ".ezmk/pkg";
+    auto found = scan_dir(project_dir);
+    if (!found.empty()) return found;
+
+    // 2) User scope
+#ifdef EZMK_WIN
+    const char* appdata = std::getenv("LOCALAPPDATA");
+    fs::path user_dir = appdata ? fs::path(appdata) / "ezmk/pkg"
+                                : get_home_dir() / "AppData/Local/ezmk/pkg";
+#else
+    fs::path user_dir = get_home_dir() / ".local/ezmk/pkg";
+#endif
+    found = scan_dir(user_dir);
+    if (!found.empty()) return found;
+
+    // 3) Global scope: same as pkg_install_dir(Global) = get_exe_dir() / "pkg"
+    fs::path global_dir = get_exe_dir() / "pkg";
+    found = scan_dir(global_dir);
+    if (!found.empty()) return found;
+
+    // 4) Development fallback: project source pkg/ dir (for testing during development)
+    fs::path dev_pkg_dir = fs::current_path() / "pkg";
+    found = scan_dir(dev_pkg_dir);
+    if (!found.empty()) return found;
+
+    return {};
+}
+
 } // namespace ezmk::util

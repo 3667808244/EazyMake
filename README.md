@@ -1,22 +1,44 @@
 # EazyMake
 
-A simple C/C++ build tool — `ezmk`. Based on GCC/g++ (MSYS2 on Windows, or native on Linux).
+A simple C/C++ build tool — `ezmk`. Based on GCC/g++ (MSYS2 on Windows, or native on Linux/macOS).
 
 **Design philosophy:** ease of use over feature richness. For complex builds, use CMake.
+
+## Dependencies
+
+| Dependency | Version | Required | Notes |
+|---|---|---|---|
+| GCC (g++/gcc) or Clang (clang++/clang) | ≥ 8.0 | **Build & runtime** | C++17 support required |
+| Lua | 5.4.7 | **Embedded** | Statically linked into `ezmk` |
+| nlohmann/json | header-only | **Embedded** | JSON support (`include/vendor/nlohmann_json.hpp`) |
+| toml++ | header-only | **Embedded** | TOML parsing (`include/vendor/toml.hpp`) |
+| Catch2 | v3 (header-only) | **Test only** | Unit test framework |
+| miniz | v3.0.2 | **Embedded** | ZIP extraction (`src/vendor/miniz/*`) |
+| Python | ≥ 3.6 | **Build only** | Locale data embedding (`scripts/embed_locale.py`) |
+| MSYS2 (Windows) | — | **Build & runtime** | Provides g++ and bash environment |
 
 ## Quick start
 
 ### Build EazyMake itself
 
 ```bash
-# Via helper script
+# Via helper script (generates locale data + version header + compiles)
 bash build.sh
 
 # Or manually — MSYS2 / Windows
-g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -lwinhttp -static
+g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+  -I include/ -I include/vendor/ -I include/vendor/lua/ \
+  -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static
 
 # Linux
-g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -static
+g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+  -I include/ -I include/vendor/ -I include/vendor/lua/ \
+  -DLUA_COMPAT_5_3 -o build/ezmk -static
+
+# macOS
+g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+  -I include/ -I include/vendor/ -I include/vendor/lua/ \
+  -DLUA_COMPAT_5_3 -o build/ezmk
 ```
 
 ### Create and build a project
@@ -43,6 +65,16 @@ ezmk repo update
 ezmk pkg install -p foo
 ```
 
+### Run utility tools
+
+```bash
+# Generate compile_commands.json for clangd/LSP
+ezmk utils cc
+
+# Custom output path
+ezmk utils cc -o build/compile_commands.json
+```
+
 ## CLI reference
 
 ### `project` — build your code
@@ -50,8 +82,8 @@ ezmk pkg install -p foo
 | Command | Description |
 |---|---|
 | `ezmk project new <name> [--type executable\|static\|shared]` | Scaffold a new project |
-| `ezmk project build [--disable-cache]` | Incremental build |
-| `ezmk project run [--disable-cache]` | Build and execute |
+| `ezmk project build [--disable-cache] [--verbose]` | Incremental build |
+| `ezmk project run [--disable-cache] [--verbose]` | Build and execute |
 | `ezmk project clean` | Remove cache and temp files |
 
 ### `pkg` — manage packages
@@ -72,20 +104,27 @@ ezmk pkg install -p foo
 | `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` to refresh |
 | `ezmk repo list [-p\|-u\|-g]` | List registered repos |
 
-### `utils` — run tools (0.2.0+)
+### `utils` — Lua-based tools (0.2.0+)
 
 | Command | Description |
 |---|---|
 | `ezmk utils <name> [args...]` | Run a Lua-based tool from an installed utils package |
 
-Utils tools are packages (type = "utils") installed via `ezmk pkg install`. See `docs/utils.md`.
+Utils tools are packages (`type = "utils"`) installed via `ezmk pkg install`. They expose Lua scripts under `utils/<name>.lua`. See `docs/utils.md` for the full plugin API.
+
+**Built-in tools:**
+
+| Tool | Description |
+|---|---|
+| `ezmk utils cc` | Generate `compile_commands.json` (clangd-compatible) |
+| `ezmk utils cc -o <path>` | Output to custom path |
 
 ### Scope flags
 
 | Flag | Scope | Install path |
 |---|---|---|
 | `-p` | Project | `<project>/.ezmk/pkg/` |
-| `-u` | User | `~/.local/ezmk/pkg/` |
+| `-u` | User | `~/.local/ezmk/pkg/` (Linux/macOS) or `%LOCALAPPDATA%/ezmk/pkg/` (Windows) |
 | `-g` | Global | `<ezmk_install_dir>/pkg/` |
 
 `install` and `repo add` accept only one scope flag; others accept combinations like `-pug`.
@@ -112,7 +151,7 @@ my_project/
 ```toml
 [project]
 name = "myapp"
-type = "executable"     # executable | static | shared
+type = "executable"     # executable | static | shared | utils
 version = "0.1.0"
 language = "C++17"      # C++17 | C++20 | C11 | ...
 
@@ -129,9 +168,21 @@ system_target = ["pthread"]
 lib = ["foo", "bar"]
 ```
 
+### Utils package config
+
+```toml
+[project]
+name = "ezmk-cc"
+type = "utils"
+version = "0.1.0"
+
+[utils]
+tools = ["cc"]
+```
+
 ## Repository
 
-A repo is a **git repository** containing `index.toml` + `packages/`. `ezmk repo add` clones; `ezmk repo update` does `git pull`. Local directories also supported. See `docs/repo.md`.
+A repo is a **git repository** containing `index.toml` + `packages/` directory. `ezmk repo add` clones to a local cache; `ezmk repo update` does `git pull`. Local directories also supported. See `docs/repo.md`.
 
 ## Design docs
 
@@ -140,7 +191,9 @@ A repo is a **git repository** containing `index.toml` + `packages/`. `ezmk repo
 | `docs/config_file.md` | Full `ezmk.toml` specification |
 | `docs/pkg.md` | Package format and lifecycle |
 | `docs/repo.md` | Git-based repository system |
-| `docs/utils.md` | Lua-based plugin tool system |
+| `docs/utils.md` | Lua-based plugin tool system and API reference |
 | `docs/@cache.md` | Incremental build cache |
 | `docs/@safety.md` | Safety invariants |
+| `CHANGES.md` | Version changelog |
 | `plans/` | Version milestone plans |
+| `plan.md` | Current execution plan |

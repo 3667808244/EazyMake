@@ -1,22 +1,44 @@
 # EazyMake
 
-简单的 C/C++ 构建工具 —— `ezmk`。基于 GCC/g++（Windows 上使用 MSYS2，Linux 原生）。
+简单的 C/C++ 构建工具 —— `ezmk`。基于 GCC/g++（Windows 上使用 MSYS2，Linux/macOS 原生）。
 
 **设计理念：** 易用优先，功能从简。复杂构建请使用 CMake。
+
+## 依赖声明
+
+| 依赖 | 版本 | 要求 | 说明 |
+|---|---|---|---|
+| GCC (g++/gcc) 或 Clang (clang++/clang) | ≥ 8.0 | **编译 & 运行时** | 需支持 C++17 |
+| Lua | 5.4.7 | **嵌入式** | 静态链接进 `ezmk` |
+| nlohmann/json | header-only | **嵌入式** | JSON 支持 |
+| toml++ | header-only | **嵌入式** | TOML 解析 |
+| Catch2 | v3 (header-only) | **仅测试** | 单元测试框架 |
+| miniz | v3.0.2 | **嵌入式** | ZIP 解压 |
+| Python | ≥ 3.6 | **仅构建** | 嵌入 locale 数据 |
+| MSYS2 (Windows) | — | **构建 & 运行时** | 提供 g++ 和 bash 环境 |
 
 ## 快速开始
 
 ### 构建 EazyMake 本身
 
 ```bash
-# 使用辅助脚本
+# 使用辅助脚本（自动生成 locale 数据 + 版本头文件 + 编译）
 bash build.sh
 
 # 或手动构建 — MSYS2 / Windows
-g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -lwinhttp -static
+g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+  -I include/ -I include/vendor/ -I include/vendor/lua/ \
+  -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static
 
 # Linux
-g++ -std=c++17 src/*.cpp src/vendor/*.c -I include/ -I include/vendor/ -o ezmk -static
+g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+  -I include/ -I include/vendor/ -I include/vendor/lua/ \
+  -DLUA_COMPAT_5_3 -o build/ezmk -static
+
+# macOS
+g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+  -I include/ -I include/vendor/ -I include/vendor/lua/ \
+  -DLUA_COMPAT_5_3 -o build/ezmk
 ```
 
 ### 创建并构建项目
@@ -43,6 +65,16 @@ ezmk repo update
 ezmk pkg install -p foo
 ```
 
+### 运行工具
+
+```bash
+# 生成 compile_commands.json（供 clangd/LSP 使用）
+ezmk utils cc
+
+# 自定义输出路径
+ezmk utils cc -o build/compile_commands.json
+```
+
 ## CLI 参考
 
 ### `project` — 构建项目
@@ -50,8 +82,8 @@ ezmk pkg install -p foo
 | 命令 | 说明 |
 |---|---|
 | `ezmk project new <name> [--type executable\|static\|shared]` | 脚手架生成新项目 |
-| `ezmk project build [--disable-cache]` | 增量构建 |
-| `ezmk project run [--disable-cache]` | 构建并运行 |
+| `ezmk project build [--disable-cache] [--verbose]` | 增量构建 |
+| `ezmk project run [--disable-cache] [--verbose]` | 构建并运行 |
 | `ezmk project clean` | 清除缓存和临时文件 |
 
 ### `pkg` — 管理包
@@ -72,12 +104,27 @@ ezmk pkg install -p foo
 | `ezmk repo update [-p\|-u\|-g] [<名称>]` | `git pull` 刷新 |
 | `ezmk repo list [-p\|-u\|-g]` | 列出已注册仓库 |
 
+### `utils` — Lua 工具（0.2.0+）
+
+| 命令 | 说明 |
+|---|---|
+| `ezmk utils <名称> [参数...]` | 运行已安装 utils 包中的 Lua 工具 |
+
+Utils 工具是通过 `ezmk pkg install` 安装的包（`type = "utils"`），暴露 `utils/<name>.lua` 脚本。详见 `docs/utils.md`。
+
+**内置工具：**
+
+| 工具 | 说明 |
+|---|---|
+| `ezmk utils cc` | 生成 `compile_commands.json`（兼容 clangd） |
+| `ezmk utils cc -o <路径>` | 输出到自定义路径 |
+
 ### 作用域参数
 
 | 参数 | 作用域 | 安装路径 |
 |---|---|---|
 | `-p` | 项目 | `<项目>/.ezmk/pkg/` |
-| `-u` | 用户 | `~/.local/ezmk/pkg/` |
+| `-u` | 用户 | `~/.local/ezmk/pkg/`（Linux/macOS）或 `%LOCALAPPDATA%/ezmk/pkg/`（Windows） |
 | `-g` | 全局 | `<ezmk安装目录>/pkg/` |
 
 `install` 和 `repo add` 仅接受单个作用域参数；其余命令支持组合使用，如 `-pug`。
@@ -104,7 +151,7 @@ my_project/
 ```toml
 [project]
 name = "myapp"
-type = "executable"     # executable | static | shared
+type = "executable"     # executable | static | shared | utils
 version = "0.1.0"
 language = "C++17"      # C++17 | C++20 | C11 | ...
 
@@ -121,6 +168,18 @@ system_target = ["pthread"]
 lib = ["foo", "bar"]
 ```
 
+### Utils 包配置
+
+```toml
+[project]
+name = "ezmk-cc"
+type = "utils"
+version = "0.1.0"
+
+[utils]
+tools = ["cc"]
+```
+
 ## 仓库
 
 仓库是一个 **git 仓库**，包含 `index.toml` + `packages/` 目录。`ezmk repo add` 自动 clone 到本地缓存；`ezmk repo update` 执行 `git pull` 增量更新。也支持本地目录作为仓库源。详见 `docs/repo.md`。
@@ -132,6 +191,9 @@ lib = ["foo", "bar"]
 | `docs/config_file.md` | `ezmk.toml` 完整格式说明 |
 | `docs/pkg.md` | 包格式与生命周期 |
 | `docs/repo.md` | 基于 git 的仓库系统 |
+| `docs/utils.md` | Lua 插件系统与 API 参考 |
 | `docs/@cache.md` | 增量构建缓存 |
 | `docs/@safety.md` | 安全规范 |
-| `plan.md` | 当前版本计划与进度 |
+| `CHANGES.md` | 版本更新日志 |
+| `plans/` | 版本里程碑计划 |
+| `plan.md` | 当前执行计划 |

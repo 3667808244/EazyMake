@@ -38,10 +38,11 @@ cat > include/ezmk/version.hpp << VEREOF
 #define EZMK_VERSION "${EZMK_VERSION}"
 VEREOF
 
-SRC="src/*.cpp src/vendor/*.c"
+SRC="src/*.cpp src/vendor/*.c src/vendor/lua/*.c"
 # Exclude main.cpp for tests (it has its own main() function; catch2_impl.cpp provides main)
-TEST_SRC="src/build.cpp src/cache.cpp src/cli.cpp src/config.cpp src/crypto.cpp src/i18n.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/util.cpp src/vendor/*.c src/vendor/catch2_impl.cpp"
-INCLUDES="-I include/ -I include/vendor/"
+TEST_SRC="src/build.cpp src/cache.cpp src/cli.cpp src/config.cpp src/crypto.cpp src/i18n.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/util.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
+INCLUDES="-I include/ -I include/vendor/ -I include/vendor/lua/"
+LUA_DEFINES="-DLUA_COMPAT_5_3"
 OUTPUT="build/ezmk"
 TEST_OUTPUT="build/test_ezmk"
 CXX="${CXX:-g++}"
@@ -107,7 +108,7 @@ if $BUILD_TEST; then
         echo ""
     fi
 
-    $CXX $CXXFLAGS test/test_*.cpp $TEST_SRC $INCLUDES -o "$TEST_OUTPUT" $LIBS $LDFLAGS
+    $CXX $CXXFLAGS test/test_*.cpp $TEST_SRC $INCLUDES $LUA_DEFINES -o "$TEST_OUTPUT" $LIBS $LDFLAGS
 
     echo "=== Test build successful: $TEST_OUTPUT ==="
 
@@ -131,7 +132,7 @@ else
         echo ""
     fi
 
-    $CXX $CXXFLAGS $SRC $INCLUDES -o "$OUTPUT" $LIBS $LDFLAGS
+    $CXX $CXXFLAGS $SRC $INCLUDES $LUA_DEFINES -o "$OUTPUT" $LIBS $LDFLAGS
 
     echo "=== Build successful: $OUTPUT ==="
 fi
