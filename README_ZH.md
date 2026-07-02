@@ -81,7 +81,7 @@ ezmk utils cc -o build/compile_commands.json
 
 | 命令 | 说明 |
 |---|---|
-| `ezmk project new <name> [--type executable\|static\|shared]` | 脚手架生成新项目 |
+| `ezmk project new <name> [--type executable\|static\|shared\|utils]` | 脚手架生成新项目 |
 | `ezmk project build [--disable-cache] [--verbose]` | 增量构建 |
 | `ezmk project run [--disable-cache] [--verbose]` | 构建并运行 |
 | `ezmk project clean` | 清除缓存和临时文件 |
@@ -158,14 +158,23 @@ language = "C++17"      # C++17 | C++20 | C11 | ...
 [compile]
 flags = ["-Wall", "-Wextra", "-O2"]
 include_dirs = ["include"]
+src_dirs = ["src"]                    # 0.2.2+ 多源目录扫描
+ezmk_macros = true                    # 0.2.2+ 注入 EZMK_* 标准宏
+msvc_flags = []                       # 0.2.1+ MSVC 专用标志
+
+[compile.macros]                      # 0.2.2+ 语义化宏定义
+DEBUG = ""
+VERSION = "0.1.0"
 
 [link]
 flags = []
 link_dirs = []
 system_target = ["pthread"]
+msvc_flags = []                       # 0.2.1+ MSVC 专用链接标志
 
 [depends]
-lib = ["foo", "bar"]
+lib = ["foo", "bar"]                  # 硬性依赖（缺失 → 错误）
+want = ["sqlite3", "zlib"]            # 0.2.2+ 可选依赖
 ```
 
 ### Utils 包配置

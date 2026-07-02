@@ -66,12 +66,14 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record);
 // Returns vector of {path, sha256} for each dependency.
 std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile);
 
-// Compute a signature from compile flags (for global options check).
+// Compute a signature from compile flags, include dirs, MSVC flags, and
+// optionally the language standard flag (for cache invalidation).
 std::string compile_options_signature(const config::CompileSection& compile);
 
-// Compute a signature including extra include paths (for package builds).
+// Compute a signature including extra include paths and language standard.
 std::string compile_options_signature(const config::CompileSection& compile,
-                                      const std::vector<fs::path>& extra_includes);
+                                      const std::vector<fs::path>& extra_includes,
+                                      std::string_view std_flag = "");
 
 // Check whether a cached .o file is still valid, by comparing:
 //  1) source file hash, 2) compile options signature, 3) all stored header hashes.
@@ -86,6 +88,17 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
                                     const config::CompileSection& compile,
                                     const CacheRecord& record,
                                     const fs::path& proj_root);
+
+// Full overload with extra_includes and std_flag (for cache signature accuracy).
+// The extra_includes and std_flag are folded into the compile options signature
+// comparison, so installing/removing a dependency package or changing the
+// language standard correctly invalidates the cache.
+std::optional<fs::path> check_cache(const fs::path& src_file,
+                                    const config::CompileSection& compile,
+                                    const CacheRecord& record,
+                                    const fs::path& proj_root,
+                                    const std::vector<fs::path>& extra_includes,
+                                    std::string_view std_flag = "");
 
 // Load record.json. Returns empty record if file doesn't exist.
 CacheRecord load_record();

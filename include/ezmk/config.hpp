@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -9,15 +10,22 @@ namespace fs = std::filesystem;
 
 struct ProjectSection {
     std::string name;
-    std::string type = "executable"; // "executable" | "static" | "shared"
+    std::string type = "executable"; // "executable" | "static" | "shared" | "utils"
     std::string version;             // required, e.g. "0.1.0"
     std::string language = "C++17";  // <Lang><Ver>, e.g. "C++17", "C11"
 };
 
+struct UtilsSection {
+    std::vector<std::string> tools;  // only for type = "utils"
+};
+
 struct CompileSection {
     std::vector<std::string> flags;
-    std::vector<std::string> msvc_flags;     // 0.2.1+ MSVC-only compile flags
-    std::vector<std::string> include_dirs;  // -I paths (default ["include"])
+    std::vector<std::string> msvc_flags;       // 0.2.1+ MSVC-only compile flags
+    std::vector<std::string> include_dirs;     // -I paths (default ["include"])
+    std::vector<std::string> src_dirs;         // 0.2.2+ source dirs (default ["src"])
+    std::map<std::string, std::string> macros; // 0.2.2+ [compile.macros] key→value
+    bool ezmk_macros = true;                   // 0.2.2+ inject EZMK_* standard macros
 };
 
 struct LinkSection {
@@ -29,6 +37,7 @@ struct LinkSection {
 
 struct DependsSection {
     std::vector<std::string> libs;
+    std::vector<std::string> want;  // 0.2.2+ optional dependencies
 };
 
 struct EzConfig {
@@ -36,6 +45,7 @@ struct EzConfig {
     CompileSection compile;
     LinkSection link;
     DependsSection depends;
+    UtilsSection utils;
 };
 
 // Parse an ezmk.toml file. Throws on parse errors.

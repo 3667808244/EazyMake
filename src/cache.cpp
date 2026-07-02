@@ -163,24 +163,38 @@ std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile) {
 }
 
 std::string compile_options_signature(const config::CompileSection& compile) {
-    return compile_options_signature(compile, {});
+    return compile_options_signature(compile, {}, "");
 }
 
 std::string compile_options_signature(const config::CompileSection& compile,
-                                      const std::vector<fs::path>& extra_includes) {
+                                      const std::vector<fs::path>& extra_includes,
+                                      std::string_view std_flag) {
     std::string combined;
+    // Language standard flag (e.g. "-std=c++17")
+    if (!std_flag.empty()) {
+        combined += std_flag;
+        combined += ' ';
+    }
+    // Compile flags (merged macros, -D flags, etc.)
     for (auto& f : compile.flags) {
         combined += f;
         combined += ' ';
     }
+    // Include dirs
     for (auto& d : compile.include_dirs) {
         combined += "-I";
         combined += d;
         combined += ' ';
     }
+    // Extra includes (dependency packages)
     for (auto& inc : extra_includes) {
         combined += "-I";
         combined += inc.string();
+        combined += ' ';
+    }
+    // MSVC-specific flags (0.2.1+) — changing these should invalidate cache
+    for (auto& f : compile.msvc_flags) {
+        combined += f;
         combined += ' ';
     }
     return crypto::sha256(combined);
@@ -189,13 +203,22 @@ std::string compile_options_signature(const config::CompileSection& compile,
 std::optional<fs::path> check_cache(const fs::path& src_file,
                                     const config::CompileSection& compile,
                                     const CacheRecord& record) {
-    return check_cache(src_file, compile, record, fs::current_path());
+    return check_cache(src_file, compile, record, fs::current_path(), {}, "");
 }
 
 std::optional<fs::path> check_cache(const fs::path& src_file,
                                     const config::CompileSection& compile,
                                     const CacheRecord& record,
                                     const fs::path& proj_root) {
+    return check_cache(src_file, compile, record, proj_root, {}, "");
+}
+
+std::optional<fs::path> check_cache(const fs::path& src_file,
+                                    const config::CompileSection& compile,
+                                    const CacheRecord& record,
+                                    const fs::path& proj_root,
+                                    const std::vector<fs::path>& extra_includes,
+                                    std::string_view std_flag) {
     auto rel_src = fs::relative(src_file, proj_root).generic_string();
 
     auto it = record.files.find(rel_src);
@@ -207,8 +230,8 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
     std::string cur_hash = crypto::sha256_file(src_file);
     if (cur_hash != entry.source_hash) return std::nullopt;
 
-    // 2. Compile options signature
-    auto cur_sig = compile_options_signature(compile);
+    // 2. Compile options signature (includes extra_includes and std_flag)
+    auto cur_sig = compile_options_signature(compile, extra_includes, std_flag);
     if (cur_sig != record.compile_options_signature) return std::nullopt;
 
     // 3. Headers: re-hash each stored header path with current content
@@ -294,7 +317,8 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
         // Check cache (unless disabled)
         bool cache_hit = false;
         if (!in.disable_cache) {
-            auto cached = check_cache(src, in.compile, record, in.proj_root);
+            auto cached = check_cache(src, in.compile, record, in.proj_root,
+                                      in.extra_includes, in.lang.std_flag);
             if (cached) {
                 auto cache_src = *cached;
                 bool same_dir = (fs::absolute(in.cache_obj_dir) == fs::absolute(in.obj_dir));
@@ -345,7 +369,8 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                         util::info(ezmk::i18n::I18nKey::cache_miss_source,
                                    {{"file", rel_src}});
                     } else {
-                        auto cur_sig = compile_options_signature(in.compile);
+                        auto cur_sig = compile_options_signature(in.compile, in.extra_includes,
+                                                                in.lang.std_flag);
                         if (cur_sig != record.compile_options_signature) {
                             util::info(ezmk::i18n::I18nKey::cache_miss_options);
                         } else {
@@ -429,8 +454,11 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
             cmd << "\"" << src.string() << "\"";
 
         } else {
-            // ---- GCC/Clang compile command (existing) ----
-            cmd << in.lang.compiler << " " << in.lang.std_flag << " -c ";
+            // ---- GCC/Clang compile command ----
+            // Use detected compiler if available (e.g. clang++), fall back to default (g++)
+            std::string compiler = in.lang.detected_compiler.empty()
+                ? in.lang.compiler : in.lang.detected_compiler;
+            cmd << compiler << " " << in.lang.std_flag << " -c ";
             for (auto& f : in.compile.flags) {
                 cmd << f << " ";
             }

@@ -23,8 +23,15 @@ fs::path list_toml_path(cli::Scope scope) {
     switch (scope) {
     case cli::Scope::Project:
         return fs::current_path() / ".ezmk/repo/list.toml";
-    case cli::Scope::User:
+    case cli::Scope::User: {
+#ifdef EZMK_WIN
+        const char* appdata = std::getenv("LOCALAPPDATA");
+        if (appdata) return fs::path(appdata) / "ezmk/repo/list.toml";
+        return util::get_home_dir() / "AppData/Local/ezmk/repo/list.toml";
+#else
         return util::get_home_dir() / ".local/ezmk/repo/list.toml";
+#endif
+    }
     case cli::Scope::Global:
         return util::get_exe_dir() / "repo/list.toml";
     }
@@ -35,8 +42,15 @@ fs::path cache_dir(cli::Scope scope, std::string_view repo_name) {
     switch (scope) {
     case cli::Scope::Project:
         return fs::current_path() / ".ezmk/repo/.cache" / repo_name;
-    case cli::Scope::User:
+    case cli::Scope::User: {
+#ifdef EZMK_WIN
+        const char* appdata = std::getenv("LOCALAPPDATA");
+        if (appdata) return fs::path(appdata) / "ezmk/repo/.cache" / repo_name;
+        return util::get_home_dir() / "AppData/Local/ezmk/repo/.cache" / repo_name;
+#else
         return util::get_home_dir() / ".local/ezmk/repo/.cache" / repo_name;
+#endif
+    }
     case cli::Scope::Global:
         return util::get_exe_dir() / "repo/.cache" / repo_name;
     }

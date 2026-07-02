@@ -70,7 +70,7 @@ build/
 
 | 参数 | 说明 |
 |------|------|
-| `--type <type>` | 项目类型：`executable`（默认）、`static`、`shared` |
+| `--type <type>` | 项目类型：`executable`（默认）、`static`、`shared`、`utils` |
 | `--disable-git-init` | 跳过 `git init` |
 | `--disable-gitignore` | 跳过 `.gitignore` 生成 |
 

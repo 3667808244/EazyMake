@@ -26,16 +26,22 @@ void create_project(const std::string& name, const std::string& project_type,
     fs::create_directories(root / ".ezmk/temp");
     fs::create_directories(root / ".ezmk/cache");
 
-    // src/main.cpp (only for executable — library projects may not need it,
-    // but we still create it as a starting point)
-    std::string main_cpp = R"(#include <iostream>
+    // src/main.cpp (skip for utils — no C++ code needed)
+    if (project_type != "utils") {
+        std::string main_cpp = R"(#include <iostream>
 
 int main(int argc, char **argv){
     std::cout << "Hello world!" << std::endl;
     return 0;
 }
 )";
-    util::file_write(root / "src/main.cpp", main_cpp);
+        util::file_write(root / "src/main.cpp", main_cpp);
+    }
+
+    // For utils projects, create the utils/ directory for Lua scripts
+    if (project_type == "utils") {
+        fs::create_directories(root / "utils");
+    }
 
     // ezmk.toml
     config::write_default_config(root / "ezmk.toml", name, project_type);

@@ -23,6 +23,7 @@ namespace ezmk::lua {
 
 static lua_State* g_L = nullptr;
 static fs::path   g_project_root; // set by register_api
+static fs::path   g_current_script_pkg_root; // set by run_script: root of the pkg owning the current script
 
 void init() {
     if (g_L) return;
@@ -346,9 +347,14 @@ static int ezmk_error(lua_State* L) {
 
 static int ezmk_pkg_dir(lua_State* L) {
     check_arg_count(L, 0);
-    // Return the first .ezmk/pkg dir; caller may want a specific package
-    // For now, return .ezmk/pkg root
-    lua_pushstring(L, (g_project_root / ".ezmk/pkg").generic_string().c_str());
+    // Return the root directory of the package that contains the currently
+    // executing Lua script. Falls back to the project .ezmk/pkg root when
+    // no script context is active (e.g. API used outside of utils script).
+    if (!g_current_script_pkg_root.empty()) {
+        lua_pushstring(L, g_current_script_pkg_root.generic_string().c_str());
+    } else {
+        lua_pushstring(L, (g_project_root / ".ezmk/pkg").generic_string().c_str());
+    }
     return 1;
 }
 
@@ -591,6 +597,16 @@ void register_api(lua_State* L, const fs::path& project_root) {
 int run_script(lua_State* L, const fs::path& script_path,
                const std::vector<std::string>& args) {
     if (!L) return 1;
+
+    // Derive package root from script path.
+    // Script path: <pkg_root>/utils/<name>.lua  →  pkg root = parent of utils/
+    g_current_script_pkg_root.clear();
+    {
+        auto parent = script_path.parent_path();
+        if (parent.filename() == "utils") {
+            g_current_script_pkg_root = parent.parent_path();
+        }
+    }
 
     // Ensure ezmk API is registered (in case register_api wasn't called explicitly)
     lua_getglobal(L, "ezmk");

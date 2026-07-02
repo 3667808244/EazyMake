@@ -65,9 +65,9 @@ New project flags: `--disable-git-init` skips `git init`; `--disable-gitignore` 
 
 Five sections:
 - `[project]` — `name` (string), `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (string, required), `language` (string, default `"C++17"`, format `<语言><版本>`)
-- `[compile]` — `flags` (array), `include_dirs` (array, default `["include"]`, `-I` paths)
-- `[link]` — `flags` (array), `link_dirs` (array, `-L` paths), `system_target` (array of system libs to link)
-- `[depends]` — `lib` (array of dependency library names)
+- `[compile]` — `flags` (array), `msvc_flags` (array, 0.2.1+), `include_dirs` (array, default `["include"]`, `-I` paths), `src_dirs` (array, default `["src"]`, 0.2.2+), `ezmk_macros` (bool, default `true`, 0.2.2+). Sub-table `[compile.macros]` (0.2.2+) for semantic macro definitions (key-value pairs, supports string/integer/boolean types)
+- `[link]` — `flags` (array), `msvc_flags` (array, 0.2.1+), `link_dirs` (array, `-L` paths), `system_target` (array of system libs to link)
+- `[depends]` — `lib` (array of hard dependency library names), `want` (array of optional dependency names, 0.2.2+)
 - `[utils]` — `tools` (array of tool names, only for `type = "utils"` packages; see `docs/utils.md`)
 
 ### Package management (see `docs/pkg.md`)
@@ -76,7 +76,7 @@ Packages are `.zip` or `.tar.gz` archives with the same structure as a project (
 
 Install paths by scope:
 - Global: `<ezmk_install_dir>/pkg/`
-- User: `~/.local/ezmk/pkg/`
+- User: `~/.local/ezmk/pkg/` (Unix) / `%LOCALAPPDATA%\ezmk\pkg\` (Windows)
 - Project: `<project_dir>/.ezmk/pkg/`
 
 There is no central package repository. Users can manually download packages, provide a URL, or register git-based repos (`ezmk repo add <git_url>`) to install packages by name. See `docs/repo.md` for the repository design.
@@ -87,7 +87,7 @@ A repo is a git repository containing `index.toml` + `packages/` directory. `ezm
 
 Repo registries (`list.toml`) are stored per scope:
 - Global: `<ezmk_install_dir>/repo/list.toml`
-- User: `~/.local/ezmk/repo/list.toml`
+- User: `~/.local/ezmk/repo/list.toml` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows)
 - Project: `.ezmk/repo/list.toml`
 
 ### Build caching (see `docs/@cache.md`)

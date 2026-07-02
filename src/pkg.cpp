@@ -282,6 +282,13 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
             adj[dep].push_back(name);
             in_degree[name]++;
         }
+        // 0.2.2+: want dependencies are included if the package is installed
+        for (auto& dep : cfg.depends.want) {
+            if (name_to_dir.find(dep) != name_to_dir.end()) {
+                adj[dep].push_back(name);
+                in_degree[name]++;
+            }
+        }
     }
 
     // Check that all dependencies are satisfied
@@ -492,6 +499,17 @@ void install(const std::string& pkg_file, cli::Scope scope,
                         }
                     }
                 }
+                // 0.2.2+: want dependencies are optional — include if installed, skip if missing
+                for (auto& dep : cur_cfg.depends.want) {
+                    if (seen.insert(dep).second) {
+                        fs::path dep_path = dest_dir / dep;
+                        if (util::file_exists(dep_path)) {
+                            to_check.push_back(dep);
+                            all_pkgs.push_back(dep_path);
+                        }
+                        // If not installed: silently skip (optional dependency)
+                    }
+                }
             }
         }
 
@@ -513,6 +531,13 @@ void install(const std::string& pkg_file, cli::Scope scope,
             }
             std::vector<fs::path> dep_includes;
             for (auto& dep : cfg.depends.libs) {
+                auto it = name_to_dir.find(dep);
+                if (it != name_to_dir.end()) {
+                    dep_includes.push_back(it->second / "include");
+                }
+            }
+            // 0.2.2+: want deps also contribute include paths when installed
+            for (auto& dep : cfg.depends.want) {
                 auto it = name_to_dir.find(dep);
                 if (it != name_to_dir.end()) {
                     dep_includes.push_back(it->second / "include");
@@ -644,9 +669,13 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
             for (auto& d : cfg.compile.include_dirs) std::cout << " " << d;
             if (cfg.compile.include_dirs.empty()) std::cout << " (none)";
             std::cout << "\n";
-            std::cout << "  Dependencies:";
+            std::cout << "  Hard dependencies:";
             if (cfg.depends.libs.empty()) std::cout << " (none)";
             for (auto& d : cfg.depends.libs) std::cout << " " << d;
+            std::cout << "\n";
+            std::cout << "  Optional dependencies:";
+            if (cfg.depends.want.empty()) std::cout << " (none)";
+            for (auto& d : cfg.depends.want) std::cout << " " << d;
             std::cout << "\n";
             std::cout << "  Link flags:";
             for (auto& f : cfg.link.flags) std::cout << " " << f;
@@ -660,6 +689,20 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
             for (auto& t : cfg.link.system_targets) std::cout << " " << t;
             if (cfg.link.system_targets.empty()) std::cout << " (none)";
             std::cout << "\n";
+
+            // Show tools for utils packages
+            if (cfg.project.type == "utils") {
+                std::cout << "  Tools:";
+                if (cfg.utils.tools.empty()) {
+                    std::cout << " (none)";
+                } else {
+                    for (size_t i = 0; i < cfg.utils.tools.size(); ++i) {
+                        if (i > 0) std::cout << ",";
+                        std::cout << " " << cfg.utils.tools[i];
+                    }
+                }
+                std::cout << "\n";
+            }
 
             // Show built artifacts
             fs::path build_dir = pkg_path / "build";

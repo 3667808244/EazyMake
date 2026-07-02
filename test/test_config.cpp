@@ -367,3 +367,309 @@ TEST_CASE("write_default_config: round-trip shared", "[config]") {
     REQUIRE(cfg.project.name == "myshared");
     REQUIRE(cfg.project.type == "shared");
 }
+
+// ===================================================================
+// 0.2.2+: src_dirs parsing
+// ===================================================================
+
+TEST_CASE("parse_config: src_dirs default value", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    // Default src_dirs when not specified
+    REQUIRE(cfg.compile.src_dirs.size() == 1);
+    REQUIRE(cfg.compile.src_dirs[0] == "src");
+}
+
+TEST_CASE("parse_config: src_dirs custom value", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+src_dirs = ["app", "lib", "vendor"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.src_dirs.size() == 3);
+    REQUIRE(cfg.compile.src_dirs[0] == "app");
+    REQUIRE(cfg.compile.src_dirs[1] == "lib");
+    REQUIRE(cfg.compile.src_dirs[2] == "vendor");
+}
+
+TEST_CASE("parse_config: src_dirs empty array throws", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+src_dirs = []
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+// ===================================================================
+// 0.2.2+: compile.macros parsing
+// ===================================================================
+
+TEST_CASE("parse_config: macros empty value", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+DEBUG = ""
+ENABLE_FEATURE = ""
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.macros.size() == 2);
+    REQUIRE(cfg.compile.macros["DEBUG"] == "");
+    REQUIRE(cfg.compile.macros["ENABLE_FEATURE"] == "");
+}
+
+TEST_CASE("parse_config: macros string value", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+VERSION = "2.0.0"
+APP_NAME = "MyApp"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.macros.size() == 2);
+    REQUIRE(cfg.compile.macros["VERSION"] == "2.0.0");
+    REQUIRE(cfg.compile.macros["APP_NAME"] == "MyApp");
+}
+
+TEST_CASE("parse_config: macros integer value", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+MAX_SIZE = 4096
+BUFFER_SIZE = 1024
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.macros.size() == 2);
+    REQUIRE(cfg.compile.macros["MAX_SIZE"] == "4096");
+    REQUIRE(cfg.compile.macros["BUFFER_SIZE"] == "1024");
+}
+
+TEST_CASE("parse_config: macros boolean value", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+ENABLED = true
+DISABLED = false
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    // true → "1", false → skipped
+    REQUIRE(cfg.compile.macros.size() == 1);
+    REQUIRE(cfg.compile.macros["ENABLED"] == "1");
+    // DISABLED=false should not appear
+    REQUIRE(cfg.compile.macros.find("DISABLED") == cfg.compile.macros.end());
+}
+
+TEST_CASE("parse_config: macros invalid key name throws", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    // Macro name starting with digit
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+"123INVALID" = ""
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+TEST_CASE("parse_config: macros key with special chars throws", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+"MY-FLAG" = ""
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+TEST_CASE("parse_config: macros valid key with underscore", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.macros]
+MY_MACRO = "value"
+_private = ""
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.macros.size() == 2);
+    REQUIRE(cfg.compile.macros["MY_MACRO"] == "value");
+    REQUIRE(cfg.compile.macros["_private"] == "");
+}
+
+// ===================================================================
+// 0.2.2+: depends.want parsing
+// ===================================================================
+
+TEST_CASE("parse_config: depends.want array", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["fmt"]
+want = ["sqlite3", "zlib"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0] == "fmt");
+    REQUIRE(cfg.depends.want.size() == 2);
+    REQUIRE(cfg.depends.want[0] == "sqlite3");
+    REQUIRE(cfg.depends.want[1] == "zlib");
+}
+
+TEST_CASE("parse_config: want defaults to empty", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.want.empty());
+}
+
+// ===================================================================
+// 0.2.2+: compile.ezmk_macros parsing
+// ===================================================================
+
+TEST_CASE("parse_config: ezmk_macros defaults to true", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.ezmk_macros == true);
+}
+
+TEST_CASE("parse_config: ezmk_macros set to false", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+ezmk_macros = false
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.ezmk_macros == false);
+}
+
+TEST_CASE("parse_config: ezmk_macros non-boolean throws", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+ezmk_macros = "yes"
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+// ===================================================================
+// 0.2.2+: msvc_flags parsing (0.2.1+ field still works)
+// ===================================================================
+
+TEST_CASE("parse_config: msvc_flags in compile section", "[config][0.2.2]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+flags = ["-Wall"]
+msvc_flags = ["/utf-8", "/MD"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.msvc_flags.size() == 2);
+    REQUIRE(cfg.compile.msvc_flags[0] == "/utf-8");
+    REQUIRE(cfg.compile.msvc_flags[1] == "/MD");
+}

@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.2.2 (2026-07-02) — 精细化编译控制
+
+### 新增
+- **可选依赖 `[depends].want`**：缺失时 warn + 自动定义 `EZMK_LIB_MISS_<NAME>` 宏，不阻断构建。`lib` 中的硬性依赖仍然缺失即 fatal
+- **语义化宏定义 `[compile.macros]`**：独立 TOML 子节管理预处理器宏。支持字符串/整数/布尔值类型，布尔 `false` 自动跳过
+- **标准预定义宏 `compile.ezmk_macros`**：默认自动注入 `EZMK` / `EZMK_VERSION` / `EZMK_PROJECT_NAME` / `EZMK_PROJECT_VERSION` / `EZMK_PROJECT_TYPE` / `EZMK_LANG` 六个标准宏，用户可在 `[compile.macros]` 中覆盖
+- **多源目录 `compile.src_dirs`**：支持 `["src", "lib", "vendor"]` 等多目录源文件扫描。文件名去重（同文件跨目录 warn），`main.cpp` 跨目录查找，默认 `["src"]` 向后兼容
+- **4 个新 API** (`build.hpp`)：`macros_to_flags()`, `generate_ezmk_macros()`, `want_to_macro_name()`, `collect_sources()`
+
+### 变更
+- **`include/ezmk/config.hpp`**：`CompileSection` 新增 `src_dirs` / `macros` / `ezmk_macros`；`DependsSection` 新增 `want`
+- **`src/config.cpp`**：解析四个新字段；宏名合法性校验；布尔/整数/字符串值类型处理
+- **`src/build.cpp`**：有效标志合并（ezmk_macros → flags → macros → want）；多目录源文件收集；可选依赖包扫描
+- **`src/pkg.cpp`**：`install()` / `resolve_dependency_order()` / `compile_package()` / `info()` 中 want 依赖处理
+- **`src/cache.cpp`**：缓存签名包含 `msvc_flags` + `std_flag` + `extra_includes`；补全 `check_cache` 重载链
+
+### 修复
+- GCC 编译命令优先使用运行时检测的编译器（`detected_compiler`），而非硬编码 `"g++"`
+- 缓存签名修复：全局签名与逐文件签名一致（修复有依赖包时缓存永久全量重编译）
+- `collect_sources` 去重改用 `filename()`（含扩展名），避免 `util.cpp` 和 `util.c` 误判为重复
+- 合并 `.ezmk/pkg/` 双重扫描为单次遍历
+
+### 测试
+- 测试套件：**333 个测试用例, 973 个断言全部通过**（+71 用例, +175 断言）
+
+---
+
+## 0.2.1 (2026-06-30) — MSVC 支持
+
+### 新增
+- **`Toolchain` 抽象层**（`include/ezmk/toolchain.hpp` + `src/toolchain.cpp`）：`CompilerFamily::Gcc/Clang/Msvc` 枚举，自动检测可用工具链
+- **GCC→MSVC 标志翻译层**：`translate_compile_flags()` / `translate_link_flags()`，覆盖常用标志（`-Wall`→`/W4`、`-O2`→`/O2`、`-g`→`/Zi` 等）
+- **MSVC 依赖解析**：`parse_show_includes()` 解析 `/showIncludes` 输出替代 `-MMD`
+- **`cl.exe` / `link.exe` / `lib.exe`** 完整编译/链接/归档流程
+- **`vcvars64.bat` 环境自动加载**：捕获环境变量 map，一次加载全流程复用
+- **`ezmk.toml` 扩展 `msvc_flags`**：MSVC 专用编译/链接标志，GCC 模式下被忽略
+
+### 变更
+- **`src/cache.cpp`**：MSVC 编译命令生成（`/utf-8`、`/MD` 默认标志）
+- **`src/build.cpp`**：MSVC 链接命令构建器（EXE/DLL/LIB）；产物路径适配（`.obj` / `.lib` / `.exe`）
+- **`include/ezmk/config.hpp`**：`CompileSection` / `LinkSection` 添加 `msvc_flags`
+
+### 测试
+- 测试套件：**262 个测试用例, 886 个断言全部通过**（+88 断言）
+
+---
+
 ## 0.2.0 (2026-06-28) — Lua 工具链
 
 ### 新增

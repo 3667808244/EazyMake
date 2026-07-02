@@ -1,7 +1,7 @@
 #include "catch2.hpp"
 #include "ezmk/i18n.hpp"
 #include "ezmk/util.hpp"
-#include "nlohmann/json.hpp"
+#include "nlohmann_json.hpp"
 
 #include <cstdlib>
 #include <filesystem>

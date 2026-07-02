@@ -44,9 +44,12 @@ utils 工具包（`type = "utils"`，详见 `docs/utils.md`）：
 | `"shared"` | 动态库 |
 | `"utils"` | 工具包（提供 `ezmk utils` 子命令，基于 Lua） |
 
-### `depends` 节
+### `[depends]` 节
 
- - `lib` : 依赖的其他库名
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `lib` | string[] | 硬性依赖库名列表。缺失 → 安装失败 |
+| `want` | string[] | **0.2.2+** 可选依赖库名列表。安装时若存在则作为正常依赖处理，缺失则跳过；构建时缺失 → warn + 定义 `EZMK_LIB_MISS_<NAME>` 宏 |
 
 ---
 
@@ -71,6 +74,34 @@ utils 工具包（`type = "utils"`，详见 `docs/utils.md`）：
 - 若不包含 `src/`：跳过编译，仅解压并注册 Lua 工具
 
 如果循环依赖或包不存在抛出错误
+
+---
+
+## 安装钩子脚本（0.2.1+）
+
+包根目录下可放置 `script/` 目录，包含安装生命周期钩子：
+
+```
+<pkg_dir>/
+    script/
+        preinstall.sh     # 解压后、安装前执行（Linux/macOS）
+        preinstall.ps1    # 解压后、安装前执行（Windows）
+        preinstall.bat    # 解压后、安装前执行（Windows 备选）
+        postinstall.sh    # 安装完成后执行（Linux/macOS）
+        postinstall.ps1   # 安装完成后执行（Windows）
+        postinstall.bat   # 安装完成后执行（Windows 备选）
+```
+
+**执行流程**：
+1. 解压包到临时目录
+2. 检测并执行 `preinstall` 脚本（若存在）→ 打开编辑器供用户审查 → 询问确认
+3. 检查已有安装 → 若覆盖则二次确认
+4. 编译依赖 + 复制文件到安装目录
+5. 检测并执行 `postinstall` 脚本（若存在）→ 同样审查+确认
+
+- 平台选择：Windows 优先 `.ps1` 其次 `.bat`；Linux/macOS 使用 `.sh`
+- 若用户拒绝执行脚本，安装继续（跳过该阶段）
+- 若脚本执行失败（exit ≠ 0），用户可选择继续或中止
 
 ---
 
@@ -110,6 +141,7 @@ URL 格式说明:
 - 完整 URL: `https://<host>/<path>/<pkg>.zip` 或 `.tar.gz`
 - 省略协议: `<host>/<path>/<pkg>.zip` → 自动补全为 `https://`
 - 支持协议: `https://`、`http://`
+- URL 自动识别：若参数包含 `://`，或同时包含 `.` 和 `/` 且并非本地已存在文件，则视为 URL
 - 下载到 `.ezmk/temp/` 后解压安装，安装完成删除临时文件
 
 ### 仓库查找（0.1.3+）

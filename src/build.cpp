@@ -1,14 +1,157 @@
 #include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
+#include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
-#include "ezmk/util.hpp"
 #include "ezmk/toolchain.hpp"
+#include "ezmk/util.hpp"
+#include "ezmk/version.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <set>
 #include <sstream>
 
 namespace ezmk::build {
 
 // ---- helpers ----
+
+// 0.2.2+: Check if a string is a plain integer (no quoting needed for -D flags)
+static bool is_plain_integer(const std::string& s) {
+    if (s.empty()) return false;
+    size_t i = 0;
+    if (s[0] == '-') i++;
+    if (i >= s.size()) return false;
+    for (; i < s.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+    }
+    return true;
+}
+
+// 0.2.2+: Escape a macro value for use in -D flag.
+// Plain integers and empty strings are used as-is; strings get quoted with
+// internal " and \ escaped.
+static std::string escape_macro_value(const std::string& val) {
+    if (val.empty() || is_plain_integer(val)) return val;
+    std::string escaped;
+    for (char c : val) {
+        if (c == '"' || c == '\\') escaped += '\\';
+        escaped += c;
+    }
+    return "\"" + escaped + "\"";
+}
+
+// 0.2.2+: Convert a macros map to -D flag vector.
+// Empty value → -DKEY; non-empty → -DKEY=VALUE.
+std::vector<std::string> macros_to_flags(
+    const std::map<std::string, std::string>& macros) {
+    std::vector<std::string> result;
+    for (auto& [key, val] : macros) {
+        if (val.empty()) {
+            result.push_back("-D" + key);
+        } else {
+            result.push_back("-D" + key + "=" + escape_macro_value(val));
+        }
+    }
+    return result;
+}
+
+// 0.2.2+: Generate standard EZMK_* preprocessor macros from project config.
+std::vector<std::string> generate_ezmk_macros(const config::EzConfig& cfg) {
+    std::vector<std::string> result;
+    result.push_back("-DEZMK=1");
+    result.push_back("-DEZMK_VERSION=\"" EZMK_VERSION "\"");
+    if (!cfg.project.name.empty()) {
+        result.push_back("-DEZMK_PROJECT_NAME=\"" +
+            util::escape_shell_arg(cfg.project.name) + "\"");
+    }
+    if (!cfg.project.version.empty()) {
+        result.push_back("-DEZMK_PROJECT_VERSION=\"" +
+            util::escape_shell_arg(cfg.project.version) + "\"");
+    }
+    if (!cfg.project.type.empty()) {
+        result.push_back("-DEZMK_PROJECT_TYPE=\"" +
+            util::escape_shell_arg(cfg.project.type) + "\"");
+    }
+    if (!cfg.project.language.empty()) {
+        result.push_back("-DEZMK_LANG=\"" +
+            util::escape_shell_arg(cfg.project.language) + "\"");
+    }
+    return result;
+}
+
+// 0.2.2+: Convert a package name to the EZMK_LIB_MISS_* macro name.
+// Uppercase, replace -/. /space with _, drop other special chars.
+std::string want_to_macro_name(const std::string& pkg_name) {
+    std::string result = "EZMK_LIB_MISS_";
+    for (char c : pkg_name) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            result += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        } else if (c == '-' || c == '.' || c == ' ') {
+            result += '_';
+        }
+        // other special characters are dropped
+    }
+    return result;
+}
+
+// 0.2.2+: Collect source files from multiple src_dirs.
+// Returns deduplicated list; warns on missing/empty directories.
+// Throws if no source files found across all directories.
+std::vector<fs::path> collect_sources(
+    const std::vector<std::string>& src_dirs,
+    const fs::path& proj_root,
+    const std::string& project_type) {
+    std::vector<fs::path> result;
+    std::set<std::string> seen_names; // filename stem for dedup
+    bool any_dir_exists = false;
+
+    for (auto& d : src_dirs) {
+        fs::path dir = d;
+        if (dir.is_relative()) dir = proj_root / dir;
+
+        if (!util::file_exists(dir)) {
+            util::warn(std::string("source directory not found, skipping: ") + d);
+            continue;
+        }
+        any_dir_exists = true;
+
+        auto files = util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
+        for (auto& f : files) {
+            std::string fname = f.filename().string();
+            if (!seen_names.insert(fname).second) {
+                util::warn(std::string("duplicate source filename '") + fname +
+                          "' — using first occurrence");
+                continue;
+            }
+            result.push_back(f);
+        }
+    }
+
+    if (!any_dir_exists) {
+        util::fatal(ezmk::i18n::I18nKey::src_dir_missing);
+    }
+
+    if (result.empty()) {
+        util::fatal(ezmk::i18n::I18nKey::no_source_files);
+    }
+
+    // Check main.cpp requirement for executables
+    if (project_type == "executable") {
+        bool has_main = false;
+        for (auto& f : result) {
+            auto fn = f.filename().string();
+            if (fn == "main.cpp" || fn == "main.c") {
+                has_main = true;
+                break;
+            }
+        }
+        if (!has_main) {
+            util::fatal(ezmk::i18n::I18nKey::main_missing);
+        }
+    }
+
+    return result;
+}
 
 std::string detect_compiler(const std::string& language) {
     bool is_cxx = (language == "C++");
@@ -81,13 +224,6 @@ std::string detect_compiler(const std::string& language) {
 #endif
     util::fatal(msg);
     return {}; // unreachable
-}
-
-static fs::path find_compiler(const config::LanguageInfo& lang) {
-    if (!lang.detected_compiler.empty())
-        return fs::path(lang.detected_compiler);
-    bool is_cxx = (lang.compiler == "g++");
-    return fs::path(detect_compiler(is_cxx ? "C++" : "C"));
 }
 
 // GCC/Clang link command builder
@@ -235,23 +371,12 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     }
 
     fs::path proj_root = fs::current_path();
-    fs::path src_dir = proj_root / "src";
     fs::path temp_dir = proj_root / ".ezmk/temp";
     fs::path build_dir = proj_root / "build";
     fs::path cache_obj_dir = proj_root / ".ezmk/cache/obj";
 
-    // Check src/ exists
-    if (!util::file_exists(src_dir)) {
-        util::fatal(ezmk::i18n::I18nKey::src_dir_missing);
-    }
-
-    // Check main.cpp requirement for executable
-    if (cfg.project.type == "executable") {
-        if (!util::file_exists(src_dir / "main.cpp") &&
-            !util::file_exists(src_dir / "main.c")) {
-            util::fatal(ezmk::i18n::I18nKey::main_missing);
-        }
-    }
+    // 0.2.2+: Collect sources from multiple src_dirs (validates directories, main.cpp check)
+    auto sources = collect_sources(cfg.compile.src_dirs, proj_root, cfg.project.type);
 
     util::info(ezmk::i18n::I18nKey::building,
                {{"name", cfg.project.name},
@@ -262,31 +387,40 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     fs::create_directories(build_dir);
     fs::create_directories(cache_obj_dir);
 
-    // Load cache
-    auto record = cache::load_record();
+    // 0.2.2+: Build effective compile flags by merging ezmk_macros + flags + macros + want macros.
+    // The order matters: later -D flags override earlier ones (compiler behavior).
+    // ezmk_macros (standard) → flags (user -D in flags) → macros (compile.macros) → want (missing optional deps)
+    std::vector<std::string> effective_flags;
 
-    // Update / set global compile options signature
-    auto cur_sig = cache::compile_options_signature(cfg.compile);
-    if (record.compile_options_signature != cur_sig) {
-        if (!record.compile_options_signature.empty()) {
-            util::info(ezmk::i18n::I18nKey::compile_options_changed);
-        }
-        record.compile_options_signature = cur_sig;
-        record.files.clear();
+    // 1. Standard EZMK_* macros (if enabled, default true)
+    if (cfg.compile.ezmk_macros) {
+        auto em = generate_ezmk_macros(cfg);
+        effective_flags.insert(effective_flags.end(), em.begin(), em.end());
     }
 
-    auto sources = util::list_files(src_dir, {".c", ".cc", ".cpp", ".cxx"});
-    if (sources.empty()) {
-        util::fatal(ezmk::i18n::I18nKey::no_source_files);
-    }
+    // 2. User flags (may contain -D flags)
+    effective_flags.insert(effective_flags.end(),
+                          cfg.compile.flags.begin(), cfg.compile.flags.end());
+
+    // 3. compile.macros
+    auto macro_flags = macros_to_flags(cfg.compile.macros);
+    effective_flags.insert(effective_flags.end(),
+                          macro_flags.begin(), macro_flags.end());
+
+    // 4. want.lib: handle after package scan (see below)
+
+    // Create a modified compile section with effective flags (want macros appended later)
+    config::CompileSection effective_compile = cfg.compile;
+    effective_compile.flags = std::move(effective_flags);
 
     // Need -fPIC for shared libraries
     bool use_pic = (cfg.project.type == "shared");
 
-    // Detect installed packages in .ezmk/pkg/
+    // Single pass over .ezmk/pkg/: collect installed package names (for want handling),
+    // include dirs, link info, and built archives.
+    std::set<std::string> installed_pkgs;
     std::vector<fs::path> extra_includes;
     std::vector<fs::path> pkg_archives;
-    // Collect link options from dependency packages
     std::vector<std::string> pkg_link_flags;
     std::vector<std::string> pkg_link_dirs;
     std::vector<std::string> pkg_system_targets;
@@ -295,11 +429,13 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         for (auto& entry : fs::directory_iterator(pkg_dir)) {
             if (!entry.is_directory()) continue;
 
-            // Parse package config for include/link data
             auto pkg_toml = entry.path() / "ezmk.toml";
             if (util::file_exists(pkg_toml)) {
                 try {
                     auto pkg_cfg = config::parse_config(pkg_toml);
+
+                    // Package name for want/lib lookup
+                    installed_pkgs.insert(pkg_cfg.project.name);
 
                     // Default include/
                     auto pkg_include = entry.path() / "include";
@@ -348,6 +484,38 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         }
     }
 
+    // want.lib: process optional dependencies using names collected in the scan above
+    {
+        std::set<std::string> lib_set(cfg.depends.libs.begin(), cfg.depends.libs.end());
+        for (auto& want_name : cfg.depends.want) {
+            if (lib_set.count(want_name)) {
+                util::warn(std::string("package '") + want_name +
+                           "' is in both [depends].lib and [depends].want — treating as hard dependency");
+                continue;
+            }
+            if (installed_pkgs.find(want_name) == installed_pkgs.end()) {
+                util::warn(std::string("optional dependency not installed: ") + want_name);
+                effective_compile.flags.push_back("-D" + want_to_macro_name(want_name));
+            }
+            // If installed, it's already handled by the package scan above
+        }
+    }
+
+    // Load cache
+    auto record = cache::load_record();
+
+    // Update / set global compile options signature (includes extra_includes for
+    // correct invalidation when dependency packages are installed/removed)
+    auto cur_sig = cache::compile_options_signature(effective_compile, extra_includes,
+                                                   lang.std_flag);
+    if (record.compile_options_signature != cur_sig) {
+        if (!record.compile_options_signature.empty()) {
+            util::info(ezmk::i18n::I18nKey::compile_options_changed);
+        }
+        record.compile_options_signature = cur_sig;
+        record.files.clear();
+    }
+
     // Clean stale temps from previous crashed builds
     {
         std::error_code ec;
@@ -366,7 +534,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     cin.obj_dir = temp_dir;
     cin.dep_dir = temp_dir;
     cin.proj_root = proj_root;
-    cin.compile = cfg.compile;
+    cin.compile = effective_compile;
     cin.lang = lang;
     cin.extra_includes = extra_includes;
     cin.cache_obj_dir = cache_obj_dir;

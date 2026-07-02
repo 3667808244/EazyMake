@@ -81,7 +81,7 @@ ezmk utils cc -o build/compile_commands.json
 
 | Command | Description |
 |---|---|
-| `ezmk project new <name> [--type executable\|static\|shared]` | Scaffold a new project |
+| `ezmk project new <name> [--type executable\|static\|shared\|utils]` | Scaffold a new project |
 | `ezmk project build [--disable-cache] [--verbose]` | Incremental build |
 | `ezmk project run [--disable-cache] [--verbose]` | Build and execute |
 | `ezmk project clean` | Remove cache and temp files |
@@ -158,14 +158,23 @@ language = "C++17"      # C++17 | C++20 | C11 | ...
 [compile]
 flags = ["-Wall", "-Wextra", "-O2"]
 include_dirs = ["include"]
+src_dirs = ["src"]                    # 0.2.2+ multi-directory source scanning
+ezmk_macros = true                    # 0.2.2+ inject EZMK_* standard macros
+msvc_flags = []                       # 0.2.1+ MSVC-only flags
+
+[compile.macros]                      # 0.2.2+ semantic macro definitions
+DEBUG = ""
+VERSION = "0.1.0"
 
 [link]
 flags = []
 link_dirs = []
 system_target = ["pthread"]
+msvc_flags = []                       # 0.2.1+ MSVC-only link flags
 
 [depends]
-lib = ["foo", "bar"]
+lib = ["foo", "bar"]                  # hard dependencies (missing → error)
+want = ["sqlite3", "zlib"]            # 0.2.2+ optional dependencies
 ```
 
 ### Utils package config

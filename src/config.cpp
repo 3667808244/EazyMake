@@ -1,6 +1,7 @@
 #include "ezmk/config.hpp"
 #include "ezmk/util.hpp"
 
+#include <cctype>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -22,6 +23,17 @@ std::vector<std::string> extract_string_array(const toml::node* node) {
         }
     }
     return result;
+}
+
+// Validate that a macro name is a legal C identifier: [A-Za-z_][A-Za-z0-9_]*
+static bool is_valid_macro_name(std::string_view name) {
+    if (name.empty()) return false;
+    if (!std::isalpha(static_cast<unsigned char>(name[0])) && name[0] != '_') return false;
+    for (size_t i = 1; i < name.size(); ++i) {
+        char c = name[i];
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') return false;
+    }
+    return true;
 }
 
 } // anonymous namespace
@@ -131,11 +143,66 @@ EzConfig parse_config(const fs::path& toml_path) {
         } else {
             cfg.compile.include_dirs = extract_string_array(comp->get("include_dir"));
         }
+
+        // 0.2.2+: src_dirs — multiple source directories
+        cfg.compile.src_dirs = extract_string_array(comp->get("src_dirs"));
+
+        // 0.2.2+: ezmk_macros — inject EZMK_* standard macros (default true)
+        if (auto ezm = comp->get("ezmk_macros")) {
+            if (ezm->is_boolean()) {
+                cfg.compile.ezmk_macros = ezm->as_boolean()->get();
+            } else {
+                throw std::runtime_error(
+                    "ezmk.toml: [compile] ezmk_macros must be a boolean (true/false)");
+            }
+        }
     }
 
     // Apply default for include_dirs if empty
     if (cfg.compile.include_dirs.empty()) {
         cfg.compile.include_dirs = {"include"};
+    }
+
+    // Apply default for src_dirs if empty (0.2.2+)
+    if (cfg.compile.src_dirs.empty()) {
+        cfg.compile.src_dirs = {"src"};
+    }
+
+    // 0.2.2+: validate src_dirs is not explicitly set to empty
+    // (check the raw TOML to distinguish "not set" from "set to []")
+    if (auto comp = root["compile"].as_table()) {
+        auto raw_src_dirs = comp->get("src_dirs");
+        if (raw_src_dirs && raw_src_dirs->is_array() &&
+            raw_src_dirs->as_array()->size() == 0) {
+            throw std::runtime_error(
+                "ezmk.toml: [compile] src_dirs is empty — at least one source directory is required");
+        }
+    }
+
+    // 0.2.2+: [compile.macros] — semantic macro definitions
+    if (auto macros_node = root["compile"]["macros"].as_table()) {
+        for (auto& [key, val] : *macros_node) {
+            std::string macro_key(key.str());
+            if (!is_valid_macro_name(macro_key)) {
+                throw std::runtime_error(
+                    "ezmk.toml: [compile.macros] invalid macro name '" + macro_key +
+                    "': must be a valid C identifier ([A-Za-z_][A-Za-z0-9_]*)");
+            }
+            std::string macro_val;
+            if (val.is_string()) {
+                macro_val = val.as_string()->get();
+            } else if (val.is_integer()) {
+                macro_val = std::to_string(val.as_integer()->get());
+            } else if (val.is_boolean()) {
+                if (!val.as_boolean()->get()) continue; // false → skip
+                macro_val = "1";
+            } else {
+                throw std::runtime_error(
+                    "ezmk.toml: [compile.macros] unsupported value type for '" +
+                    macro_key + "'; expected string, integer, or boolean");
+            }
+            cfg.compile.macros[macro_key] = macro_val;
+        }
     }
 
     // [link]
@@ -149,6 +216,13 @@ EzConfig parse_config(const fs::path& toml_path) {
     // [depends]
     if (auto deps = root["depends"].as_table()) {
         cfg.depends.libs = extract_string_array(deps->get("lib"));
+        // 0.2.2+: optional dependencies
+        cfg.depends.want = extract_string_array(deps->get("want"));
+    }
+
+    // [utils] (only relevant for type = "utils")
+    if (auto utils = root["utils"].as_table()) {
+        cfg.utils.tools = extract_string_array(utils->get("tools"));
     }
 
     return cfg;
@@ -178,6 +252,12 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     content += "\n";
     content += "[depends]\n";
     content += "lib = []\n";
+
+    if (project_type == "utils") {
+        content += "\n";
+        content += "[utils]\n";
+        content += "tools = []\n";
+    }
 
     if (!util::file_write(toml_path, content)) {
         throw std::runtime_error("failed to write config file: " + toml_path.string());

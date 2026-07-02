@@ -126,13 +126,13 @@ namespace ezmk::cli
                 {
                     if (i + 1 >= argc)
                     {
-                        util::fatal("'--type' requires a value: executable, static, or shared");
+                        util::fatal("'--type' requires a value: executable, static, shared, or utils");
                     }
                     std::string_view t = argv[++i];
-                    if (t != "executable" && t != "static" && t != "shared")
+                    if (t != "executable" && t != "static" && t != "shared" && t != "utils")
                     {
                         util::fatal(std::string("unknown project type: ") + std::string(t) +
-                                    ". Expected: executable, static, or shared");
+                                    ". Expected: executable, static, shared, or utils");
                     }
                     args.project_type = t;
                 }
