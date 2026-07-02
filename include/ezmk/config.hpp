@@ -16,11 +16,13 @@ struct ProjectSection {
 
 struct CompileSection {
     std::vector<std::string> flags;
+    std::vector<std::string> msvc_flags;     // 0.2.1+ MSVC-only compile flags
     std::vector<std::string> include_dirs;  // -I paths (default ["include"])
 };
 
 struct LinkSection {
     std::vector<std::string> flags;
+    std::vector<std::string> msvc_flags;       // 0.2.1+ MSVC-only link flags
     std::vector<std::string> link_dirs;       // -L paths (default [])
     std::vector<std::string> system_targets;  // -l libs (e.g. "pthread")
 };

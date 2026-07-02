@@ -1,6 +1,7 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/util.hpp"
+#include "ezmk/toolchain.hpp"
 #include "nlohmann_json.hpp"
 
 #include <algorithm>
@@ -271,18 +272,21 @@ void clear_cache() {
 CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
     CompileResult result;
 
+    // Determine object file suffix based on toolchain
+    bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
+    const char* obj_suffix = is_msvc ? ".obj" : ".o";
+    const char* tmp_suffix = is_msvc ? ".tmp.obj" : ".tmp.o";
+
     for (auto& src : in.sources) {
         // Compute paths
         auto rel = fs::relative(src, in.proj_root);
         fs::path obj = in.obj_dir / rel;
-        obj.replace_extension(EZMK_OBJ_SUFFIX);
+        obj.replace_extension(obj_suffix);
         fs::path obj_tmp = in.obj_dir / rel;
-        obj_tmp.replace_extension(".tmp" EZMK_OBJ_SUFFIX);
-        fs::path dep = in.dep_dir / rel;
-        dep.replace_extension(".d");
+        obj_tmp.replace_extension(tmp_suffix);
 
         fs::path cache_obj = in.cache_obj_dir / rel;
-        cache_obj.replace_extension(EZMK_OBJ_SUFFIX);
+        cache_obj.replace_extension(obj_suffix);
 
         fs::create_directories(obj.parent_path());
         fs::create_directories(cache_obj.parent_path());
@@ -369,31 +373,92 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
 
         // Build compile command
         std::ostringstream cmd;
-        cmd << in.lang.compiler << " " << in.lang.std_flag << " -c ";
-        for (auto& f : in.compile.flags) {
-            cmd << f << " ";
-        }
-        if (in.use_pic) {
-            cmd << "-fPIC ";
-        }
 
-        // Default include: proj_root/include (fixes bug 7.1: was fs::current_path())
-        auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) {
-            cmd << "-I\"" << def_inc.string() << "\" ";
-        }
+        if (is_msvc) {
+            // ---- MSVC compile command ----
+            cmd << "cl.exe /c ";
 
-        for (auto& d : in.compile.include_dirs) {
-            fs::path resolved = d;
-            if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            cmd << "-I\"" << resolved.string() << "\" ";
-        }
-        for (auto& inc : in.extra_includes) {
-            cmd << "-I\"" << inc.string() << "\" ";
-        }
+            // Standard flag (GCC→MSVC translated)
+            auto translated = toolchain::translate_compile_flags(
+                std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
+            if (!translated.translated.empty()) {
+                cmd << translated.translated[0] << " ";
+            }
 
-        cmd << "-MMD -MF \"" << dep.string() << "\" ";
-        cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
+            // Compile flags: translate GCC→MSVC, then add MSVC-specific flags
+            auto flag_trans = toolchain::translate_compile_flags(
+                in.compile.flags, toolchain::CompilerFamily::Msvc);
+            for (auto& f : flag_trans.translated) {
+                cmd << f << " ";
+            }
+            for (auto& f : flag_trans.unrecognized) {
+                if (in.verbose) {
+                    util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
+                }
+            }
+
+            // MSVC-specific flags (no translation needed)
+            for (auto& f : in.compile.msvc_flags) {
+                cmd << f << " ";
+            }
+
+            // Default MSVC flags
+            cmd << "/utf-8 /MD ";
+
+            // Default include: proj_root/include
+            auto def_inc = in.proj_root / "include";
+            if (util::file_exists(def_inc)) {
+                cmd << "/I\"" << def_inc.string() << "\" ";
+            }
+
+            // User include dirs
+            for (auto& d : in.compile.include_dirs) {
+                fs::path resolved = d;
+                if (resolved.is_relative()) resolved = in.proj_root / resolved;
+                cmd << "/I\"" << resolved.string() << "\" ";
+            }
+
+            // Extra includes (dependency packages)
+            for (auto& inc : in.extra_includes) {
+                cmd << "/I\"" << inc.string() << "\" ";
+            }
+
+            // Output + source
+            cmd << "/Fo\"" << obj_tmp.string() << "\" ";
+            cmd << "/showIncludes ";
+            cmd << "\"" << src.string() << "\"";
+
+        } else {
+            // ---- GCC/Clang compile command (existing) ----
+            cmd << in.lang.compiler << " " << in.lang.std_flag << " -c ";
+            for (auto& f : in.compile.flags) {
+                cmd << f << " ";
+            }
+            if (in.use_pic) {
+                cmd << "-fPIC ";
+            }
+
+            // Default include: proj_root/include
+            auto def_inc = in.proj_root / "include";
+            if (util::file_exists(def_inc)) {
+                cmd << "-I\"" << def_inc.string() << "\" ";
+            }
+
+            for (auto& d : in.compile.include_dirs) {
+                fs::path resolved = d;
+                if (resolved.is_relative()) resolved = in.proj_root / resolved;
+                cmd << "-I\"" << resolved.string() << "\" ";
+            }
+            for (auto& inc : in.extra_includes) {
+                cmd << "-I\"" << inc.string() << "\" ";
+            }
+
+            // GCC: depfile for dependency tracking
+            fs::path dep = in.dep_dir / rel;
+            dep.replace_extension(".d");
+            cmd << "-MMD -MF \"" << dep.string() << "\" ";
+            cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
+        }
 
         if (in.verbose) {
             util::info(ezmk::i18n::I18nKey::compiling,
@@ -428,7 +493,7 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
         }
         result.objects.push_back(obj);
 
-        // Copy compiled .o to cache (atomic: copy to tmp then rename)
+        // Copy compiled object to cache (atomic: copy to tmp then rename)
         {
             std::error_code ec;
             fs::path cache_tmp = cache_obj;
@@ -447,8 +512,28 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
         auto rel_src = rel.generic_string();
         auto& entry = record.files[rel_src];
 
-        // Parse depfile and hash all headers
-        auto new_deps = parse_depfile_and_hash(dep);
+        // Parse dependencies: GCC uses .d file, MSVC uses /showIncludes output
+        std::vector<DepEntry> new_deps;
+
+        if (is_msvc) {
+            // MSVC: parse /showIncludes output from stderr
+            // cl.exe writes include notes to stderr
+            auto includes = toolchain::parse_show_includes(res.err);
+            for (auto& inc_path : includes) {
+                DepEntry dep;
+                dep.path = inc_path.string();
+                // Hash the header file for cache validation
+                if (util::file_exists(inc_path)) {
+                    dep.hash = crypto::sha256_file(inc_path);
+                }
+                new_deps.push_back(std::move(dep));
+            }
+        } else {
+            // GCC: parse .d depfile
+            fs::path dep = in.dep_dir / rel;
+            dep.replace_extension(".d");
+            new_deps = parse_depfile_and_hash(dep);
+        }
 
         // Normalize dep paths: absolute paths under proj_root → relative
         // (so package caches survive relocation; system headers stay absolute)
@@ -474,8 +559,19 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
 
         entry.source_hash = crypto::sha256_file(src);
         entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
-        entry.compiler = in.lang.compiler;  // fixes bug 7.2: was hardcoded "g++" in pkg.cpp
-        entry.compile_opts = in.compile.flags;
+        entry.compiler = is_msvc ? "cl.exe" : in.lang.compiler;
+        // Store the effective compile opts used for this file
+        if (is_msvc) {
+            // Store MSVC-translated flags
+            auto flag_trans = toolchain::translate_compile_flags(
+                in.compile.flags, toolchain::CompilerFamily::Msvc);
+            entry.compile_opts = flag_trans.translated;
+            for (auto& f : in.compile.msvc_flags) {
+                entry.compile_opts.push_back(f);
+            }
+        } else {
+            entry.compile_opts = in.compile.flags;
+        }
         entry.dependencies = std::move(new_deps);
         entry.last_build_time = iso_time();
     }

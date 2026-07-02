@@ -122,6 +122,7 @@ EzConfig parse_config(const fs::path& toml_path) {
     // [compile]
     if (auto comp = root["compile"].as_table()) {
         cfg.compile.flags = extract_string_array(comp->get("flags"));
+        cfg.compile.msvc_flags = extract_string_array(comp->get("msvc_flags"));
 
         // Try new field name "include_dirs" first, fall back to old "include_dir"
         auto inc_dirs = comp->get("include_dirs");
@@ -140,6 +141,7 @@ EzConfig parse_config(const fs::path& toml_path) {
     // [link]
     if (auto link = root["link"].as_table()) {
         cfg.link.flags = extract_string_array(link->get("flags"));
+        cfg.link.msvc_flags = extract_string_array(link->get("msvc_flags"));
         cfg.link.link_dirs = extract_string_array(link->get("link_dirs"));
         cfg.link.system_targets = extract_string_array(link->get("system_target"));
     }

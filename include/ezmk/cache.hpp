@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <optional>
 #include "ezmk/config.hpp"
+#include "ezmk/toolchain.hpp"
 
 namespace ezmk::cache {
 namespace fs = std::filesystem;
@@ -36,16 +37,17 @@ struct CacheRecord {
 
 struct CompileInput {
     std::vector<fs::path> sources;           // source files to compile
-    fs::path obj_dir;                        // where .o files go during build
-    fs::path dep_dir;                        // where .d dependency files go
+    fs::path obj_dir;                        // where .o/.obj files go during build
+    fs::path dep_dir;                        // where .d dependency files go (GCC only)
     fs::path proj_root;                      // project/package root (for relative cache keys)
     config::CompileSection compile;          // compile options
     config::LanguageInfo lang;               // compiler + std flag
     std::vector<fs::path> extra_includes;    // extra -I dirs (dependency packages)
-    fs::path cache_obj_dir;                  // where cached .o files are stored permanently
+    fs::path cache_obj_dir;                  // where cached .o/.obj files are stored permanently
     bool disable_cache = false;              // --disable-cache
     bool use_pic = false;                    // -fPIC for shared libs
     bool verbose = false;                    // --verbose: print compile commands & cache details
+    toolchain::Toolchain tc;                 // 0.2.1+ detected toolchain
 };
 
 struct CompileResult {

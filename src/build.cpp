@@ -2,6 +2,7 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/util.hpp"
+#include "ezmk/toolchain.hpp"
 
 #include <sstream>
 
@@ -34,15 +35,9 @@ std::string detect_compiler(const std::string& language) {
     // 2. Platform-specific candidate list
     std::vector<std::string> candidates;
 #ifdef EZMK_WIN
-    // Check for MSVC compiler (cl.exe) — inform but don't use yet
-    {
-        auto res = util::run_command("cl 2>&1");
-        if (res.exit_code == 0) {
-            util::info("MSVC compiler (cl.exe) detected. "
-                       "Full MSVC support is planned for v0.2.1. "
-                       "Using MinGW g++/clang++ instead.");
-        }
-    }
+    // MSVC (cl.exe) is now handled by toolchain::detect_toolchain() (0.2.1+).
+    // When MSVC is the active toolchain, detect_compiler() is not called —
+    // this function only serves GCC/Clang detection for non-MSVC builds.
     candidates = is_cxx
         ? std::vector<std::string>{"g++", "clang++"}
         : std::vector<std::string>{"gcc", "clang"};
@@ -95,12 +90,13 @@ static fs::path find_compiler(const config::LanguageInfo& lang) {
     return fs::path(detect_compiler(is_cxx ? "C++" : "C"));
 }
 
-static std::string make_link_cmd(const std::vector<fs::path>& objs,
-                                 const std::vector<fs::path>& archives,
-                                 const fs::path& output,
-                                 const config::LinkSection& link,
-                                 const config::LanguageInfo& lang,
-                                 bool shared = false) {
+// GCC/Clang link command builder
+static std::string make_gcc_link_cmd(const std::vector<fs::path>& objs,
+                                     const std::vector<fs::path>& archives,
+                                     const fs::path& output,
+                                     const config::LinkSection& link,
+                                     const config::LanguageInfo& lang,
+                                     bool shared = false) {
     std::ostringstream cmd;
     cmd << (lang.detected_compiler.empty() ? lang.compiler : lang.detected_compiler);
 
@@ -130,6 +126,94 @@ static std::string make_link_cmd(const std::vector<fs::path>& objs,
     return cmd.str();
 }
 
+// MSVC link command builder — executable
+static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
+                                     const std::vector<fs::path>& archives,
+                                     const fs::path& output,
+                                     const config::LinkSection& link) {
+    std::ostringstream cmd;
+    cmd << "link.exe /OUT:\"" << output.string() << "\" ";
+
+    for (auto& o : objs) {
+        cmd << "\"" << o.string() << "\" ";
+    }
+    for (auto& a : archives) {
+        cmd << "\"" << a.string() << "\" ";
+    }
+
+    // Translate and add link flags
+    auto translated = toolchain::translate_link_flags(link.flags,
+        toolchain::CompilerFamily::Msvc);
+    for (auto& f : translated.translated) {
+        cmd << f << " ";
+    }
+
+    // MSVC-specific link flags
+    for (auto& f : link.msvc_flags) {
+        cmd << f << " ";
+    }
+
+    // Link dirs → /LIBPATH
+    for (auto& d : link.link_dirs) {
+        cmd << "/LIBPATH:\"" << d << "\" ";
+    }
+
+    // System targets: -l<name> → <name>.lib
+    for (auto& t : link.system_targets) {
+        cmd << "\"" << t << ".lib\" ";
+    }
+
+    return cmd.str();
+}
+
+// MSVC link command builder — shared library (DLL)
+static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
+                                     const std::vector<fs::path>& archives,
+                                     const fs::path& output_dll,
+                                     const fs::path& output_implib,
+                                     const config::LinkSection& link) {
+    std::ostringstream cmd;
+    cmd << "link.exe /DLL /OUT:\"" << output_dll.string() << "\" ";
+    cmd << "/IMPLIB:\"" << output_implib.string() << "\" ";
+
+    for (auto& o : objs) {
+        cmd << "\"" << o.string() << "\" ";
+    }
+    for (auto& a : archives) {
+        cmd << "\"" << a.string() << "\" ";
+    }
+
+    auto translated = toolchain::translate_link_flags(link.flags,
+        toolchain::CompilerFamily::Msvc);
+    for (auto& f : translated.translated) {
+        cmd << f << " ";
+    }
+    for (auto& f : link.msvc_flags) {
+        cmd << f << " ";
+    }
+    for (auto& d : link.link_dirs) {
+        cmd << "/LIBPATH:\"" << d << "\" ";
+    }
+    for (auto& t : link.system_targets) {
+        cmd << "\"" << t << ".lib\" ";
+    }
+
+    return cmd.str();
+}
+
+// MSVC static library command builder (lib.exe)
+static std::string make_msvc_lib_cmd(const std::vector<fs::path>& objs,
+                                     const fs::path& output) {
+    std::ostringstream cmd;
+    cmd << "lib.exe /OUT:\"" << output.string() << "\" ";
+
+    for (auto& o : objs) {
+        cmd << "\"" << o.string() << "\" ";
+    }
+
+    return cmd.str();
+}
+
 // ===================================================================
 // Build
 // ===================================================================
@@ -138,8 +222,17 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     // Parse language → compiler + std flag
     auto lang = config::parse_language(cfg.project.language);
 
-    // Detect best available compiler (respects $CXX/$CC, probes platform candidates)
-    lang.detected_compiler = detect_compiler(lang.compiler == "g++" ? "C++" : "C");
+    // 0.2.1+: Detect full toolchain FIRST (GCC/Clang/MSVC).
+    // Must run before detect_compiler() so we don't fatal on a pure-MSVC system
+    // that has no MinGW g++ installed.
+    auto tc = toolchain::detect_toolchain();
+    bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
+
+    // Detect best available compiler (respects $CXX/$CC, probes platform candidates).
+    // Only needed for GCC/Clang; MSVC uses cl.exe directly.
+    if (!is_msvc) {
+        lang.detected_compiler = detect_compiler(lang.compiler == "g++" ? "C++" : "C");
+    }
 
     fs::path proj_root = fs::current_path();
     fs::path src_dir = proj_root / "src";
@@ -242,11 +335,12 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                 }
             }
 
-            // Look for compiled .a
+            // Look for compiled library (.a for GCC, .lib for MSVC)
             auto pkg_build = entry.path() / "build";
             if (util::file_exists(pkg_build)) {
                 for (auto& f : fs::directory_iterator(pkg_build)) {
-                    if (f.path().extension() == ".a") {
+                    auto ext = f.path().extension().string();
+                    if (ext == ".a" || (is_msvc && ext == ".lib")) {
                         pkg_archives.push_back(f.path());
                     }
                 }
@@ -279,6 +373,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     cin.disable_cache = opts.disable_cache;
     cin.use_pic = use_pic;
     cin.verbose = opts.verbose;
+    cin.tc = tc;  // 0.2.1+ pass detected toolchain
 
     auto comp_result = cache::compile_sources(cin, record);
 
@@ -301,7 +396,38 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
 
     // Link phase — varies by project type
     if (cfg.project.type == "static") {
-        // Static library: ar rcs (atomic via tmp)
+        if (is_msvc) {
+            // MSVC: lib.exe for static library
+            fs::path lib = build_dir / (cfg.project.name + ".lib");
+            fs::path lib_tmp = build_dir / (cfg.project.name + ".lib.tmp");
+
+            {
+                std::error_code ec;
+                fs::remove(lib_tmp, ec);
+            }
+
+            util::info(ezmk::i18n::I18nKey::archiving, {{"target", lib.filename().string()}});
+            std::string lib_cmd = make_msvc_lib_cmd(objects, lib_tmp);
+            if (opts.verbose) util::info("    cmd: " + lib_cmd);
+            auto lib_res = util::run_command(lib_cmd);
+            if (lib_res.exit_code != 0) {
+                std::error_code ec;
+                fs::remove(lib_tmp, ec);
+                util::error(ezmk::i18n::I18nKey::archive_failed,
+                            {{"code", std::to_string(lib_res.exit_code)}});
+                util::error("  cmd: " + lib_cmd);
+                if (!lib_res.err.empty()) util::error(lib_res.err);
+                util::fatal(ezmk::i18n::I18nKey::build_failed);
+            }
+            {
+                std::error_code ec;
+                fs::rename(lib_tmp, lib, ec);
+            }
+            util::info(ezmk::i18n::I18nKey::build_success, {{"path", lib.string()}});
+            return lib;
+        }
+
+        // GCC/Clang: ar rcs (atomic via tmp)
         fs::path lib = build_dir / ("lib" + cfg.project.name + ".a");
         fs::path lib_tmp = build_dir / ("lib" + cfg.project.name + ".a.tmp");
 
@@ -336,6 +462,41 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     }
 
     if (cfg.project.type == "shared") {
+        if (is_msvc) {
+            // MSVC: link.exe /DLL for shared library
+            fs::path dll = build_dir / (cfg.project.name + ".dll");
+            fs::path implib = build_dir / (cfg.project.name + "_implib.lib");
+            fs::path dll_tmp = build_dir / (cfg.project.name + ".dll.tmp");
+
+            {
+                std::error_code ec;
+                fs::remove(dll_tmp, ec);
+            }
+
+            util::info(ezmk::i18n::I18nKey::linking, {{"target", dll.filename().string()}});
+            std::string link_cmd = make_msvc_dll_cmd(objects, pkg_archives,
+                                                     dll_tmp, implib, merged_link);
+            if (opts.verbose) util::info("    cmd: " + link_cmd);
+            auto link_res = util::run_command(link_cmd);
+            if (link_res.exit_code != 0) {
+                std::error_code ec;
+                fs::remove(dll_tmp, ec);
+                util::error(ezmk::i18n::I18nKey::link_failed,
+                            {{"code", std::to_string(link_res.exit_code)}});
+                util::error("  cmd: " + link_cmd);
+                if (!link_res.err.empty()) util::error(link_res.err);
+                if (!link_res.out.empty()) util::error(link_res.out);
+                util::fatal(ezmk::i18n::I18nKey::build_failed);
+            }
+            {
+                std::error_code ec;
+                fs::rename(dll_tmp, dll, ec);
+            }
+            util::info(ezmk::i18n::I18nKey::build_success, {{"path", dll.string()}});
+            return dll;
+        }
+
+        // GCC/Clang: g++ -shared
         std::string lib_name = "lib" + cfg.project.name;
 #ifdef EZMK_WIN
         lib_name += ".dll";
@@ -352,8 +513,8 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         }
 
         util::info(ezmk::i18n::I18nKey::linking, {{"target", lib.filename().string()}});
-        std::string link_cmd = make_link_cmd(objects, pkg_archives, lib_tmp,
-                                             merged_link, lang, true);
+        std::string link_cmd = make_gcc_link_cmd(objects, pkg_archives, lib_tmp,
+                                                 merged_link, lang, true);
         if (opts.verbose) util::info("    cmd: " + link_cmd);
         auto link_res = util::run_command(link_cmd);
         if (link_res.exit_code != 0) {
@@ -375,6 +536,41 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     }
 
     // Default: executable
+    if (is_msvc) {
+        // MSVC: link.exe for executable
+        fs::path exe = build_dir / (cfg.project.name + ".exe");
+        fs::path exe_tmp = build_dir / (cfg.project.name + ".exe.tmp");
+
+        {
+            std::error_code ec;
+            fs::remove(exe_tmp, ec);
+        }
+
+        util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
+        std::string link_cmd = make_msvc_exe_cmd(objects, pkg_archives,
+                                                 exe_tmp, merged_link);
+        if (opts.verbose) util::info("    cmd: " + link_cmd);
+        auto link_res = util::run_command(link_cmd);
+        if (link_res.exit_code != 0) {
+            std::error_code ec;
+            fs::remove(exe_tmp, ec);
+            util::error(ezmk::i18n::I18nKey::link_failed,
+                        {{"code", std::to_string(link_res.exit_code)}});
+            util::error("  cmd: " + link_cmd);
+            if (!link_res.err.empty()) util::error(link_res.err);
+            if (!link_res.out.empty()) util::error(link_res.out);
+            util::fatal(ezmk::i18n::I18nKey::build_failed);
+        }
+        {
+            std::error_code ec;
+            fs::rename(exe_tmp, exe, ec);
+        }
+
+        util::info(ezmk::i18n::I18nKey::build_success, {{"path", exe.string()}});
+        return exe;
+    }
+
+    // GCC/Clang: g++ for executable
     fs::path exe = build_dir / cfg.project.name;
 #ifdef EZMK_WIN
     exe += ".exe";
@@ -391,8 +587,8 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     }
 
     util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
-    std::string link_cmd = make_link_cmd(objects, pkg_archives, exe_tmp,
-                                         merged_link, lang);
+    std::string link_cmd = make_gcc_link_cmd(objects, pkg_archives, exe_tmp,
+                                             merged_link, lang);
     if (opts.verbose) util::info("    cmd: " + link_cmd);
     auto link_res = util::run_command(link_cmd);
     if (link_res.exit_code != 0) {
