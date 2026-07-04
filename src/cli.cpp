@@ -1,4 +1,5 @@
 #include "ezmk/cli.hpp"
+#include "ezmk/i18n.hpp"
 #include "ezmk/util.hpp"
 
 #include <cstring>
@@ -166,6 +167,26 @@ namespace ezmk::cli
                 {
                     args.build_opts.verbose = true;
                 }
+                else if (std::strcmp(argv[i], "-j") == 0 ||
+                         std::strcmp(argv[i], "--jobs") == 0)
+                {
+                    if (i + 1 >= argc)
+                        util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
+                    std::string val = argv[++i];
+                    try {
+                        args.build_opts.jobs = std::stoi(val);
+                        if (args.build_opts.jobs < 0)
+                            util::fatal("'-j' value must be >= 0");
+                    } catch (...) {
+                        util::fatal(std::string("invalid -j value: ") + val);
+                    }
+                }
+                else if (std::strcmp(argv[i], "--profile") == 0)
+                {
+                    if (i + 1 >= argc)
+                        util::fatal("'--profile' requires a name (e.g. --profile debug)");
+                    args.build_opts.profile = argv[++i];
+                }
                 else
                 {
                     util::fatal(std::string("unknown flag for build: ") + argv[i]);
@@ -188,6 +209,26 @@ namespace ezmk::cli
                 {
                     args.build_opts.verbose = true;
                 }
+                else if (std::strcmp(argv[i], "-j") == 0 ||
+                         std::strcmp(argv[i], "--jobs") == 0)
+                {
+                    if (i + 1 >= argc)
+                        util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
+                    std::string val = argv[++i];
+                    try {
+                        args.build_opts.jobs = std::stoi(val);
+                        if (args.build_opts.jobs < 0)
+                            util::fatal("'-j' value must be >= 0");
+                    } catch (...) {
+                        util::fatal(std::string("invalid -j value: ") + val);
+                    }
+                }
+                else if (std::strcmp(argv[i], "--profile") == 0)
+                {
+                    if (i + 1 >= argc)
+                        util::fatal("'--profile' requires a name (e.g. --profile debug)");
+                    args.build_opts.profile = argv[++i];
+                }
                 else
                 {
                     util::fatal(std::string("unknown flag for run: ") + argv[i]);
@@ -199,6 +240,52 @@ namespace ezmk::cli
         if (action == "clean")
         {
             args.cmd = Command::ProjectClean;
+            return args;
+        }
+
+        if (action == "watch")
+        {
+            args.cmd = Command::ProjectWatch;
+            for (int i = 3; i < argc; ++i)
+            {
+                if (std::strcmp(argv[i], "--disable-cache") == 0)
+                {
+                    args.build_opts.disable_cache = true;
+                }
+                else if (std::strcmp(argv[i], "--verbose") == 0 ||
+                         std::strcmp(argv[i], "-v") == 0)
+                {
+                    args.build_opts.verbose = true;
+                }
+                else if (std::strcmp(argv[i], "-j") == 0 ||
+                         std::strcmp(argv[i], "--jobs") == 0)
+                {
+                    if (i + 1 >= argc)
+                        util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
+                    std::string val = argv[++i];
+                    try {
+                        args.build_opts.jobs = std::stoi(val);
+                        if (args.build_opts.jobs < 0)
+                            util::fatal("'-j' value must be >= 0");
+                    } catch (...) {
+                        util::fatal(std::string("invalid -j value: ") + val);
+                    }
+                }
+                else if (std::strcmp(argv[i], "--profile") == 0)
+                {
+                    if (i + 1 >= argc)
+                        util::fatal("'--profile' requires a name (e.g. --profile debug)");
+                    args.build_opts.profile = argv[++i];
+                }
+                else if (std::strcmp(argv[i], "--no-build-on-start") == 0)
+                {
+                    args.watch_no_build_on_start = true;
+                }
+                else
+                {
+                    util::fatal(std::string("unknown flag for watch: ") + argv[i]);
+                }
+            }
             return args;
         }
 
@@ -280,6 +367,42 @@ namespace ezmk::cli
             {
                 util::fatal(std::string("'ezmk pkg ") + std::string(action) +
                             "' requires a package name");
+            }
+            if (opts.scopes.empty())
+            {
+                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
+            }
+            opts.pkg_name = pkg_name;
+            args.query_opts = opts;
+            return args;
+        }
+
+        if (action == "list")
+        {
+            args.cmd = Command::PkgList;
+            QueryOptions opts;
+            std::string dummy;
+            parse_scope_and_value(argc, argv, opts.scopes, dummy, false,
+                                  "ezmk pkg list");
+            if (opts.scopes.empty())
+            {
+                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
+            }
+            args.query_opts = opts;
+            return args;
+        }
+
+        if (action == "update")
+        {
+            args.cmd = Command::PkgUpdate;
+            QueryOptions opts;
+            std::string pkg_name;
+            parse_scope_and_value(argc, argv, opts.scopes, pkg_name, false,
+                                  "ezmk pkg update");
+
+            if (pkg_name.empty())
+            {
+                util::fatal("'ezmk pkg update' requires a package name");
             }
             if (opts.scopes.empty())
             {
@@ -460,44 +583,48 @@ namespace ezmk::cli
 
     void print_usage()
     {
-        std::cout << R"(EazyMake - A simple C/C++ build tool
-
-Usage:
-Project management:
-  ezmk project new <project_name>             Create a new project
-  ezmk project build [--disable-cache] [--verbose|-v]  Build the project
-  ezmk project run [--disable-cache] [--verbose|-v]    Build and run
-  ezmk project clean                          Clean cache and temp files
-
-Package management:
-  ezmk pkg install [-p|-u|-g] [--sha256 <hash>] [-y] <pkg_file_or_url>
-  ezmk pkg remove  [-p|-u|-g] <pkg>              Remove a package (default: -pug)
-  ezmk pkg search  [-p|-u|-g] <pkg>              Search for a package (default: -pug)
-  ezmk pkg info    [-p|-u|-g] <pkg>              Show package info (default: -pug)
-
-Repository management:
-  ezmk repo add [-p|-u|-g] <git_url_or_path> [--name <name>] [--branch <branch>]
-  ezmk repo remove [-p|-u|-g] <name>
-  ezmk repo update [-p|-u|-g] [<name>]
-  ezmk repo list [-p|-u|-g]
-
-Utilities:
-  ezmk utils <util_name> [args]              Reserved for future tools
-
-Scope flags:
-  -p    Project scope
-  -u    User scope
-  -g    Global scope
-  Flags can be combined, e.g. -pug
-
-Build flags:
-  --disable-cache   Force recompilation of all sources
-  --verbose, -v     Print detailed compile commands and cache diagnostics
-
-Install flags:
-  --sha256 <hash>   Verify package archive against expected SHA-256
-  -y, --yes         Skip all interactive prompts (for CI/scripts)
-)";
+        using namespace ezmk::i18n;
+        std::cout << get(I18nKey::cli_usage_header) << "\n\n"
+                  << get(I18nKey::cli_usage_usage) << ":\n\n";
+        std::cout << get(I18nKey::cli_usage_project) << "\n"
+                  << "  ezmk project new <project_name>             Create a new project\n"
+                  << "  ezmk project build [--disable-cache] [--verbose|-v] [-j <N>] [--profile <name>]\n"
+                  << "  ezmk project run [--disable-cache] [--verbose|-v] [-j <N>] [--profile <name>]\n"
+                  << "  ezmk project clean                          Clean cache and temp files\n"
+                  << "  ezmk project watch [--profile <name>] [--no-build-on-start] [-j <N>]\n"
+                  << "\n";
+        std::cout << get(I18nKey::cli_usage_pkg) << "\n"
+                  << "  ezmk pkg install [-p|-u|-g] [--sha256 <hash>] [-y] <pkg_file_or_url>\n"
+                  << "  ezmk pkg remove  [-p|-u|-g] <pkg>              Remove a package (default: -pug)\n"
+                  << "  ezmk pkg search  [-p|-u|-g] <pkg>              Search for a package (default: -pug)\n"
+                  << "  ezmk pkg info    [-p|-u|-g] <pkg>              Show package info (default: -pug)\n"
+                  << "  ezmk pkg list    [-p|-u|-g]                    List installed packages (default: -pug)\n"
+                  << "  ezmk pkg update  [-p|-u|-g] <pkg>              Update an installed package (default: -pug)\n"
+                  << "\n";
+        std::cout << get(I18nKey::cli_usage_repo) << "\n"
+                  << "  ezmk repo add [-p|-u|-g] <git_url_or_path> [--name <name>] [--branch <branch>]\n"
+                  << "  ezmk repo remove [-p|-u|-g] <name>\n"
+                  << "  ezmk repo update [-p|-u|-g] [<name>]\n"
+                  << "  ezmk repo list [-p|-u|-g]\n"
+                  << "\n";
+        std::cout << get(I18nKey::cli_usage_utils) << "\n"
+                  << "  ezmk utils <util_name> [args]              Run a Lua-based utility tool\n"
+                  << "\n";
+        std::cout << get(I18nKey::cli_usage_scopes) << "\n"
+                  << "  -p    Project scope\n"
+                  << "  -u    User scope\n"
+                  << "  -g    Global scope\n"
+                  << "  Flags can be combined, e.g. -pug\n"
+                  << "\n";
+        std::cout << get(I18nKey::cli_usage_build_flags) << "\n"
+                  << "  --disable-cache      Force recompilation of all sources\n"
+                  << "  --verbose, -v        Print detailed compile commands and cache diagnostics\n"
+                  << "  -j, --jobs <N>       Max parallel compile jobs (0 = auto, default: auto)\n"
+                  << "  --profile <name>     Build profile (e.g. debug, release)\n"
+                  << "\n";
+        std::cout << get(I18nKey::cli_usage_install_flags) << "\n"
+                  << "  --sha256 <hash>      Verify package archive against expected SHA-256\n"
+                  << "  -y, --yes            Skip all interactive prompts (for CI/scripts)\n";
     }
 
 } // namespace ezmk::cli

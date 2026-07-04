@@ -1017,3 +1017,114 @@ TEST_CASE("lua: state returns nullptr before init, non-null after", "[lua][lifec
     init();
     REQUIRE(state() != nullptr);
 }
+
+// ===================================================================
+// 0.2.3+: list_sources() uses src_dirs from config
+// ===================================================================
+
+TEST_CASE("lua: list_sources respects src_dirs config", "[lua][api][0.2.3]") {
+    TempDir tmp;
+    write_minimal_config(tmp.path);
+    // Add custom src_dirs to config
+    {
+        std::ofstream of(tmp.path / "ezmk.toml");
+        of << "[project]\nname = \"testproj\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+           << "[compile]\nflags = [\"-Wall\"]\ninclude_dirs = [\"include\"]\nsrc_dirs = [\"src\", \"lib\"]\n\n"
+           << "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+           << "[depends]\nlib = []\n";
+    }
+    fs::create_directories(tmp.path / "src");
+    fs::create_directories(tmp.path / "lib");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp.path / "lib" / "helper.cpp") << "void helper() {}\n";
+
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, tmp.path);
+
+    int rc = luaL_dostring(L, "local sources = ezmk.list_sources(); return #sources");
+    REQUIRE(rc == 0);
+    // Should find files from both src/ and lib/
+    int count = static_cast<int>(lua_tointeger(L, -1));
+    REQUIRE(count == 2);
+    lua_pop(L, 1);
+}
+
+TEST_CASE("lua: list_sources default to src only", "[lua][api][0.2.3]") {
+    TempDir tmp;
+    write_minimal_config(tmp.path);
+    fs::create_directories(tmp.path / "src");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp.path / "src" / "util.cpp") << "void util() {}\n";
+
+    // Create a "lib" dir that should NOT be included (not in config)
+    fs::create_directories(tmp.path / "lib");
+    std::ofstream(tmp.path / "lib" / "helper.cpp") << "void helper() {}\n";
+
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, tmp.path);
+
+    int rc = luaL_dostring(L, "local sources = ezmk.list_sources(); return #sources");
+    REQUIRE(rc == 0);
+    // Should only find files from src/ (the default)
+    int count = static_cast<int>(lua_tointeger(L, -1));
+    REQUIRE(count == 2); // main.cpp + util.cpp, NOT helper.cpp
+    lua_pop(L, 1);
+}
+
+// ===================================================================
+// 0.2.3+: run_hook_script() tests
+// ===================================================================
+
+TEST_CASE("run_hook_script: basic execution", "[lua][hook][0.2.3]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "hook_test", R"(
+function run(ctx)
+    return 0
+end
+)");
+
+    int rc = run_hook_script(state(), script,
+                              tmp.path / "build" / "output",
+                              tmp.path, "");
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_hook_script: receives ctx with output field", "[lua][hook][0.2.3]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "hook_ctx", R"(
+function run(ctx)
+    assert(type(ctx) == "table", "ctx must be a table")
+    assert(type(ctx.output) == "string", "ctx.output must be a string")
+    assert(type(ctx.project_root) == "string", "ctx.project_root must be a string")
+    assert(type(ctx.profile) == "string", "ctx.profile must be a string")
+    return 0
+end
+)");
+
+    int rc = run_hook_script(state(), script,
+                              tmp.path / "build" / "myapp",
+                              tmp.path, "release");
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_hook_script: returns run() exit code", "[lua][hook][0.2.3]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "hook_rc", R"(
+function run(ctx)
+    return 7
+end
+)");
+
+    int rc = run_hook_script(state(), script,
+                              tmp.path / "build" / "output",
+                              tmp.path, "");
+    REQUIRE(rc == 7);
+}
+
+TEST_CASE("run_hook_script: null L returns error", "[lua][hook][0.2.3]") {
+    int rc = run_hook_script(nullptr, fs::path("test.lua"),
+                              fs::path("output"), fs::path("."), "");
+    REQUIRE(rc != 0);
+}

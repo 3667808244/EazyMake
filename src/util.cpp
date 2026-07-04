@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 
@@ -40,19 +41,25 @@ namespace ezmk::util {
 // Logging
 // ===================================================================
 
+// 0.2.3+: Global mutex for thread-safe console output during parallel builds.
+static std::mutex g_log_mutex;
+
 void info(std::string_view msg)  {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
     if (supports_color())
         std::cerr << color::green << "[ezmk] " << color::reset << msg << "\n";
     else
         std::cerr << "[ezmk] " << msg << "\n";
 }
 void warn(std::string_view msg)  {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
     if (supports_color())
         std::cerr << color::yellow << "[ezmk warn] " << color::reset << msg << "\n";
     else
         std::cerr << "[ezmk warn] " << msg << "\n";
 }
 void error(std::string_view msg) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
     if (supports_color())
         std::cerr << color::red << "[ezmk error] " << color::reset << msg << "\n";
     else
@@ -60,10 +67,13 @@ void error(std::string_view msg) {
 }
 
 void fatal(std::string_view msg) {
-    if (supports_color())
-        std::cerr << color::red << "[ezmk fatal] " << color::reset << msg << "\n";
-    else
-        std::cerr << "[ezmk fatal] " << msg << "\n";
+    {
+        std::lock_guard<std::mutex> lock(g_log_mutex);
+        if (supports_color())
+            std::cerr << color::red << "[ezmk fatal] " << color::reset << msg << "\n";
+        else
+            std::cerr << "[ezmk fatal] " << msg << "\n";
+    }
     throw ezmk::fatal_error(msg);
 }
 
@@ -209,7 +219,10 @@ std::vector<fs::path> list_files(const fs::path& dir,
 
 fs::path get_home_dir() {
 #ifdef EZMK_WIN
-    const char* home = std::getenv("USERPROFILE");
+    // 0.2.3+: Check HOME first for Git Bash / MSYS2 compatibility
+    const char* home = std::getenv("HOME");
+    if (home) return fs::path(home);
+    home = std::getenv("USERPROFILE");
     if (home) return fs::path(home);
     const char* homeDrive = std::getenv("HOMEDRIVE");
     const char* homePath  = std::getenv("HOMEPATH");
@@ -700,8 +713,13 @@ std::string git_last_commit_time(const fs::path& repo_dir) {
 // ===================================================================
 
 std::string find_editor() {
+    // 0.2.3+: Check EDITOR and VISUAL environment variables (cross-platform)
+    const char* editor_env = std::getenv("EDITOR");
+    if (editor_env && editor_env[0] != '\0') return editor_env;
+    const char* visual_env = std::getenv("VISUAL");
+    if (visual_env && visual_env[0] != '\0') return visual_env;
 #ifdef EZMK_WIN
-    // Check if notepad exists (it always should on Windows)
+    // Fallback: notepad (always available on Windows)
     return "notepad";
 #else
     // Try editors in order: vim, nano, emacs
@@ -724,7 +742,7 @@ void open_in_editor(const fs::path& file) {
     info(ezmk::i18n::I18nKey::opening_editor,
          {{"file", file.string()}, {"editor", editor}});
 #ifdef EZMK_WIN
-    std::string cmd = "notepad \"" + escape_shell_arg(file.string()) + "\"";
+    std::string cmd = editor + " \"" + escape_shell_arg(file.string()) + "\"";
 #else
     std::string cmd = editor + " \"" + escape_shell_arg(file.string()) + "\" < /dev/tty > /dev/tty 2>&1";
 #endif

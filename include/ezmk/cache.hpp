@@ -62,6 +62,28 @@ struct CompileResult {
 // caches survive relocation); system headers outside proj_root stay absolute.
 CompileResult compile_sources(const CompileInput& in, CacheRecord& record);
 
+// 0.2.3+: Per-file compile result returned by compile_one_source().
+// Used for parallel compilation — each thread compiles one file and returns
+// its result; the main thread merges results into the record afterward.
+struct SingleCompileResult {
+    fs::path source;           // original source path
+    fs::path object;           // compiled .o/.obj path (in obj_dir)
+    bool cache_hit = false;    // true if served from cache
+    bool success = false;      // false if compilation failed
+    std::string error_msg;     // error details on failure
+    std::string rel_src;       // source path relative to proj_root (cache key)
+    FileEntry record_entry;    // new cache record entry (only valid if success && !cache_hit)
+    std::vector<DepEntry> new_deps; // parsed dependencies (for dependency change detection)
+};
+
+// 0.2.3+: Compile a single source file (check cache, compile if needed).
+// Designed for parallel use — reads from `record` (read-only during parallel phase),
+// does NOT write to record. Returns per-file result for later merge.
+// Thread-safe: only reads from record and filesystem; no shared mutable state.
+SingleCompileResult compile_one_source(const fs::path& src,
+                                       const CompileInput& in,
+                                       const CacheRecord& record);
+
 // Parse .d file (gcc -MMD output) and hash every listed header.
 // Returns vector of {path, sha256} for each dependency.
 std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile);

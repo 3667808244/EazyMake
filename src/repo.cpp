@@ -251,8 +251,14 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
             }
         }
 
-        return {repo_dir / best_file, best_sha256};
+        return {repo_dir / best_file, best_sha256, best_version};
+    } catch (const std::exception& e) {
+        util::warn(std::string("failed to parse index.toml for repo '") +
+                   repo_dir.filename().string() + "': " + e.what());
+        return {};
     } catch (...) {
+        util::warn(std::string("failed to parse index.toml for repo '") +
+                   repo_dir.filename().string() + "' — unknown error");
         return {};
     }
 }
@@ -445,10 +451,11 @@ void list(const std::vector<cli::Scope>& scopes) {
 
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
-        std::cout << "Repositories (" << scope_label(scope) << "):\n";
+        std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_list_title,
+                                      {{"scope", scope_label(scope)}}) << "\n";
 
         if (entries.empty()) {
-            std::cout << "  (none)\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_list_none) << "\n";
         } else {
             for (auto& e : entries) {
                 std::cout << "  " << std::left << std::setw(16) << e.name

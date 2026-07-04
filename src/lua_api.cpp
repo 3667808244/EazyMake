@@ -88,7 +88,11 @@ static config::EzConfig* get_config() {
     try {
         g_cached_config = new config::EzConfig(config::parse_config(cfg_path));
         return g_cached_config;
+    } catch (const std::exception& e) {
+        util::warn(std::string("failed to parse ezmk.toml: ") + e.what());
+        return nullptr;
     } catch (...) {
+        util::warn("failed to parse ezmk.toml — unknown error");
         return nullptr;
     }
 }
@@ -205,16 +209,28 @@ static int ezmk_link_dirs(lua_State* L) {
 
 static int ezmk_list_sources(lua_State* L) {
     check_arg_count(L, 0);
-    fs::path src_dir = g_project_root / "src";
-    if (!util::file_exists(src_dir)) {
-        lua_newtable(L);
-        return 1;
+
+    // 0.2.3+: Read src_dirs from ezmk.toml instead of hardcoding "src/"
+    std::vector<std::string> src_dirs = {"src"}; // default
+    auto* cfg = get_config();
+    if (cfg && !cfg->compile.src_dirs.empty()) {
+        src_dirs = cfg->compile.src_dirs;
     }
-    auto files = util::list_files(src_dir, {".c", ".cpp", ".cxx", ".cc"});
-    std::vector<fs::path> abs_files;
-    abs_files.reserve(files.size());
-    for (auto& f : files) abs_files.push_back(fs::absolute(f));
-    push_path_array(L, abs_files);
+
+    std::vector<fs::path> result;
+    std::set<std::string> seen;
+    for (auto& d : src_dirs) {
+        fs::path dir = g_project_root / d;
+        if (!util::file_exists(dir)) continue;
+        auto files = util::list_files(dir, {".c", ".cpp", ".cxx", ".cc"});
+        for (auto& f : files) {
+            std::string fname = f.filename().string();
+            if (seen.insert(fname).second) {
+                result.push_back(fs::absolute(f));
+            }
+        }
+    }
+    push_path_array(L, result);
     return 1;
 }
 
@@ -738,6 +754,100 @@ int run_script(lua_State* L, const fs::path& script_path,
         exit_code = (int)lua_tonumber(L, -1);
     }
     // non-number return → exit code 0
+
+    lua_pop(L, 2); // return value + sandbox
+    return exit_code;
+}
+
+// 0.2.3+
+int run_hook_script(lua_State* L, const fs::path& script_path,
+                    const fs::path& output,
+                    const fs::path& project_root,
+                    const std::string& profile) {
+    if (!L) return 1;
+
+    // Set current script package root for ezmk API context
+    g_current_script_pkg_root.clear();
+    {
+        auto parent = script_path.parent_path();
+        if (parent.filename() == "utils") {
+            g_current_script_pkg_root = parent.parent_path();
+        }
+    }
+
+    // Ensure ezmk API is registered
+    lua_getglobal(L, "ezmk");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        register_api(L, project_root);
+    } else {
+        lua_pop(L, 1);
+    }
+
+    // Build sandbox environment
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_getglobal(L, "_G");
+    lua_setfield(L, -2, "__index");
+    lua_setmetatable(L, -2);
+    int sandbox_idx = lua_gettop(L);
+
+    // Inject ezmk table into sandbox
+    lua_getglobal(L, "ezmk");
+    lua_setfield(L, sandbox_idx, "ezmk");
+
+    // Load the script file
+    if (luaL_loadfile(L, script_path.string().c_str())) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
+        lua_pop(L, 2); // error + sandbox
+        return 1;
+    }
+
+    // Set _ENV upvalue to sandbox
+    lua_pushvalue(L, sandbox_idx);
+    lua_setupvalue(L, -2, 1);
+
+    // Execute the script chunk (define run function)
+    if (lua_pcall(L, 0, 0, 0)) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
+        lua_pop(L, 2); // error + sandbox
+        return 1;
+    }
+
+    // Get run function from sandbox
+    lua_getfield(L, sandbox_idx, "run");
+    if (!lua_isfunction(L, -1)) {
+        util::error(ezmk::i18n::I18nKey::lua_error,
+                    {{"msg", "hook script does not define a run() function"}});
+        lua_pop(L, 2); // nil + sandbox
+        return 1;
+    }
+
+    // Build ctx table
+    lua_createtable(L, 0, 3);
+    lua_pushstring(L, output.string().c_str());
+    lua_setfield(L, -2, "output");
+    lua_pushstring(L, project_root.string().c_str());
+    lua_setfield(L, -2, "project_root");
+    lua_pushstring(L, profile.c_str());
+    lua_setfield(L, -2, "profile");
+
+    // Call run(ctx)
+    if (lua_pcall(L, 1, 1, 0)) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
+        lua_pop(L, 2); // error + sandbox
+        return 1;
+    }
+
+    int exit_code = 0;
+    if (lua_isinteger(L, -1)) {
+        exit_code = (int)lua_tointeger(L, -1);
+    } else if (lua_isnumber(L, -1)) {
+        exit_code = (int)lua_tonumber(L, -1);
+    }
 
     lua_pop(L, 2); // return value + sandbox
     return exit_code;

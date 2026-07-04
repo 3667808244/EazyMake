@@ -38,4 +38,15 @@ void register_api(lua_State* L, const fs::path& project_root);
 int run_script(lua_State* L, const fs::path& script_path,
                const std::vector<std::string>& args);
 
+// 0.2.3+: Run a build hook script.
+// script_path: absolute path to the .lua file
+// output: path to the built artifact (exe/.a/.dll/.so)
+// project_root: project root directory
+// profile: profile name (empty string if none)
+// Returns 0 on success, non-zero on error or if run() returns non-zero.
+int run_hook_script(lua_State* L, const fs::path& script_path,
+                    const fs::path& output,
+                    const fs::path& project_root,
+                    const std::string& profile);
+
 } // namespace ezmk::lua

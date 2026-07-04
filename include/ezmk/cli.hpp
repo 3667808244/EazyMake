@@ -20,6 +20,9 @@ enum class Command {
     RepoRemove,
     RepoList,
     Utils,
+    ProjectWatch,    // 0.2.3+
+    PkgList,         // 0.2.3+
+    PkgUpdate,       // 0.2.3+
     Version,
     Help,
 };
@@ -33,6 +36,8 @@ enum class Scope {
 struct BuildOptions {
     bool disable_cache = false;
     bool verbose = false;
+    int jobs = 0;              // 0.2.3+ (0 = auto-detect via hardware_concurrency)
+    std::string profile;        // 0.2.3+ build profile name (debug, release, etc.)
 };
 
 struct InstallOptions {
@@ -78,6 +83,9 @@ struct CliArgs {
     // Only valid for Utils
     std::string utils_name;
     std::vector<std::string> utils_args;
+
+    // 0.2.3+: Watch mode flags
+    bool watch_no_build_on_start = false;   // --no-build-on-start
 };
 
 CliArgs parse(int argc, char** argv);

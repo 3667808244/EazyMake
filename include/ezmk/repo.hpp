@@ -52,6 +52,7 @@ void list(const std::vector<cli::Scope>& scopes);
 struct PkgSearchResult {
     fs::path archive_path;   // path to the package archive
     std::string sha256;      // from index.toml, empty if not provided
+    std::string version;     // 0.2.3+: version from index.toml
 };
 
 // Search registered repos (in scope order) for a package by name.

@@ -8,13 +8,16 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <sstream>
 
+namespace fs = std::filesystem;
 using namespace ezmk::build;
 using namespace ezmk::config;
 using namespace ezmk::cli;
+using namespace ezmk::util;
 
 // ===================================================================
 // Build the link command via make_link_cmd (static, tested indirectly)
@@ -460,4 +463,201 @@ TEST_CASE("build: DependsSection 0.2.2 want field defaults", "[build][0.2.2]") {
     DependsSection ds;
     REQUIRE(ds.libs.empty());
     REQUIRE(ds.want.empty());
+}
+
+// ===================================================================
+// 0.2.3+: merge_compile_profile()
+// ===================================================================
+
+TEST_CASE("merge_compile_profile: appends profile flags after base flags", "[build][0.2.3]") {
+    CompileSection base;
+    base.flags = {"-Wall", "-O2"};
+
+    ProfileConfig profile;
+    profile.flags = {"-g", "-DDEBUG"};
+
+    auto merged = merge_compile_profile(base, profile);
+
+    REQUIRE(merged.flags.size() == 4);
+    REQUIRE(merged.flags[0] == "-Wall");
+    REQUIRE(merged.flags[1] == "-O2");
+    REQUIRE(merged.flags[2] == "-g");
+    REQUIRE(merged.flags[3] == "-DDEBUG");
+}
+
+TEST_CASE("merge_compile_profile: profile macros override base macros", "[build][0.2.3]") {
+    CompileSection base;
+    base.macros = {
+        {"VERSION", "1.0.0"},
+        {"DEBUG", "0"},
+    };
+
+    ProfileConfig profile;
+    profile.macros = {
+        {"DEBUG", "1"},
+        {"EXTRA", "enabled"},
+    };
+
+    auto merged = merge_compile_profile(base, profile);
+
+    REQUIRE(merged.macros.size() == 3);
+    // DEBUG from profile overrides base
+    REQUIRE(merged.macros["DEBUG"] == "1");
+    // VERSION from base is preserved
+    REQUIRE(merged.macros["VERSION"] == "1.0.0");
+    // EXTRA from profile is added
+    REQUIRE(merged.macros["EXTRA"] == "enabled");
+}
+
+TEST_CASE("merge_compile_profile: empty profile does not change base", "[build][0.2.3]") {
+    CompileSection base;
+    base.flags = {"-Wall", "-Wextra"};
+    base.macros = {{"FOO", "bar"}};
+    base.msvc_flags = {"/utf-8"};
+
+    ProfileConfig empty_profile;
+    auto merged = merge_compile_profile(base, empty_profile);
+
+    REQUIRE(merged.flags == base.flags);
+    REQUIRE(merged.macros == base.macros);
+    REQUIRE(merged.msvc_flags == base.msvc_flags);
+}
+
+TEST_CASE("merge_compile_profile: profile MSVC flags appended", "[build][0.2.3]") {
+    CompileSection base;
+    base.msvc_flags = {"/utf-8"};
+
+    ProfileConfig profile;
+    profile.msvc_flags = {"/MD", "/W4"};
+
+    auto merged = merge_compile_profile(base, profile);
+
+    REQUIRE(merged.msvc_flags.size() == 3);
+    REQUIRE(merged.msvc_flags[0] == "/utf-8");
+    REQUIRE(merged.msvc_flags[1] == "/MD");
+    REQUIRE(merged.msvc_flags[2] == "/W4");
+}
+
+// ===================================================================
+// 0.2.3+: merge_link_profile()
+// ===================================================================
+
+TEST_CASE("merge_link_profile: appends profile flags after base flags", "[build][0.2.3]") {
+    LinkSection base;
+    base.flags = {"-static"};
+
+    ProfileLinkConfig profile;
+    profile.flags = {"-s", "--strip-all"};
+
+    auto merged = merge_link_profile(base, profile);
+
+    REQUIRE(merged.flags.size() == 3);
+    REQUIRE(merged.flags[0] == "-static");
+    REQUIRE(merged.flags[1] == "-s");
+    REQUIRE(merged.flags[2] == "--strip-all");
+}
+
+TEST_CASE("merge_link_profile: empty profile does not change base", "[build][0.2.3]") {
+    LinkSection base;
+    base.flags = {"-static", "-L/usr/lib"};
+    base.msvc_flags = {"/DEBUG"};
+    base.link_dirs = {"/usr/local/lib"};
+
+    ProfileLinkConfig empty_profile;
+    auto merged = merge_link_profile(base, empty_profile);
+
+    REQUIRE(merged.flags == base.flags);
+    REQUIRE(merged.msvc_flags == base.msvc_flags);
+    REQUIRE(merged.link_dirs == base.link_dirs);
+}
+
+// ===================================================================
+// 0.2.3+: BuildOptions new fields
+// ===================================================================
+
+TEST_CASE("build: BuildOptions 0.2.3 fields have correct defaults", "[build][0.2.3]") {
+    BuildOptions opts;
+    REQUIRE(opts.jobs == 0);
+    REQUIRE(opts.profile.empty());
+}
+
+TEST_CASE("build: BuildOptions with jobs and profile set", "[build][0.2.3]") {
+    BuildOptions opts;
+    opts.jobs = 8;
+    opts.profile = "release";
+    REQUIRE(opts.jobs == 8);
+    REQUIRE(opts.profile == "release");
+}
+
+// ===================================================================
+// 0.2.3+: Integration tests — build with profile and jobs options
+// ===================================================================
+
+TEST_CASE("build: BuildOptions with -j 0 defaults to auto-detect", "[build][0.2.3]") {
+    BuildOptions opts;
+    REQUIRE(opts.jobs == 0);
+    REQUIRE(opts.profile.empty());
+    // -j 0 means auto-detect via std::thread::hardware_concurrency()
+}
+
+TEST_CASE("build: BuildOptions -j 1 means single-threaded", "[build][0.2.3]") {
+    BuildOptions opts;
+    opts.jobs = 1;
+    REQUIRE(opts.jobs == 1);
+}
+
+// ===================================================================
+// 0.2.3+: Profile integration tests
+// ===================================================================
+
+TEST_CASE("build: profile merge with debug flags", "[build][0.2.3][profile]") {
+    // Test merge_compile_profile appends -g -O0 -DDEBUG for debug profile
+    CompileSection base;
+    base.flags = {"-Wall", "-O2"};
+
+    ProfileConfig profile;
+    profile.flags = {"-g", "-O0", "-DDEBUG"};
+    profile.macros = {{"DEBUG", "1"}};
+
+    auto merged = merge_compile_profile(base, profile);
+    // Verify -g appears after base flags
+    REQUIRE(merged.flags[0] == "-Wall");
+    REQUIRE(merged.flags[1] == "-O2");
+    REQUIRE(merged.flags[2] == "-g");
+    REQUIRE(merged.flags[3] == "-O0");
+    REQUIRE(merged.flags[4] == "-DDEBUG");
+    // Profile macro overrides empty base
+    REQUIRE(merged.macros["DEBUG"] == "1");
+}
+
+TEST_CASE("build: profile merge with release flags and LTO", "[build][0.2.3][profile]") {
+    CompileSection base;
+    base.flags = {"-Wall"};
+
+    ProfileConfig profile;
+    profile.flags = {"-O3", "-DNDEBUG", "-flto"};
+
+    auto merged = merge_compile_profile(base, profile);
+    REQUIRE(merged.flags.size() == 4);
+    REQUIRE(merged.flags[1] == "-O3");
+    REQUIRE(merged.flags[2] == "-DNDEBUG");
+    REQUIRE(merged.flags[3] == "-flto");
+}
+
+TEST_CASE("build: profile with macros override from base", "[build][0.2.3][profile]") {
+    CompileSection base;
+    base.macros = {{"API_KEY", "default"}, {"ENABLE_X", "0"}};
+    base.flags = {"-Wall"};
+
+    ProfileConfig profile;
+    profile.flags = {"-O2"};
+    profile.macros = {{"ENABLE_X", "1"}};
+
+    auto merged = merge_compile_profile(base, profile);
+    // Profile macro overrides base
+    REQUIRE(merged.macros["ENABLE_X"] == "1");
+    // Base macro preserved
+    REQUIRE(merged.macros["API_KEY"] == "default");
+    // Profile flag appended
+    REQUIRE(merged.flags[1] == "-O2");
 }

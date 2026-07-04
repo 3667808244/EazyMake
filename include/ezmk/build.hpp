@@ -41,4 +41,16 @@ std::vector<fs::path> collect_sources(
     const fs::path& proj_root,
     const std::string& project_type);
 
+// 0.2.3+: Merge a compile profile into the base compile section.
+// Profile flags are appended to base flags; profile macros override base macros.
+config::CompileSection merge_compile_profile(
+    const config::CompileSection& base,
+    const config::ProfileConfig& profile);
+
+// 0.2.3+: Merge a link profile into the base link section.
+// Profile flags are appended to base flags.
+config::LinkSection merge_link_profile(
+    const config::LinkSection& base,
+    const config::ProfileLinkConfig& profile);
+
 } // namespace ezmk::build

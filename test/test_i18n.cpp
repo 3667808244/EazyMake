@@ -283,3 +283,85 @@ TEST_CASE("General prefix keys are non-empty", "[i18n][general]") {
     REQUIRE(!get(I18nKey::warn_prefix).empty());
     REQUIRE(!get(I18nKey::info_prefix).empty());
 }
+
+// ===================================================================
+// 0.2.3+: New i18n keys — existence and non-empty check
+// ===================================================================
+
+TEST_CASE("0.2.3 i18n keys: parallel and profile keys", "[i18n][0.2.3]") {
+    init("en");
+    REQUIRE(!get(I18nKey::parallel_jobs_info).empty());
+    REQUIRE(!get(I18nKey::profile_not_found).empty());
+}
+
+TEST_CASE("0.2.3 i18n keys: hook keys", "[i18n][0.2.3]") {
+    init("en");
+    REQUIRE(!get(I18nKey::pre_build_hook).empty());
+    REQUIRE(!get(I18nKey::post_build_hook).empty());
+    REQUIRE(!get(I18nKey::on_failure_hook).empty());
+    REQUIRE(!get(I18nKey::hook_not_found).empty());
+    REQUIRE(!get(I18nKey::hook_nonzero).empty());
+}
+
+TEST_CASE("0.2.3 i18n keys: pkg list/update keys", "[i18n][0.2.3]") {
+    init("en");
+    REQUIRE(!get(I18nKey::pkg_list_title).empty());
+    REQUIRE(!get(I18nKey::pkg_list_none).empty());
+    REQUIRE(!get(I18nKey::pkg_list_item).empty());
+    REQUIRE(!get(I18nKey::pkg_update_up_to_date).empty());
+    REQUIRE(!get(I18nKey::pkg_update_no_updates).empty());
+    REQUIRE(!get(I18nKey::pkg_update_updating).empty());
+}
+
+TEST_CASE("0.2.3 i18n keys: watch mode keys", "[i18n][0.2.3]") {
+    init("en");
+    REQUIRE(!get(I18nKey::watch_started).empty());
+    REQUIRE(!get(I18nKey::watch_skip_initial).empty());
+    REQUIRE(!get(I18nKey::watch_config_changed).empty());
+    REQUIRE(!get(I18nKey::watch_detected_change).empty());
+    REQUIRE(!get(I18nKey::watch_stopping).empty());
+}
+
+TEST_CASE("0.2.3 i18n keys: Chinese translations also non-empty", "[i18n][0.2.3][zh]") {
+    init("zh");
+    REQUIRE(!get(I18nKey::parallel_jobs_info).empty());
+    REQUIRE(!get(I18nKey::pre_build_hook).empty());
+    REQUIRE(!get(I18nKey::pkg_list_title).empty());
+    REQUIRE(!get(I18nKey::pkg_update_up_to_date).empty());
+    REQUIRE(!get(I18nKey::watch_started).empty());
+}
+
+TEST_CASE("0.2.3 i18n keys: en and zh differ for key strings", "[i18n][0.2.3][zh]") {
+    init("en");
+    std::string en_watch = get(I18nKey::watch_started);
+    std::string en_list = get(I18nKey::pkg_list_title);
+    std::string en_update = get(I18nKey::pkg_update_up_to_date);
+
+    init("zh");
+    std::string zh_watch = get(I18nKey::watch_started);
+    std::string zh_list = get(I18nKey::pkg_list_title);
+    std::string zh_update = get(I18nKey::pkg_update_up_to_date);
+
+    REQUIRE(en_watch != zh_watch);
+    REQUIRE(en_list != zh_list);
+    REQUIRE(en_update != zh_update);
+}
+
+TEST_CASE("0.2.3 i18n keys: fmt works with new keys", "[i18n][0.2.3]") {
+    init("en");
+
+    std::string r1 = fmt(I18nKey::parallel_jobs_info,
+                         {{"jobs", "8"}, {"total", "12"}});
+    REQUIRE(r1.find("8") != std::string::npos);
+    REQUIRE(r1.find("12") != std::string::npos);
+
+    std::string r2 = fmt(I18nKey::pkg_update_updating,
+                         {{"pkg", "fmt"}, {"old", "1.0"}, {"new", "2.0"}});
+    REQUIRE(r2.find("fmt") != std::string::npos);
+    REQUIRE(r2.find("1.0") != std::string::npos);
+    REQUIRE(r2.find("2.0") != std::string::npos);
+
+    std::string r3 = fmt(I18nKey::watch_detected_change,
+                         {{"path", "/src/main.cpp"}});
+    REQUIRE(r3.find("/src/main.cpp") != std::string::npos);
+}

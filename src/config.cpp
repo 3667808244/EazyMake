@@ -1,4 +1,5 @@
 #include "ezmk/config.hpp"
+#include "ezmk/i18n.hpp"
 #include "ezmk/util.hpp"
 
 #include <cctype>
@@ -55,8 +56,8 @@ LanguageInfo parse_language(std::string_view language) {
         ver_str = language.substr(1);
     } else {
         throw std::runtime_error(
-            std::string("invalid language format: '") + std::string(language) +
-            "'. Expected format: <Lang><Version>, e.g. C++17, C11");
+            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
+                            {{"lang", std::string(language)}}));
     }
 
     // Map version string to -std= flag
@@ -111,8 +112,8 @@ EzConfig parse_config(const fs::path& toml_path) {
             if (*type != "executable" && *type != "static" &&
                 *type != "shared" && *type != "utils") {
                 throw std::runtime_error(
-                    "invalid project type '" + *type +
-                    "'; expected one of: executable, static, shared, utils");
+                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_type,
+                                    {{"type", *type}}));
             }
             cfg.project.type = *type;
         }
@@ -127,8 +128,7 @@ EzConfig parse_config(const fs::path& toml_path) {
     // project.version is required
     if (cfg.project.version.empty()) {
         throw std::runtime_error(
-            "ezmk.toml: [project] section missing required field 'version'. "
-            "Add: version = \"0.1.0\"");
+            ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_missing_ver));
     }
 
     // [compile]
@@ -153,7 +153,7 @@ EzConfig parse_config(const fs::path& toml_path) {
                 cfg.compile.ezmk_macros = ezm->as_boolean()->get();
             } else {
                 throw std::runtime_error(
-                    "ezmk.toml: [compile] ezmk_macros must be a boolean (true/false)");
+                    ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_ezmk_macros_type));
             }
         }
     }
@@ -175,7 +175,7 @@ EzConfig parse_config(const fs::path& toml_path) {
         if (raw_src_dirs && raw_src_dirs->is_array() &&
             raw_src_dirs->as_array()->size() == 0) {
             throw std::runtime_error(
-                "ezmk.toml: [compile] src_dirs is empty — at least one source directory is required");
+                ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_src_dirs));
         }
     }
 
@@ -185,8 +185,8 @@ EzConfig parse_config(const fs::path& toml_path) {
             std::string macro_key(key.str());
             if (!is_valid_macro_name(macro_key)) {
                 throw std::runtime_error(
-                    "ezmk.toml: [compile.macros] invalid macro name '" + macro_key +
-                    "': must be a valid C identifier ([A-Za-z_][A-Za-z0-9_]*)");
+                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_macro,
+                                    {{"name", macro_key}}));
             }
             std::string macro_val;
             if (val.is_string()) {
@@ -198,8 +198,8 @@ EzConfig parse_config(const fs::path& toml_path) {
                 macro_val = "1";
             } else {
                 throw std::runtime_error(
-                    "ezmk.toml: [compile.macros] unsupported value type for '" +
-                    macro_key + "'; expected string, integer, or boolean");
+                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_macros_val_type,
+                                    {{"key", macro_key}}));
             }
             cfg.compile.macros[macro_key] = macro_val;
         }
@@ -218,6 +218,100 @@ EzConfig parse_config(const fs::path& toml_path) {
         cfg.depends.libs = extract_string_array(deps->get("lib"));
         // 0.2.2+: optional dependencies
         cfg.depends.want = extract_string_array(deps->get("want"));
+    }
+
+    // 0.2.3+: [compile.profile.<name>] — build configuration profiles
+    if (auto comp = root["compile"].as_table()) {
+        if (auto profiles = (*comp)["profile"].as_table()) {
+            for (auto& [key, val] : *profiles) {
+                std::string profile_name(key.str());
+                // Validate profile name: [a-zA-Z0-9_-]+
+                if (profile_name.empty()) {
+                    throw std::runtime_error(
+                        ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_profile));
+                }
+                for (char c : profile_name) {
+                    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
+                        throw std::runtime_error(
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_profile,
+                                            {{"name", profile_name}}));
+                    }
+                }
+
+                ProfileConfig pc;
+                if (auto prof_table = val.as_table()) {
+                    pc.flags = extract_string_array(prof_table->get("flags"));
+                    pc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"));
+
+                    // Parse macros sub-table within profile
+                    if (auto macros_node = (*prof_table)["macros"].as_table()) {
+                        for (auto& [mk, mv] : *macros_node) {
+                            std::string macro_key(mk.str());
+                            if (!is_valid_macro_name(macro_key)) {
+                                throw std::runtime_error(
+                                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_macro,
+                                                    {{"name", macro_key}}));
+                            }
+                            std::string macro_val;
+                            if (mv.is_string()) {
+                                macro_val = mv.as_string()->get();
+                            } else if (mv.is_integer()) {
+                                macro_val = std::to_string(mv.as_integer()->get());
+                            } else if (mv.is_boolean()) {
+                                if (!mv.as_boolean()->get()) continue;
+                                macro_val = "1";
+                            } else {
+                                throw std::runtime_error(
+                                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_macros_val_type,
+                                                    {{"key", macro_key}}));
+                            }
+                            pc.macros[macro_key] = macro_val;
+                        }
+                    }
+                }
+                cfg.compile_profiles[profile_name] = std::move(pc);
+            }
+        }
+    }
+
+    // 0.2.3+: [link.profile.<name>] — link configuration profiles
+    if (auto link = root["link"].as_table()) {
+        if (auto profiles = (*link)["profile"].as_table()) {
+            for (auto& [key, val] : *profiles) {
+                std::string profile_name(key.str());
+                if (profile_name.empty()) {
+                    throw std::runtime_error(
+                        ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_profile));
+                }
+                for (char c : profile_name) {
+                    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
+                        throw std::runtime_error(
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_profile,
+                                            {{"name", profile_name}}));
+                    }
+                }
+
+                ProfileLinkConfig plc;
+                if (auto prof_table = val.as_table()) {
+                    plc.flags = extract_string_array(prof_table->get("flags"));
+                    plc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"));
+                }
+                cfg.link_profiles[profile_name] = std::move(plc);
+            }
+        }
+    }
+
+    // 0.2.3+: [hooks] — pre/post-build Lua hook scripts
+    if (auto hooks = root["hooks"].as_table()) {
+        if (auto pre = (*hooks)["pre_build"].value<std::string>()) {
+            cfg.hooks.pre_build = *pre;
+        }
+        if (auto post = (*hooks)["post_build"].value<std::string>()) {
+            cfg.hooks.post_build = *post;
+        }
+        if (auto fail = (*hooks)["on_failure"].value<std::string>()) {
+            cfg.hooks.on_failure = *fail;
+        }
     }
 
     // [utils] (only relevant for type = "utils")

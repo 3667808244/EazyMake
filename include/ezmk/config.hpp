@@ -40,12 +40,35 @@ struct DependsSection {
     std::vector<std::string> want;  // 0.2.2+ optional dependencies
 };
 
+// 0.2.3+ — Build profile configuration for debug/release/etc.
+struct ProfileConfig {
+    std::vector<std::string> flags;
+    std::vector<std::string> msvc_flags;
+    std::map<std::string, std::string> macros;
+};
+
+// 0.2.3+ — Link profile configuration
+struct ProfileLinkConfig {
+    std::vector<std::string> flags;
+    std::vector<std::string> msvc_flags;
+};
+
+// 0.2.3+ — Build hook scripts
+struct HooksSection {
+    std::string pre_build;    // Lua script path (relative to project root)
+    std::string post_build;   // executed after successful link
+    std::string on_failure;   // executed on build/link failure
+};
+
 struct EzConfig {
     ProjectSection project;
     CompileSection compile;
     LinkSection link;
     DependsSection depends;
     UtilsSection utils;
+    HooksSection hooks;                                          // 0.2.3+
+    std::map<std::string, ProfileConfig> compile_profiles;       // 0.2.3+ [compile.profile.*]
+    std::map<std::string, ProfileLinkConfig> link_profiles;      // 0.2.3+ [link.profile.*]
 };
 
 // Parse an ezmk.toml file. Throws on parse errors.

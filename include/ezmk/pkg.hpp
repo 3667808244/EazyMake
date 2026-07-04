@@ -33,6 +33,12 @@ std::vector<fs::path> search(const std::string& pkg_name,
 // Show information about a package (its ezmk.toml contents).
 void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
 
+// 0.2.3+: List all installed packages across the given scopes.
+void list(const std::vector<cli::Scope>& scopes);
+
+// 0.2.3+: Update an installed package to the latest version from registered repos.
+void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
+
 // ---- Dependency resolution ----
 // Topologically sort a list of package directories by their [depends].lib order.
 // Throws if a cycle is detected or a dependency is missing.

@@ -673,3 +673,276 @@ msvc_flags = ["/utf-8", "/MD"]
     REQUIRE(cfg.compile.msvc_flags[0] == "/utf-8");
     REQUIRE(cfg.compile.msvc_flags[1] == "/MD");
 }
+
+// ===================================================================
+// 0.2.3+: [compile.profile.<name>] parsing
+// ===================================================================
+
+TEST_CASE("parse_config: compile profile basic parsing", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+msvc_flags = ["/Zi", "/Od"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile_profiles.size() == 1);
+    REQUIRE(cfg.compile_profiles.count("debug") == 1);
+    auto& debug = cfg.compile_profiles["debug"];
+    REQUIRE(debug.flags.size() == 2);
+    REQUIRE(debug.flags[0] == "-g");
+    REQUIRE(debug.flags[1] == "-O0");
+    REQUIRE(debug.msvc_flags.size() == 2);
+    REQUIRE(debug.msvc_flags[0] == "/Zi");
+    REQUIRE(debug.msvc_flags[1] == "/Od");
+}
+
+TEST_CASE("parse_config: multiple compile profiles", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.release]
+flags = ["-O3", "-DNDEBUG"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile_profiles.size() == 2);
+    REQUIRE(cfg.compile_profiles.count("debug") == 1);
+    REQUIRE(cfg.compile_profiles.count("release") == 1);
+    REQUIRE(cfg.compile_profiles["debug"].flags.size() == 2);
+    REQUIRE(cfg.compile_profiles["release"].flags.size() == 2);
+}
+
+TEST_CASE("parse_config: compile profile with macros", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile.debug]
+flags = ["-g"]
+
+[compile.profile.debug.macros]
+DEBUG = ""
+LOG_LEVEL = "2"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile_profiles.count("debug") == 1);
+    auto& debug = cfg.compile_profiles["debug"];
+    REQUIRE(debug.macros.size() == 2);
+    REQUIRE(debug.macros["DEBUG"] == "");
+    REQUIRE(debug.macros["LOG_LEVEL"] == "2");
+}
+
+TEST_CASE("parse_config: compile profile name must be alphanumeric", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    // Profile name with special characters should be rejected
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile."my profile"]
+flags = ["-g"]
+)");
+    // The toml parser handles quoted keys differently. Let's test with a malformed name.
+    // Actually, toml++ will accept quoted keys. We test invalid pattern names.
+    fs::remove(toml);
+
+    // Test with name containing spaces (via explicit TOML quoting)
+    auto toml2 = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile."bad name"]
+flags = ["-g"]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml2), std::runtime_error);
+    fs::remove(toml2);
+}
+
+TEST_CASE("parse_config: compile profile empty name rejected", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile.""]
+flags = ["-g"]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+TEST_CASE("parse_config: compile profile with underscore and hyphen ok", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile.profile.debug-fast]
+flags = ["-g", "-O2"]
+
+[compile.profile.release_safe]
+flags = ["-O3", "-D_FORTIFY_SOURCE=2"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile_profiles.size() == 2);
+    REQUIRE(cfg.compile_profiles.count("debug-fast") == 1);
+    REQUIRE(cfg.compile_profiles.count("release_safe") == 1);
+}
+
+// ===================================================================
+// 0.2.3+: [link.profile.<name>] parsing
+// ===================================================================
+
+TEST_CASE("parse_config: link profile basic parsing", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[link.profile.release]
+flags = ["-s", "--strip-all"]
+msvc_flags = ["/OPT:REF"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.link_profiles.size() == 1);
+    REQUIRE(cfg.link_profiles.count("release") == 1);
+    auto& rel = cfg.link_profiles["release"];
+    REQUIRE(rel.flags.size() == 2);
+    REQUIRE(rel.flags[0] == "-s");
+    REQUIRE(rel.flags[1] == "--strip-all");
+    REQUIRE(rel.msvc_flags.size() == 1);
+    REQUIRE(rel.msvc_flags[0] == "/OPT:REF");
+}
+
+TEST_CASE("parse_config: link profile empty allowed", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[link.profile.minimal]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.link_profiles.count("minimal") == 1);
+    REQUIRE(cfg.link_profiles["minimal"].flags.empty());
+}
+
+// ===================================================================
+// 0.2.3+: [hooks] section parsing
+// ===================================================================
+
+TEST_CASE("parse_config: hooks section with all fields", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[hooks]
+pre_build = "scripts/pre.lua"
+post_build = "scripts/post.lua"
+on_failure = "scripts/fail.lua"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.hooks.pre_build == "scripts/pre.lua");
+    REQUIRE(cfg.hooks.post_build == "scripts/post.lua");
+    REQUIRE(cfg.hooks.on_failure == "scripts/fail.lua");
+}
+
+TEST_CASE("parse_config: hooks section partial", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[hooks]
+post_build = "scripts/notify.lua"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.hooks.pre_build.empty());
+    REQUIRE(cfg.hooks.post_build == "scripts/notify.lua");
+    REQUIRE(cfg.hooks.on_failure.empty());
+}
+
+TEST_CASE("parse_config: no hooks section defaults to empty", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.hooks.pre_build.empty());
+    REQUIRE(cfg.hooks.post_build.empty());
+    REQUIRE(cfg.hooks.on_failure.empty());
+}
+
+// ===================================================================
+// 0.2.3+: write_default_config does NOT include profiles or hooks
+// ===================================================================
+
+TEST_CASE("write_default_config: no profile or hooks sections", "[config][0.2.3]") {
+    using namespace ezmk::config;
+
+    auto tmp = fs::temp_directory_path() / "ezmk_test_nodefaults.toml";
+    write_default_config(tmp, "testapp", "executable");
+    REQUIRE(fs::exists(tmp));
+
+    auto cfg = parse_config(tmp);
+    fs::remove(tmp);
+
+    // Verify no profiles or hooks are present in the default template
+    REQUIRE(cfg.compile_profiles.empty());
+    REQUIRE(cfg.link_profiles.empty());
+    REQUIRE(cfg.hooks.pre_build.empty());
+    REQUIRE(cfg.hooks.post_build.empty());
+    REQUIRE(cfg.hooks.on_failure.empty());
+}

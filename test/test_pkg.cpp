@@ -214,3 +214,29 @@ TEST_CASE("resolve_dependency_order: missing dependency throws", "[pkg]") {
 
     fs::remove_all(base);
 }
+
+// ===================================================================
+// 0.2.3+: list()
+// ===================================================================
+
+TEST_CASE("pkg list: empty install directory shows none", "[pkg][0.2.3]") {
+    // list() writes to util::info() — we verify it doesn't crash
+    REQUIRE_NOTHROW(list({Scope::Project}));
+}
+
+TEST_CASE("pkg list: all scopes listable", "[pkg][0.2.3]") {
+    // Verify list() works for all scope combinations
+    REQUIRE_NOTHROW(list({Scope::Project, Scope::User, Scope::Global}));
+    REQUIRE_NOTHROW(list({Scope::User}));
+    REQUIRE_NOTHROW(list({Scope::Global}));
+}
+
+// ===================================================================
+// 0.2.3+: update() - basic error paths
+// ===================================================================
+
+TEST_CASE("pkg update: non-existent package shows error", "[pkg][0.2.3]") {
+    // update() of a non-existent package should output an error via util::error()
+    // and return without throwing
+    REQUIRE_NOTHROW(update("nonexistent_pkg_xyz_12345", {Scope::Project}));
+}

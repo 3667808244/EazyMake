@@ -25,3 +25,4 @@ stdout_in_linux_vm.txt
 plan.md
 src/locale_data.cpp
 stdout_and_stderr.txt
+build_err.txt

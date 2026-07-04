@@ -53,7 +53,7 @@ function run(args)
     -- Collect project info
     local sources = ezmk.list_sources()
     if #sources == 0 then
-        ezmk.warn("no source files found in src/")
+        ezmk.warn("no source files found in configured source directories")
         return 0
     end
 
@@ -93,7 +93,8 @@ function run(args)
         if not lang then
             lang = content:match("language%s*=%s*'([^']*)'")
         end
-        if lang and lang:match("^C$") then
+        -- "C" or "C11"/"C17"/"C99" etc. (but NOT "C++" which is C++)
+        if lang and lang:match("^C[^+%%]") then
             compiler = "gcc"
         end
     end

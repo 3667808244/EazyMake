@@ -289,6 +289,262 @@ void clear_cache() {
 }
 
 // ===================================================================
+// 0.2.3+: Single-source compile (thread-safe — read-only on record)
+// ===================================================================
+
+SingleCompileResult compile_one_source(const fs::path& src,
+                                       const CompileInput& in,
+                                       const CacheRecord& record) {
+    SingleCompileResult result;
+    result.source = src;
+    result.success = false;
+
+    bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
+    const char* obj_suffix = is_msvc ? ".obj" : ".o";
+    const char* tmp_suffix = is_msvc ? ".tmp.obj" : ".tmp.o";
+
+    auto rel = fs::relative(src, in.proj_root);
+    result.rel_src = rel.generic_string();
+
+    fs::path obj = in.obj_dir / rel;
+    obj.replace_extension(obj_suffix);
+    fs::path obj_tmp = in.obj_dir / rel;
+    obj_tmp.replace_extension(tmp_suffix);
+
+    fs::path cache_obj = in.cache_obj_dir / rel;
+    cache_obj.replace_extension(obj_suffix);
+
+    fs::create_directories(obj.parent_path());
+    fs::create_directories(cache_obj.parent_path());
+
+    // Check cache (unless disabled)
+    if (!in.disable_cache) {
+        auto cached = check_cache(src, in.compile, record, in.proj_root,
+                                  in.extra_includes, in.lang.std_flag);
+        if (cached) {
+            auto cache_src = *cached;
+            bool same_dir = (fs::absolute(in.cache_obj_dir) == fs::absolute(in.obj_dir));
+            if (same_dir && util::file_exists(cache_src)) {
+                result.object = cache_src;
+                result.cache_hit = true;
+                result.success = true;
+                if (in.verbose) {
+                    auto it = record.files.find(result.rel_src);
+                    if (it != record.files.end()) {
+                        util::info(util::color_msg(util::color::cyan,
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::cache_hit,
+                                {{"file", result.rel_src},
+                                 {"count", std::to_string(it->second.dependencies.size())}})));
+                    }
+                }
+                return result;
+            } else if (!same_dir && util::file_exists(cache_src)) {
+                std::error_code ec;
+                fs::copy_file(cache_src, obj_tmp, fs::copy_options::overwrite_existing, ec);
+                if (!ec) {
+                    fs::rename(obj_tmp, obj, ec);
+                    if (!ec) {
+                        result.object = obj;
+                        result.cache_hit = true;
+                        result.success = true;
+                        if (in.verbose) {
+                            auto it = record.files.find(result.rel_src);
+                            if (it != record.files.end()) {
+                                util::info(util::color_msg(util::color::cyan,
+                                    "  [cached] " + result.rel_src +
+                                    "  (source hash matches, " +
+                                    std::to_string(it->second.dependencies.size()) + " headers unchanged)"));
+                            }
+                        }
+                        return result;
+                    }
+                }
+                fs::remove(obj_tmp, ec);
+            }
+        }
+        // Verbose: explain cache miss
+        if (in.verbose) {
+            auto it = record.files.find(result.rel_src);
+            if (it == record.files.end()) {
+                util::info(ezmk::i18n::I18nKey::cache_miss_record,
+                           {{"file", result.rel_src}});
+            } else {
+                std::string cur_hash = crypto::sha256_file(src);
+                if (cur_hash != it->second.source_hash) {
+                    util::info(ezmk::i18n::I18nKey::cache_miss_source,
+                               {{"file", result.rel_src}});
+                } else {
+                    auto cur_sig = compile_options_signature(in.compile, in.extra_includes,
+                                                            in.lang.std_flag);
+                    if (cur_sig != record.compile_options_signature) {
+                        util::info(ezmk::i18n::I18nKey::cache_miss_options);
+                    } else {
+                        for (auto& dep : it->second.dependencies) {
+                            fs::path dp(dep.path);
+                            if (dp.is_relative()) dp = in.proj_root / dp;
+                            std::string hdr_hash = crypto::sha256_file(dp);
+                            if (hdr_hash != dep.hash) {
+                                util::info(ezmk::i18n::I18nKey::cache_miss_header,
+                                           {{"header", dep.path}});
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Cache miss: compile to temp file
+    if (in.verbose) {
+        util::info(ezmk::i18n::I18nKey::compiling,
+                   {{"file", result.rel_src}});
+    }
+
+    // Build compile command
+    std::ostringstream cmd;
+
+    if (is_msvc) {
+        cmd << "cl.exe /c ";
+        auto translated = toolchain::translate_compile_flags(
+            std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
+        if (!translated.translated.empty()) {
+            cmd << translated.translated[0] << " ";
+        }
+        auto flag_trans = toolchain::translate_compile_flags(
+            in.compile.flags, toolchain::CompilerFamily::Msvc);
+        for (auto& f : flag_trans.translated) cmd << f << " ";
+        for (auto& f : flag_trans.unrecognized) {
+            if (in.verbose) {
+                util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
+            }
+        }
+        for (auto& f : in.compile.msvc_flags) cmd << f << " ";
+        cmd << "/utf-8 /MD ";
+        auto def_inc = in.proj_root / "include";
+        if (util::file_exists(def_inc)) cmd << "/I\"" << def_inc.string() << "\" ";
+        for (auto& d : in.compile.include_dirs) {
+            fs::path resolved = d;
+            if (resolved.is_relative()) resolved = in.proj_root / resolved;
+            cmd << "/I\"" << resolved.string() << "\" ";
+        }
+        for (auto& inc : in.extra_includes) cmd << "/I\"" << inc.string() << "\" ";
+        cmd << "/Fo\"" << obj_tmp.string() << "\" ";
+        cmd << "/showIncludes ";
+        cmd << "\"" << src.string() << "\"";
+    } else {
+        std::string compiler = in.lang.detected_compiler.empty()
+            ? in.lang.compiler : in.lang.detected_compiler;
+        cmd << compiler << " " << in.lang.std_flag << " -c ";
+        for (auto& f : in.compile.flags) cmd << f << " ";
+        if (in.use_pic) cmd << "-fPIC ";
+        auto def_inc = in.proj_root / "include";
+        if (util::file_exists(def_inc)) cmd << "-I\"" << def_inc.string() << "\" ";
+        for (auto& d : in.compile.include_dirs) {
+            fs::path resolved = d;
+            if (resolved.is_relative()) resolved = in.proj_root / resolved;
+            cmd << "-I\"" << resolved.string() << "\" ";
+        }
+        for (auto& inc : in.extra_includes) cmd << "-I\"" << inc.string() << "\" ";
+        fs::path dep = in.dep_dir / rel;
+        dep.replace_extension(".d");
+        cmd << "-MMD -MF \"" << dep.string() << "\" ";
+        cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
+    }
+
+    if (in.verbose) {
+        util::info(util::color_msg(util::color::dim, "    cmd: " + cmd.str()));
+    }
+
+    auto res = util::run_command(cmd.str());
+    if (res.exit_code != 0) {
+        std::ostringstream err;
+        err << ezmk::i18n::fmt(ezmk::i18n::I18nKey::compilation_failed,
+                                {{"file", src.string()},
+                                 {"code", std::to_string(res.exit_code)}}) << "\n";
+        if (!res.err.empty()) err << res.err << "\n";
+        if (!res.out.empty()) err << res.out << "\n";
+        err << "  cmd: " << cmd.str();
+        result.error_msg = err.str();
+        std::error_code ec;
+        fs::remove(obj_tmp, ec);
+        return result;
+    }
+
+    // Atomically rename temp to final
+    {
+        std::error_code ec;
+        fs::rename(obj_tmp, obj, ec);
+        if (ec) {
+            fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
+            fs::remove(obj_tmp, ec);
+        }
+    }
+    result.object = obj;
+
+    // Copy compiled object to cache (atomic)
+    {
+        std::error_code ec;
+        fs::path cache_tmp = cache_obj;
+        cache_tmp += ".tmp";
+        fs::copy_file(obj, cache_tmp, fs::copy_options::overwrite_existing, ec);
+        if (!ec) {
+            fs::rename(cache_tmp, cache_obj, ec);
+            if (ec) {
+                fs::copy_file(obj, cache_obj, fs::copy_options::overwrite_existing, ec);
+            }
+        }
+    }
+
+    // Build record entry
+    auto& entry = result.record_entry;
+    entry.source_hash = crypto::sha256_file(src);
+    entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
+    entry.compiler = is_msvc ? "cl.exe" : in.lang.compiler;
+    if (is_msvc) {
+        auto flag_trans = toolchain::translate_compile_flags(
+            in.compile.flags, toolchain::CompilerFamily::Msvc);
+        entry.compile_opts = flag_trans.translated;
+        for (auto& f : in.compile.msvc_flags) entry.compile_opts.push_back(f);
+    } else {
+        entry.compile_opts = in.compile.flags;
+    }
+
+    // Parse dependencies
+    if (is_msvc) {
+        auto includes = toolchain::parse_show_includes(res.err);
+        for (auto& inc_path : includes) {
+            DepEntry dep;
+            dep.path = inc_path.string();
+            if (util::file_exists(inc_path)) {
+                dep.hash = crypto::sha256_file(inc_path);
+            }
+            result.new_deps.push_back(std::move(dep));
+        }
+    } else {
+        fs::path dep = in.dep_dir / rel;
+        dep.replace_extension(".d");
+        result.new_deps = parse_depfile_and_hash(dep);
+    }
+
+    // Normalize dep paths
+    for (auto& d : result.new_deps) {
+        fs::path dp(d.path);
+        if (dp.is_absolute()) {
+            auto r = fs::relative(dp, in.proj_root);
+            if (!r.empty() && r.string().find("..") == std::string::npos) {
+                d.path = r.generic_string();
+            }
+        }
+    }
+
+    entry.dependencies = result.new_deps;
+    entry.last_build_time = iso_time();
+    result.success = true;
+    return result;
+}
+
+// ===================================================================
 // Unified compile loop (0.1.5 DRY refactoring)
 // ===================================================================
 

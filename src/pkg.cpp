@@ -2,6 +2,7 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
+#include "ezmk/i18n.hpp"
 #include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
 
@@ -615,11 +616,11 @@ std::vector<fs::path> search(const std::string& pkg_name,
 // ===================================================================
 
 namespace {
-    const char* scope_name(cli::Scope s) {
+    std::string scope_name(cli::Scope s) {
         switch (s) {
-        case cli::Scope::Project: return "project";
-        case cli::Scope::User:    return "user";
-        case cli::Scope::Global:  return "global";
+        case cli::Scope::Project: return ezmk::i18n::get(ezmk::i18n::I18nKey::scope_project);
+        case cli::Scope::User:    return ezmk::i18n::get(ezmk::i18n::I18nKey::scope_user);
+        case cli::Scope::Global:  return ezmk::i18n::get(ezmk::i18n::I18nKey::scope_global);
         }
         return "unknown";
     }
@@ -649,52 +650,68 @@ namespace {
 }
 
 void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
+    auto none_str = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_none);
     for (auto scope : scopes) {
         fs::path dir = pkg_install_dir(scope);
         fs::path pkg_path = dir / pkg_name;
         if (util::file_exists(pkg_path)) {
             auto cfg = config::parse_config(pkg_path / "ezmk.toml");
-            std::cout << "Package: " << cfg.project.name << "\n";
-            std::cout << "  Version: " << cfg.project.version << "\n";
-            std::cout << "  Type: " << cfg.project.type << "\n";
-            std::cout << "  Language: " << cfg.project.language << "\n";
-            std::cout << "  Scope: " << scope_name(scope) << "\n";
-            std::cout << "  Location: " << pkg_path.string() << "\n";
-            std::cout << "  Installed: " << format_time(pkg_path) << "\n";
-            std::cout << "  Compile flags:";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_name)
+                      << ": " << cfg.project.name << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_version)
+                      << ": " << cfg.project.version << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_type)
+                      << ": " << cfg.project.type << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_language)
+                      << ": " << cfg.project.language << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_scope)
+                      << ": " << scope_name(scope) << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_location)
+                      << ": " << pkg_path.string() << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_installed)
+                      << ": " << format_time(pkg_path) << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_compile_flags)
+                      << ":";
             for (auto& f : cfg.compile.flags) std::cout << " " << f;
-            if (cfg.compile.flags.empty()) std::cout << " (none)";
+            if (cfg.compile.flags.empty()) std::cout << none_str;
             std::cout << "\n";
-            std::cout << "  Include dirs:";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_include_dirs)
+                      << ":";
             for (auto& d : cfg.compile.include_dirs) std::cout << " " << d;
-            if (cfg.compile.include_dirs.empty()) std::cout << " (none)";
+            if (cfg.compile.include_dirs.empty()) std::cout << none_str;
             std::cout << "\n";
-            std::cout << "  Hard dependencies:";
-            if (cfg.depends.libs.empty()) std::cout << " (none)";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_hard_deps)
+                      << ":";
+            if (cfg.depends.libs.empty()) std::cout << none_str;
             for (auto& d : cfg.depends.libs) std::cout << " " << d;
             std::cout << "\n";
-            std::cout << "  Optional dependencies:";
-            if (cfg.depends.want.empty()) std::cout << " (none)";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_optional_deps)
+                      << ":";
+            if (cfg.depends.want.empty()) std::cout << none_str;
             for (auto& d : cfg.depends.want) std::cout << " " << d;
             std::cout << "\n";
-            std::cout << "  Link flags:";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_flags)
+                      << ":";
             for (auto& f : cfg.link.flags) std::cout << " " << f;
-            if (cfg.link.flags.empty()) std::cout << " (none)";
+            if (cfg.link.flags.empty()) std::cout << none_str;
             std::cout << "\n";
-            std::cout << "  Link dirs:";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_dirs)
+                      << ":";
             for (auto& d : cfg.link.link_dirs) std::cout << " " << d;
-            if (cfg.link.link_dirs.empty()) std::cout << " (none)";
+            if (cfg.link.link_dirs.empty()) std::cout << none_str;
             std::cout << "\n";
-            std::cout << "  System targets:";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_system_targets)
+                      << ":";
             for (auto& t : cfg.link.system_targets) std::cout << " " << t;
-            if (cfg.link.system_targets.empty()) std::cout << " (none)";
+            if (cfg.link.system_targets.empty()) std::cout << none_str;
             std::cout << "\n";
 
             // Show tools for utils packages
             if (cfg.project.type == "utils") {
-                std::cout << "  Tools:";
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_tools)
+                          << ":";
                 if (cfg.utils.tools.empty()) {
-                    std::cout << " (none)";
+                    std::cout << none_str;
                 } else {
                     for (size_t i = 0; i < cfg.utils.tools.size(); ++i) {
                         if (i > 0) std::cout << ",";
@@ -707,7 +724,8 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
             // Show built artifacts
             fs::path build_dir = pkg_path / "build";
             if (util::file_exists(build_dir)) {
-                std::cout << "  Artifacts:";
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_artifacts)
+                          << ":";
                 bool found = false;
                 for (auto& f : fs::directory_iterator(build_dir)) {
                     auto ext = f.path().extension().string();
@@ -716,13 +734,136 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                         found = true;
                     }
                 }
-                if (!found) std::cout << " (none)";
+                if (!found) std::cout << none_str;
                 std::cout << "\n";
             }
             return;
         }
     }
     util::error(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
+}
+
+// 0.2.3+
+void list(const std::vector<cli::Scope>& scopes) {
+    for (auto scope : scopes) {
+        std::string scope_label = (scope == cli::Scope::Project) ? "project" :
+                                  (scope == cli::Scope::User) ? "user" : "global";
+        util::info(ezmk::i18n::I18nKey::pkg_list_title, {{"scope", scope_label}});
+
+        fs::path dir = pkg_install_dir(scope);
+        if (!util::file_exists(dir)) {
+            util::info(ezmk::i18n::I18nKey::pkg_list_none);
+            continue;
+        }
+
+        std::vector<std::string> names;
+        for (auto& entry : fs::directory_iterator(dir)) {
+            if (entry.is_directory()) {
+                names.push_back(entry.path().filename().string());
+            }
+        }
+        std::sort(names.begin(), names.end());
+
+        if (names.empty()) {
+            util::info(ezmk::i18n::I18nKey::pkg_list_none);
+            continue;
+        }
+
+        for (auto& name : names) {
+            fs::path pkg_path = dir / name;
+            auto toml = pkg_path / "ezmk.toml";
+            if (util::file_exists(toml)) {
+                try {
+                    auto cfg = config::parse_config(toml);
+                    std::string line = ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_list_item,
+                        {{"name", cfg.project.name},
+                         {"version", cfg.project.version},
+                         {"type", cfg.project.type}});
+                    if (cfg.project.type == "utils" && !cfg.utils.tools.empty()) {
+                        line += " (tools:";
+                        for (size_t i = 0; i < cfg.utils.tools.size(); ++i) {
+                            if (i > 0) line += ",";
+                            line += " " + cfg.utils.tools[i];
+                        }
+                        line += ")";
+                    } else if (!cfg.depends.libs.empty()) {
+                        line += " (depends:";
+                        for (size_t i = 0; i < cfg.depends.libs.size(); ++i) {
+                            if (i > 0) line += ",";
+                            line += " " + cfg.depends.libs[i];
+                        }
+                        line += ")";
+                    }
+                    util::info(line);
+                } catch (...) {
+                    util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_list_parse_error,
+                                                {{"name", name}}));
+                }
+            } else {
+                util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_list_no_toml,
+                                            {{"name", name}}));
+            }
+        }
+    }
+}
+
+// 0.2.3+
+void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
+    // Find installed package in specified scopes (first match wins)
+    cli::Scope found_scope = cli::Scope::Project;
+    fs::path found_pkg_path;
+    std::string installed_version;
+    bool found = false;
+
+    for (auto scope : scopes) {
+        fs::path dir = pkg_install_dir(scope);
+        fs::path pkg_path = dir / pkg_name;
+        if (!util::file_exists(pkg_path)) continue;
+
+        auto cfg = config::parse_config(pkg_path / "ezmk.toml");
+        found_scope = scope;
+        found_pkg_path = pkg_path;
+        installed_version = cfg.project.version;
+        found = true;
+        break;
+    }
+
+    if (!found) {
+        util::error(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
+        return;
+    }
+
+    // Search registered repos for the package (all scopes)
+    auto search_result = repo::search_package(pkg_name, {
+        cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+
+    if (search_result.archive_path.empty() ||
+        !util::file_exists(search_result.archive_path)) {
+        util::info(ezmk::i18n::I18nKey::pkg_update_no_updates, {{"pkg", pkg_name}});
+        return;
+    }
+
+    std::string repo_version = search_result.version;
+
+    // Version comparison — simple string compare
+    if (repo_version == installed_version) {
+        util::info(ezmk::i18n::I18nKey::pkg_update_up_to_date,
+                   {{"pkg", pkg_name}, {"version", installed_version}});
+        return;
+    }
+
+    util::info(ezmk::i18n::I18nKey::pkg_update_updating,
+               {{"pkg", pkg_name}, {"old", installed_version}, {"new", repo_version}});
+
+    // Use the install flow to handle download, verify, compile, and replace
+    std::string sha256_hint;
+    if (!search_result.sha256.empty()) {
+        sha256_hint = search_result.sha256;
+    }
+
+    // Call install with the archive path found in the repo
+    // Since install() accepts local paths, we pass the archive_path directly
+    install(search_result.archive_path.string(), found_scope, sha256_hint, false);
 }
 
 } // namespace ezmk::pkg

@@ -24,6 +24,13 @@ enum class I18nKey {
     no_source_files,
     src_dir_missing,
     cache_summary,
+    parallel_jobs_info,       // 0.2.3+
+    profile_not_found,        // 0.2.3+
+    pre_build_hook,           // 0.2.3+
+    post_build_hook,          // 0.2.3+
+    on_failure_hook,          // 0.2.3+
+    hook_not_found,           // 0.2.3+
+    hook_nonzero,             // 0.2.3+
 
     // cache (verbose)
     cache_hit,
@@ -70,6 +77,56 @@ enum class I18nKey {
     sha256_ok,
     skipping,
     verifying,
+    pkg_list_title,           // 0.2.3+
+    pkg_list_none,            // 0.2.3+
+    pkg_list_item,            // 0.2.3+
+    pkg_list_parse_error,     // 0.2.3+
+    pkg_list_no_toml,         // 0.2.3+
+    pkg_update_up_to_date,    // 0.2.3+
+    pkg_update_no_updates,    // 0.2.3+
+    pkg_update_updating,      // 0.2.3+
+    pkg_info_name,            // 0.2.3+
+    pkg_info_version,         // 0.2.3+
+    pkg_info_type,            // 0.2.3+
+    pkg_info_language,        // 0.2.3+
+    pkg_info_scope,           // 0.2.3+
+    pkg_info_location,        // 0.2.3+
+    pkg_info_installed,       // 0.2.3+
+    pkg_info_compile_flags,   // 0.2.3+
+    pkg_info_include_dirs,    // 0.2.3+
+    pkg_info_hard_deps,       // 0.2.3+
+    pkg_info_optional_deps,   // 0.2.3+
+    pkg_info_link_flags,      // 0.2.3+
+    pkg_info_link_dirs,       // 0.2.3+
+    pkg_info_system_targets,  // 0.2.3+
+    pkg_info_tools,           // 0.2.3+
+    pkg_info_artifacts,       // 0.2.3+
+    pkg_info_none,            // 0.2.3+
+
+    // config errors (0.2.3+)
+    config_err_invalid_type,
+    config_err_missing_ver,   // 0.2.3+
+    config_err_invalid_lang,  // 0.2.3+
+    config_err_invalid_macro, // 0.2.3+
+    config_err_empty_src_dirs,// 0.2.3+
+    config_err_ezmk_macros_type, // 0.2.3+
+    config_err_macros_val_type,  // 0.2.3+
+    config_err_empty_profile,    // 0.2.3+
+    config_err_invalid_profile,  // 0.2.3+
+
+    // cli usage (0.2.3+)
+    cli_usage_header,
+    cli_usage_project,        // 0.2.3+
+    cli_usage_pkg,            // 0.2.3+
+    cli_usage_repo,           // 0.2.3+
+    cli_usage_utils,          // 0.2.3+
+    cli_usage_scopes,         // 0.2.3+
+    cli_usage_build_flags,    // 0.2.3+
+    cli_usage_install_flags,  // 0.2.3+
+    cli_usage_usage,           // 0.2.3+
+    scope_project,             // 0.2.3+
+    scope_user,                // 0.2.3+
+    scope_global,              // 0.2.3+
 
     // repo
     cloning,
@@ -111,6 +168,13 @@ enum class I18nKey {
     lua_error,
     lua_api_type_error,
     lua_api_arg_count,
+
+    // watch (0.2.3+)
+    watch_started,
+    watch_skip_initial,
+    watch_config_changed,
+    watch_detected_change,
+    watch_stopping,
 
     // general
     fatal_prefix,
