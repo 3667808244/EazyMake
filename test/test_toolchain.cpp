@@ -95,11 +95,10 @@ TEST_CASE("translate_compile_flags: MSVC-style flags pass through", "[toolchain]
 TEST_CASE("translate_compile_flags: unrecognized GCC-only flags", "[toolchain][translate]") {
     std::vector<std::string> flags = {"-Wno-unused", "-fno-strict-aliasing", "--some-unknown-flag"};
     auto result = tc::translate_compile_flags(flags, tc::CompilerFamily::Msvc);
-    // These cannot be translated and should appear in unrecognized
-    REQUIRE(result.unrecognized.size() == 3);
+    // -fno-strict-aliasing is now recognised (silently skipped, 0.2.4+), so only 2 unrecognized
+    REQUIRE(result.unrecognized.size() == 2);
     CHECK(result.unrecognized[0] == "-Wno-unused");
-    CHECK(result.unrecognized[1] == "-fno-strict-aliasing");
-    CHECK(result.unrecognized[2] == "--some-unknown-flag");
+    CHECK(result.unrecognized[1] == "--some-unknown-flag");
 }
 
 TEST_CASE("translate_compile_flags: mixed GCC + MSVC flags", "[toolchain][translate]") {

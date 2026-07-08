@@ -618,26 +618,32 @@ ProcResult run_command(const std::string& cmd) {
     CloseHandle(hReadOut);
     CloseHandle(hReadErr);
 #else
-    // Use temporary files to capture stdout and stderr separately
-    char out_tmp[] = "/tmp/ezmk_stdout_XXXXXX";
-    char err_tmp[] = "/tmp/ezmk_stderr_XXXXXX";
-    int out_fd = mkstemp(out_tmp);
-    int err_fd = mkstemp(err_tmp);
+    // Use temporary files to capture stdout and stderr separately.
+    // Respect $TMPDIR; fall back to /tmp (POSIX).
+    const char* tmpdir = std::getenv("TMPDIR");
+    std::string tmp_prefix = tmpdir ? std::string(tmpdir) : "/tmp";
+    if (!tmp_prefix.empty() && tmp_prefix.back() != '/') tmp_prefix += '/';
+
+    std::string out_tmpl = tmp_prefix + "ezmk_stdout_XXXXXX";
+    std::string err_tmpl = tmp_prefix + "ezmk_stderr_XXXXXX";
+    // mkstemp modifies the buffer in-place; use &out_tmpl[0] (C++11 guarantees
+    // contiguous storage for std::string).
+    int out_fd = mkstemp(&out_tmpl[0]);
+    int err_fd = mkstemp(&err_tmpl[0]);
     if (out_fd < 0 || err_fd < 0) {
-        if (out_fd >= 0) close(out_fd);
-        if (err_fd >= 0) close(err_fd);
+        if (out_fd >= 0) { close(out_fd); unlink(out_tmpl.c_str()); }
+        if (err_fd >= 0) { close(err_fd); unlink(err_tmpl.c_str()); }
         return result;
     }
 
-    std::string cmd2 = cmd + " 1>/tmp/ezmk_stdout_" + std::string(out_tmp + 16) +
-                       " 2>/tmp/ezmk_stderr_" + std::string(err_tmp + 16);
+    std::string cmd2 = cmd + " 1>" + out_tmpl + " 2>" + err_tmpl;
     int rc = std::system(cmd2.c_str());
     if (WIFEXITED(rc)) result.exit_code = WEXITSTATUS(rc);
     else result.exit_code = rc;
 
     // Read stdout
     {
-        std::ifstream fout(out_tmp);
+        std::ifstream fout(out_tmpl);
         if (fout) {
             std::ostringstream ss;
             ss << fout.rdbuf();
@@ -646,7 +652,7 @@ ProcResult run_command(const std::string& cmd) {
     }
     // Read stderr
     {
-        std::ifstream ferr(err_tmp);
+        std::ifstream ferr(err_tmpl);
         if (ferr) {
             std::ostringstream ss;
             ss << ferr.rdbuf();
@@ -656,8 +662,8 @@ ProcResult run_command(const std::string& cmd) {
 
     close(out_fd);
     close(err_fd);
-    unlink(out_tmp);
-    unlink(err_tmp);
+    unlink(out_tmpl.c_str());
+    unlink(err_tmpl.c_str());
 #endif
     return result;
 }

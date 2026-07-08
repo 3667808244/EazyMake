@@ -50,6 +50,7 @@ struct InstallOptions {
 struct QueryOptions {
     std::vector<Scope> scopes;
     std::string pkg_name;
+    bool update_all = false;       // 0.2.4+: --all flag for pkg update
 };
 
 struct RepoOptions {

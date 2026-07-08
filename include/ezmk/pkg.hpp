@@ -39,6 +39,9 @@ void list(const std::vector<cli::Scope>& scopes);
 // 0.2.3+: Update an installed package to the latest version from registered repos.
 void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
 
+// 0.2.4+: Update all installed packages across the given scopes.
+void update_all(const std::vector<cli::Scope>& scopes);
+
 // ---- Dependency resolution ----
 // Topologically sort a list of package directories by their [depends].lib order.
 // Throws if a cycle is detected or a dependency is missing.

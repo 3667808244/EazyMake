@@ -10,12 +10,12 @@
 |---|---|---|---|
 | GCC (g++/gcc) 或 Clang (clang++/clang) | ≥ 8.0 | **编译 & 运行时** | 需支持 C++17 |
 | Lua | 5.4.7 | **嵌入式** | 静态链接进 `ezmk` |
-| nlohmann/json | header-only | **嵌入式** | JSON 支持 |
-| toml++ | header-only | **嵌入式** | TOML 解析 |
+| nlohmann/json | header-only | **嵌入式** | JSON 支持（`include/vendor/nlohmann_json.hpp`） |
+| toml++ | header-only | **嵌入式** | TOML 解析（`include/vendor/toml.hpp`） |
 | Catch2 | v3 (header-only) | **仅测试** | 单元测试框架 |
-| miniz | v3.0.2 | **嵌入式** | ZIP 解压 |
-| Python | ≥ 3.6 | **仅构建** | 嵌入 locale 数据 |
-| MSYS2 (Windows) | — | **构建 & 运行时** | 提供 g++ 和 bash 环境 |
+| miniz | v3.0.2 | **嵌入式** | ZIP 解压（`src/vendor/miniz/*`） |
+| Python | ≥ 3.6 | **仅构建** | Locale 数据嵌入（`scripts/embed_locale.py`） |
+| MSYS2 (Windows) | — | **编译 & 运行时** | 提供 g++ 和 bash 环境 |
 
 ## 快速开始
 
@@ -81,28 +81,31 @@ ezmk utils cc -o build/compile_commands.json
 
 | 命令 | 说明 |
 |---|---|
-| `ezmk project new <name> [--type executable\|static\|shared\|utils]` | 脚手架生成新项目 |
-| `ezmk project build [--disable-cache] [--verbose]` | 增量构建 |
-| `ezmk project run [--disable-cache] [--verbose]` | 构建并运行 |
-| `ezmk project clean` | 清除缓存和临时文件 |
+| `ezmk project new <name> [--type <type>] [--disable-git-init] [--disable-gitignore]` | 脚手架生成新项目 |
+| `ezmk project build [--disable-cache] [--verbose] [-j <N>] [--profile <name>]` | 增量构建 |
+| `ezmk project run [--disable-cache] [--verbose] [-j <N>] [--profile <name>]` | 构建并运行 |
+| `ezmk project clean` | 清除 `.ezmk/cache/` 和临时文件 |
+| `ezmk project watch [--profile <name>] [--no-build-on-start] [-j <N>]` | 监视文件并自动重新构建（0.2.3+） |
 
 ### `pkg` — 管理包
 
 | 命令 | 说明 |
 |---|---|
-| `ezmk pkg install [-p\|-u\|-g] <文件或URL或名称>` | 安装包 |
-| `ezmk pkg remove [-p\|-u\|-g] <名称>` | 移除包 |
-| `ezmk pkg search [-p\|-u\|-g] <名称>` | 搜索包 |
-| `ezmk pkg info [-p\|-u\|-g] <名称>` | 查看包详情 |
+| `ezmk pkg install [-p\|-u\|-g] [--sha256 <hash>] [-y] <包文件或URL>` | 安装包（默认：`-p`） |
+| `ezmk pkg remove [-p\|-u\|-g] <包名>` | 移除包（默认：`-pug`） |
+| `ezmk pkg search [-p\|-u\|-g] <包名>` | 搜索包（默认：`-pug`） |
+| `ezmk pkg info [-p\|-u\|-g] <包名>` | 查看包详情（默认：`-pug`） |
+| `ezmk pkg list [-p\|-u\|-g]` | 列出已安装的包（0.2.3+） |
+| `ezmk pkg update [-p\|-u\|-g] <包名>` | 从仓库更新已安装的包（0.2.3+） |
 
 ### `repo` — 管理仓库
 
 | 命令 | 说明 |
 |---|---|
-| `ezmk repo add [-p\|-u\|-g] <git地址或路径> [--name <名称>] [--branch <分支>]` | 注册并 clone |
-| `ezmk repo remove [-p\|-u\|-g] <名称>` | 注销并删除缓存 |
-| `ezmk repo update [-p\|-u\|-g] [<名称>]` | `git pull` 刷新 |
-| `ezmk repo list [-p\|-u\|-g]` | 列出已注册仓库 |
+| `ezmk repo add [-p\|-u\|-g] <git地址或路径> [--name <名称>] [--branch <分支>]` | 注册基于 git 的仓库（clone 到本地缓存） |
+| `ezmk repo remove [-p\|-u\|-g] <名称>` | 注销仓库并删除缓存 |
+| `ezmk repo update [-p\|-u\|-g] [<名称>]` | `git pull` 刷新仓库缓存（或重新读取本地目录） |
+| `ezmk repo list [-p\|-u\|-g]` | 列出已注册仓库（含 URL、分支、最后更新时间） |
 
 ### `utils` — Lua 工具（0.2.0+）
 

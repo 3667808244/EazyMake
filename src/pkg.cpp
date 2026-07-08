@@ -845,8 +845,8 @@ void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
 
     std::string repo_version = search_result.version;
 
-    // Version comparison — simple string compare
-    if (repo_version == installed_version) {
+    // Version comparison — semantic numeric comparison
+    if (util::compare_version(repo_version, installed_version) == 0) {
         util::info(ezmk::i18n::I18nKey::pkg_update_up_to_date,
                    {{"pkg", pkg_name}, {"version", installed_version}});
         return;
@@ -864,6 +864,79 @@ void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
     // Call install with the archive path found in the repo
     // Since install() accepts local paths, we pass the archive_path directly
     install(search_result.archive_path.string(), found_scope, sha256_hint, false);
+}
+
+// 0.2.4+
+void update_all(const std::vector<cli::Scope>& scopes) {
+    // Note: users should run 'ezmk repo update' first to refresh repo indices.
+    int updated = 0;
+    int up_to_date = 0;
+    int failed = 0;
+
+    for (auto scope : scopes) {
+        fs::path dir = pkg_install_dir(scope);
+        if (!util::file_exists(dir)) continue;
+
+        for (auto& entry : fs::directory_iterator(dir)) {
+            if (!entry.is_directory()) continue;
+            std::string pkg_name = entry.path().filename().string();
+
+            // Read installed version
+            auto toml = entry.path() / "ezmk.toml";
+            if (!util::file_exists(toml)) continue;
+
+            std::string installed_version;
+            try {
+                auto cfg = config::parse_config(toml);
+                installed_version = cfg.project.version;
+            } catch (...) {
+                util::warn(std::string("failed to parse config for package: ") + pkg_name + " — skipping");
+                ++failed;
+                continue;
+            }
+
+            // Search repos for latest version
+            auto result = repo::search_package(pkg_name, {
+                cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+
+            if (result.archive_path.empty() ||
+                !util::file_exists(result.archive_path)) {
+                ++up_to_date;
+                continue;
+            }
+
+            // Compare versions
+            if (util::compare_version(result.version, installed_version) <= 0) {
+                ++up_to_date;
+                continue;
+            }
+
+            // Update available — install latest
+            util::info(ezmk::i18n::I18nKey::pkg_update_updating,
+                       {{"pkg", pkg_name},
+                        {"old", installed_version},
+                        {"new", result.version}});
+
+            std::string sha256_hint;
+            if (!result.sha256.empty()) sha256_hint = result.sha256;
+
+            try {
+                install(result.archive_path.string(), scope, sha256_hint, false);
+                ++updated;
+            } catch (...) {
+                util::warn(std::string("failed to update package: ") + pkg_name);
+                ++failed;
+            }
+        }
+    }
+
+    // Summary
+    if (updated > 0 || up_to_date > 0 || failed > 0) {
+        std::string summary = std::to_string(updated) + " updated";
+        if (up_to_date > 0) summary += ", " + std::to_string(up_to_date) + " already up-to-date";
+        if (failed > 0) summary += ", " + std::to_string(failed) + " failed";
+        util::info(summary);
+    }
 }
 
 } // namespace ezmk::pkg

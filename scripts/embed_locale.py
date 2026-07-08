@@ -71,7 +71,9 @@ def main():
     print()
     print("namespace ezmk::i18n {")
     print()
-    print("// extern ensures external linkage (overrides the weak definition in i18n.cpp)")
+    print("// 0.2.4+: Flag signalling embedded data is available (see i18n.cpp).")
+    print("extern const bool g_has_embedded_locales = true;")
+    print()
     print("extern const std::map<std::string, std::string> embedded_locales = {")
 
     for lang, escaped in entries.items():

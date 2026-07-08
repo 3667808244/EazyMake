@@ -153,44 +153,48 @@ namespace ezmk::cli
             return args;
         }
 
+        // 0.2.4+: Shared build-option parsing used by build/run/watch.
+        // Returns false if an unknown flag is encountered; caller should
+        // report a command-specific error with the flag value.
+        auto parse_build_flag = [&](const char* flag, int& i) -> bool {
+            if (std::strcmp(flag, "--disable-cache") == 0) {
+                args.build_opts.disable_cache = true;
+                return true;
+            }
+            if (std::strcmp(flag, "--verbose") == 0 ||
+                std::strcmp(flag, "-v") == 0) {
+                args.build_opts.verbose = true;
+                return true;
+            }
+            if (std::strcmp(flag, "-j") == 0 ||
+                std::strcmp(flag, "--jobs") == 0) {
+                if (i + 1 >= argc)
+                    util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
+                std::string val = argv[++i];
+                try {
+                    args.build_opts.jobs = std::stoi(val);
+                    if (args.build_opts.jobs < 0)
+                        util::fatal("'-j' value must be >= 0");
+                } catch (...) {
+                    util::fatal(std::string("invalid -j value: ") + val);
+                }
+                return true;
+            }
+            if (std::strcmp(flag, "--profile") == 0) {
+                if (i + 1 >= argc)
+                    util::fatal("'--profile' requires a name (e.g. --profile debug)");
+                args.build_opts.profile = argv[++i];
+                return true;
+            }
+            return false;
+        };
+
         if (action == "build")
         {
             args.cmd = Command::ProjectBuild;
-            for (int i = 3; i < argc; ++i)
-            {
-                if (std::strcmp(argv[i], "--disable-cache") == 0)
-                {
-                    args.build_opts.disable_cache = true;
-                }
-                else if (std::strcmp(argv[i], "--verbose") == 0 ||
-                         std::strcmp(argv[i], "-v") == 0)
-                {
-                    args.build_opts.verbose = true;
-                }
-                else if (std::strcmp(argv[i], "-j") == 0 ||
-                         std::strcmp(argv[i], "--jobs") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
-                    std::string val = argv[++i];
-                    try {
-                        args.build_opts.jobs = std::stoi(val);
-                        if (args.build_opts.jobs < 0)
-                            util::fatal("'-j' value must be >= 0");
-                    } catch (...) {
-                        util::fatal(std::string("invalid -j value: ") + val);
-                    }
-                }
-                else if (std::strcmp(argv[i], "--profile") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'--profile' requires a name (e.g. --profile debug)");
-                    args.build_opts.profile = argv[++i];
-                }
-                else
-                {
+            for (int i = 3; i < argc; ++i) {
+                if (!parse_build_flag(argv[i], i))
                     util::fatal(std::string("unknown flag for build: ") + argv[i]);
-                }
             }
             return args;
         }
@@ -198,41 +202,9 @@ namespace ezmk::cli
         if (action == "run")
         {
             args.cmd = Command::ProjectRun;
-            for (int i = 3; i < argc; ++i)
-            {
-                if (std::strcmp(argv[i], "--disable-cache") == 0)
-                {
-                    args.build_opts.disable_cache = true;
-                }
-                else if (std::strcmp(argv[i], "--verbose") == 0 ||
-                         std::strcmp(argv[i], "-v") == 0)
-                {
-                    args.build_opts.verbose = true;
-                }
-                else if (std::strcmp(argv[i], "-j") == 0 ||
-                         std::strcmp(argv[i], "--jobs") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
-                    std::string val = argv[++i];
-                    try {
-                        args.build_opts.jobs = std::stoi(val);
-                        if (args.build_opts.jobs < 0)
-                            util::fatal("'-j' value must be >= 0");
-                    } catch (...) {
-                        util::fatal(std::string("invalid -j value: ") + val);
-                    }
-                }
-                else if (std::strcmp(argv[i], "--profile") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'--profile' requires a name (e.g. --profile debug)");
-                    args.build_opts.profile = argv[++i];
-                }
-                else
-                {
+            for (int i = 3; i < argc; ++i) {
+                if (!parse_build_flag(argv[i], i))
                     util::fatal(std::string("unknown flag for run: ") + argv[i]);
-                }
             }
             return args;
         }
@@ -246,43 +218,10 @@ namespace ezmk::cli
         if (action == "watch")
         {
             args.cmd = Command::ProjectWatch;
-            for (int i = 3; i < argc; ++i)
-            {
-                if (std::strcmp(argv[i], "--disable-cache") == 0)
-                {
-                    args.build_opts.disable_cache = true;
-                }
-                else if (std::strcmp(argv[i], "--verbose") == 0 ||
-                         std::strcmp(argv[i], "-v") == 0)
-                {
-                    args.build_opts.verbose = true;
-                }
-                else if (std::strcmp(argv[i], "-j") == 0 ||
-                         std::strcmp(argv[i], "--jobs") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
-                    std::string val = argv[++i];
-                    try {
-                        args.build_opts.jobs = std::stoi(val);
-                        if (args.build_opts.jobs < 0)
-                            util::fatal("'-j' value must be >= 0");
-                    } catch (...) {
-                        util::fatal(std::string("invalid -j value: ") + val);
-                    }
-                }
-                else if (std::strcmp(argv[i], "--profile") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'--profile' requires a name (e.g. --profile debug)");
-                    args.build_opts.profile = argv[++i];
-                }
-                else if (std::strcmp(argv[i], "--no-build-on-start") == 0)
-                {
+            for (int i = 3; i < argc; ++i) {
+                if (std::strcmp(argv[i], "--no-build-on-start") == 0) {
                     args.watch_no_build_on_start = true;
-                }
-                else
-                {
+                } else if (!parse_build_flag(argv[i], i)) {
                     util::fatal(std::string("unknown flag for watch: ") + argv[i]);
                 }
             }
@@ -400,9 +339,25 @@ namespace ezmk::cli
             parse_scope_and_value(argc, argv, opts.scopes, pkg_name, false,
                                   "ezmk pkg update");
 
-            if (pkg_name.empty())
-            {
-                util::fatal("'ezmk pkg update' requires a package name");
+            // 0.2.4+: Check for --all flag before requiring package name
+            for (int i = 3; i < argc; ++i) {
+                if (std::strcmp(argv[i], "--all") == 0) {
+                    opts.update_all = true;
+                    // Shift arguments to remove --all from further parsing
+                    for (int j = i; j < argc - 1; ++j) argv[j] = argv[j + 1];
+                    --argc;
+                    break;
+                }
+            }
+
+            if (opts.update_all) {
+                // --all: package name is optional
+                if (!pkg_name.empty()) {
+                    util::warn("'--all' ignores the explicit package name '" + pkg_name + "'");
+                }
+                opts.pkg_name.clear();
+            } else if (pkg_name.empty()) {
+                util::fatal("'ezmk pkg update' requires a package name or --all");
             }
             if (opts.scopes.empty())
             {
@@ -599,7 +554,7 @@ namespace ezmk::cli
                   << "  ezmk pkg search  [-p|-u|-g] <pkg>              Search for a package (default: -pug)\n"
                   << "  ezmk pkg info    [-p|-u|-g] <pkg>              Show package info (default: -pug)\n"
                   << "  ezmk pkg list    [-p|-u|-g]                    List installed packages (default: -pug)\n"
-                  << "  ezmk pkg update  [-p|-u|-g] <pkg>              Update an installed package (default: -pug)\n"
+                  << "  ezmk pkg update  [-p|-u|-g] [--all] [<pkg>]        Update installed package(s) (default: -pug)\n"
                   << "\n";
         std::cout << get(I18nKey::cli_usage_repo) << "\n"
                   << "  ezmk repo add [-p|-u|-g] <git_url_or_path> [--name <name>] [--branch <branch>]\n"

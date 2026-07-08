@@ -144,6 +144,13 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd);
 // Make a path use forward slashes (MSYS2-compatible)
 std::string native_path(const fs::path& p);
 
+// ---- Version comparison ----
+// Compare two semantic version strings (major.minor.patch).
+// Returns -1 if a < b, 0 if equal, 1 if a > b.
+// Pre-release tags (-alpha, -beta) and build metadata (+build) are ignored.
+// Missing segments are treated as 0 (e.g. "1.0" == "1.0.0").
+int compare_version(std::string_view a, std::string_view b);
+
 // ---- Shell safety ----
 // Escape a string for safe use inside double-quoted shell arguments.
 // Escapes: " \ ` $

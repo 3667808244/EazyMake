@@ -22,8 +22,25 @@ using json = nlohmann::json;
 namespace ezmk::i18n
 {
 
-    // Forward declaration — definition in this file (weak) or locale_data.cpp (strong).
+    // Forward declaration — strong definition in locale_data.cpp.
     extern const std::map<std::string, std::string> embedded_locales;
+
+    // 0.2.4+: Weak flag to detect if locale_data.cpp was linked (GCC 16+ compat).
+    // The map itself is NOT weak to avoid double-destruction of std::map with
+    // initializer_list under GCC 16+.
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((weak)) extern const bool g_has_embedded_locales;
+#else
+    extern const bool g_has_embedded_locales;
+#endif
+
+    const std::map<std::string, std::string>& get_embedded_locales() {
+        if (&g_has_embedded_locales && g_has_embedded_locales) {
+            return embedded_locales;
+        }
+        static const std::map<std::string, std::string> empty;
+        return empty;
+    }
 
     namespace
     {
@@ -335,8 +352,8 @@ namespace ezmk::i18n
         void load_en_fallback()
         {
             // Try embedded first
-            auto it = embedded_locales.find("en");
-            if (it != embedded_locales.end() && !it->second.empty())
+            auto it = get_embedded_locales().find("en");
+            if (it != get_embedded_locales().end() && !it->second.empty())
             {
                 if (parse_locale_json(it->second, "en"))
                     return;
@@ -371,17 +388,6 @@ namespace ezmk::i18n
 
     } // anonymous namespace
 
-// ---- embedded locale data ----
-// Weak definition: when locale_data.cpp is linked, its strong definition wins.
-// When it's not (development without running embed_locale.py), this empty map
-// is used as fallback.  The 'extern' keyword ensures external linkage even with
-// the initializer (required for __attribute__((weak)) to work on GCC).
-#if defined(__GNUC__) || defined(__clang__)
-    extern const std::map<std::string, std::string> embedded_locales __attribute__((weak)) = {};
-#else
-    extern const std::map<std::string, std::string> embedded_locales = {};
-#endif
-
     // ---- public API ----
 
     void init(std::string_view lang)
@@ -405,8 +411,8 @@ namespace ezmk::i18n
         }
 
         // 2. Try embedded data
-        auto it = embedded_locales.find(target_lang);
-        if (it != embedded_locales.end() && !it->second.empty())
+        auto it = get_embedded_locales().find(target_lang);
+        if (it != get_embedded_locales().end() && !it->second.empty())
         {
             if (parse_locale_json(it->second, target_lang))
                 return;
@@ -476,7 +482,7 @@ namespace ezmk::i18n
             if (dot != std::string::npos)
                 lang = lang.substr(0, dot);
             // Only return if we actually have data for this language
-            if (embedded_locales.count(lang) || !load_runtime_locale_file(lang).empty())
+            if (get_embedded_locales().count(lang) || !load_runtime_locale_file(lang).empty())
             {
                 return lang;
             }
@@ -494,7 +500,7 @@ namespace ezmk::i18n
             auto dash = lang.find('-');
             if (dash != std::string::npos)
                 lang = lang.substr(0, dash);
-            if (embedded_locales.count(lang) || !load_runtime_locale_file(lang).empty())
+            if (get_embedded_locales().count(lang) || !load_runtime_locale_file(lang).empty())
             {
                 return lang;
             }
@@ -516,7 +522,7 @@ namespace ezmk::i18n
                 auto dash = lang.find('-');
                 if (dash != std::string::npos)
                     lang = lang.substr(0, dash);
-                if (embedded_locales.count(lang) || !load_runtime_locale_file(lang).empty())
+                if (get_embedded_locales().count(lang) || !load_runtime_locale_file(lang).empty())
                 {
                     return lang;
                 }

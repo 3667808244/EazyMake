@@ -216,34 +216,7 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
             if (!file) continue;
 
             std::string ver_str = ver ? *ver : "0.0.0";
-            // Numeric version comparison — splits on '.' and compares each segment.
-            // Non-numeric segments (e.g. "beta", "alpha") are treated as 0.
-            auto num_cmp = [](std::string_view a, std::string_view b) -> int {
-                auto parse_seg = [](std::string_view s) -> unsigned long {
-                    try {
-                        return std::stoul(std::string(s));
-                    } catch (...) {
-                        return 0; // non-numeric → 0
-                    }
-                };
-                size_t pa = 0, pb = 0;
-                while (pa < a.size() || pb < b.size()) {
-                    unsigned long va = 0, vb = 0;
-                    if (pa < a.size()) {
-                        size_t dot = a.find('.', pa);
-                        va = parse_seg(a.substr(pa, dot - pa));
-                        pa = (dot == std::string::npos) ? a.size() : dot + 1;
-                    }
-                    if (pb < b.size()) {
-                        size_t dot = b.find('.', pb);
-                        vb = parse_seg(b.substr(pb, dot - pb));
-                        pb = (dot == std::string::npos) ? b.size() : dot + 1;
-                    }
-                    if (va != vb) return va > vb ? 1 : -1;
-                }
-                return 0;
-            };
-            if (best_file.empty() || num_cmp(ver_str, best_version) > 0) {
+            if (best_file.empty() || util::compare_version(ver_str, best_version) > 0) {
                 best_version = ver_str;
                 best_file = *file;
                 auto sha = (*tbl)["sha256"].value<std::string>();

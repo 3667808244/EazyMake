@@ -4,107 +4,82 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS2 on Windows). It prioritizes ease of use over feature richness — for complex builds, use CMake.
+EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS2 on Windows). Design philosophy: ease of use over feature richness. **See `README.md` for user-facing documentation** (quick start, CLI reference, project structure, config examples).
 
-Design specifications live in `docs/`. Source code is under active development; see `plans/` for the current and upcoming milestones.
+Design specifications live in `docs/`. Source code is under active development; see `plans/` for milestones.
 
 ## Build & test commands
 
-- Build EazyMake: `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static` (MSYS2)
-- On Linux: `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -static`
-- Or use the convenience script: `bash build.sh` (generates locale data + version header, then builds)
-- Build and run tests: `g++ -std=c++17 test/test_*.cpp src/vendor/catch2_impl.cpp src/build.cpp src/cache.cpp src/cli.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/util.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/test_ezmk -lwinhttp -static && ./build/test_ezmk`
+- Build: `bash build.sh` (generates locale data + version header, then compiles)
+- Manual build (MSYS2): `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static`
+- Manual build (Linux): `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -static`
+- Test: `g++ -std=c++17 test/test_*.cpp src/vendor/catch2_impl.cpp src/build.cpp src/cache.cpp src/cli.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/test_ezmk -lwinhttp -static && ./build/test_ezmk`
 - Test framework: Catch2 v3 (header-only: `include/vendor/catch2.hpp` + `src/vendor/catch2_impl.cpp`)
 
-## Architecture (from design docs)
+## Architecture
 
-### CLI surface
+### CLI flags not in README
 
-| Command | Purpose |
-|---|---|
-| `ezmk project new <name> [--type <type>] [--disable-git-init] [--disable-gitignore]` | Scaffold a new project |
-| `ezmk project build [--disable-cache] [--verbose] [-j <N>] [--profile <name>]` | Build the project |
-| `ezmk project run [--disable-cache] [--verbose] [-j <N>] [--profile <name>]` | Build and run |
-| `ezmk project clean` | Remove `.ezmk/cache/` and temp files |
-| `ezmk project watch [--profile <name>] [--no-build-on-start] [-j <N>]` | Watch files and auto-rebuild (0.2.3+) |
-| `ezmk pkg install [-p\|-u\|-g] [--sha256 <hash>] [-y] <pkg_file_or_url>` | Install a package (default: `-p`) |
-| `ezmk pkg remove [-p\|-u\|-g] <pkg>` | Remove a package (default: `-pug`) |
-| `ezmk pkg search [-p\|-u\|-g] <pkg>` | Search for a package (default: `-pug`) |
-| `ezmk pkg info [-p\|-u\|-g] <pkg>` | Show package info (default: `-pug`) |
-| `ezmk pkg list [-p\|-u\|-g]` | List installed packages (0.2.3+) |
-| `ezmk pkg update [-p\|-u\|-g] <pkg>` | Update an installed package from repos (0.2.3+) |
-| `ezmk repo add [-p\|-u\|-g] <git_url_or_path> [--name <name>] [--branch <branch>]` | Register a git-based repo (clone to local cache) |
-| `ezmk repo remove [-p\|-u\|-g] <name>` | Unregister a repo and delete its cache |
-| `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` the repo cache (or re-read local dir) |
-| `ezmk repo list [-p\|-u\|-g]` | List registered repos with URL, branch, last update |
-| `ezmk utils <util_name> [args]` | Run a Lua-based utility tool from an installed utils package (0.2.0+) |
+These implementation-relevant flags are not documented in the README command table:
 
-Scope flags: `-p` (project), `-u` (user), `-g` (global). `install` only supports one scope; others accept combined flags like `-pug`.
+| Flag | Command(s) | Purpose |
+|---|---|---|
+| `--disable-git-init` | `project new` | Skip `git init` |
+| `--disable-gitignore` | `project new` | Skip `.gitignore` generation |
+| `--sha256 <hash>` | `pkg install` | Verify package integrity |
+| `-y` | `pkg install` | Skip confirmation prompts |
+| `-j` / `--jobs <N>` | `project build/run/watch` | Parallel compile jobs (0=auto, default) |
+| `--profile <name>` | `project build/run/watch` | Apply a build profile (e.g. debug/release) |
+| `--no-build-on-start` | `project watch` | Skip initial build in watch mode |
 
-Build flags: `--disable-cache` forces recompilation; `--verbose` / `-v` prints detailed compile commands and cache hit/miss reasons; `-j` / `--jobs <N>` sets parallel compile jobs (0=auto, default); `--profile <name>` applies a build profile (e.g. debug/release).
+Additional commands not yet in README:
+- `ezmk pkg list [-p|-u|-g]` — list installed packages (0.2.3+)
+- `ezmk pkg update [-p|-u|-g] <pkg>` — update a package from repos (0.2.3+)
 
-New project flags: `--disable-git-init` skips `git init`; `--disable-gitignore` skips `.gitignore` generation.
+Scope flags (`-p`/`-u`/`-g`): `install` and `repo add` accept only one; others accept combined flags like `-pug`.
 
-Watch mode flags (0.2.3+): `--no-build-on-start` skips initial build; supports `-j` and `--profile`.
+### Configuration (`ezmk.toml`) — implementation notes
 
-### Project structure (as generated by `ezmk new`)
+See `README.md` for the TOML example and `docs/config_file.md` for the full spec. Key sections for implementation:
 
-```
-<project_dir>/
-  .ezmk/
-    pkg/            # installed packages live here
-    temp/           # temp files (excluded from build scanning)
-    cache/          # build cache
-      record.json
-      obj/
-    repo/           # registered repo list + cloned cache
-      list.toml
-      .cache/
-  include/          # project headers (*.h, *.hpp)
-  src/              # project sources (*.c, *.cpp, *.cxx), must include main.cpp
-  build/            # output directory
-  ezmk.toml         # project configuration
-```
+- `[project]` — `name`, `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (required), `language` (default `"C++17"`, format `<语言><版本>`)
+- `[compile]` — `flags`, `msvc_flags` (0.2.1+), `include_dirs` (default `["include"]`), `src_dirs` (default `["src"]`, 0.2.2+), `ezmk_macros` (bool, default `true`, 0.2.2+). Sub-table `[compile.macros]` (0.2.2+) for semantic macro definitions (key-value, supports string/int/bool)
+- `[link]` — `flags`, `msvc_flags` (0.2.1+), `link_dirs`, `system_target`
+- `[depends]` — `lib` (hard deps, missing → error), `want` (optional deps, 0.2.2+)
+- `[utils]` — `tools` array (only for `type = "utils"`)
+- `[compile.profile.<name>]` (0.2.3+) — profile-specific `flags`, `msvc_flags`, `macros` (sub-table). Flags append to base; macros override base on key conflict.
+- `[link.profile.<name>]` (0.2.3+) — profile-specific link `flags`, `msvc_flags`
+- `[hooks]` (0.2.3+) — `pre_build`, `post_build`, `on_failure`: paths to Lua hook scripts (relative to project root)
 
-### Configuration (`ezmk.toml`)
+### Package management
 
-Five sections (plus optional `[compile.profile.<name>]`, `[link.profile.<name>]`, and `[hooks]`):
-- `[project]` — `name` (string), `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (string, required), `language` (string, default `"C++17"`, format `<语言><版本>`)
-- `[compile]` — `flags` (array), `msvc_flags` (array, 0.2.1+), `include_dirs` (array, default `["include"]`, `-I` paths), `src_dirs` (array, default `["src"]`, 0.2.2+), `ezmk_macros` (bool, default `true`, 0.2.2+). Sub-table `[compile.macros]` (0.2.2+) for semantic macro definitions (key-value pairs, supports string/integer/boolean types)
-- `[link]` — `flags` (array), `msvc_flags` (array, 0.2.1+), `link_dirs` (array, `-L` paths), `system_target` (array of system libs to link)
-- `[depends]` — `lib` (array of hard dependency library names), `want` (array of optional dependency names, 0.2.2+)
-- `[utils]` — `tools` (array of tool names, only for `type = "utils"` packages; see `docs/utils.md`)
-- `[compile.profile.<name>]` (0.2.3+) — profile-specific `flags`, `msvc_flags`, `macros` (sub-table). Profile flags append to base; profile macros override base.
-- `[link.profile.<name>]` (0.2.3+) — profile-specific `flags`, `msvc_flags` for link stage.
-- `[hooks]` (0.2.3+) — `pre_build`, `post_build`, `on_failure`: paths to Lua hook scripts (relative to project root).
-
-### Package management (see `docs/pkg.md`)
-
-Packages are `.zip` or `.tar.gz` archives with the same structure as a project (`include/`, `src/`, `ezmk.toml`). Each package is compiled to a `*.a` static library following its dependency chain. `type = "utils"` packages additionally provide Lua-based tools via `ezmk utils` (see `docs/utils.md`). Circular dependencies or missing packages are errors.
+Packages are `.zip` or `.tar.gz` archives compiled to `*.a` static libraries following dependency chain. Circular dependencies or missing packages are errors. `type = "utils"` packages additionally provide Lua-based tools via `ezmk utils`.
 
 Install paths by scope:
 - Global: `<ezmk_install_dir>/pkg/`
 - User: `~/.local/ezmk/pkg/` (Unix) / `%LOCALAPPDATA%\ezmk\pkg\` (Windows)
 - Project: `<project_dir>/.ezmk/pkg/`
 
-There is no central package repository. Users can manually download packages, provide a URL, or register git-based repos (`ezmk repo add <git_url>`) to install packages by name. See `docs/repo.md` for the repository design.
+See `docs/pkg.md` for full details.
 
-### Repository management (see `docs/repo.md`)
+### Repository management
 
-A repo is a git repository containing `index.toml` + `packages/` directory. `ezmk repo add` clones it to a local cache; `ezmk repo update` does `git pull`. Local directories are also supported (`type = "local"`). When a repo is registered, `pkg install <name>` can install packages by name without specifying a full URL.
+A repo is a git repository containing `index.toml` + `packages/` directory. `ezmk repo add` clones to local cache; `ezmk repo update` does `git pull`. Local directories supported (`type = "local"`).
 
-Repo registries (`list.toml`) are stored per scope:
+Repo registries (`list.toml`) per scope:
 - Global: `<ezmk_install_dir>/repo/list.toml`
 - User: `~/.local/ezmk/repo/list.toml` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows)
 - Project: `.ezmk/repo/list.toml`
 
+See `docs/repo.md` for full details.
+
 ### Parallel compilation (0.2.3+)
 
-Uses `ThreadPool` (fixed-size thread pool in `include/ezmk/thread_pool.hpp`) for parallel source compilation. Cache records (`record.json`) are loaded once before compilation and saved once after all tasks complete. Console output uses a global mutex for clean interleaved messages. Default `-j 0` (or unspecified) auto-detects via `std::thread::hardware_concurrency()`.
+`ThreadPool` (fixed-size thread pool in `include/ezmk/thread_pool.hpp`) for parallel source compilation. Cache records (`record.json`) loaded once before compilation, saved once after all tasks complete. Console output uses a global mutex for clean interleaved messages. Default `-j 0` auto-detects via `std::thread::hardware_concurrency()`.
 
 ### Build profiles (0.2.3+)
 
-Predefined compile/link configurations in `[compile.profile.<name>]` / `[link.profile.<name>]`. Activated via `--profile <name>`. Profiles do NOT auto-apply — users must explicitly pass `--profile`. Profile flags append after base flags (later overrides earlier, matching GCC/Clang behavior). Profile macros merge into base macros (profile wins on key conflict).
+Predefined compile/link configs in `[compile.profile.<name>]` / `[link.profile.<name>]`. Activated via `--profile <name>`. Profiles do NOT auto-apply. Profile flags append after base flags (later overrides earlier, matching GCC/Clang behavior). Profile macros merge into base macros (profile wins on key conflict).
 
 ### Build hooks (0.2.3+)
 
@@ -114,34 +89,30 @@ Lua scripts executed at build lifecycle points: `pre_build` (before compilation)
 
 Cross-platform `FileWatcher` class (`include/ezmk/file_watcher.hpp`): Windows uses `ReadDirectoryChangesW` + IOCP; Linux uses `inotify`; macOS uses `kqueue`. Watch mode (`ezmk project watch`) monitors `src_dirs`, `include_dirs`, and `ezmk.toml`. 300ms debounce coalesces rapid edits. `ezmk.toml` changes trigger cache clear + full rebuild. Build failures don't exit the watch loop.
 
-### Build caching (see `docs/@cache.md`)
+### Build caching
 
-Content-hash-based incremental compilation. For each source file:
+Content-hash-based incremental compilation. See `docs/@cache.md`. Algorithm:
 1. Hash the source file content
 2. Compare against `record.json` entry (source hash + compile flags)
 3. Recursively check all `#include`d header hashes
-4. If all match → cache hit, reuse `.o`; otherwise → recompile and update the record
+4. All match → cache hit, reuse `.o`; otherwise → recompile and update record
 
-Cache is stored in `.ezmk/cache/obj/` (object files) and `.ezmk/cache/record.json` (metadata). The `--disable-cache` flag forces recompilation of everything but still updates the cache afterward.
+Atomic writes: `.o` and `record.json` written to temp files first, then `rename` to avoid corruption on mid-build failure. Cache stored in `.ezmk/cache/obj/` and `.ezmk/cache/record.json`. `--disable-cache` forces recompilation but still updates the cache afterward.
 
-Atomicity: write `.o` and `record.json` to temp files first, then `rename` to avoid corruption on mid-build failure.
+### Safety requirements
 
-### Safety requirements (see `docs/@safety.md`)
-
+See `docs/@safety.md`:
 - Global package installs require secondary confirmation
 - Installations that would overwrite existing files require secondary confirmation
 
 ### Lua scripting & utils (0.2.0+)
 
-EazyMake embeds Lua 5.4.7 (static-linked). The `ezmk utils <name>` subcommand runs Lua-based tools from installed `type = "utils"` packages.
+Embedded Lua 5.4.7 (static-linked). `ezmk utils <name>` runs Lua-based tools from `type = "utils"` packages. See `docs/utils.md` for the full plugin API.
 
-**Lua sandbox safety:**
-- `io` and `os` standard libraries are removed at compile time (in `linit.c`)
-- Scripts use `ezmk.*` API functions for I/O and process execution
-- `ezmk.file_write()` denies writes outside the project root
-- Each script invocation gets a fresh sandbox environment table (no cross-script global pollution)
+**Sandbox:** `io` and `os` removed at compile time (`linit.c`). Scripts use `ezmk.*` API. `ezmk.file_write()` denies writes outside project root. Each invocation gets a fresh sandbox environment table.
 
-**ezmk Lua API (22 functions):**
+**ezmk Lua API (23 functions):**
+
 | Category | Functions |
 |---|---|
 | Project info | `project_root()`, `project_name()`, `project_type()`, `project_config()`, `build_dir()` |
@@ -153,13 +124,5 @@ EazyMake embeds Lua 5.4.7 (static-linked). The `ezmk utils <name>` subcommand ru
 | JSON | `json_encode()`, `json_decode()` |
 
 **Built-in tool:** `ezmk-cc` — generates `compile_commands.json` (clangd-compatible) via `ezmk utils cc`.
-
-**Utils package structure:**
-```
-<utils_pkg>/
-  ezmk.toml          # type = "utils", [utils] section with tools = [...]
-  utils/
-    <name>.lua       # tools listed in ezmk.toml
-```
 
 **Script discovery order:** project scope (`.ezmk/pkg/*/utils/`) → user scope (`~/.local/ezmk/pkg/*/utils/`) → global scope (`<install_dir>/pkg/*/utils/`).

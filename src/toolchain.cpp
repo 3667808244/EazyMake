@@ -51,13 +51,45 @@ const FlagMapEntry COMPILE_FLAG_MAP[] = {
     {"-O2",          "/O2"},
     {"-O3",          "/Ox"},
     {"-Os",          "/O1"},           // size optimisation → /O1
+    {"-Og",          "/Og"},           // 0.2.4+: optimize for debugging
 
     // Debug
     {"-g",           "/Zi"},
     {"-g3",          "/Zi"},
 
-    // Pedantic
+    // Pedantic / standards conformance
     {"-pedantic",    "/permissive-"},
+
+    // RTTI control (0.2.4+)
+    {"-fno-rtti",    "/GR-"},
+    {"-frtti",       "/GR"},
+
+    // Exception control (0.2.4+)
+    {"-fno-exceptions",  "/EHs-c-"},
+    {"-fexceptions",     "/EHsc"},
+
+    // Frame pointer control (0.2.4+)
+    {"-fomit-frame-pointer",     "/Oy"},
+    {"-fno-omit-frame-pointer",  "/Oy-"},
+
+    // Fast math (0.2.4+)
+    {"-ffast-math",  "/fp:fast"},
+
+    // Strict aliasing (0.2.4+)
+    {"-fno-strict-aliasing", ""},      // MSVC: no direct equivalent, silently skip
+    {"-fstrict-aliasing",    ""},      // MSVC: default behavior
+
+    // Stack protection (0.2.4+)
+    {"-fstack-protector",      "/GS"},
+    {"-fstack-protector-all",  "/GS"},
+    {"-fno-stack-protector",   "/GS-"},
+
+    // C++ inline / EH (0.2.4+)
+    {"-finline-functions",     "/Ob2"},   // aggressive inlining
+    {"-fno-inline",            "/Ob0"},
+
+    // Character set (0.2.4+)
+    {"-finput-charset=UTF-8",  "/utf-8"},
 
     // PIC — MSVC is always position-independent
     {"-fPIC",        ""},              // ignore (empty = skip without warn)
@@ -68,6 +100,13 @@ const FlagMapEntry COMPILE_FLAG_MAP[] = {
 
     // Misc
     {"-c",           "/c"},
+
+    // 0.2.4+: More flags — those without direct MSVC equivalents are skipped
+    // silently or generate a warning through the unrecognized pathway.
+    {"-march=native",    ""},  // no MSVC equivalent; user should use msvc_flags
+    {"-mtune=native",    ""},  // no MSVC equivalent
+    {"-rdynamic",        ""},  // Windows has no -rdynamic concept
+    {"-s",               ""},  // MSVC strips by default; /PDBSTRIPPED for partial
 
     // These are prefix-based matches:
     // -D<name>=<value> → /D<name>=<value>

@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.2.4 (2026-07-08) — 健壮性与完善
+
+### Bug 修复
+- **版本比较逻辑统一**：新增 `util::compare_version()`（`src/version.cpp`），替换 `pkg.cpp` 的字符串比较和 `repo.cpp` 的内联数值比较，正确处理 `1.10.0` vs `9.0.0` 等边界
+- **Shell 注入风险修复**：`build.cpp` 全部 4 个链接命令构建器 + `cache.cpp` 全部 2 个编译命令构建器，所有路径和标志统一使用 `util::escape_shell_arg()`
+- **`/tmp` 硬编码修复**：`run_command()` 中的临时文件改用 `$TMPDIR` 环境变量 + 动态路径拼接，移除硬编码魔数偏移
+
+### 代码质量
+- **`build_project()` 重构**：530 行函数拆分为 `BuildState` 结构体 + `prepare_build_state()` + `compile_phase()` + `link_phase()` + `run_hook()` 五个模块，主函数降至 ~20 行编排逻辑
+- **CLI 标志解析去重**：`parse_build_flag()` lambda 统一 `build`/`run`/`watch` 三个命令的 `--disable-cache`/`--verbose`/`-j`/`--profile` 解析，减少 ~70 行重复代码
+- **帮助文本 i18n**：章节标题全部使用 I18nKey 枚举，支持中英文切换
+
+### 功能补全
+- **C23 语言标准支持**：`config.cpp` 语言版本映射已包含 C23（`-std=c23`）
+- **`pkg update --all`**：批量更新全部已安装包，自动遍历 → 版本比较 → 安装，输出 `N updated, M up-to-date, K failed` 摘要
+- **扩展 GCC→MSVC 标志映射**：新增 17 个标志（`-fno-rtti`→`/GR-`、`-fno-exceptions`→`/EHs-c-`、`-ffast-math`→`/fp:fast`、`-fstack-protector`→`/GS` 等），总计 58 个映射
+
+### 工程规范
+- `License` 重命名为 `LICENSE`
+- 历史计划文件 checkbox 全部标记为 `[x]`
+- 补打 6 个缺失的 git tag（v0.1.6 ~ v0.2.3）
+
+### 测试
+- 测试套件：**411 个测试用例，409 通过**（2 个预存 i18n 失败）
+
+---
+
+## 0.2.3 (2026-07-04) — 开发者体验提升
+
+### 新增
+- **并行编译 `-j` / `--jobs`**：基于 `ThreadPool`（`include/ezmk/thread_pool.hpp`）的多线程编译，默认自动检测 CPU 核数
+- **构建 Profile `--profile`**：`[compile.profile.<name>]` / `[link.profile.<name>]` 预定义配置段，Profile 标志追加到基础标志后
+- **Build Hooks `[hooks]`**：`pre_build` / `post_build` / `on_failure` Lua 脚本，在构建生命周期各阶段自动执行
+- **Watch 模式 `ezmk project watch`**：跨平台 `FileWatcher`（Windows IOCP / Linux inotify / macOS kqueue），300ms 防抖，配置变更触发全量重建
+- **`ezmk pkg list`**：列出全部已安装包（含版本、类型、工具列表）
+- **`ezmk pkg update`**：从注册仓库更新指定包到最新版本
+
+### 修复
+- `list_sources()` 不再仅扫描 `src/`，跟随 `src_dirs` 配置
+- `ezmk-cc` 的 `cc.lua` 不再硬编码 `g++`，改为使用检测到的编译器
+- 移除多处裸 `catch(...)`，改为具体异常处理
+
+### 测试
+- 测试套件：**333+ 用例，973+ 断言**
+
+---
+
 ## 0.2.2 (2026-07-02) — 精细化编译控制
 
 ### 新增

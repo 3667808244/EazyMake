@@ -112,7 +112,7 @@ ezmk 向 Lua 脚本暴露一个 `ezmk` 全局模块：
 ```lua
 ezmk.project_root()       -- → string   项目根目录绝对路径
 ezmk.project_name()       -- → string   项目名（ezmk.toml [project].name）
-ezmk.project_type()       -- → string   "executable" | "static" | "shared"
+ezmk.project_type()       -- → string   "executable" | "static" | "shared" | "utils"
 ezmk.project_config()     -- → string   ezmk.toml 绝对路径
 ezmk.build_dir()          -- → string   build/ 目录绝对路径
 ```

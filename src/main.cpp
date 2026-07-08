@@ -226,9 +226,12 @@ int main(int argc, char** argv) {
         }
 
         case ezmk::cli::Command::PkgUpdate: {
-            // 0.2.3+ — implementation in Phase 6
             auto& opts = *args.query_opts;
-            ezmk::pkg::update(opts.pkg_name, opts.scopes);
+            if (opts.update_all) {
+                ezmk::pkg::update_all(opts.scopes);
+            } else {
+                ezmk::pkg::update(opts.pkg_name, opts.scopes);
+            }
             break;
         }
 

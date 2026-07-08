@@ -409,47 +409,47 @@ SingleCompileResult compile_one_source(const fs::path& src,
         auto translated = toolchain::translate_compile_flags(
             std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
         if (!translated.translated.empty()) {
-            cmd << translated.translated[0] << " ";
+            cmd << util::escape_shell_arg(translated.translated[0]) << " ";
         }
         auto flag_trans = toolchain::translate_compile_flags(
             in.compile.flags, toolchain::CompilerFamily::Msvc);
-        for (auto& f : flag_trans.translated) cmd << f << " ";
+        for (auto& f : flag_trans.translated) cmd << util::escape_shell_arg(f) << " ";
         for (auto& f : flag_trans.unrecognized) {
             if (in.verbose) {
                 util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
             }
         }
-        for (auto& f : in.compile.msvc_flags) cmd << f << " ";
+        for (auto& f : in.compile.msvc_flags) cmd << util::escape_shell_arg(f) << " ";
         cmd << "/utf-8 /MD ";
         auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) cmd << "/I\"" << def_inc.string() << "\" ";
+        if (util::file_exists(def_inc)) cmd << "/I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
         for (auto& d : in.compile.include_dirs) {
             fs::path resolved = d;
             if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            cmd << "/I\"" << resolved.string() << "\" ";
+            cmd << "/I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
         }
-        for (auto& inc : in.extra_includes) cmd << "/I\"" << inc.string() << "\" ";
-        cmd << "/Fo\"" << obj_tmp.string() << "\" ";
+        for (auto& inc : in.extra_includes) cmd << "/I\"" << util::escape_shell_arg(inc.string()) << "\" ";
+        cmd << "/Fo\"" << util::escape_shell_arg(obj_tmp.string()) << "\" ";
         cmd << "/showIncludes ";
-        cmd << "\"" << src.string() << "\"";
+        cmd << "\"" << util::escape_shell_arg(src.string()) << "\"";
     } else {
         std::string compiler = in.lang.detected_compiler.empty()
             ? in.lang.compiler : in.lang.detected_compiler;
         cmd << compiler << " " << in.lang.std_flag << " -c ";
-        for (auto& f : in.compile.flags) cmd << f << " ";
+        for (auto& f : in.compile.flags) cmd << util::escape_shell_arg(f) << " ";
         if (in.use_pic) cmd << "-fPIC ";
         auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) cmd << "-I\"" << def_inc.string() << "\" ";
+        if (util::file_exists(def_inc)) cmd << "-I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
         for (auto& d : in.compile.include_dirs) {
             fs::path resolved = d;
             if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            cmd << "-I\"" << resolved.string() << "\" ";
+            cmd << "-I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
         }
-        for (auto& inc : in.extra_includes) cmd << "-I\"" << inc.string() << "\" ";
+        for (auto& inc : in.extra_includes) cmd << "-I\"" << util::escape_shell_arg(inc.string()) << "\" ";
         fs::path dep = in.dep_dir / rel;
         dep.replace_extension(".d");
-        cmd << "-MMD -MF \"" << dep.string() << "\" ";
-        cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
+        cmd << "-MMD -MF \"" << util::escape_shell_arg(dep.string()) << "\" ";
+        cmd << "\"" << util::escape_shell_arg(src.string()) << "\" -o \"" << util::escape_shell_arg(obj_tmp.string()) << "\"";
     }
 
     if (in.verbose) {
@@ -663,14 +663,14 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
             auto translated = toolchain::translate_compile_flags(
                 std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
             if (!translated.translated.empty()) {
-                cmd << translated.translated[0] << " ";
+                cmd << util::escape_shell_arg(translated.translated[0]) << " ";
             }
 
             // Compile flags: translate GCC→MSVC, then add MSVC-specific flags
             auto flag_trans = toolchain::translate_compile_flags(
                 in.compile.flags, toolchain::CompilerFamily::Msvc);
             for (auto& f : flag_trans.translated) {
-                cmd << f << " ";
+                cmd << util::escape_shell_arg(f) << " ";
             }
             for (auto& f : flag_trans.unrecognized) {
                 if (in.verbose) {
@@ -680,7 +680,7 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
 
             // MSVC-specific flags (no translation needed)
             for (auto& f : in.compile.msvc_flags) {
-                cmd << f << " ";
+                cmd << util::escape_shell_arg(f) << " ";
             }
 
             // Default MSVC flags
@@ -689,25 +689,25 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
             // Default include: proj_root/include
             auto def_inc = in.proj_root / "include";
             if (util::file_exists(def_inc)) {
-                cmd << "/I\"" << def_inc.string() << "\" ";
+                cmd << "/I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
             }
 
             // User include dirs
             for (auto& d : in.compile.include_dirs) {
                 fs::path resolved = d;
                 if (resolved.is_relative()) resolved = in.proj_root / resolved;
-                cmd << "/I\"" << resolved.string() << "\" ";
+                cmd << "/I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
             }
 
             // Extra includes (dependency packages)
             for (auto& inc : in.extra_includes) {
-                cmd << "/I\"" << inc.string() << "\" ";
+                cmd << "/I\"" << util::escape_shell_arg(inc.string()) << "\" ";
             }
 
             // Output + source
-            cmd << "/Fo\"" << obj_tmp.string() << "\" ";
+            cmd << "/Fo\"" << util::escape_shell_arg(obj_tmp.string()) << "\" ";
             cmd << "/showIncludes ";
-            cmd << "\"" << src.string() << "\"";
+            cmd << "\"" << util::escape_shell_arg(src.string()) << "\"";
 
         } else {
             // ---- GCC/Clang compile command ----
@@ -716,7 +716,7 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                 ? in.lang.compiler : in.lang.detected_compiler;
             cmd << compiler << " " << in.lang.std_flag << " -c ";
             for (auto& f : in.compile.flags) {
-                cmd << f << " ";
+                cmd << util::escape_shell_arg(f) << " ";
             }
             if (in.use_pic) {
                 cmd << "-fPIC ";
@@ -725,23 +725,23 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
             // Default include: proj_root/include
             auto def_inc = in.proj_root / "include";
             if (util::file_exists(def_inc)) {
-                cmd << "-I\"" << def_inc.string() << "\" ";
+                cmd << "-I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
             }
 
             for (auto& d : in.compile.include_dirs) {
                 fs::path resolved = d;
                 if (resolved.is_relative()) resolved = in.proj_root / resolved;
-                cmd << "-I\"" << resolved.string() << "\" ";
+                cmd << "-I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
             }
             for (auto& inc : in.extra_includes) {
-                cmd << "-I\"" << inc.string() << "\" ";
+                cmd << "-I\"" << util::escape_shell_arg(inc.string()) << "\" ";
             }
 
             // GCC: depfile for dependency tracking
             fs::path dep = in.dep_dir / rel;
             dep.replace_extension(".d");
-            cmd << "-MMD -MF \"" << dep.string() << "\" ";
-            cmd << "\"" << src.string() << "\" -o \"" << obj_tmp.string() << "\"";
+            cmd << "-MMD -MF \"" << util::escape_shell_arg(dep.string()) << "\" ";
+            cmd << "\"" << util::escape_shell_arg(src.string()) << "\" -o \"" << util::escape_shell_arg(obj_tmp.string()) << "\"";
         }
 
         if (in.verbose) {

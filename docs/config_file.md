@@ -102,6 +102,85 @@
 
 ---
 
+## `compile.profile.<name>` 节（0.2.3+）
+
+通过 `--profile <name>` 激活的构建配置。profile 名称必须是字母数字（支持 `-` 和 `_`），不允许空格。
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `flags` | string[] | 否 | `[]` | 追加到 `[compile].flags` 之后的编译标志 |
+| `msvc_flags` | string[] | 否 | `[]` | 追加到 `[compile].msvc_flags` 之后的 MSVC 专用标志 |
+| `macros` | table | 否 | `{}` | 合并到 `[compile.macros]` 的宏定义，同名 key 覆盖 |
+
+合并规则：
+- `flags` / `msvc_flags`：profile 标志**追加**到基础标志之后（GCC/Clang 行为：后面的覆盖前面的）
+- `macros`：合并到基础宏表，**profile 的 key 覆盖同名基础 key**
+
+示例：
+
+```toml
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+msvc_flags = ["/Zi", "/Od"]
+
+[compile.profile.debug.macros]
+DEBUG = "1"
+
+[compile.profile.release]
+flags = ["-O3", "-DNDEBUG"]
+msvc_flags = ["/O2", "/DNDEBUG"]
+```
+
+Profile **不会**自动应用——用户必须显式传 `--profile <name>`。
+
+---
+
+## `link.profile.<name>` 节（0.2.3+）
+
+与 `compile.profile` 对应的链接阶段配置，通过同一个 `--profile <name>` 激活。
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `flags` | string[] | 否 | `[]` | 追加到 `[link].flags` 之后的链接标志 |
+| `msvc_flags` | string[] | 否 | `[]` | 追加到 `[link].msvc_flags` 之后的 MSVC 专用链接标志 |
+
+合并规则与 compile profile 相同：profile 标志追加到基础标志之后。
+
+示例：
+
+```toml
+[link.profile.debug]
+flags = []
+
+[link.profile.release]
+flags = ["-flto"]
+```
+
+---
+
+## `hooks` 节（0.2.3+）
+
+构建生命周期钩子——在编译/链接的关键节点执行 Lua 脚本。钩子脚本接收 `ctx` 表（`ctx.output`、`ctx.project_root`、`ctx.profile`），运行在沙箱 Lua 环境中。脚本不存在 → warn + 跳过（非致命）。仅对用户项目生效，包编译时不执行。
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `pre_build` | string | 否 | `""` | 编译开始前执行的 Lua 脚本路径（相对于项目根目录） |
+| `post_build` | string | 否 | `""` | 链接成功后执行的 Lua 脚本路径 |
+| `on_failure` | string | 否 | `""` | 编译或链接失败时执行的 Lua 脚本路径 |
+
+示例：
+
+```toml
+[hooks]
+pre_build = "scripts/pre.lua"
+post_build = "scripts/post.lua"
+on_failure = "scripts/fail.lua"
+```
+
+详见 `docs/utils.md`（Lua API 参考）和 CLAUDE.md（构建钩子实现细节）。
+
+---
+
 ## `utils` 节 [version >= 0.2.0]
 
 仅当 `[project].type = "utils"` 时有效。
@@ -123,7 +202,7 @@ tools = ["cc", "compile-commands"]
 
 ## 完整示例
 
-### 普通项目（0.2.2）
+### 普通项目（0.2.3）
 
 ```toml
 [project]
@@ -134,6 +213,7 @@ language = "C++17"
 
 [compile]
 flags = ["-Wall", "-Wextra", "-O2"]
+msvc_flags = []
 include_dirs = ["include"]
 src_dirs = ["src", "lib"]
 ezmk_macros = true
@@ -143,14 +223,32 @@ DEBUG = ""
 VERSION = "0.1.0"
 MAX_CONNECTIONS = 64
 
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.debug.macros]
+DEBUG = "1"
+
+[compile.profile.release]
+flags = ["-O3", "-DNDEBUG"]
+
 [link]
 flags = []
+msvc_flags = []
 link_dirs = []
 system_target = ["pthread"]
+
+[link.profile.release]
+flags = ["-flto"]
 
 [depends]
 lib = ["foo", "bar"]
 want = ["sqlite3", "zlib"]
+
+[hooks]
+pre_build = "scripts/pre.lua"
+post_build = "scripts/post.lua"
+on_failure = "scripts/fail.lua"
 ```
 
 ### utils 工具包

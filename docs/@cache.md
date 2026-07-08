@@ -1,4 +1,4 @@
-# 包预编译缓存
+# 构建缓存
 
 ## 缓存内容
 
@@ -54,7 +54,7 @@
 ```json
 {
   "version": 1,
-  "compile_options_signature": "sha256_of_flags_and_env",  // 全局编译选项指纹
+  "compile_options_signature": "sha256_of_flags_include_dirs_std_flag_and_env",  // 全局编译选项指纹（含 msvc_flags、std_flag、include_dirs）
   "files": {
     "src/main.cpp": {
       "source_hash": "a3f5c9...",
@@ -74,7 +74,7 @@
 
 ### 字段说明
 - `version`：用于缓存格式演进。
-- `compile_options_signature`：全局编译选项（如 `[compile] flags`、环境变量 `CXXFLAGS`）的整体哈希，任一变化导致所有源文件缓存失效（安全但较粗）。更细粒度可与每个条目的 `compile_opts` 结合。
+- `compile_options_signature`：全局编译选项的 SHA-256 指纹，涵盖 `[compile] flags`、`msvc_flags`、`include_dirs`、`std_flag`、`extra_includes` 等。任一变化导致所有源文件缓存失效。较细粒度可与每个条目的 `compile_opts` 结合。
 - `object_file` 相对路径。
 - 系统头文件（如 `/usr/include/iostream`）的哈希也需记录，因为系统头文件升级可能改变编译结果。
 

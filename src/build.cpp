@@ -1,4 +1,4 @@
-#include "ezmk/build.hpp"
+﻿#include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
@@ -44,7 +44,7 @@ static std::string escape_macro_value(const std::string& val) {
 }
 
 // 0.2.2+: Convert a macros map to -D flag vector.
-// Empty value → -DKEY; non-empty → -DKEY=VALUE.
+// Empty value 鈫?-DKEY; non-empty 鈫?-DKEY=VALUE.
 std::vector<std::string> macros_to_flags(
     const std::map<std::string, std::string>& macros) {
     std::vector<std::string> result;
@@ -123,7 +123,7 @@ std::vector<fs::path> collect_sources(
             std::string fname = f.filename().string();
             if (!seen_names.insert(fname).second) {
                 util::warn(std::string("duplicate source filename '") + fname +
-                          "' — using first occurrence");
+                          "' 鈥?using first occurrence");
                 continue;
             }
             result.push_back(f);
@@ -175,15 +175,14 @@ std::string detect_compiler(const std::string& language) {
             return cached;
         }
         util::warn(std::string("$") + (is_cxx ? "CXX" : "CC") +
-                   " is set to '" + candidate + "' but it is not executable — falling back to auto-detect");
+                   " is set to '" + candidate + "' but it is not executable 鈥?falling back to auto-detect");
     }
 
     // 2. Platform-specific candidate list
     std::vector<std::string> candidates;
 #ifdef EZMK_WIN
     // MSVC (cl.exe) is now handled by toolchain::detect_toolchain() (0.2.1+).
-    // When MSVC is the active toolchain, detect_compiler() is not called —
-    // this function only serves GCC/Clang detection for non-MSVC builds.
+    // When MSVC is the active toolchain, detect_compiler() is not called 鈥?    // this function only serves GCC/Clang detection for non-MSVC builds.
     candidates = is_cxx
         ? std::vector<std::string>{"g++", "clang++"}
         : std::vector<std::string>{"gcc", "clang"};
@@ -210,7 +209,7 @@ std::string detect_compiler(const std::string& language) {
         }
     }
 
-    // 4. None found — fatal with platform-specific install instructions
+    // 4. None found 鈥?fatal with platform-specific install instructions
     std::string msg = "no C";
     msg += (is_cxx ? "++" : "");
     msg += " compiler found.\n\n";
@@ -240,101 +239,101 @@ static std::string make_gcc_link_cmd(const std::vector<fs::path>& objs,
     cmd << (lang.detected_compiler.empty() ? lang.compiler : lang.detected_compiler);
 
     for (auto& o : objs) {
-        cmd << " \"" << o.string() << "\"";
+        cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
     }
     for (auto& a : archives) {
-        cmd << " \"" << a.string() << "\"";
+        cmd << " \"" << util::escape_shell_arg(a.string()) << "\"";
     }
 
-    cmd << " -o \"" << output.string() << "\"";
+    cmd << " -o \"" << util::escape_shell_arg(output.string()) << "\"";
 
     if (shared) {
         cmd << " -shared";
     }
 
     for (auto& f : link.flags) {
-        cmd << " " << f;
+        cmd << " " << util::escape_shell_arg(f);
     }
     for (auto& d : link.link_dirs) {
-        cmd << " -L\"" << d << "\"";
+        cmd << " -L\"" << util::escape_shell_arg(d) << "\"";
     }
     for (auto& t : link.system_targets) {
-        cmd << " -l" << t;
+        cmd << " -l" << util::escape_shell_arg(t);
     }
 
     return cmd.str();
 }
 
-// MSVC link command builder — executable
+// MSVC link command builder 鈥?executable
 static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
                                      const std::vector<fs::path>& archives,
                                      const fs::path& output,
                                      const config::LinkSection& link) {
     std::ostringstream cmd;
-    cmd << "link.exe /OUT:\"" << output.string() << "\" ";
+    cmd << "link.exe /OUT:\"" << util::escape_shell_arg(output.string()) << "\" ";
 
     for (auto& o : objs) {
-        cmd << "\"" << o.string() << "\" ";
+        cmd << "\"" << util::escape_shell_arg(o.string()) << "\" ";
     }
     for (auto& a : archives) {
-        cmd << "\"" << a.string() << "\" ";
+        cmd << "\"" << util::escape_shell_arg(a.string()) << "\" ";
     }
 
     // Translate and add link flags
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
     for (auto& f : translated.translated) {
-        cmd << f << " ";
+        cmd << util::escape_shell_arg(f) << " ";
     }
 
     // MSVC-specific link flags
     for (auto& f : link.msvc_flags) {
-        cmd << f << " ";
+        cmd << util::escape_shell_arg(f) << " ";
     }
 
-    // Link dirs → /LIBPATH
+    // Link dirs 鈫?/LIBPATH
     for (auto& d : link.link_dirs) {
-        cmd << "/LIBPATH:\"" << d << "\" ";
+        cmd << "/LIBPATH:\"" << util::escape_shell_arg(d) << "\" ";
     }
 
-    // System targets: -l<name> → <name>.lib
+    // System targets: -l<name> 鈫?<name>.lib
     for (auto& t : link.system_targets) {
-        cmd << "\"" << t << ".lib\" ";
+        cmd << "\"" << util::escape_shell_arg(t) << ".lib\" ";
     }
 
     return cmd.str();
 }
 
-// MSVC link command builder — shared library (DLL)
+// MSVC link command builder 鈥?shared library (DLL)
 static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
                                      const std::vector<fs::path>& archives,
                                      const fs::path& output_dll,
                                      const fs::path& output_implib,
                                      const config::LinkSection& link) {
     std::ostringstream cmd;
-    cmd << "link.exe /DLL /OUT:\"" << output_dll.string() << "\" ";
-    cmd << "/IMPLIB:\"" << output_implib.string() << "\" ";
+    cmd << "link.exe /DLL /OUT:\"" << util::escape_shell_arg(output_dll.string()) << "\" ";
+    cmd << "/IMPLIB:\"" << util::escape_shell_arg(output_implib.string()) << "\" ";
 
     for (auto& o : objs) {
-        cmd << "\"" << o.string() << "\" ";
+        cmd << "\"" << util::escape_shell_arg(o.string()) << "\" ";
     }
     for (auto& a : archives) {
-        cmd << "\"" << a.string() << "\" ";
+        cmd << "\"" << util::escape_shell_arg(a.string()) << "\" ";
     }
 
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
     for (auto& f : translated.translated) {
-        cmd << f << " ";
+        cmd << util::escape_shell_arg(f) << " ";
     }
     for (auto& f : link.msvc_flags) {
-        cmd << f << " ";
+        cmd << util::escape_shell_arg(f) << " ";
     }
     for (auto& d : link.link_dirs) {
-        cmd << "/LIBPATH:\"" << d << "\" ";
+        cmd << "/LIBPATH:\"" << util::escape_shell_arg(d) << "\" ";
     }
     for (auto& t : link.system_targets) {
-        cmd << "\"" << t << ".lib\" ";
+        cmd << "\"" << util::escape_shell_arg(t) << ".lib\" ";
     }
 
     return cmd.str();
@@ -344,10 +343,10 @@ static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
 static std::string make_msvc_lib_cmd(const std::vector<fs::path>& objs,
                                      const fs::path& output) {
     std::ostringstream cmd;
-    cmd << "lib.exe /OUT:\"" << output.string() << "\" ";
+    cmd << "lib.exe /OUT:\"" << util::escape_shell_arg(output.string()) << "\" ";
 
     for (auto& o : objs) {
-        cmd << "\"" << o.string() << "\" ";
+        cmd << "\"" << util::escape_shell_arg(o.string()) << "\" ";
     }
 
     return cmd.str();
@@ -394,40 +393,82 @@ config::LinkSection merge_link_profile(
     return result;
 }
 
+
 // ===================================================================
-// Build
+// Build — internal helpers
 // ===================================================================
 
-fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opts) {
-    // Parse language → compiler + std flag
-    auto lang = config::parse_language(cfg.project.language);
+namespace {
 
-    // 0.2.1+: Detect full toolchain FIRST (GCC/Clang/MSVC).
-    // Must run before detect_compiler() so we don't fatal on a pure-MSVC system
-    // that has no MinGW g++ installed.
-    auto tc = toolchain::detect_toolchain();
-    bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
+// Shared state that flows through the build phases.
+struct BuildState {
+    fs::path proj_root;
+    fs::path temp_dir;
+    fs::path build_dir;
+    fs::path cache_obj_dir;
+    config::CompileSection compile_cfg;
+    config::LinkSection link_cfg;
+    config::LanguageInfo lang;
+    toolchain::Toolchain tc;
+    bool is_msvc = false;
+    bool use_pic = false;
+    std::vector<fs::path> pkg_archives;
+    std::vector<fs::path> extra_includes;
+    std::vector<std::string> pkg_link_flags;
+    std::vector<std::string> pkg_link_dirs;
+    std::vector<std::string> pkg_system_targets;
+};
 
-    // Detect best available compiler (respects $CXX/$CC, probes platform candidates).
-    // Only needed for GCC/Clang; MSVC uses cl.exe directly.
-    if (!is_msvc) {
-        lang.detected_compiler = detect_compiler(lang.compiler == "g++" ? "C++" : "C");
+// 0.2.4+: Unified hook execution — runs a Lua hook script if configured.
+void run_hook(const std::string& hook_path_cfg, const fs::path& proj_root,
+              const fs::path& hook_output, const std::string& profile,
+              ezmk::i18n::I18nKey info_key) {
+    if (hook_path_cfg.empty()) return;
+    fs::path hook_path = hook_path_cfg;
+    if (hook_path.is_relative()) hook_path = proj_root / hook_path;
+    if (util::file_exists(hook_path)) {
+        util::info(info_key, {{"path", hook_path_cfg}});
+        int rc = lua::run_hook_script(lua::state(), hook_path,
+                                      hook_output, proj_root, profile);
+        if (rc != 0) {
+            util::warn(ezmk::i18n::I18nKey::hook_nonzero,
+                       {{"path", hook_path_cfg},
+                        {"code", std::to_string(rc)}});
+        }
+    } else {
+        util::warn(ezmk::i18n::I18nKey::hook_not_found,
+                   {{"path", hook_path_cfg}});
+    }
+}
+
+// Phase 1: Setup + package scanning + pre-build hook.
+// Returns fully initialized build state with effective compile flags.
+BuildState prepare_build_state(const config::EzConfig& cfg,
+                               const cli::BuildOptions& opts) {
+    BuildState st;
+
+    st.proj_root = fs::current_path();
+    st.temp_dir = st.proj_root / ".ezmk/temp";
+    st.build_dir = st.proj_root / "build";
+    st.cache_obj_dir = st.proj_root / ".ezmk/cache/obj";
+
+    // Language + toolchain detection
+    st.lang = config::parse_language(cfg.project.language);
+    st.tc = toolchain::detect_toolchain();
+    st.is_msvc = (st.tc.family == toolchain::CompilerFamily::Msvc);
+    if (!st.is_msvc) {
+        st.lang.detected_compiler = detect_compiler(
+            st.lang.compiler == "g++" ? "C++" : "C");
     }
 
-    fs::path proj_root = fs::current_path();
-    fs::path temp_dir = proj_root / ".ezmk/temp";
-    fs::path build_dir = proj_root / "build";
-    fs::path cache_obj_dir = proj_root / ".ezmk/cache/obj";
-
-    // 0.2.3+: Apply build profile (merge profile into base config)
-    config::CompileSection compile_cfg = cfg.compile;
-    config::LinkSection link_cfg = cfg.link;
+    // Apply build profile
+    st.compile_cfg = cfg.compile;
+    st.link_cfg = cfg.link;
     if (!opts.profile.empty()) {
         auto it = cfg.compile_profiles.find(opts.profile);
         if (it != cfg.compile_profiles.end()) {
-            compile_cfg = merge_compile_profile(compile_cfg, it->second);
+            st.compile_cfg = merge_compile_profile(st.compile_cfg, it->second);
         } else {
-            // Profile not found — check if any profile is defined at all
             if (cfg.compile_profiles.empty() && cfg.link_profiles.empty()) {
                 util::fatal(std::string("unknown profile: '") + opts.profile +
                             "'. No profiles defined in ezmk.toml.");
@@ -436,126 +477,93 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                             "'. Available: check [compile.profile] and [link.profile] in ezmk.toml.");
             }
         }
-
         auto lit = cfg.link_profiles.find(opts.profile);
         if (lit != cfg.link_profiles.end()) {
-            link_cfg = merge_link_profile(link_cfg, lit->second);
+            st.link_cfg = merge_link_profile(st.link_cfg, lit->second);
         }
-        // Link profile is optional — if only compile profile exists, that's fine
     }
 
-    // 0.2.2+: Collect sources from multiple src_dirs (validates directories, main.cpp check)
-    auto sources = collect_sources(compile_cfg.src_dirs, proj_root, cfg.project.type);
+    // Collect sources + validate
+    collect_sources(st.compile_cfg.src_dirs, st.proj_root, cfg.project.type);
 
     util::info(ezmk::i18n::I18nKey::building,
                {{"name", cfg.project.name},
                 {"type", cfg.project.type},
                 {"lang", cfg.project.language}});
 
-    fs::create_directories(temp_dir);
-    fs::create_directories(build_dir);
-    fs::create_directories(cache_obj_dir);
+    fs::create_directories(st.temp_dir);
+    fs::create_directories(st.build_dir);
+    fs::create_directories(st.cache_obj_dir);
 
-    // 0.2.2+: Build effective compile flags by merging ezmk_macros + flags + macros + want macros.
-    // The order matters: later -D flags override earlier ones (compiler behavior).
-    // ezmk_macros (standard) → flags (user -D in flags) → macros (compile.macros) → want (missing optional deps)
+    // Build effective compile flags (order: ezmk_macros → flags → macros)
     std::vector<std::string> effective_flags;
-
-    // 1. Standard EZMK_* macros (if enabled, default true)
-    if (compile_cfg.ezmk_macros) {
+    if (st.compile_cfg.ezmk_macros) {
         auto em = generate_ezmk_macros(cfg);
         effective_flags.insert(effective_flags.end(), em.begin(), em.end());
     }
-
-    // 2. User flags (may contain -D flags)
     effective_flags.insert(effective_flags.end(),
-                          compile_cfg.flags.begin(), compile_cfg.flags.end());
-
-    // 3. compile.macros
-    auto macro_flags = macros_to_flags(compile_cfg.macros);
+                           st.compile_cfg.flags.begin(),
+                           st.compile_cfg.flags.end());
+    auto macro_flags = macros_to_flags(st.compile_cfg.macros);
     effective_flags.insert(effective_flags.end(),
-                          macro_flags.begin(), macro_flags.end());
+                           macro_flags.begin(), macro_flags.end());
 
-    // 4. want.lib: handle after package scan (see below)
+    st.compile_cfg.flags = std::move(effective_flags);
+    st.use_pic = (cfg.project.type == "shared");
 
-    // Create a modified compile section with effective flags (want macros appended later)
-    config::CompileSection effective_compile = compile_cfg;
-    effective_compile.flags = std::move(effective_flags);
-
-    // Need -fPIC for shared libraries
-    bool use_pic = (cfg.project.type == "shared");
-
-    // Single pass over .ezmk/pkg/: collect installed package names (for want handling),
-    // include dirs, link info, and built archives.
+    // Scan installed packages
     std::set<std::string> installed_pkgs;
-    std::vector<fs::path> extra_includes;
-    std::vector<fs::path> pkg_archives;
-    std::vector<std::string> pkg_link_flags;
-    std::vector<std::string> pkg_link_dirs;
-    std::vector<std::string> pkg_system_targets;
-    fs::path pkg_dir = proj_root / ".ezmk/pkg";
+    fs::path pkg_dir = st.proj_root / ".ezmk/pkg";
     if (util::file_exists(pkg_dir)) {
         for (auto& entry : fs::directory_iterator(pkg_dir)) {
             if (!entry.is_directory()) continue;
-
             auto pkg_toml = entry.path() / "ezmk.toml";
             if (util::file_exists(pkg_toml)) {
                 try {
                     auto pkg_cfg = config::parse_config(pkg_toml);
-
-                    // Package name for want/lib lookup
                     installed_pkgs.insert(pkg_cfg.project.name);
-
-                    // Default include/
                     auto pkg_include = entry.path() / "include";
                     if (util::file_exists(pkg_include)) {
-                        extra_includes.push_back(pkg_include);
+                        st.extra_includes.push_back(pkg_include);
                     }
-
-                    // Extra include dirs from package's compile.include_dirs
                     for (auto& d : pkg_cfg.compile.include_dirs) {
                         fs::path resolved = d;
                         if (resolved.is_relative()) resolved = entry.path() / resolved;
                         if (util::file_exists(resolved) &&
                             resolved != pkg_include) {
-                            extra_includes.push_back(resolved);
+                            st.extra_includes.push_back(resolved);
                         }
                     }
-
-                    // Collect link options
                     for (auto& f : pkg_cfg.link.flags)
-                        pkg_link_flags.push_back(f);
+                        st.pkg_link_flags.push_back(f);
                     for (auto& d : pkg_cfg.link.link_dirs)
-                        pkg_link_dirs.push_back(d);
+                        st.pkg_link_dirs.push_back(d);
                     for (auto& t : pkg_cfg.link.system_targets)
-                        pkg_system_targets.push_back(t);
+                        st.pkg_system_targets.push_back(t);
                 } catch (...) {
-                    // 0.2.3+: warn on package config parse failure
                     util::warn(std::string("failed to parse ezmk.toml for dependency package: ") +
                                entry.path().filename().string() + " — skipping");
                 }
             } else {
-                // No ezmk.toml — at least add default include/
                 auto pkg_include = entry.path() / "include";
                 if (util::file_exists(pkg_include)) {
-                    extra_includes.push_back(pkg_include);
+                    st.extra_includes.push_back(pkg_include);
                 }
             }
-
-            // Look for compiled library (.a for GCC, .lib for MSVC)
+            // Collect built archives
             auto pkg_build = entry.path() / "build";
             if (util::file_exists(pkg_build)) {
                 for (auto& f : fs::directory_iterator(pkg_build)) {
                     auto ext = f.path().extension().string();
-                    if (ext == ".a" || (is_msvc && ext == ".lib")) {
-                        pkg_archives.push_back(f.path());
+                    if (ext == ".a" || (st.is_msvc && ext == ".lib")) {
+                        st.pkg_archives.push_back(f.path());
                     }
                 }
             }
         }
     }
 
-    // want.lib: process optional dependencies using names collected in the scan above
+    // want.lib: process optional dependencies
     {
         std::set<std::string> lib_set(cfg.depends.libs.begin(), cfg.depends.libs.end());
         for (auto& want_name : cfg.depends.want) {
@@ -566,40 +574,25 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             }
             if (installed_pkgs.find(want_name) == installed_pkgs.end()) {
                 util::warn(std::string("optional dependency not installed: ") + want_name);
-                effective_compile.flags.push_back("-D" + want_to_macro_name(want_name));
+                st.compile_cfg.flags.push_back("-D" + want_to_macro_name(want_name));
             }
-            // If installed, it's already handled by the package scan above
         }
     }
 
-    // 0.2.3+: Run pre-build hook (before compilation)
-    if (!cfg.hooks.pre_build.empty()) {
-        fs::path hook_path = cfg.hooks.pre_build;
-        if (hook_path.is_relative()) hook_path = proj_root / hook_path;
-        if (util::file_exists(hook_path)) {
-            util::info(ezmk::i18n::I18nKey::pre_build_hook,
-                       {{"path", cfg.hooks.pre_build}});
-            int rc = lua::run_hook_script(lua::state(), hook_path,
-                                          "", /* no output yet */
-                                          proj_root, opts.profile);
-            if (rc != 0) {
-                util::warn(ezmk::i18n::I18nKey::hook_nonzero,
-                           {{"path", cfg.hooks.pre_build},
-                            {"code", std::to_string(rc)}});
-            }
-        } else {
-            util::warn(ezmk::i18n::I18nKey::hook_not_found,
-                       {{"path", cfg.hooks.pre_build}});
-        }
-    }
+    // Pre-build hook
+    run_hook(cfg.hooks.pre_build, st.proj_root, "" /* no output yet */,
+             opts.profile, ezmk::i18n::I18nKey::pre_build_hook);
 
+    return st;
+}
+
+// Phase 2: Compile all sources (cache check + compilation).
+// Returns the list of compiled object paths.
+std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opts) {
     // Load cache
     auto record = cache::load_record();
-
-    // Update / set global compile options signature (includes extra_includes for
-    // correct invalidation when dependency packages are installed/removed)
-    auto cur_sig = cache::compile_options_signature(effective_compile, extra_includes,
-                                                   lang.std_flag);
+    auto cur_sig = cache::compile_options_signature(st.compile_cfg, st.extra_includes,
+                                                    st.lang.std_flag);
     if (record.compile_options_signature != cur_sig) {
         if (!record.compile_options_signature.empty()) {
             util::info(ezmk::i18n::I18nKey::compile_options_changed);
@@ -608,10 +601,10 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         record.files.clear();
     }
 
-    // Clean stale temps from previous crashed builds
+    // Clean stale temps
     {
         std::error_code ec;
-        for (auto& e : fs::directory_iterator(temp_dir, ec)) {
+        for (auto& e : fs::directory_iterator(st.temp_dir, ec)) {
             auto& p = e.path();
             if (p.extension() == ".tmp") {
                 util::warn(ezmk::i18n::I18nKey::clean_stale, {{"path", p.string()}});
@@ -620,22 +613,22 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         }
     }
 
-    // ---- Unified compile phase (0.2.3+ parallel support) ----
+    // Build compile input (re-collect sources — already validated in prepare)
     cache::CompileInput cin;
-    cin.sources = std::move(sources);
-    cin.obj_dir = temp_dir;
-    cin.dep_dir = temp_dir;
-    cin.proj_root = proj_root;
-    cin.compile = effective_compile;
-    cin.lang = lang;
-    cin.extra_includes = extra_includes;
-    cin.cache_obj_dir = cache_obj_dir;
+    cin.sources = collect_sources(st.compile_cfg.src_dirs, st.proj_root,
+                                  "utils" /* skip main.cpp check — already done */);
+    cin.obj_dir = st.temp_dir;
+    cin.dep_dir = st.temp_dir;
+    cin.proj_root = st.proj_root;
+    cin.compile = st.compile_cfg;
+    cin.lang = st.lang;
+    cin.extra_includes = st.extra_includes;
+    cin.cache_obj_dir = st.cache_obj_dir;
     cin.disable_cache = opts.disable_cache;
-    cin.use_pic = use_pic;
+    cin.use_pic = st.use_pic;
     cin.verbose = opts.verbose;
-    cin.tc = tc;
+    cin.tc = st.tc;
 
-    // Determine number of parallel jobs
     int num_jobs = opts.jobs;
     if (num_jobs <= 0) {
         num_jobs = static_cast<int>(std::thread::hardware_concurrency());
@@ -647,44 +640,35 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     single_results.reserve(cin.sources.size());
 
     if (num_jobs > 1 && cin.sources.size() > 1) {
-        // Parallel compilation via thread pool
         if (opts.verbose) {
             util::info(ezmk::i18n::I18nKey::parallel_jobs_info,
                        {{"jobs", std::to_string(num_jobs)},
                         {"total", std::to_string(cin.sources.size())}});
         }
-
         util::ThreadPool pool(static_cast<size_t>(num_jobs));
         std::vector<std::future<cache::SingleCompileResult>> futures;
         futures.reserve(cin.sources.size());
-
         std::atomic<int> task_index{0};
         int total = static_cast<int>(cin.sources.size());
-
-        // Submit all compile tasks
         for (size_t i = 0; i < cin.sources.size(); ++i) {
             futures.push_back(pool.submit([&cin, &record, &task_index, total, i]() {
                 auto idx = task_index.fetch_add(1) + 1;
                 auto result = cache::compile_one_source(cin.sources[i], cin, record);
                 if (cin.verbose && result.success && !result.cache_hit) {
                     util::info(std::string("[") + std::to_string(idx) + "/" +
-                               std::to_string(total) + "] compiled: " +
-                               result.rel_src);
+                               std::to_string(total) + "] compiled: " + result.rel_src);
                 }
                 return result;
             }));
         }
-
-        // Collect results (thread pool destructor waits for all threads)
         for (auto& f : futures) {
             single_results.push_back(f.get());
         }
     } else {
-        // Single-threaded: use existing compile_sources for simplicity
         comp_result = cache::compile_sources(cin, record);
     }
 
-    // Process results from parallel compilation
+    // Process parallel results
     if (!single_results.empty()) {
         bool has_failure = false;
         for (auto& sr : single_results) {
@@ -694,32 +678,24 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             } else if (sr.success) {
                 comp_result.objects.push_back(sr.object);
                 ++comp_result.cache_misses;
-
-                // Merge into cache record
                 auto& entry = record.files[sr.rel_src];
-
-                // Check dependency path set change
                 auto old_it = record.files.find(sr.rel_src);
                 if (old_it != record.files.end() &&
                     !cache::same_dependency_paths(old_it->second.dependencies, sr.new_deps)) {
                     util::info(ezmk::i18n::I18nKey::include_structure_changed,
                                {{"file", sr.rel_src}});
                 }
-
                 entry = std::move(sr.record_entry);
             } else {
-                // Compilation failed
                 has_failure = true;
                 util::error(sr.error_msg);
             }
         }
-
         if (has_failure) {
             util::fatal(ezmk::i18n::I18nKey::build_failed);
         }
     }
 
-    // Save updated cache record
     cache::save_record(record);
 
     if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
@@ -728,51 +704,45 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                     {"compiled", std::to_string(comp_result.cache_misses)}});
     }
 
-    auto& objects = comp_result.objects;
+    return comp_result.objects;
+}
 
-    // Merge package link options into project link config
-    config::LinkSection merged_link = link_cfg;
-    for (auto& f : pkg_link_flags) merged_link.flags.push_back(f);
-    for (auto& d : pkg_link_dirs) merged_link.link_dirs.push_back(d);
-    for (auto& t : pkg_system_targets) merged_link.system_targets.push_back(t);
+// Phase 3: Link objects into the final output.
+fs::path link_phase(const BuildState& st,
+                    const std::vector<fs::path>& objects,
+                    const cli::BuildOptions& opts,
+                    const config::EzConfig& cfg) {
+    // Merge package link options
+    config::LinkSection merged_link = st.link_cfg;
+    for (auto& f : st.pkg_link_flags) merged_link.flags.push_back(f);
+    for (auto& d : st.pkg_link_dirs) merged_link.link_dirs.push_back(d);
+    for (auto& t : st.pkg_system_targets) merged_link.system_targets.push_back(t);
 
-    // Link phase — varies by project type. Sets `output` on success, throws on failure.
-    fs::path output;
-
-    // Helper: try to link; if it fails, run on_failure hook before re-throwing
+    // Helper: try to link; on failure, run on_failure hook before re-throwing.
     auto try_link = [&](auto&& link_fn) -> fs::path {
         try {
             return link_fn();
         } catch (...) {
-            // Run on_failure hook if configured
-            if (!cfg.hooks.on_failure.empty()) {
-                fs::path hook_path = cfg.hooks.on_failure;
-                if (hook_path.is_relative()) hook_path = proj_root / hook_path;
-                if (util::file_exists(hook_path)) {
-                    util::info(ezmk::i18n::I18nKey::on_failure_hook,
-                               {{"path", cfg.hooks.on_failure}});
-                    lua::run_hook_script(lua::state(), hook_path,
-                                         "", /* no output on failure */
-                                         proj_root, opts.profile);
-                }
-            }
+            run_hook(cfg.hooks.on_failure, st.proj_root, "" /* no output */,
+                     opts.profile, ezmk::i18n::I18nKey::on_failure_hook);
             throw;
         }
     };
 
     if (cfg.project.type == "static") {
-        if (is_msvc) {
-            output = try_link([&]() -> fs::path {
-                fs::path lib = build_dir / (cfg.project.name + ".lib");
-                fs::path lib_tmp = build_dir / (cfg.project.name + ".lib.tmp");
+        if (st.is_msvc) {
+            return try_link([&]() -> fs::path {
+                fs::path lib = st.build_dir / (cfg.project.name + ".lib");
+                fs::path lib_tmp = st.build_dir / (cfg.project.name + ".lib.tmp");
                 { std::error_code ec; fs::remove(lib_tmp, ec); }
                 util::info(ezmk::i18n::I18nKey::archiving, {{"target", lib.filename().string()}});
                 std::string lib_cmd = make_msvc_lib_cmd(objects, lib_tmp);
                 if (opts.verbose) util::info("    cmd: " + lib_cmd);
                 auto lib_res = util::run_command(lib_cmd);
                 if (lib_res.exit_code != 0) {
-                    std::error_code ec; fs::remove(lib_tmp, ec);
-                    util::error(ezmk::i18n::I18nKey::archive_failed, {{"code", std::to_string(lib_res.exit_code)}});
+                    { std::error_code ec; fs::remove(lib_tmp, ec); }
+                    util::error(ezmk::i18n::I18nKey::archive_failed,
+                                {{"code", std::to_string(lib_res.exit_code)}});
                     util::error("  cmd: " + lib_cmd);
                     if (!lib_res.err.empty()) util::error(lib_res.err);
                     util::fatal(ezmk::i18n::I18nKey::build_failed);
@@ -782,18 +752,20 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                 return lib;
             });
         } else {
-            output = try_link([&]() -> fs::path {
-                fs::path lib = build_dir / ("lib" + cfg.project.name + ".a");
-                fs::path lib_tmp = build_dir / ("lib" + cfg.project.name + ".a.tmp");
+            return try_link([&]() -> fs::path {
+                fs::path lib = st.build_dir / ("lib" + cfg.project.name + ".a");
+                fs::path lib_tmp = st.build_dir / ("lib" + cfg.project.name + ".a.tmp");
                 { std::error_code ec; fs::remove(lib_tmp, ec); }
                 util::info(ezmk::i18n::I18nKey::archiving, {{"target", lib.filename().string()}});
                 std::ostringstream ar_cmd;
-                ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
-                for (auto& o : objects) ar_cmd << " \"" << o.string() << "\"";
+                ar_cmd << "ar rcs \"" << util::escape_shell_arg(lib_tmp.string()) << "\"";
+                for (auto& o : objects)
+                    ar_cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
                 auto ar_res = util::run_command(ar_cmd.str());
                 if (ar_res.exit_code != 0) {
-                    std::error_code ec; fs::remove(lib_tmp, ec);
-                    util::error(ezmk::i18n::I18nKey::archive_failed, {{"code", std::to_string(ar_res.exit_code)}});
+                    { std::error_code ec; fs::remove(lib_tmp, ec); }
+                    util::error(ezmk::i18n::I18nKey::archive_failed,
+                                {{"code", std::to_string(ar_res.exit_code)}});
                     util::error("  cmd: " + ar_cmd.str());
                     if (!ar_res.err.empty()) util::error(ar_res.err);
                     util::fatal(ezmk::i18n::I18nKey::build_failed);
@@ -804,19 +776,20 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             });
         }
     } else if (cfg.project.type == "shared") {
-        if (is_msvc) {
-            output = try_link([&]() -> fs::path {
-                fs::path dll = build_dir / (cfg.project.name + ".dll");
-                fs::path implib = build_dir / (cfg.project.name + "_implib.lib");
-                fs::path dll_tmp = build_dir / (cfg.project.name + ".dll.tmp");
+        if (st.is_msvc) {
+            return try_link([&]() -> fs::path {
+                fs::path dll = st.build_dir / (cfg.project.name + ".dll");
+                fs::path implib = st.build_dir / (cfg.project.name + "_implib.lib");
+                fs::path dll_tmp = st.build_dir / (cfg.project.name + ".dll.tmp");
                 { std::error_code ec; fs::remove(dll_tmp, ec); }
                 util::info(ezmk::i18n::I18nKey::linking, {{"target", dll.filename().string()}});
-                std::string link_cmd = make_msvc_dll_cmd(objects, pkg_archives, dll_tmp, implib, merged_link);
+                std::string link_cmd = make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp, implib, merged_link);
                 if (opts.verbose) util::info("    cmd: " + link_cmd);
                 auto link_res = util::run_command(link_cmd);
                 if (link_res.exit_code != 0) {
-                    std::error_code ec; fs::remove(dll_tmp, ec);
-                    util::error(ezmk::i18n::I18nKey::link_failed, {{"code", std::to_string(link_res.exit_code)}});
+                    { std::error_code ec; fs::remove(dll_tmp, ec); }
+                    util::error(ezmk::i18n::I18nKey::link_failed,
+                                {{"code", std::to_string(link_res.exit_code)}});
                     util::error("  cmd: " + link_cmd);
                     if (!link_res.err.empty()) util::error(link_res.err);
                     if (!link_res.out.empty()) util::error(link_res.out);
@@ -827,23 +800,24 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                 return dll;
             });
         } else {
-            output = try_link([&]() -> fs::path {
+            return try_link([&]() -> fs::path {
                 std::string lib_name = "lib" + cfg.project.name;
 #ifdef EZMK_WIN
                 lib_name += ".dll";
 #else
                 lib_name += ".so";
 #endif
-                fs::path lib = build_dir / lib_name;
-                fs::path lib_tmp = build_dir / (lib_name + ".tmp");
+                fs::path lib = st.build_dir / lib_name;
+                fs::path lib_tmp = st.build_dir / (lib_name + ".tmp");
                 { std::error_code ec; fs::remove(lib_tmp, ec); }
                 util::info(ezmk::i18n::I18nKey::linking, {{"target", lib.filename().string()}});
-                std::string link_cmd = make_gcc_link_cmd(objects, pkg_archives, lib_tmp, merged_link, lang, true);
+                std::string link_cmd = make_gcc_link_cmd(objects, st.pkg_archives, lib_tmp, merged_link, st.lang, true);
                 if (opts.verbose) util::info("    cmd: " + link_cmd);
                 auto link_res = util::run_command(link_cmd);
                 if (link_res.exit_code != 0) {
-                    std::error_code ec; fs::remove(lib_tmp, ec);
-                    util::error(ezmk::i18n::I18nKey::link_failed, {{"code", std::to_string(link_res.exit_code)}});
+                    { std::error_code ec; fs::remove(lib_tmp, ec); }
+                    util::error(ezmk::i18n::I18nKey::link_failed,
+                                {{"code", std::to_string(link_res.exit_code)}});
                     util::error("  cmd: " + link_cmd);
                     if (!link_res.err.empty()) util::error(link_res.err);
                     if (!link_res.out.empty()) util::error(link_res.out);
@@ -856,18 +830,19 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
         }
     } else {
         // Default: executable
-        if (is_msvc) {
-            output = try_link([&]() -> fs::path {
-                fs::path exe = build_dir / (cfg.project.name + ".exe");
-                fs::path exe_tmp = build_dir / (cfg.project.name + ".exe.tmp");
+        if (st.is_msvc) {
+            return try_link([&]() -> fs::path {
+                fs::path exe = st.build_dir / (cfg.project.name + ".exe");
+                fs::path exe_tmp = st.build_dir / (cfg.project.name + ".exe.tmp");
                 { std::error_code ec; fs::remove(exe_tmp, ec); }
                 util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
-                std::string link_cmd = make_msvc_exe_cmd(objects, pkg_archives, exe_tmp, merged_link);
+                std::string link_cmd = make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp, merged_link);
                 if (opts.verbose) util::info("    cmd: " + link_cmd);
                 auto link_res = util::run_command(link_cmd);
                 if (link_res.exit_code != 0) {
-                    std::error_code ec; fs::remove(exe_tmp, ec);
-                    util::error(ezmk::i18n::I18nKey::link_failed, {{"code", std::to_string(link_res.exit_code)}});
+                    { std::error_code ec; fs::remove(exe_tmp, ec); }
+                    util::error(ezmk::i18n::I18nKey::link_failed,
+                                {{"code", std::to_string(link_res.exit_code)}});
                     util::error("  cmd: " + link_cmd);
                     if (!link_res.err.empty()) util::error(link_res.err);
                     if (!link_res.out.empty()) util::error(link_res.out);
@@ -878,23 +853,24 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
                 return exe;
             });
         } else {
-            output = try_link([&]() -> fs::path {
-                fs::path exe = build_dir / cfg.project.name;
+            return try_link([&]() -> fs::path {
+                fs::path exe = st.build_dir / cfg.project.name;
 #ifdef EZMK_WIN
                 exe += ".exe";
 #endif
-                fs::path exe_tmp = build_dir / (cfg.project.name + ".tmp");
+                fs::path exe_tmp = st.build_dir / (cfg.project.name + ".tmp");
 #ifdef EZMK_WIN
                 exe_tmp += ".exe";
 #endif
                 { std::error_code ec; fs::remove(exe_tmp, ec); }
                 util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
-                std::string link_cmd = make_gcc_link_cmd(objects, pkg_archives, exe_tmp, merged_link, lang);
+                std::string link_cmd = make_gcc_link_cmd(objects, st.pkg_archives, exe_tmp, merged_link, st.lang);
                 if (opts.verbose) util::info("    cmd: " + link_cmd);
                 auto link_res = util::run_command(link_cmd);
                 if (link_res.exit_code != 0) {
-                    std::error_code ec; fs::remove(exe_tmp, ec);
-                    util::error(ezmk::i18n::I18nKey::link_failed, {{"code", std::to_string(link_res.exit_code)}});
+                    { std::error_code ec; fs::remove(exe_tmp, ec); }
+                    util::error(ezmk::i18n::I18nKey::link_failed,
+                                {{"code", std::to_string(link_res.exit_code)}});
                     util::error("  cmd: " + link_cmd);
                     if (!link_res.err.empty()) util::error(link_res.err);
                     if (!link_res.out.empty()) util::error(link_res.out);
@@ -906,26 +882,27 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             });
         }
     }
+}
 
-    // 0.2.3+: Run post-build hook (after successful link)
-    if (!cfg.hooks.post_build.empty()) {
-        fs::path hook_path = cfg.hooks.post_build;
-        if (hook_path.is_relative()) hook_path = proj_root / hook_path;
-        if (util::file_exists(hook_path)) {
-            util::info(ezmk::i18n::I18nKey::post_build_hook,
-                       {{"path", cfg.hooks.post_build}});
-            int rc = lua::run_hook_script(lua::state(), hook_path,
-                                          output, proj_root, opts.profile);
-            if (rc != 0) {
-                util::warn(ezmk::i18n::I18nKey::hook_nonzero,
-                           {{"path", cfg.hooks.post_build},
-                            {"code", std::to_string(rc)}});
-            }
-        } else {
-            util::warn(ezmk::i18n::I18nKey::hook_not_found,
-                       {{"path", cfg.hooks.post_build}});
-        }
-    }
+} // anonymous namespace
+
+// ===================================================================
+// Build — public entry point
+// ===================================================================
+
+fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opts) {
+    // Phase 1: Setup, config merge, package scan, pre-build hook
+    auto st = prepare_build_state(cfg, opts);
+
+    // Phase 2: Compile all sources
+    auto objects = compile_phase(st, opts);
+
+    // Phase 3: Link
+    auto output = link_phase(st, objects, opts, cfg);
+
+    // Post-build hook
+    run_hook(cfg.hooks.post_build, st.proj_root, output, opts.profile,
+             ezmk::i18n::I18nKey::post_build_hook);
 
     return output;
 }
