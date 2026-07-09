@@ -187,3 +187,39 @@ TEST_CASE("search_package: returns empty for unknown package", "[repo]") {
     REQUIRE(result.archive_path.empty());
     REQUIRE(result.sha256.empty());
 }
+
+// ===================================================================
+// 0.2.5 — repo info
+// ===================================================================
+
+TEST_CASE("repo info: not found does not throw", "[repo][info]") {
+    REQUIRE_NOTHROW(info("nonexistent_repo_xyz_12345", {Scope::Project}));
+}
+
+// ===================================================================
+// 0.2.5 — search_package: cross-repo features
+// ===================================================================
+
+TEST_CASE("search_package: repo_name field default empty", "[repo][search]") {
+    PkgSearchResult r;
+    REQUIRE(r.repo_name.empty());
+}
+
+TEST_CASE("search_package: repo_name can be set", "[repo][search]") {
+    PkgSearchResult r;
+    r.repo_name = "community";
+    REQUIRE(r.repo_name == "community");
+}
+
+// ===================================================================
+// 0.2.5 — local repo validation (structural tests)
+// ===================================================================
+
+TEST_CASE("RepoEntry: local repo fields", "[repo][validate]") {
+    RepoEntry e;
+    e.name = "local-dev";
+    e.type = "local";
+    e.url = "E:/packages/my-dev-repo";
+    REQUIRE(e.type == "local");
+    REQUIRE(e.url == "E:/packages/my-dev-repo");
+}

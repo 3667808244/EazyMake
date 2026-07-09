@@ -19,6 +19,7 @@ Thumbs.db
 Desktop.ini
 
 *.exe
+*.o
 
 stdout_in_linux_vm.txt
 

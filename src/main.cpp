@@ -42,17 +42,34 @@ int main(int argc, char** argv) {
             break;
 
         case ezmk::cli::Command::ProjectBuild: {
+            if (args.build_opts.auto_update) {          // 0.2.5+
+                ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
+                ezmk::repo::update("", {ezmk::cli::Scope::Project,
+                                         ezmk::cli::Scope::User,
+                                         ezmk::cli::Scope::Global});
+            }
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             ezmk::build::build_project(cfg, args.build_opts);
             break;
         }
 
         case ezmk::cli::Command::ProjectRun: {
+            if (args.build_opts.auto_update) {          // 0.2.5+
+                ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
+                ezmk::repo::update("", {ezmk::cli::Scope::Project,
+                                         ezmk::cli::Scope::User,
+                                         ezmk::cli::Scope::Global});
+            }
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             auto exe = ezmk::build::build_project(cfg, args.build_opts);
             ezmk::util::info(ezmk::i18n::I18nKey::running,
                              {{"exe", exe.filename().string()}});
-            auto res = ezmk::util::run_command("\"" + exe.string() + "\"");
+            // 0.2.5+: forward positional args (after "--") to the program.
+            std::string cmd = "\"" + exe.string() + "\"";
+            for (const auto& a : args.program_args) {
+                cmd += " \"" + ezmk::util::escape_shell_arg(a) + "\"";
+            }
+            auto res = ezmk::util::run_command(cmd);
             if (!res.out.empty()) std::cout << res.out;
             if (!res.err.empty()) std::cerr << res.err;
             if (res.exit_code != 0) {
@@ -69,6 +86,12 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::ProjectWatch: {
             // 0.2.3+: Watch mode — file monitoring + auto rebuild
+            if (args.build_opts.auto_update) {          // 0.2.5+
+                ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
+                ezmk::repo::update("", {ezmk::cli::Scope::Project,
+                                         ezmk::cli::Scope::User,
+                                         ezmk::cli::Scope::Global});
+            }
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             auto proj_root = std::filesystem::current_path();
 
@@ -249,6 +272,10 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::RepoList:
             ezmk::repo::list(args.repo_opts.scopes);
+            break;
+
+        case ezmk::cli::Command::RepoInfo:   // 0.2.5+
+            ezmk::repo::info(args.repo_opts.name, args.repo_opts.scopes);
             break;
 
         case ezmk::cli::Command::Utils: {

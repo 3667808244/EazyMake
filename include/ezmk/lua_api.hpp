@@ -1,14 +1,61 @@
 #pragma once
 
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <filesystem>
+
+#include "ezmk/config.hpp"
 
 // Forward-declare Lua state type (lua.h typedefs this to an opaque struct)
 struct lua_State;
 
 namespace ezmk::lua {
 namespace fs = std::filesystem;
+
+// ---- 0.2.5+ Utils permission model ----
+//
+// Three-state result of a permission check. Priority: Deny > Allow > Ask.
+// The check_* functions are pure (no I/O, no prompting) so they are trivially
+// unit-testable; the lua_api layer turns Ask into Allow/Deny via resolve_ask().
+enum class PermResult { Allow, Deny, Ask };
+
+// Category of a controlled access, used for prompt text and the ask cache key.
+enum class PermCategory { Read, Write, Run };
+
+// Decide read access to `path` (already resolved to an absolute path).
+// nullopt perms → Allow (backward compat with packages that declare none).
+// The project's own ezmk.toml and the tool's package dir are implicitly
+// allowed unless a read_deny entry matches them.
+PermResult check_read_permission(const fs::path& path,
+                                 const std::optional<config::UtilsPermissions>& perms,
+                                 const fs::path& project_root,
+                                 const fs::path& pkg_root);
+
+// Decide write access to `path`. The "outside project root" hard limit is
+// enforced by the caller before allow is ever considered (see lua_api.cpp).
+PermResult check_write_permission(const fs::path& path,
+                                  const std::optional<config::UtilsPermissions>& perms,
+                                  const fs::path& project_root);
+
+// Decide run access for a command line. Only the first token (executable) is
+// matched. Supports exact match, trailing "*" prefix wildcard, and full path.
+PermResult check_run_permission(std::string_view cmd,
+                                const std::optional<config::UtilsPermissions>& perms);
+
+// Turn an Ask result into a concrete allow/deny decision: prompt the user
+// interactively and cache the decision for the session (keyed by category +
+// target). Non-interactive environments (no TTY, or assume_yes) fail safe and
+// return false (deny), recording the denied target.
+bool resolve_ask(PermCategory cat, std::string_view target);
+
+// Test/CLI hook: set non-interactive mode (mirrors -y / no TTY). When true,
+// resolve_ask() denies without prompting.
+void set_noninteractive(bool value);
+
+// Test hook: clear the session ask-decision cache.
+void clear_ask_cache();
 
 // ---- Lifecycle ----
 

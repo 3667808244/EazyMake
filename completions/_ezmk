@@ -1,0 +1,342 @@
+#compdef ezmk
+
+# EazyMake zsh completion — 0.2.5+
+# Install:
+#   System-wide:  cp completions/_ezmk /usr/share/zsh/site-functions/
+#   User-local:   mkdir -p ~/.zsh/completions && cp completions/_ezmk ~/.zsh/completions/
+#                 Then add to ~/.zshrc: fpath=(~/.zsh/completions $fpath)
+#   Restart shell or run: autoload -Uz compinit && compinit
+
+# ===================================================================
+# Dynamic helpers
+# ===================================================================
+
+# List build profiles from current project's ezmk.toml
+_ezmk_profiles() {
+    local -a profiles
+    if [[ -f ezmk.toml ]]; then
+        profiles=(${(f)"$(grep -E '^\s*\[compile\.profile\.' ezmk.toml 2>/dev/null | sed 's/.*\.profile\.//;s/\]//')"})
+    fi
+    _describe -t profiles 'profile' profiles
+}
+
+# List installed package names from .ezmk/pkg/
+_ezmk_installed_pkgs() {
+    local -a pkgs
+    local pkg_dir=".ezmk/pkg"
+    if [[ -d "$pkg_dir" ]]; then
+        pkgs=(${(f)"$(find "$pkg_dir" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null)"})
+    fi
+    _describe -t packages 'installed package' pkgs
+}
+
+# List registered repo names from list.toml
+_ezmk_repo_names() {
+    local -a repos
+    local list_file=".ezmk/repo/list.toml"
+    if [[ -f "$list_file" ]]; then
+        repos=(${(f)"$(grep -E '^name\s*=\s*"' "$list_file" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')"})
+    fi
+    _describe -t repos 'registered repo' repos
+}
+
+# List installed utils tool names
+_ezmk_utils_tools() {
+    local -a tools
+    local pkg_dir=".ezmk/pkg"
+    if [[ -d "$pkg_dir" ]]; then
+        tools=(${(f)"$(find "$pkg_dir" -path '*/utils/*.lua' -type f 2>/dev/null | sed 's|.*/utils/||;s|\.lua$||' | sort -u)"})
+    fi
+    _describe -t tools 'utils tool' tools
+}
+
+# ===================================================================
+# Top-level commands
+# ===================================================================
+
+_ezmk_commands() {
+    local -a commands
+    commands=(
+        'project:Project management (new, build, run, watch, clean)'
+        'pkg:Package management (install, remove, search, info, list, update)'
+        'repo:Repository management (add, remove, update, list, info)'
+        'utils:Run Lua-based utility tools'
+        'version:Show version information'
+        'help:Show help message'
+    )
+    _describe -t commands 'ezmk command' commands
+}
+
+# ===================================================================
+# project subcommands
+# ===================================================================
+
+_ezmk_project() {
+    local -a subcmds
+    subcmds=(
+        'new:Create a new project'
+        'build:Incremental build'
+        'run:Build and execute'
+        'watch:Watch mode — auto rebuild on changes'
+        'clean:Remove cache and temp files'
+    )
+    _describe -t subcommands 'project subcommand' subcmds
+}
+
+_ezmk_project_new() {
+    _arguments \
+        '--type[Project type]:type:(executable static shared utils)' \
+        '--disable-git-init[Skip git init]' \
+        '--disable-gitignore[Skip .gitignore creation]' \
+        '1:project name:'
+}
+
+_ezmk_project_build() {
+    _arguments \
+        '(--verbose)-v[Verbose output]' \
+        '--verbose[Verbose output]' \
+        '(-j)--jobs[Max parallel compile jobs]:jobs:' \
+        '-j[Max parallel compile jobs (short)]:jobs:' \
+        '--disable-cache[Force recompilation of all sources]' \
+        '--profile[Build profile]:profile:_ezmk_profiles' \
+        '--auto-update[Auto-update repo indices before build]'
+}
+
+_ezmk_project_run() {
+    _arguments \
+        '(--verbose)-v[Verbose output]' \
+        '--verbose[Verbose output]' \
+        '(-j)--jobs[Max parallel compile jobs]:jobs:' \
+        '-j[Max parallel compile jobs (short)]:jobs:' \
+        '--disable-cache[Force recompilation of all sources]' \
+        '--profile[Build profile]:profile:_ezmk_profiles' \
+        '--auto-update[Auto-update repo indices before build]' \
+        '*:::program args:_normal'
+}
+
+_ezmk_project_watch() {
+    _arguments \
+        '(--verbose)-v[Verbose output]' \
+        '--verbose[Verbose output]' \
+        '(-j)--jobs[Max parallel compile jobs]:jobs:' \
+        '-j[Max parallel compile jobs (short)]:jobs:' \
+        '--disable-cache[Force recompilation of all sources]' \
+        '--profile[Build profile]:profile:_ezmk_profiles' \
+        '--auto-update[Auto-update repo indices before build]' \
+        '--no-build-on-start[Skip initial build on watch start]'
+}
+
+_ezmk_project_clean() {
+    # No arguments
+}
+
+# ===================================================================
+# pkg subcommands
+# ===================================================================
+
+_ezmk_pkg() {
+    local -a subcmds
+    subcmds=(
+        'install:Install a package'
+        'remove:Remove a package'
+        'search:Search for a package'
+        'info:Show package details'
+        'list:List installed packages'
+        'update:Update installed package(s)'
+    )
+    _describe -t subcommands 'pkg subcommand' subcmds
+}
+
+_ezmk_pkg_install() {
+    _arguments \
+        '(-p -u -g)-p[Project scope]' \
+        '(-p -u -g)-u[User scope]' \
+        '(-p -u -g)-g[Global scope]' \
+        '--sha256[Verify against SHA-256]:hash:' \
+        '(-y)--yes[Skip interactive prompts]' \
+        '(-y)-y[Skip interactive prompts (short)]' \
+        '1:package file, URL, or name:_files'
+}
+
+_ezmk_pkg_remove() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '1:package name:_ezmk_installed_pkgs'
+}
+
+_ezmk_pkg_search() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '1:package name:'
+}
+
+_ezmk_pkg_info() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '1:package name:_ezmk_installed_pkgs'
+}
+
+_ezmk_pkg_list() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]'
+}
+
+_ezmk_pkg_update() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '--all[Update all installed packages]' \
+        '1:package name:_ezmk_installed_pkgs'
+}
+
+# ===================================================================
+# repo subcommands
+# ===================================================================
+
+_ezmk_repo() {
+    local -a subcmds
+    subcmds=(
+        'add:Register and clone a repository'
+        'remove:Unregister and delete cache'
+        'update:Git pull to refresh'
+        'list:List registered repositories'
+        'info:Show repository details'
+    )
+    _describe -t subcommands 'repo subcommand' subcmds
+}
+
+_ezmk_repo_add() {
+    _arguments \
+        '(-p -u -g)-p[Project scope]' \
+        '(-p -u -g)-u[User scope]' \
+        '(-p -u -g)-g[Global scope]' \
+        '--name[Repository name override]:name:' \
+        '--branch[Git branch to track]:branch:("main" "master" "stable" "develop")' \
+        '1:git URL or local path:_files -/'
+}
+
+_ezmk_repo_remove() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '1:repo name:_ezmk_repo_names'
+}
+
+_ezmk_repo_update() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '1:repo name:_ezmk_repo_names'
+}
+
+_ezmk_repo_list() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]'
+}
+
+_ezmk_repo_info() {
+    _arguments \
+        '(-p)-p[Project scope only]' \
+        '(-u)-u[User scope only]' \
+        '(-g)-g[Global scope only]' \
+        '1:repo name:_ezmk_repo_names'
+}
+
+# ===================================================================
+# utils
+# ===================================================================
+
+_ezmk_utils() {
+    _arguments \
+        '1:tool name:_ezmk_utils_tools' \
+        '*:::tool args:_normal'
+}
+
+# ===================================================================
+# Main dispatch
+# ===================================================================
+
+_ezmk() {
+    local curcontext="$curcontext" state line
+    typeset -A opt_args
+
+    if (( CURRENT == 2 )); then
+        _ezmk_commands
+        return
+    fi
+
+    local cmd=${words[2]}
+    local subcmd
+
+    case "$cmd" in
+        project)
+            if (( CURRENT == 3 )); then
+                _ezmk_project
+            else
+                subcmd=${words[3]}
+                case "$subcmd" in
+                    new)   _ezmk_project_new ;;
+                    build) _ezmk_project_build ;;
+                    run)   _ezmk_project_run ;;
+                    watch) _ezmk_project_watch ;;
+                    clean) _ezmk_project_clean ;;
+                    *)     _ezmk_project ;;
+                esac
+            fi
+            ;;
+        pkg)
+            if (( CURRENT == 3 )); then
+                _ezmk_pkg
+            else
+                subcmd=${words[3]}
+                case "$subcmd" in
+                    install) _ezmk_pkg_install ;;
+                    remove)  _ezmk_pkg_remove ;;
+                    search)  _ezmk_pkg_search ;;
+                    info)    _ezmk_pkg_info ;;
+                    list)    _ezmk_pkg_list ;;
+                    update)  _ezmk_pkg_update ;;
+                    *)       _ezmk_pkg ;;
+                esac
+            fi
+            ;;
+        repo)
+            if (( CURRENT == 3 )); then
+                _ezmk_repo
+            else
+                subcmd=${words[3]}
+                case "$subcmd" in
+                    add)    _ezmk_repo_add ;;
+                    remove) _ezmk_repo_remove ;;
+                    update) _ezmk_repo_update ;;
+                    list)   _ezmk_repo_list ;;
+                    info)   _ezmk_repo_info ;;
+                    *)      _ezmk_repo ;;
+                esac
+            fi
+            ;;
+        utils)
+            _ezmk_utils
+            ;;
+        version|help)
+            ;;
+        *)
+            _ezmk_commands
+            ;;
+    esac
+}
+
+_ezmk "$@"

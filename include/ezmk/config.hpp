@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <optional>
 #include <filesystem>
 
 namespace ezmk::config {
@@ -15,8 +16,21 @@ struct ProjectSection {
     std::string language = "C++17";  // <Lang><Ver>, e.g. "C++17", "C11"
 };
 
+// 0.2.5+ — Fine-grained utils permission declaration ([utils.permissions]).
+// Judged in order deny > allow > ask (see lua_api.hpp check_*_permission).
+struct UtilsPermissions {
+    std::vector<std::string> read;         // allow read paths (relative to project root)
+    std::vector<std::string> read_deny;    // deny read paths (takes precedence over allow)
+    std::vector<std::string> write;        // allow write paths
+    std::vector<std::string> write_deny;   // deny write paths
+    std::vector<std::string> run;          // allow commands
+    std::vector<std::string> run_deny;     // deny commands
+    bool network = false;                  // network access (declarative, not yet enforced)
+};
+
 struct UtilsSection {
-    std::vector<std::string> tools;  // only for type = "utils"
+    std::vector<std::string> tools;                    // only for type = "utils"
+    std::optional<UtilsPermissions> permissions;       // 0.2.5+ — nullopt when [utils.permissions] absent
 };
 
 struct CompileSection {

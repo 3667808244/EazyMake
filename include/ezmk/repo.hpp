@@ -46,6 +46,9 @@ void update(const std::string& name, const std::vector<cli::Scope>& scopes);
 // List registered repos to stdout.
 void list(const std::vector<cli::Scope>& scopes);
 
+// Show detailed info for a single registered repo (0.2.5+).
+void info(std::string_view name, const std::vector<cli::Scope>& scopes);
+
 // ---- pkg integration ----
 
 // Result of searching a package in registered repos.
@@ -53,6 +56,7 @@ struct PkgSearchResult {
     fs::path archive_path;   // path to the package archive
     std::string sha256;      // from index.toml, empty if not provided
     std::string version;     // 0.2.3+: version from index.toml
+    std::string repo_name;   // 0.2.5+: source repo name
 };
 
 // Search registered repos (in scope order) for a package by name.

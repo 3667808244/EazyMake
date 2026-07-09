@@ -317,6 +317,25 @@ EzConfig parse_config(const fs::path& toml_path) {
     // [utils] (only relevant for type = "utils")
     if (auto utils = root["utils"].as_table()) {
         cfg.utils.tools = extract_string_array(utils->get("tools"));
+
+        // 0.2.5+: [utils.permissions] — fine-grained read/write/run control.
+        // Presence of the sub-table switches on the deny/allow/ask model;
+        // absence keeps the legacy unrestricted behavior.
+        if (auto perms = (*utils)["permissions"].as_table()) {
+            UtilsPermissions up;
+            up.read       = extract_string_array(perms->get("read"));
+            up.read_deny  = extract_string_array(perms->get("read_deny"));
+            up.write      = extract_string_array(perms->get("write"));
+            up.write_deny = extract_string_array(perms->get("write_deny"));
+            up.run        = extract_string_array(perms->get("run"));
+            up.run_deny   = extract_string_array(perms->get("run_deny"));
+            if (auto net = perms->get("network")) {
+                if (net->is_boolean()) {
+                    up.network = net->as_boolean()->get();
+                }
+            }
+            cfg.utils.permissions = std::move(up);
+        }
     }
 
     return cfg;

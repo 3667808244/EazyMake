@@ -5,10 +5,12 @@
 #include "toml.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <ctime>
 #include <deque>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -169,19 +171,59 @@ static bool is_git_url(std::string_view s) {
     return false;
 }
 
-// Verify that a local directory is a valid EazyMake repo (has index.toml).
+// Verify that a local directory is a valid EazyMake repo.
+// Enhanced in 0.2.5: validates each package's file existence and sha256 format.
 static void validate_local_repo(const fs::path& dir) {
     if (!util::file_exists(dir)) {
         throw std::runtime_error("directory not found: " + dir.string());
     }
-    if (!util::file_exists(dir / "index.toml")) {
+    auto index_path = dir / "index.toml";
+    if (!util::file_exists(index_path)) {
         throw std::runtime_error("not a valid EazyMake repo (missing index.toml): " + dir.string());
     }
     // Try to parse it
     try {
-        auto root = toml::parse_file((dir / "index.toml").string());
+        auto root = toml::parse_file(index_path.string());
         if (!root["repo"].as_table()) {
             throw std::runtime_error("index.toml missing [repo] section");
+        }
+        // 0.2.5+: validate each package entry
+        auto pkgs = root["packages"].as_array();
+        if (pkgs) {
+            for (size_t i = 0; i < pkgs->size(); ++i) {
+                auto tbl = (*pkgs)[i].as_table();
+                if (!tbl) continue;
+                // Validate file existence
+                auto file = (*tbl)["file"].value<std::string>();
+                if (file && !file->empty()) {
+                    auto full_path = dir / *file;
+                    if (!util::file_exists(full_path)) {
+                        throw std::runtime_error(
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_validate_missing_file,
+                                            {{"file", full_path.string()}}));
+                    }
+                }
+                // Validate sha256 format (non-empty must be 64-char hex)
+                auto sha = (*tbl)["sha256"].value<std::string>();
+                if (sha && !sha->empty()) {
+                    if (sha->size() != 64) {
+                        auto name = (*tbl)["name"].value<std::string>();
+                        throw std::runtime_error(
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_validate_bad_sha256,
+                                            {{"name", name ? *name : "?"},
+                                             {"hash", *sha}}));
+                    }
+                    for (char c : *sha) {
+                        if (!std::isxdigit(static_cast<unsigned char>(c))) {
+                            auto name = (*tbl)["name"].value<std::string>();
+                            throw std::runtime_error(
+                                ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_validate_bad_sha256,
+                                                {{"name", name ? *name : "?"},
+                                                 {"hash", *sha}}));
+                        }
+                    }
+                }
+            }
         }
     } catch (const toml::parse_error& e) {
         throw std::runtime_error(std::string("invalid index.toml: ") + e.what());
@@ -224,7 +266,13 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
             }
         }
 
-        return {repo_dir / best_file, best_sha256, best_version};
+        if (best_file.empty()) return {};
+        PkgSearchResult result;
+        result.archive_path = repo_dir / best_file;
+        result.sha256 = best_sha256;
+        result.version = best_version;
+        result.repo_name = repo_dir.filename().string();
+        return result;
     } catch (const std::exception& e) {
         util::warn(std::string("failed to parse index.toml for repo '") +
                    repo_dir.filename().string() + "': " + e.what());
@@ -454,12 +502,115 @@ void list(const std::vector<cli::Scope>& scopes) {
 }
 
 // ===================================================================
+// info — show detailed info for a single registered repo (0.2.5+)
+// ===================================================================
+
+void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
+    for (auto scope : scopes) {
+        auto entries = load_repo_list(scope);
+        for (auto& e : entries) {
+            if (e.name != name) continue;
+
+            fs::path index_path;
+            fs::path cache_path;
+            if (e.type == "git") {
+                cache_path = cache_dir(scope, e.name);
+                index_path = cache_path / "index.toml";
+            } else {
+                cache_path = fs::path(e.url);
+                index_path = cache_path / "index.toml";
+            }
+
+            // Print repo header
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_name) << ": " << name << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_scope) << ": "
+                      << scope_label(scope) << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_url) << ": " << e.url << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_type) << ": " << e.type << "\n";
+            if (e.type == "git") {
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_branch) << ": "
+                          << e.branch << "\n";
+            }
+            if (!e.last_update.empty()) {
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_updated) << ": "
+                          << e.last_update << "\n";
+            }
+            if (e.type == "git") {
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_cache) << ": "
+                          << cache_path.string() << "\n";
+            }
+
+            // Parse index.toml for package stats
+            if (util::file_exists(index_path)) {
+                try {
+                    auto root = toml::parse_file(index_path.string());
+                    auto pkgs = root["packages"].as_array();
+                    if (pkgs) {
+                        std::map<std::string, std::vector<std::string>> pkg_versions;
+                        for (size_t i = 0; i < pkgs->size(); ++i) {
+                            auto tbl = (*pkgs)[i].as_table();
+                            if (!tbl) continue;
+                            auto pkg_name = (*tbl)["name"].value<std::string>();
+                            auto ver = (*tbl)["version"].value<std::string>();
+                            if (pkg_name) {
+                                pkg_versions[*pkg_name].push_back(ver ? *ver : "0.0.0");
+                            }
+                        }
+                        std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages) << ": "
+                                  << pkg_versions.size() << "\n";
+                        for (auto& [pkg, vers] : pkg_versions) {
+                            // Sort versions descending
+                            std::sort(vers.begin(), vers.end(),
+                                      [](const std::string& a, const std::string& b) {
+                                          return util::compare_version(a, b) > 0;
+                                      });
+                            std::string version_list;
+                            for (size_t i = 0; i < vers.size(); ++i) {
+                                if (i > 0) version_list += ", ";
+                                version_list += vers[i];
+                            }
+                            std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_info_version_list,
+                                                          {{"name", pkg},
+                                                           {"versions", version_list}})
+                                      << "\n";
+                        }
+                    } else {
+                        std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages) << ": 0\n";
+                    }
+                } catch (const std::exception& e) {
+                    std::cout << "  (parse error: " << e.what() << ")\n";
+                }
+            } else {
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages)
+                          << ": (index.toml not found)\n";
+            }
+            return;
+        }
+    }
+    // Not found
+    util::error(ezmk::i18n::I18nKey::repo_not_found, {{"name", std::string(name)}});
+}
+
+// ===================================================================
 // pkg integration: search for a package in registered repos
+// 0.2.5+: cross-repo highest-version selection
 // ===================================================================
 
 PkgSearchResult search_package(std::string_view pkg_name,
                                const std::vector<cli::Scope>& scopes) {
-    for (auto scope : scopes) {
+    // 0.2.5+: collect all matches across all repos, pick highest version.
+    struct Match {
+        std::string version;
+        fs::path archive_path;
+        std::string sha256;
+        std::string repo_name;
+        int scope_index; // 0=project, 1=user, 2=global
+    };
+    std::vector<Match> matches;
+    int repos_searched = 0;
+
+    for (size_t si = 0; si < scopes.size(); ++si) {
+        auto scope = scopes[si];
         auto entries = load_repo_list(scope);
         for (auto& e : entries) {
             fs::path repo_dir;
@@ -470,15 +621,38 @@ PkgSearchResult search_package(std::string_view pkg_name,
             }
 
             if (!util::file_exists(repo_dir)) continue;
+            repos_searched++;
 
             auto result = read_pkg_from_index(repo_dir, pkg_name);
             if (!result.archive_path.empty() &&
                 util::file_exists(result.archive_path)) {
-                return result;
+                matches.push_back({result.version, result.archive_path,
+                                   result.sha256, result.repo_name,
+                                   static_cast<int>(si)});
             }
         }
     }
-    return {};
+
+    if (matches.empty()) return {};
+
+    // Find the highest version; tie-break by scope priority
+    const Match* best = &matches[0];
+    for (size_t i = 1; i < matches.size(); ++i) {
+        int cmp = util::compare_version(matches[i].version, best->version);
+        if (cmp > 0 || (cmp == 0 && matches[i].scope_index < best->scope_index)) {
+            best = &matches[i];
+        }
+    }
+
+    if (matches.size() > 1 || repos_searched > 1) {
+        util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_search_resolved,
+                   {{"pkg", std::string(pkg_name)},
+                    {"version", best->version},
+                    {"repo", best->repo_name},
+                    {"count", std::to_string(repos_searched)}}));
+    }
+
+    return {best->archive_path, best->sha256, best->version, best->repo_name};
 }
 
 } // namespace ezmk::repo

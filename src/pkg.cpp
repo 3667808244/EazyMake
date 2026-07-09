@@ -721,7 +721,26 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                 std::cout << "\n";
             }
 
-            // Show built artifacts
+            // 0.2.5+: Show declared utils permissions, if any.
+            if (cfg.utils.permissions.has_value()) {
+                const auto& pm = *cfg.utils.permissions;
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_permissions)
+                          << ":\n";
+                auto print_list = [&](const char* label,
+                                      const std::vector<std::string>& v) {
+                    if (v.empty()) return;
+                    std::cout << "    " << label << ":";
+                    for (auto& e : v) std::cout << " " << e;
+                    std::cout << "\n";
+                };
+                print_list("read", pm.read);
+                print_list("read-deny", pm.read_deny);
+                print_list("write", pm.write);
+                print_list("write-deny", pm.write_deny);
+                print_list("run", pm.run);
+                print_list("run-deny", pm.run_deny);
+                std::cout << "    (unlisted access will prompt at runtime)\n";
+            }
             fs::path build_dir = pkg_path / "build";
             if (util::file_exists(build_dir)) {
                 std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_artifacts)

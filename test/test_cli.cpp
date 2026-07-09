@@ -481,3 +481,167 @@ TEST_CASE("cli parse: repo remove with no name should throw", "[cli]") {
         ezmk::fatal_error
     );
 }
+
+// ===================================================================
+// 0.2.5 — GNU option syntax (argparse layer)
+// ===================================================================
+
+TEST_CASE("cli parse: long option --flag=value equals --flag value", "[cli][gnu]") {
+    auto a = TestArgs({"project", "build", "--profile=debug"}).parse();
+    auto b = TestArgs({"project", "build", "--profile", "debug"}).parse();
+    REQUIRE(a.build_opts.profile == "debug");
+    REQUIRE(b.build_opts.profile == "debug");
+}
+
+TEST_CASE("cli parse: short option attached value -j4 equals -j 4", "[cli][gnu]") {
+    auto a = TestArgs({"project", "build", "-j4"}).parse();
+    auto b = TestArgs({"project", "build", "-j", "4"}).parse();
+    REQUIRE(a.build_opts.jobs == 4);
+    REQUIRE(b.build_opts.jobs == 4);
+}
+
+TEST_CASE("cli parse: --jobs=8 long attached value", "[cli][gnu]") {
+    auto a = TestArgs({"project", "build", "--jobs=8"}).parse();
+    REQUIRE(a.build_opts.jobs == 8);
+}
+
+TEST_CASE("cli parse: grouped scope flags -pug split", "[cli][gnu]") {
+    auto args = TestArgs({"pkg", "search", "-pug", "foo"}).parse();
+    REQUIRE(args.query_opts->scopes.size() == 3);
+    REQUIRE(args.query_opts->scopes[0] == Scope::Project);
+    REQUIRE(args.query_opts->scopes[1] == Scope::User);
+    REQUIRE(args.query_opts->scopes[2] == Scope::Global);
+}
+
+TEST_CASE("cli parse: grouped short with trailing value -vj4", "[cli][gnu]") {
+    auto args = TestArgs({"project", "build", "-vj4"}).parse();
+    REQUIRE(args.build_opts.verbose == true);
+    REQUIRE(args.build_opts.jobs == 4);
+}
+
+TEST_CASE("cli parse: options and positionals interleave", "[cli][gnu]") {
+    auto a = TestArgs({"pkg", "install", "-g", "foo.zip"}).parse();
+    auto b = TestArgs({"pkg", "install", "foo.zip", "-g"}).parse();
+    REQUIRE(a.install_opts->pkg_file == "foo.zip");
+    REQUIRE(a.install_opts->scope == Scope::Global);
+    REQUIRE(b.install_opts->pkg_file == "foo.zip");
+    REQUIRE(b.install_opts->scope == Scope::Global);
+}
+
+TEST_CASE("cli parse: -- forwards args to utils tool", "[cli][gnu]") {
+    auto args = TestArgs({"utils", "fmt", "--", "--help"}).parse();
+    REQUIRE(args.cmd == Command::Utils);
+    REQUIRE(args.utils_name == "fmt");
+    REQUIRE(args.utils_args.size() == 1);
+    REQUIRE(args.utils_args[0] == "--help");
+}
+
+TEST_CASE("cli parse: -- forwards args to project run", "[cli][gnu]") {
+    auto args = TestArgs({"project", "run", "--", "--verbose", "input.txt"}).parse();
+    REQUIRE(args.cmd == Command::ProjectRun);
+    REQUIRE(args.program_args.size() == 2);
+    REQUIRE(args.program_args[0] == "--verbose");
+    REQUIRE(args.program_args[1] == "input.txt");
+}
+
+TEST_CASE("cli parse: lone dash is a positional", "[cli][gnu]") {
+    auto args = TestArgs({"pkg", "install", "-"}).parse();
+    REQUIRE(args.install_opts->pkg_file == "-");
+}
+
+TEST_CASE("cli parse: unknown long option throws", "[cli][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "build", "--nonsense"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: unknown short option in group throws", "[cli][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "build", "-xj4"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: missing value for long option throws", "[cli][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "build", "--profile"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: pkg install rejects combined scope flags", "[cli][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"pkg", "install", "-pu", "foo.zip"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: value beginning with dash via = form", "[cli][gnu]") {
+    auto args = TestArgs({"pkg", "install", "foo.zip", "--sha256=-abc"}).parse();
+    REQUIRE(args.install_opts->sha256 == "-abc");
+}
+
+TEST_CASE("cli parse: invalid -j value throws", "[cli][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "build", "-jabc"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+// ===================================================================
+// 0.2.5 — repo info CLI
+// ===================================================================
+
+TEST_CASE("cli parse: repo info basic", "[cli][gnu]") {
+    auto args = TestArgs({"repo", "info", "myrepo"}).parse();
+    REQUIRE(args.cmd == Command::RepoInfo);
+    REQUIRE(args.repo_opts.name == "myrepo");
+    REQUIRE(args.repo_opts.scopes.size() == 3); // default: -pug
+}
+
+TEST_CASE("cli parse: repo info -p", "[cli][gnu]") {
+    auto args = TestArgs({"repo", "info", "-p", "myrepo"}).parse();
+    REQUIRE(args.repo_opts.scopes.size() == 1);
+    REQUIRE(args.repo_opts.scopes[0] == Scope::Project);
+}
+
+TEST_CASE("cli parse: repo info -g", "[cli][gnu]") {
+    auto args = TestArgs({"repo", "info", "-g", "myrepo"}).parse();
+    REQUIRE(args.repo_opts.scopes.size() == 1);
+    REQUIRE(args.repo_opts.scopes[0] == Scope::Global);
+}
+
+TEST_CASE("cli parse: repo info with no name throws", "[cli][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"repo", "info"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+// ===================================================================
+// 0.2.5 — --auto-update flag
+// ===================================================================
+
+TEST_CASE("cli parse: project build --auto-update", "[cli][gnu]") {
+    auto args = TestArgs({"project", "build", "--auto-update"}).parse();
+    REQUIRE(args.cmd == Command::ProjectBuild);
+    REQUIRE(args.build_opts.auto_update == true);
+}
+
+TEST_CASE("cli parse: project build without --auto-update defaults false", "[cli][gnu]") {
+    auto args = TestArgs({"project", "build"}).parse();
+    REQUIRE(args.build_opts.auto_update == false);
+}
+
+TEST_CASE("cli parse: project run --auto-update", "[cli][gnu]") {
+    auto args = TestArgs({"project", "run", "--auto-update"}).parse();
+    REQUIRE(args.cmd == Command::ProjectRun);
+    REQUIRE(args.build_opts.auto_update == true);
+}
+
+TEST_CASE("cli parse: project watch --auto-update", "[cli][gnu]") {
+    auto args = TestArgs({"project", "watch", "--auto-update"}).parse();
+    REQUIRE(args.cmd == Command::ProjectWatch);
+    REQUIRE(args.build_opts.auto_update == true);
+}

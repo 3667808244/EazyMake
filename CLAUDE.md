@@ -13,7 +13,7 @@ Design specifications live in `docs/`. Source code is under active development; 
 - Build: `bash build.sh` (generates locale data + version header, then compiles)
 - Manual build (MSYS2): `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static`
 - Manual build (Linux): `g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/ezmk -static`
-- Test: `g++ -std=c++17 test/test_*.cpp src/vendor/catch2_impl.cpp src/build.cpp src/cache.cpp src/cli.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/test_ezmk -lwinhttp -static && ./build/test_ezmk`
+- Test: `g++ -std=c++17 test/test_*.cpp src/vendor/catch2_impl.cpp src/build.cpp src/cache.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/test_ezmk -lwinhttp -static && ./build/test_ezmk`
 - Test framework: Catch2 v3 (header-only: `include/vendor/catch2.hpp` + `src/vendor/catch2_impl.cpp`)
 
 ## Architecture

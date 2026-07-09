@@ -9,11 +9,26 @@
 #include "lauxlib.h"
 #include "nlohmann_json.hpp"
 
+#include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <optional>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
+
+#if defined(_WIN32)
+#include <io.h>
+#define EZMK_ISATTY(fd) _isatty(fd)
+#define EZMK_FILENO(f) _fileno(f)
+#else
+#include <unistd.h>
+#define EZMK_ISATTY(fd) isatty(fd)
+#define EZMK_FILENO(f) fileno(f)
+#endif
 
 namespace ezmk::lua {
 
@@ -24,6 +39,229 @@ namespace ezmk::lua {
 static lua_State* g_L = nullptr;
 static fs::path   g_project_root; // set by register_api
 static fs::path   g_current_script_pkg_root; // set by run_script: root of the pkg owning the current script
+
+// 0.2.5+ — permission state for the currently running utils/hook script.
+static std::optional<config::UtilsPermissions> g_current_perms; // nullopt → legacy unrestricted
+static bool g_in_script_context = false;   // true while a utils script drives the API
+static bool g_perms_warned = false;        // one deprecation warning per session
+static bool g_noninteractive = false;      // set by -y / detected no-TTY
+static std::set<std::string> g_ask_allow;  // session cache: "cat:target" → allowed
+static std::set<std::string> g_ask_deny;   // session cache: "cat:target" → denied
+
+// ===================================================================
+// 0.2.5+ Utils permission model (pure checks + ask resolver)
+// ===================================================================
+
+namespace {
+
+// Normalize a filesystem path to an absolute, lexically-normal generic string
+// for stable prefix / equality comparisons. Any trailing '/' is stripped so a
+// directory entry like "src/" compares cleanly against "src/main.cpp".
+std::string norm_path(const fs::path& p) {
+    std::string s = fs::absolute(p).lexically_normal().generic_string();
+    while (s.size() > 1 && s.back() == '/') s.pop_back();
+    return s;
+}
+
+// Does `child` equal `parent` or live under it? Both are normalized strings.
+bool path_within(const std::string& child, const std::string& parent) {
+    if (child == parent) return true;
+    if (child.size() > parent.size() &&
+        child.compare(0, parent.size(), parent) == 0) {
+        // Ensure a directory boundary so "/a/bc" is not "within" "/a/b".
+        return child[parent.size()] == '/';
+    }
+    return false;
+}
+
+// Match a resolved absolute path against a permission list entry.
+// An entry is a path pattern relative to project_root (or absolute). A trailing
+// "/" or a directory entry matches everything beneath it; a file entry matches
+// exactly. A trailing "*" (or glob-ish token) is treated as a prefix match.
+bool path_matches_entry(const std::string& target_abs,
+                        const std::string& entry,
+                        const fs::path& project_root) {
+    if (entry.empty()) return false;
+
+    // Glob-style entries (contain * or ?) → match against the last path segment
+    // as well as the full string, so patterns like "**/.ssh/" or "*.key" work.
+    if (entry.find('*') != std::string::npos || entry.find('?') != std::string::npos) {
+        // Build a regex from a simple glob: ** → .*, * → [^/]*, ? → single char.
+        std::string rx;
+        for (size_t i = 0; i < entry.size(); ++i) {
+            char c = entry[i];
+            if (c == '*') {
+                if (i + 1 < entry.size() && entry[i + 1] == '*') {
+                    rx += ".*";
+                    ++i;
+                } else {
+                    rx += "[^/]*";
+                }
+            } else if (c == '?') {
+                rx += ".";
+            } else if (std::strchr(".^$+()[]{}|\\", c)) {
+                rx += '\\';
+                rx += c;
+            } else {
+                rx += c;
+            }
+        }
+        try {
+            std::regex re(rx);
+            // Match against the whole path and against any suffix boundary.
+            if (std::regex_search(target_abs, re)) return true;
+        } catch (...) {
+            // Malformed pattern → treat as no match rather than throwing.
+        }
+        return false;
+    }
+
+    // Non-glob: resolve entry relative to the project root, then prefix-match.
+    fs::path ep = entry;
+    std::string entry_abs = ep.is_absolute()
+        ? norm_path(ep)
+        : norm_path(project_root / ep);
+    return path_within(target_abs, entry_abs);
+}
+
+// Match a command's first token against a run permission entry.
+bool cmd_matches_entry(const std::string& cmd_token, const std::string& entry) {
+    if (entry.empty()) return false;
+    // Trailing "*" → prefix match (e.g. "git*" matches "git", "git.exe").
+    if (entry.size() >= 1 && entry.back() == '*') {
+        std::string prefix = entry.substr(0, entry.size() - 1);
+        return cmd_token.compare(0, prefix.size(), prefix) == 0;
+    }
+    // Exact match, or full-path basename equivalence.
+    if (cmd_token == entry) return true;
+    // Full path entry vs bare token, or vice versa: compare basenames only when
+    // the entry itself looks like a plain command name.
+    if (entry.find('/') == std::string::npos &&
+        entry.find('\\') == std::string::npos) {
+        fs::path p = cmd_token;
+        if (p.filename().generic_string() == entry) return true;
+    }
+    return false;
+}
+
+// Extract the executable token from a command line (first whitespace- or
+// quote-delimited word).
+std::string first_token(std::string_view cmd) {
+    size_t i = 0;
+    while (i < cmd.size() && std::isspace((unsigned char)cmd[i])) ++i;
+    if (i < cmd.size() && (cmd[i] == '"' || cmd[i] == '\'')) {
+        char q = cmd[i++];
+        size_t start = i;
+        while (i < cmd.size() && cmd[i] != q) ++i;
+        return std::string(cmd.substr(start, i - start));
+    }
+    size_t start = i;
+    while (i < cmd.size() && !std::isspace((unsigned char)cmd[i])) ++i;
+    return std::string(cmd.substr(start, i - start));
+}
+
+} // anonymous namespace
+
+PermResult check_read_permission(const fs::path& path,
+                                 const std::optional<config::UtilsPermissions>& perms,
+                                 const fs::path& project_root,
+                                 const fs::path& pkg_root) {
+    if (!perms) return PermResult::Allow; // legacy: unrestricted
+
+    std::string target = norm_path(path);
+
+    // deny wins over everything.
+    for (const auto& d : perms->read_deny) {
+        if (path_matches_entry(target, d, project_root)) return PermResult::Deny;
+    }
+    // allow list.
+    for (const auto& a : perms->read) {
+        if (path_matches_entry(target, a, project_root)) return PermResult::Allow;
+    }
+    // Implicit allow for the project config and the tool's own package dir,
+    // unless read_deny already caught them above.
+    std::string cfg_toml = norm_path(project_root / "ezmk.toml");
+    if (target == cfg_toml) return PermResult::Allow;
+    if (!pkg_root.empty() && path_within(target, norm_path(pkg_root)))
+        return PermResult::Allow;
+
+    return PermResult::Ask;
+}
+
+PermResult check_write_permission(const fs::path& path,
+                                  const std::optional<config::UtilsPermissions>& perms,
+                                  const fs::path& project_root) {
+    if (!perms) return PermResult::Allow; // legacy: unrestricted (hard limit still applies in caller)
+
+    std::string target = norm_path(path);
+
+    for (const auto& d : perms->write_deny) {
+        if (path_matches_entry(target, d, project_root)) return PermResult::Deny;
+    }
+    for (const auto& a : perms->write) {
+        if (path_matches_entry(target, a, project_root)) return PermResult::Allow;
+    }
+    return PermResult::Ask;
+}
+
+PermResult check_run_permission(std::string_view cmd,
+                                const std::optional<config::UtilsPermissions>& perms) {
+    if (!perms) return PermResult::Allow; // legacy: unrestricted
+
+    std::string tok = first_token(cmd);
+
+    for (const auto& d : perms->run_deny) {
+        if (cmd_matches_entry(tok, d)) return PermResult::Deny;
+    }
+    for (const auto& a : perms->run) {
+        if (cmd_matches_entry(tok, a)) return PermResult::Allow;
+    }
+    return PermResult::Ask;
+}
+
+void set_noninteractive(bool value) { g_noninteractive = value; }
+
+void clear_ask_cache() {
+    g_ask_allow.clear();
+    g_ask_deny.clear();
+}
+
+bool resolve_ask(PermCategory cat, std::string_view target) {
+    const char* cat_str = (cat == PermCategory::Read)  ? "READ"
+                        : (cat == PermCategory::Write) ? "WRITE"
+                                                       : "RUN";
+    std::string key = std::string(cat_str) + ":" + std::string(target);
+
+    // Session cache: an earlier "always allow / always deny" decision.
+    if (g_ask_allow.count(key)) return true;
+    if (g_ask_deny.count(key))  return false;
+
+    // Non-interactive (no TTY, or -y): fail safe → deny, and report the target.
+    bool tty = EZMK_ISATTY(EZMK_FILENO(stdin)) != 0;
+    if (g_noninteractive || !tty) {
+        util::warn(std::string("permission denied (non-interactive): ") +
+                   cat_str + " " + std::string(target));
+        return false;
+    }
+
+    // Interactive prompt.
+    std::cout << "[ezmk] utils " << cat_str << " access request:\n"
+              << "  " << target << "\n"
+              << "This target is neither allowed nor denied by the package permissions.\n"
+              << "Allow? [y]es / [n]o / [a]lways / [d]eny-always: " << std::flush;
+    std::string line;
+    if (!std::getline(std::cin, line)) {
+        return false; // EOF → deny
+    }
+    char c = line.empty() ? 'n' : (char)std::tolower((unsigned char)line[0]);
+    switch (c) {
+        case 'y': return true;
+        case 'a': g_ask_allow.insert(key); return true;
+        case 'd': g_ask_deny.insert(key);  return false;
+        case 'n':
+        default:  return false;
+    }
+}
 
 void init() {
     if (g_L) return;
@@ -240,6 +478,26 @@ static fs::path resolve_path(const fs::path& p) {
     return g_project_root / p;
 }
 
+// 0.2.5+ — one-time deprecation warning when a script uses a controlled API
+// without declaring [utils.permissions].
+static void warn_perms_undeclared() {
+    if (g_perms_warned) return;
+    g_perms_warned = true;
+    util::warn("utils permissions not declared; all file/command access allowed. "
+               "Define [utils.permissions] to restrict.");
+}
+
+// Resolve a PermResult to a final allow/deny decision, prompting on Ask.
+// `target` is used for the ask prompt and cache key.
+static bool permit(PermResult r, PermCategory cat, const std::string& target) {
+    switch (r) {
+        case PermResult::Allow: return true;
+        case PermResult::Deny:  return false;
+        case PermResult::Ask:   return resolve_ask(cat, target);
+    }
+    return false;
+}
+
 static int ezmk_file_exists(lua_State* L) {
     check_arg_count(L, 1);
     const char* path = luaL_checkstring(L, 1);
@@ -251,6 +509,25 @@ static int ezmk_file_read(lua_State* L) {
     check_arg_count(L, 1);
     const char* path = luaL_checkstring(L, 1);
     auto resolved = resolve_path(path);
+
+    // 0.2.5+ permission check.
+    if (g_in_script_context) {
+        if (!g_current_perms) {
+            warn_perms_undeclared();
+        } else {
+            auto abs = fs::absolute(resolved).lexically_normal();
+            PermResult r = check_read_permission(abs, g_current_perms,
+                                                 g_project_root,
+                                                 g_current_script_pkg_root);
+            if (!permit(r, PermCategory::Read, abs.generic_string())) {
+                lua_pushnil(L);
+                lua_pushstring(L, (std::string("permission denied: read access to ") +
+                                   abs.generic_string()).c_str());
+                return 2;
+            }
+        }
+    }
+
     if (!util::file_exists(resolved)) {
         lua_pushnil(L);
         lua_pushstring(L, "file not found");
@@ -290,6 +567,22 @@ static int ezmk_file_write(lua_State* L) {
         return 2;
     }
 
+    // 0.2.5+ permission check (after the hard "outside project root" limit).
+    if (g_in_script_context) {
+        if (!g_current_perms) {
+            warn_perms_undeclared();
+        } else {
+            auto abs = fs::absolute(resolved).lexically_normal();
+            PermResult r = check_write_permission(abs, g_current_perms, g_project_root);
+            if (!permit(r, PermCategory::Write, abs.generic_string())) {
+                lua_pushboolean(L, 0);
+                lua_pushstring(L, (std::string("permission denied: write access to ") +
+                                   abs.generic_string()).c_str());
+                return 2;
+            }
+        }
+    }
+
     // Ensure parent directory exists
     util::create_directories(resolved.parent_path());
 
@@ -308,6 +601,26 @@ static int ezmk_run(lua_State* L) {
     check_arg_count(L, 1);
     const char* cmd = luaL_checkstring(L, 1);
 
+    // 0.2.5+ permission check.
+    if (g_in_script_context) {
+        if (!g_current_perms) {
+            warn_perms_undeclared();
+        } else {
+            std::string tok = first_token(cmd);
+            PermResult r = check_run_permission(cmd, g_current_perms);
+            if (!permit(r, PermCategory::Run, tok)) {
+                lua_createtable(L, 0, 3);
+                lua_pushinteger(L, -1);
+                lua_setfield(L, -2, "exit_code");
+                lua_pushstring(L, "");
+                lua_setfield(L, -2, "stdout");
+                lua_pushstring(L, (std::string("permission denied: '") + tok + "'").c_str());
+                lua_setfield(L, -2, "stderr");
+                return 1;
+            }
+        }
+    }
+
     auto res = util::run_command(cmd);
 
     lua_createtable(L, 0, 3);
@@ -323,6 +636,19 @@ static int ezmk_run(lua_State* L) {
 static int ezmk_run_capture(lua_State* L) {
     check_arg_count(L, 1);
     const char* cmd = luaL_checkstring(L, 1);
+
+    // 0.2.5+ permission check.
+    if (g_in_script_context) {
+        if (!g_current_perms) {
+            warn_perms_undeclared();
+        } else {
+            std::string tok = first_token(cmd);
+            PermResult r = check_run_permission(cmd, g_current_perms);
+            if (!permit(r, PermCategory::Run, tok)) {
+                luaL_error(L, "permission denied: '%s'", tok.c_str());
+            }
+        }
+    }
 
     auto res = util::run_command(cmd);
     if (res.exit_code != 0) {
@@ -623,6 +949,25 @@ int run_script(lua_State* L, const fs::path& script_path,
             g_current_script_pkg_root = parent.parent_path();
         }
     }
+
+    // 0.2.5+ — load the package's declared permissions (if any) and enter
+    // script context so controlled APIs enforce them.
+    g_current_perms.reset();
+    g_in_script_context = true;
+    if (!g_current_script_pkg_root.empty()) {
+        auto pkg_toml = g_current_script_pkg_root / "ezmk.toml";
+        if (util::file_exists(pkg_toml)) {
+            try {
+                auto pkg_cfg = config::parse_config(pkg_toml);
+                g_current_perms = pkg_cfg.utils.permissions;
+            } catch (...) {
+                // Unparseable package config → leave perms nullopt (legacy path).
+            }
+        }
+    }
+    struct ScriptContextGuard {
+        ~ScriptContextGuard() { g_in_script_context = false; g_current_perms.reset(); }
+    } script_ctx_guard;
 
     // Ensure ezmk API is registered (in case register_api wasn't called explicitly)
     lua_getglobal(L, "ezmk");

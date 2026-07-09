@@ -1,9 +1,11 @@
 #include "ezmk/cli.hpp"
+#include "ezmk/argparse.hpp"
 #include "ezmk/i18n.hpp"
 #include "ezmk/util.hpp"
 
-#include <cstring>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 
 namespace ezmk::cli
 {
@@ -12,95 +14,62 @@ namespace ezmk::cli
     // Shared helpers
     // ===================================================================
 
-    // Parse combined scope flags like "-pug", "-pu", etc.
-    // Returns true if scope flags were parsed.
-    static bool parse_scope_flags(std::string_view a,
-                                  std::vector<Scope> &scopes,
-                                  bool allow_single)
+    // Scope flags -p / -u / -g are ordinary short options; the generic
+    // tokenizer splits "-pug" into "-p -u -g" for free. Collect them from a
+    // ParsedOptions in the order they appeared.
+    static std::vector<Scope> collect_scopes(const ParsedOptions &p)
     {
-        if (a.empty() || a[0] != '-')
-            return false;
-
-        if (allow_single)
+        std::vector<Scope> scopes;
+        for (const auto &[k, v] : p.options)
         {
-            if (a == "-p")
-            {
-                scopes = {Scope::Project};
-                return true;
-            }
-            if (a == "-u")
-            {
-                scopes = {Scope::User};
-                return true;
-            }
-            if (a == "-g")
-            {
-                scopes = {Scope::Global};
-                return true;
-            }
-            return false;
-        }
-        else
-        {
-            // Must be a short flag like -pug (single dash, not --long-flag)
-            if (a.size() < 2 || a[0] != '-' || a[1] == '-')
-                return false;
-
-            bool found = false;
-            if (a.find('p') != std::string::npos)
-            {
+            (void)v;
+            if (k == "p")
                 scopes.push_back(Scope::Project);
-                found = true;
-            }
-            if (a.find('u') != std::string::npos)
-            {
+            else if (k == "u")
                 scopes.push_back(Scope::User);
-                found = true;
-            }
-            if (a.find('g') != std::string::npos)
-            {
+            else if (k == "g")
                 scopes.push_back(Scope::Global);
-                found = true;
-            }
-            return found;
         }
+        return scopes;
     }
 
-    // Helper for subcommands that take scopes + one positional argument.
-    // Sets scopes if default_scopes is non-empty, sets value_name to the positional arg.
-    // single_scope: if true, only one scope flag is allowed (like install).
-    static void parse_scope_and_value(int argc, char **argv,
-                                      std::vector<Scope> &scopes,
-                                      std::string &value,
-                                      bool single_scope,
-                                      const char *cmd_name)
+    // The three scope option specs, shared by every scoped subcommand.
+    static void add_scope_specs(std::vector<OptionSpec> &spec)
     {
-        bool scope_set = false;
-        bool has_value = false;
+        spec.push_back({'p', "", false});
+        spec.push_back({'u', "", false});
+        spec.push_back({'g', "", false});
+    }
 
-        for (int i = 3; i < argc; ++i)
+    // Read build-related options (build / run / watch share these).
+    static void fill_build_opts(const ParsedOptions &p, BuildOptions &b)
+    {
+        if (p.has("disable-cache"))
+            b.disable_cache = true;
+        if (p.has("verbose"))
+            b.verbose = true;
+        if (auto v = p.value("jobs"))
         {
-            std::vector<Scope> parsed;
-            if (parse_scope_flags(argv[i], parsed, single_scope))
+            int j = 0;
+            try
             {
-                if (single_scope && scope_set)
-                {
-                    util::fatal(std::string("'") + cmd_name + "' accepts only one scope flag");
-                }
-                for (auto s : parsed)
-                    scopes.push_back(s);
-                scope_set = true;
+                size_t pos = 0;
+                j = std::stoi(*v, &pos);
+                if (pos != v->size())
+                    throw std::invalid_argument("");
             }
-            else
+            catch (...)
             {
-                if (has_value)
-                {
-                    util::fatal(std::string("'") + cmd_name + "' takes only one argument");
-                }
-                value = argv[i];
-                has_value = true;
+                util::fatal(std::string("invalid -j value: ") + *v);
             }
+            if (j < 0)
+                util::fatal("'-j' value must be >= 0");
+            b.jobs = j;
         }
+        if (auto v = p.value("profile"))
+            b.profile = *v;
+        if (p.has("auto-update"))          // 0.2.5+
+            b.auto_update = true;
     }
 
     // ===================================================================
@@ -115,96 +84,81 @@ namespace ezmk::cli
         if (action == "new")
         {
             args.cmd = Command::ProjectNew;
-            if (argc < 4)
-            {
+            std::vector<OptionSpec> spec = {
+                {'\0', "type", true},
+                {'\0', "disable-git-init", false},
+                {'\0', "disable-gitignore", false},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project new");
+
+            if (p.positionals.empty())
                 util::fatal("'ezmk project new' requires a project name");
-            }
-            args.project_name = argv[3];
+            if (p.positionals.size() > 1)
+                util::fatal("'ezmk project new' takes only one project name");
+            args.project_name = p.positionals[0];
 
-            for (int i = 4; i < argc; ++i)
+            if (auto t = p.value("type"))
             {
-                if (std::strcmp(argv[i], "--type") == 0)
-                {
-                    if (i + 1 >= argc)
-                    {
-                        util::fatal("'--type' requires a value: executable, static, shared, or utils");
-                    }
-                    std::string_view t = argv[++i];
-                    if (t != "executable" && t != "static" && t != "shared" && t != "utils")
-                    {
-                        util::fatal(std::string("unknown project type: ") + std::string(t) +
-                                    ". Expected: executable, static, shared, or utils");
-                    }
-                    args.project_type = t;
-                }
-                else if (std::strcmp(argv[i], "--disable-git-init") == 0)
-                {
-                    args.disable_git_init = true;
-                }
-                else if (std::strcmp(argv[i], "--disable-gitignore") == 0)
-                {
-                    args.disable_gitignore = true;
-                }
-                else
-                {
-                    util::fatal(std::string("unknown flag for new: ") + argv[i]);
-                }
+                if (*t != "executable" && *t != "static" && *t != "shared" && *t != "utils")
+                    util::fatal(std::string("unknown project type: ") + *t +
+                                ". Expected: executable, static, shared, or utils");
+                args.project_type = *t;
             }
+            if (p.has("disable-git-init"))
+                args.disable_git_init = true;
+            if (p.has("disable-gitignore"))
+                args.disable_gitignore = true;
             return args;
         }
 
-        // 0.2.4+: Shared build-option parsing used by build/run/watch.
-        // Returns false if an unknown flag is encountered; caller should
-        // report a command-specific error with the flag value.
-        auto parse_build_flag = [&](const char* flag, int& i) -> bool {
-            if (std::strcmp(flag, "--disable-cache") == 0) {
-                args.build_opts.disable_cache = true;
-                return true;
-            }
-            if (std::strcmp(flag, "--verbose") == 0 ||
-                std::strcmp(flag, "-v") == 0) {
-                args.build_opts.verbose = true;
-                return true;
-            }
-            if (std::strcmp(flag, "-j") == 0 ||
-                std::strcmp(flag, "--jobs") == 0) {
-                if (i + 1 >= argc)
-                    util::fatal("'-j' / '--jobs' requires a number (e.g. -j 4)");
-                std::string val = argv[++i];
-                try {
-                    args.build_opts.jobs = std::stoi(val);
-                    if (args.build_opts.jobs < 0)
-                        util::fatal("'-j' value must be >= 0");
-                } catch (...) {
-                    util::fatal(std::string("invalid -j value: ") + val);
-                }
-                return true;
-            }
-            if (std::strcmp(flag, "--profile") == 0) {
-                if (i + 1 >= argc)
-                    util::fatal("'--profile' requires a name (e.g. --profile debug)");
-                args.build_opts.profile = argv[++i];
-                return true;
-            }
-            return false;
-        };
-
-        if (action == "build")
+        if (action == "build" || action == "run" || action == "watch")
         {
-            args.cmd = Command::ProjectBuild;
-            for (int i = 3; i < argc; ++i) {
-                if (!parse_build_flag(argv[i], i))
-                    util::fatal(std::string("unknown flag for build: ") + argv[i]);
+            std::vector<OptionSpec> spec = {
+                {'v', "verbose", false},
+                {'j', "jobs", true},
+                {'\0', "disable-cache", false},
+                {'\0', "profile", true},
+                {'\0', "auto-update", false},    // 0.2.5+
+            };
+            std::string cmd_name;
+            if (action == "build")
+            {
+                args.cmd = Command::ProjectBuild;
+                cmd_name = "ezmk project build";
             }
-            return args;
-        }
+            else if (action == "run")
+            {
+                args.cmd = Command::ProjectRun;
+                cmd_name = "ezmk project run";
+            }
+            else
+            {
+                args.cmd = Command::ProjectWatch;
+                cmd_name = "ezmk project watch";
+                spec.push_back({'\0', "no-build-on-start", false});
+            }
 
-        if (action == "run")
-        {
-            args.cmd = Command::ProjectRun;
-            for (int i = 3; i < argc; ++i) {
-                if (!parse_build_flag(argv[i], i))
-                    util::fatal(std::string("unknown flag for run: ") + argv[i]);
+            auto p = parse_options(argc, argv, 3, spec, cmd_name);
+            fill_build_opts(p, args.build_opts);
+
+            if (action == "run")
+            {
+                // Positionals (typically after "--") are passed to the program.
+                args.program_args = p.positionals;
+            }
+            else if (action == "watch")
+            {
+                if (p.has("no-build-on-start"))
+                    args.watch_no_build_on_start = true;
+                if (!p.positionals.empty())
+                    util::fatal(std::string("unexpected argument for watch: ") +
+                                p.positionals[0]);
+            }
+            else // build
+            {
+                if (!p.positionals.empty())
+                    util::fatal(std::string("unexpected argument for build: ") +
+                                p.positionals[0]);
             }
             return args;
         }
@@ -212,19 +166,6 @@ namespace ezmk::cli
         if (action == "clean")
         {
             args.cmd = Command::ProjectClean;
-            return args;
-        }
-
-        if (action == "watch")
-        {
-            args.cmd = Command::ProjectWatch;
-            for (int i = 3; i < argc; ++i) {
-                if (std::strcmp(argv[i], "--no-build-on-start") == 0) {
-                    args.watch_no_build_on_start = true;
-                } else if (!parse_build_flag(argv[i], i)) {
-                    util::fatal(std::string("unknown flag for watch: ") + argv[i]);
-                }
-            }
             return args;
         }
 
@@ -239,51 +180,30 @@ namespace ezmk::cli
         if (action == "install")
         {
             args.cmd = Command::PkgInstall;
-            InstallOptions opts;
-            std::string pkg_file;
-            std::vector<Scope> scopes;
+            std::vector<OptionSpec> spec = {
+                {'\0', "sha256", true},
+                {'y', "yes", false},
+            };
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk pkg install");
 
-            // Parse scope flags, positional arg, and optional flags
-            for (int i = 3; i < argc; ++i)
-            {
-                std::vector<Scope> parsed;
-                if (parse_scope_flags(argv[i], parsed, true))
-                {
-                    for (auto s : parsed)
-                        scopes.push_back(s);
-                }
-                else if (argv[i][0] == '-' && argv[i][1] != '-' &&
-                         (std::strchr(argv[i], 'p') || std::strchr(argv[i], 'u') || std::strchr(argv[i], 'g')))
-                {
-                    util::fatal("'ezmk pkg install' accepts only one scope flag "
-                                "(e.g. -p, -u, or -g), not combined flags like -pug");
-                }
-                else if (std::strcmp(argv[i], "--sha256") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'--sha256' requires a value");
-                    opts.sha256 = argv[++i];
-                }
-                else if (std::strcmp(argv[i], "-y") == 0 || std::strcmp(argv[i], "--yes") == 0)
-                {
-                    opts.assume_yes = true;
-                }
-                else
-                {
-                    if (!pkg_file.empty())
-                    {
-                        util::fatal("'ezmk pkg install' takes only one package argument");
-                    }
-                    pkg_file = argv[i];
-                }
-            }
+            auto scopes = collect_scopes(p);
+            if (scopes.size() > 1)
+                util::fatal("'ezmk pkg install' accepts only one scope flag "
+                            "(e.g. -p, -u, or -g), not combined flags like -pug");
 
-            if (pkg_file.empty())
-            {
+            if (p.positionals.empty())
                 util::fatal("'ezmk pkg install' requires a package file or URL");
-            }
-            opts.pkg_file = pkg_file;
+            if (p.positionals.size() > 1)
+                util::fatal("'ezmk pkg install' takes only one package argument");
+
+            InstallOptions opts;
+            opts.pkg_file = p.positionals[0];
             opts.scope = scopes.empty() ? Scope::Project : scopes[0];
+            if (auto s = p.value("sha256"))
+                opts.sha256 = *s;
+            if (p.has("yes"))
+                opts.assume_yes = true;
             args.install_opts = opts;
             return args;
         }
@@ -297,21 +217,23 @@ namespace ezmk::cli
             else
                 args.cmd = Command::PkgInfo;
 
-            QueryOptions opts;
-            std::string pkg_name;
-            parse_scope_and_value(argc, argv, opts.scopes, pkg_name, false,
-                                  ("ezmk pkg " + std::string(action)).c_str());
+            std::vector<OptionSpec> spec;
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec,
+                                   "ezmk pkg " + std::string(action));
 
-            if (pkg_name.empty())
-            {
+            if (p.positionals.empty())
                 util::fatal(std::string("'ezmk pkg ") + std::string(action) +
                             "' requires a package name");
-            }
+            if (p.positionals.size() > 1)
+                util::fatal(std::string("'ezmk pkg ") + std::string(action) +
+                            "' takes only one package name");
+
+            QueryOptions opts;
+            opts.pkg_name = p.positionals[0];
+            opts.scopes = collect_scopes(p);
             if (opts.scopes.empty())
-            {
                 opts.scopes = {Scope::Project, Scope::User, Scope::Global};
-            }
-            opts.pkg_name = pkg_name;
             args.query_opts = opts;
             return args;
         }
@@ -319,14 +241,16 @@ namespace ezmk::cli
         if (action == "list")
         {
             args.cmd = Command::PkgList;
+            std::vector<OptionSpec> spec;
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk pkg list");
+            if (!p.positionals.empty())
+                util::fatal(std::string("'ezmk pkg list' takes no arguments"));
+
             QueryOptions opts;
-            std::string dummy;
-            parse_scope_and_value(argc, argv, opts.scopes, dummy, false,
-                                  "ezmk pkg list");
+            opts.scopes = collect_scopes(p);
             if (opts.scopes.empty())
-            {
                 opts.scopes = {Scope::Project, Scope::User, Scope::Global};
-            }
             args.query_opts = opts;
             return args;
         }
@@ -334,36 +258,35 @@ namespace ezmk::cli
         if (action == "update")
         {
             args.cmd = Command::PkgUpdate;
+            std::vector<OptionSpec> spec = {
+                {'\0', "all", false},
+            };
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk pkg update");
+
             QueryOptions opts;
-            std::string pkg_name;
-            parse_scope_and_value(argc, argv, opts.scopes, pkg_name, false,
-                                  "ezmk pkg update");
+            opts.update_all = p.has("all");
+            if (p.positionals.size() > 1)
+                util::fatal("'ezmk pkg update' takes only one package name");
 
-            // 0.2.4+: Check for --all flag before requiring package name
-            for (int i = 3; i < argc; ++i) {
-                if (std::strcmp(argv[i], "--all") == 0) {
-                    opts.update_all = true;
-                    // Shift arguments to remove --all from further parsing
-                    for (int j = i; j < argc - 1; ++j) argv[j] = argv[j + 1];
-                    --argc;
-                    break;
-                }
-            }
-
-            if (opts.update_all) {
-                // --all: package name is optional
-                if (!pkg_name.empty()) {
+            std::string pkg_name = p.positionals.empty() ? "" : p.positionals[0];
+            if (opts.update_all)
+            {
+                if (!pkg_name.empty())
                     util::warn("'--all' ignores the explicit package name '" + pkg_name + "'");
-                }
                 opts.pkg_name.clear();
-            } else if (pkg_name.empty()) {
+            }
+            else if (pkg_name.empty())
+            {
                 util::fatal("'ezmk pkg update' requires a package name or --all");
             }
-            if (opts.scopes.empty())
+            else
             {
-                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
+                opts.pkg_name = pkg_name;
             }
-            opts.pkg_name = pkg_name;
+            opts.scopes = collect_scopes(p);
+            if (opts.scopes.empty())
+                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
             args.query_opts = opts;
             return args;
         }
@@ -379,47 +302,29 @@ namespace ezmk::cli
         if (action == "add")
         {
             args.cmd = Command::RepoAdd;
-            RepoOptions opts;
-            bool scope_set = false;
-            bool has_url = false;
+            std::vector<OptionSpec> spec = {
+                {'\0', "name", true},
+                {'\0', "branch", true},
+            };
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk repo add");
 
-            for (int i = 3; i < argc; ++i)
-            {
-                std::vector<Scope> parsed;
-                if (parse_scope_flags(argv[i], parsed, true))
-                {
-                    if (scope_set)
-                    {
-                        util::fatal("'ezmk repo add' accepts only one scope flag");
-                    }
-                    opts.scopes = {parsed[0]};
-                    scope_set = true;
-                }
-                else if (std::strcmp(argv[i], "--name") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'--name' requires a value");
-                    opts.name = argv[++i];
-                }
-                else if (std::strcmp(argv[i], "--branch") == 0)
-                {
-                    if (i + 1 >= argc)
-                        util::fatal("'--branch' requires a value");
-                    opts.branch = argv[++i];
-                }
-                else
-                {
-                    if (has_url)
-                        util::fatal("'ezmk repo add' takes only one URL or path");
-                    opts.url = argv[i];
-                    has_url = true;
-                }
-            }
+            auto scopes = collect_scopes(p);
+            if (scopes.size() > 1)
+                util::fatal("'ezmk repo add' accepts only one scope flag");
 
-            if (!has_url)
+            if (p.positionals.empty())
                 util::fatal("'ezmk repo add' requires a git URL or local path");
-            if (!scope_set)
-                opts.scopes = {Scope::Project};
+            if (p.positionals.size() > 1)
+                util::fatal("'ezmk repo add' takes only one URL or path");
+
+            RepoOptions opts;
+            opts.url = p.positionals[0];
+            opts.scopes = scopes.empty() ? std::vector<Scope>{Scope::Project} : scopes;
+            if (auto n = p.value("name"))
+                opts.name = *n;
+            if (auto b = p.value("branch"))
+                opts.branch = *b;
             args.repo_opts = std::move(opts);
             return args;
         }
@@ -428,20 +333,24 @@ namespace ezmk::cli
         {
             bool is_remove = (action == "remove");
             args.cmd = is_remove ? Command::RepoRemove : Command::RepoUpdate;
-            RepoOptions opts;
-            std::string name;
-            parse_scope_and_value(argc, argv, opts.scopes, name, false,
-                                  ("ezmk repo " + std::string(action)).c_str());
 
+            std::vector<OptionSpec> spec;
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec,
+                                   "ezmk repo " + std::string(action));
+
+            if (p.positionals.size() > 1)
+                util::fatal(std::string("'ezmk repo ") + std::string(action) +
+                            "' takes only one repository name");
+            std::string name = p.positionals.empty() ? "" : p.positionals[0];
             if (is_remove && name.empty())
-            {
                 util::fatal("'ezmk repo remove' requires a repository name");
-            }
-            if (opts.scopes.empty())
-            {
-                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
-            }
+
+            RepoOptions opts;
             opts.name = name;
+            opts.scopes = collect_scopes(p);
+            if (opts.scopes.empty())
+                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
             args.repo_opts = std::move(opts);
             return args;
         }
@@ -449,25 +358,36 @@ namespace ezmk::cli
         if (action == "list")
         {
             args.cmd = Command::RepoList;
+            std::vector<OptionSpec> spec;
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk repo list");
+            if (!p.positionals.empty())
+                util::fatal(std::string("'ezmk repo list' takes no arguments"));
+
             RepoOptions opts;
-            bool scope_set = false;
+            opts.scopes = collect_scopes(p);
+            if (opts.scopes.empty())
+                opts.scopes = {Scope::Project, Scope::User, Scope::Global};
+            args.repo_opts = std::move(opts);
+            return args;
+        }
 
-            for (int i = 3; i < argc; ++i)
-            {
-                std::vector<Scope> parsed;
-                if (parse_scope_flags(argv[i], parsed, false))
-                {
-                    for (auto s : parsed)
-                        opts.scopes.push_back(s);
-                    scope_set = true;
-                }
-                else
-                {
-                    util::fatal(std::string("unknown argument for repo list: ") + argv[i]);
-                }
-            }
+        if (action == "info")     // 0.2.5+
+        {
+            args.cmd = Command::RepoInfo;
+            std::vector<OptionSpec> spec;
+            add_scope_specs(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk repo info");
 
-            if (!scope_set)
+            if (p.positionals.empty())
+                util::fatal("'ezmk repo info' requires a repository name");
+            if (p.positionals.size() > 1)
+                util::fatal("'ezmk repo info' takes only one repository name");
+
+            RepoOptions opts;
+            opts.name = p.positionals[0];
+            opts.scopes = collect_scopes(p);
+            if (opts.scopes.empty())
                 opts.scopes = {Scope::Project, Scope::User, Scope::Global};
             args.repo_opts = std::move(opts);
             return args;
@@ -476,12 +396,23 @@ namespace ezmk::cli
         util::fatal(std::string("unknown repo subcommand: ") + std::string(action));
     }
 
-    static CliArgs parse_utils_args(int argc, char **argv) {
+    static CliArgs parse_utils_args(int argc, char **argv)
+    {
         CliArgs args;
         args.cmd = Command::Utils;
         args.utils_name = (argc >= 3) ? argv[2] : "";
-        // Store extra args for future use
-        for (int i = 3; i < argc; ++i) {
+        // Everything after the tool name is passed to the tool verbatim.
+        // A single leading "--" separator is consumed so callers can write
+        // `ezmk utils fmt -- --help` to forward flags that would otherwise
+        // look like ezmk options.
+        bool dropped_separator = false;
+        for (int i = 3; i < argc; ++i)
+        {
+            if (!dropped_separator && std::string(argv[i]) == "--")
+            {
+                dropped_separator = true;
+                continue;
+            }
             args.utils_args.push_back(argv[i]);
         }
         return args;
@@ -542,11 +473,11 @@ namespace ezmk::cli
         std::cout << get(I18nKey::cli_usage_header) << "\n\n"
                   << get(I18nKey::cli_usage_usage) << ":\n\n";
         std::cout << get(I18nKey::cli_usage_project) << "\n"
-                  << "  ezmk project new <project_name>             Create a new project\n"
-                  << "  ezmk project build [--disable-cache] [--verbose|-v] [-j <N>] [--profile <name>]\n"
-                  << "  ezmk project run [--disable-cache] [--verbose|-v] [-j <N>] [--profile <name>]\n"
-                  << "  ezmk project clean                          Clean cache and temp files\n"
-                  << "  ezmk project watch [--profile <name>] [--no-build-on-start] [-j <N>]\n"
+                  << "  ezmk project new <project_name>                             Create a new project\n"
+                  << "  ezmk project build [--disable-cache] [--verbose|-v] [-j <N>] [--profile <name>] [--auto-update]\n"
+                  << "  ezmk project run [--disable-cache] [--verbose|-v] [-j <N>] [--profile <name>] [--auto-update] [-- <program args>]\n"
+                  << "  ezmk project clean                                          Clean cache and temp files\n"
+                  << "  ezmk project watch [--profile <name>] [--no-build-on-start] [-j <N>] [--auto-update]\n"
                   << "\n";
         std::cout << get(I18nKey::cli_usage_pkg) << "\n"
                   << "  ezmk pkg install [-p|-u|-g] [--sha256 <hash>] [-y] <pkg_file_or_url>\n"
@@ -561,9 +492,10 @@ namespace ezmk::cli
                   << "  ezmk repo remove [-p|-u|-g] <name>\n"
                   << "  ezmk repo update [-p|-u|-g] [<name>]\n"
                   << "  ezmk repo list [-p|-u|-g]\n"
+                  << "  ezmk repo info [-p|-u|-g] <name>                          Show repository details\n"
                   << "\n";
         std::cout << get(I18nKey::cli_usage_utils) << "\n"
-                  << "  ezmk utils <util_name> [args]              Run a Lua-based utility tool\n"
+                  << "  ezmk utils <util_name> [-- args]           Run a Lua-based utility tool\n"
                   << "\n";
         std::cout << get(I18nKey::cli_usage_scopes) << "\n"
                   << "  -p    Project scope\n"
@@ -576,10 +508,17 @@ namespace ezmk::cli
                   << "  --verbose, -v        Print detailed compile commands and cache diagnostics\n"
                   << "  -j, --jobs <N>       Max parallel compile jobs (0 = auto, default: auto)\n"
                   << "  --profile <name>     Build profile (e.g. debug, release)\n"
+                  << "  --auto-update        Auto-update all registered repo indices before building\n"
                   << "\n";
         std::cout << get(I18nKey::cli_usage_install_flags) << "\n"
                   << "  --sha256 <hash>      Verify package archive against expected SHA-256\n"
-                  << "  -y, --yes            Skip all interactive prompts (for CI/scripts)\n";
+                  << "  -y, --yes            Skip all interactive prompts (for CI/scripts)\n"
+                  << "\n";
+        // 0.2.5+: GNU-style option syntax note.
+        std::cout << "Option syntax:\n"
+                  << "  Long options accept --flag=value or --flag value.\n"
+                  << "  Short options can be grouped (-pug) and take attached values (-j4).\n"
+                  << "  Use -- to end option parsing and pass the rest through (utils, project run).\n";
     }
 
 } // namespace ezmk::cli

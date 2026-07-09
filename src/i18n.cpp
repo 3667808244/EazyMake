@@ -240,6 +240,16 @@ namespace ezmk::i18n
             case I18nKey::lua_api_arg_count:
                 return "lua_api_arg_count";
 
+            // cli option parsing (0.2.5+)
+            case I18nKey::cli_unknown_option:
+                return "cli_unknown_option";
+            case I18nKey::cli_missing_value:
+                return "cli_missing_value";
+
+            // pkg info (0.2.5+)
+            case I18nKey::pkg_info_permissions:
+                return "pkg_info_permissions";
+
             // general
             case I18nKey::fatal_prefix:
                 return "fatal_prefix";

@@ -19,6 +19,7 @@ enum class Command {
     RepoUpdate,
     RepoRemove,
     RepoList,
+    RepoInfo,        // 0.2.5+
     Utils,
     ProjectWatch,    // 0.2.3+
     PkgList,         // 0.2.3+
@@ -38,6 +39,7 @@ struct BuildOptions {
     bool verbose = false;
     int jobs = 0;              // 0.2.3+ (0 = auto-detect via hardware_concurrency)
     std::string profile;        // 0.2.3+ build profile name (debug, release, etc.)
+    bool auto_update = false;   // 0.2.5+: auto-update repo indices before build
 };
 
 struct InstallOptions {
@@ -78,12 +80,15 @@ struct CliArgs {
     // Only valid for PkgRemove / PkgSearch / PkgInfo
     std::optional<QueryOptions> query_opts;
 
-    // Only valid for RepoAdd / RepoRemove / RepoUpdate / RepoList
+    // Only valid for RepoAdd / RepoRemove / RepoUpdate / RepoList / RepoInfo
     RepoOptions repo_opts;
 
     // Only valid for Utils
     std::string utils_name;
     std::vector<std::string> utils_args;
+
+    // 0.2.5+: Positional args after "--" for `project run` (passed to the program)
+    std::vector<std::string> program_args;
 
     // 0.2.3+: Watch mode flags
     bool watch_no_build_on_start = false;   // --no-build-on-start

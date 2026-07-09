@@ -205,6 +205,60 @@ Lua 脚本运行在受限环境：
 
 ---
 
+## 权限管理 [version >= 0.2.5]
+
+Lua sandbox 之外，可在包的 `ezmk.toml` 中通过 `[utils.permissions]` 对 `file_read` /
+`file_write` / `run` 三类受控访问声明**细粒度**的白名单与黑名单：
+
+```toml
+[utils]
+tools = ["cc", "compile-commands"]
+
+[utils.permissions]
+read       = ["src/", "include/", "ezmk.toml"]   # 允许读取（相对项目根）
+read_deny  = ["**/.ssh/", "*.key", ".env"]       # 拒绝读取（优先于白名单）
+write      = ["build/", ".ezmk/cache/"]          # 允许写入
+write_deny = []                                  # 拒绝写入
+run        = ["g++", "clang++", "git*"]          # 允许执行的命令
+run_deny   = ["rm", "curl", "wget"]              # 拒绝执行
+network    = false                               # 声明式，暂未强制执行
+```
+
+### 判定顺序：deny > allow > ask
+
+每类访问按固定优先级判定（三类一致）：
+
+1. 命中 **deny 黑名单** → **拒绝**（最高优先级，即使同一目标也在白名单中）
+2. 否则命中 **allow 白名单** → **允许**
+3. 两者都不命中 → **询问用户**（交互式确认）
+
+- **读取**：`ezmk.toml` 本身与 `ezmk.pkg_dir()` 返回的包目录默认允许，但 `read_deny` 仍可覆盖。
+- **写入**：先经过「禁止写项目根目录外」的硬限制（不可绕过），再进入 deny/allow/ask。
+- **执行**：仅匹配命令第一个 token（可执行文件名）。精确匹配（`g++` 不匹配 `g++-13`）、
+  `*` 结尾前缀通配（`git*` 匹配 `git`、`git.exe`）、全路径匹配。
+
+### 询问（ask）与非交互兜底
+
+当访问目标「既不在白名单也不在黑名单」时，向用户交互确认，可选 `y`/`n`，或
+`a`（本会话始终允许）/`d`（本会话始终拒绝）。决策按「类别 + 目标」在会话内缓存。
+
+**非交互环境**（无 TTY，或 CI 场景）：无法询问 → 一律**拒绝**（fail-safe），并打印被拒目标，
+便于用户补白名单后重试。CI 中应把所需访问显式写入白名单。
+
+### 向后兼容
+
+`[utils.permissions]` 整节缺失的旧包保持无限制行为，但首次调用受控 API 时打印一次
+deprecation warning。一旦声明该节，三类权限即全部进入 deny/allow/ask 模型；某字段省略
+= 空列表 = 该类访问默认询问。
+
+拒绝时受控 API 的返回：
+
+- `ezmk.file_read()` → `nil, "permission denied: read access to <path>"`
+- `ezmk.file_write()` → `false, "permission denied: write access to <path>"`
+- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}`；`run_capture()` 抛 error
+
+---
+
 ## 与 `pkg info` 集成
 
 对 `type = "utils"` 的包执行 `ezmk pkg info` 时，除常规字段外，额外展示：

@@ -82,9 +82,10 @@ ezmk utils cc -o build/compile_commands.json
 | Command | Description |
 |---|---|
 | `ezmk project new <name> [--type executable\|static\|shared\|utils]` | Scaffold a new project |
-| `ezmk project build [--disable-cache] [--verbose]` | Incremental build |
-| `ezmk project run [--disable-cache] [--verbose]` | Build and execute |
+| `ezmk project build [--disable-cache] [--verbose] [-j <N>] [--profile <name>] [--auto-update]` | Incremental build |
+| `ezmk project run [--disable-cache] [--verbose] [-j <N>] [--profile <name>] [--auto-update] [-- <program args>]` | Build and execute |
 | `ezmk project clean` | Remove cache and temp files |
+| `ezmk project watch [--profile <name>] [--no-build-on-start] [-j <N>] [--auto-update]` | Watch for changes and auto-rebuild |
 
 ### `pkg` — manage packages
 
@@ -103,6 +104,7 @@ ezmk utils cc -o build/compile_commands.json
 | `ezmk repo remove [-p\|-u\|-g] <name>` | Unregister and delete cache |
 | `ezmk repo update [-p\|-u\|-g] [<name>]` | `git pull` to refresh |
 | `ezmk repo list [-p\|-u\|-g]` | List registered repos |
+| `ezmk repo info [-p\|-u\|-g] <name>` | Show repository details (packages, versions) |
 
 ### `utils` — Lua-based tools (0.2.0+)
 
@@ -128,6 +130,39 @@ Utils tools are packages (`type = "utils"`) installed via `ezmk pkg install`. Th
 | `-g` | Global | `<ezmk_install_dir>/pkg/` |
 
 `install` and `repo add` accept only one scope flag; others accept combinations like `-pug`.
+
+### Option syntax (GNU conventions)
+
+EazyMake follows GNU argument syntax conventions:
+
+- **Long options**: `--flag=value` or `--flag value` are equivalent
+- **Short option grouping**: `-pug` equals `-p -u -g`
+- **Attached values**: `-j4` equals `-j 4`
+- **Option/value interleaving**: Options and positional arguments can be freely mixed
+- **`--` terminator**: Everything after `--` is treated as a positional argument, enabling pass-through for `utils` and `project run`
+
+### Shell completion (zsh)
+
+EazyMake ships a static zsh completion script at `completions/_ezmk`:
+
+```bash
+# Install system-wide
+cp completions/_ezmk /usr/share/zsh/site-functions/
+
+# Or install for current user
+mkdir -p ~/.zsh/completions
+cp completions/_ezmk ~/.zsh/completions/
+# Then add to ~/.zshrc: fpath=(~/.zsh/completions $fpath)
+```
+
+After installing, restart your shell or run `autoload -Uz compinit && compinit`. Then `ezmk <TAB>` will offer:
+- Top-level command completion (`project`, `pkg`, `repo`, `utils`)
+- Subcommand flags (GNU style: `--flag=value`, `-j4`, `-pug`)
+- Dynamic completions: build profiles, installed packages, registered repos, utils tools
+
+### Build flags
+
+`--auto-update` runs `ezmk repo update --pug` before building, so packages installed from registered repos resolve the latest index. Default is off — updates are explicit to avoid network latency on every build.
 
 ## Project structure
 

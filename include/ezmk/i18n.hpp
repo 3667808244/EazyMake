@@ -102,6 +102,7 @@ enum class I18nKey {
     pkg_info_tools,           // 0.2.3+
     pkg_info_artifacts,       // 0.2.3+
     pkg_info_none,            // 0.2.3+
+    pkg_info_permissions,     // 0.2.5+
 
     // config errors (0.2.3+)
     config_err_invalid_type,
@@ -124,6 +125,8 @@ enum class I18nKey {
     cli_usage_build_flags,    // 0.2.3+
     cli_usage_install_flags,  // 0.2.3+
     cli_usage_usage,           // 0.2.3+
+    cli_unknown_option,        // 0.2.5+
+    cli_missing_value,         // 0.2.5+
     scope_project,             // 0.2.3+
     scope_user,                // 0.2.3+
     scope_global,              // 0.2.3+
@@ -139,6 +142,21 @@ enum class I18nKey {
     repo_removed,
     repo_updated,
     removing_cache,
+
+    // repo info (0.2.5+)
+    repo_info_name,
+    repo_info_scope,
+    repo_info_url,
+    repo_info_type,
+    repo_info_branch,
+    repo_info_updated,
+    repo_info_cache,
+    repo_info_packages,
+    repo_info_version_list,
+    repo_search_resolved,
+    repo_validate_missing_file,
+    repo_validate_bad_sha256,
+    auto_updating_repos,
 
     // project
     creating_project,
