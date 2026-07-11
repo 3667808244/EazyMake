@@ -46,221 +46,17 @@ namespace ezmk::i18n
     {
 
         // ---- key_name mapping ----
+        // Generated from include/ezmk/i18n_keys.def so it can never drift out
+        // of sync with the I18nKey enum (single source of truth, 0.2.6+).
         const char *key_name(I18nKey key)
         {
             switch (key)
             {
-            // build
-            case I18nKey::archive_failed:
-                return "archive_failed";
-            case I18nKey::build_failed:
-                return "build_failed";
-            case I18nKey::build_success:
-                return "build_success";
-            case I18nKey::building:
-                return "building";
-            case I18nKey::compiling:
-                return "compiling";
-            case I18nKey::compilation_failed:
-                return "compilation_failed";
-            case I18nKey::compile_options_changed:
-                return "compile_options_changed";
-            case I18nKey::compiler_not_found:
-                return "compiler_not_found";
-            case I18nKey::linking:
-                return "linking";
-            case I18nKey::link_failed:
-                return "link_failed";
-            case I18nKey::archiving:
-                return "archiving";
-            case I18nKey::main_missing:
-                return "main_missing";
-            case I18nKey::no_source_files:
-                return "no_source_files";
-            case I18nKey::src_dir_missing:
-                return "src_dir_missing";
-            case I18nKey::cache_summary:
-                return "cache_summary";
-
-            // cache
-            case I18nKey::cache_hit:
-                return "cache_hit";
-            case I18nKey::cache_hit_brief:
-                return "cache_hit_brief";
-            case I18nKey::cache_miss:
-                return "cache_miss";
-            case I18nKey::cache_miss_record:
-                return "cache_miss_record";
-            case I18nKey::cache_miss_source:
-                return "cache_miss_source";
-            case I18nKey::cache_miss_options:
-                return "cache_miss_options";
-            case I18nKey::cache_miss_header:
-                return "cache_miss_header";
-            case I18nKey::source_changed:
-                return "source_changed";
-            case I18nKey::options_changed:
-                return "options_changed";
-            case I18nKey::header_changed:
-                return "header_changed";
-            case I18nKey::include_structure_changed:
-                return "include_structure_changed";
-
-            // pkg
-            case I18nKey::auto_yes:
-                return "auto_yes";
-            case I18nKey::circular_dep:
-                return "circular_dep";
-            case I18nKey::compiling_pkg:
-                return "compiling_pkg";
-            case I18nKey::confirm_continue:
-                return "confirm_continue";
-            case I18nKey::confirm_script:
-                return "confirm_script";
-            case I18nKey::downloading:
-                return "downloading";
-            case I18nKey::extracting:
-                return "extracting";
-            case I18nKey::exec_question:
-                return "exec_question";
-            case I18nKey::found_in_repo:
-                return "found_in_repo";
-            case I18nKey::found_script:
-                return "found_script";
-            case I18nKey::global_confirm:
-                return "global_confirm";
-            case I18nKey::install_cancelled:
-                return "install_cancelled";
-            case I18nKey::install_cancelled_user:
-                return "install_cancelled_user";
-            case I18nKey::installed:
-                return "installed";
-            case I18nKey::installing:
-                return "installing";
-            case I18nKey::installing_to:
-                return "installing_to";
-            case I18nKey::missing_dep:
-                return "missing_dep";
-            case I18nKey::not_found:
-                return "not_found";
-            case I18nKey::overwrite_confirm:
-                return "overwrite_confirm";
-            case I18nKey::removed:
-                return "removed";
-            case I18nKey::removing:
-                return "removing";
-            case I18nKey::resolving_deps:
-                return "resolving_deps";
-            case I18nKey::running_script:
-                return "running_script";
-            case I18nKey::script_completed:
-                return "script_completed";
-            case I18nKey::script_failed:
-                return "script_failed";
-            case I18nKey::searching:
-                return "searching";
-            case I18nKey::searching_repos:
-                return "searching_repos";
-            case I18nKey::sha256_mismatch:
-                return "sha256_mismatch";
-            case I18nKey::sha256_ok:
-                return "sha256_ok";
-            case I18nKey::skipping:
-                return "skipping";
-            case I18nKey::verifying:
-                return "verifying";
-
-            // repo
-            case I18nKey::cloning:
-                return "cloning";
-            case I18nKey::no_repos:
-                return "no_repos";
-            case I18nKey::pulling:
-                return "pulling";
-            case I18nKey::re_cloning:
-                return "re_cloning";
-            case I18nKey::re_reading:
-                return "re_reading";
-            case I18nKey::repo_added:
-                return "repo_added";
-            case I18nKey::repo_not_found:
-                return "repo_not_found";
-            case I18nKey::repo_removed:
-                return "repo_removed";
-            case I18nKey::repo_updated:
-                return "repo_updated";
-            case I18nKey::removing_cache:
-                return "removing_cache";
-
-            // project
-            case I18nKey::creating_project:
-                return "creating_project";
-            case I18nKey::project_created:
-                return "project_created";
-            case I18nKey::init_git:
-                return "init_git";
-            case I18nKey::git_initialized:
-                return "git_initialized";
-            case I18nKey::git_not_found:
-                return "git_not_found";
-            case I18nKey::git_init_failed:
-                return "git_init_failed";
-
-            // run & clean
-            case I18nKey::cleaned:
-                return "cleaned";
-            case I18nKey::running:
-                return "running";
-            case I18nKey::clean_stale:
-                return "clean_stale";
-
-            // editor
-            case I18nKey::no_editor:
-                return "no_editor";
-            case I18nKey::opening_editor:
-                return "opening_editor";
-            case I18nKey::editor_error:
-                return "editor_error";
-
-            // version
-            case I18nKey::version_output:
-                return "version_output";
-
-            // utils / Lua
-            case I18nKey::utils_placeholder:
-                return "utils_placeholder";
-            case I18nKey::utils_not_found:
-                return "utils_not_found";
-            case I18nKey::lua_init_failed:
-                return "lua_init_failed";
-            case I18nKey::lua_error:
-                return "lua_error";
-            case I18nKey::lua_api_type_error:
-                return "lua_api_type_error";
-            case I18nKey::lua_api_arg_count:
-                return "lua_api_arg_count";
-
-            // cli option parsing (0.2.5+)
-            case I18nKey::cli_unknown_option:
-                return "cli_unknown_option";
-            case I18nKey::cli_missing_value:
-                return "cli_missing_value";
-
-            // pkg info (0.2.5+)
-            case I18nKey::pkg_info_permissions:
-                return "pkg_info_permissions";
-
-            // general
-            case I18nKey::fatal_prefix:
-                return "fatal_prefix";
-            case I18nKey::error_prefix:
-                return "error_prefix";
-            case I18nKey::warn_prefix:
-                return "warn_prefix";
-            case I18nKey::info_prefix:
-                return "info_prefix";
+#define EZMK_I18N_KEY(name) case I18nKey::name: return #name;
+#include "ezmk/i18n_keys.def"
+#undef EZMK_I18N_KEY
             }
-            return "???"; // unreachable — all enum values covered
+            return "???"; // unreachable — all enum values are generated above
         }
 
         // ---- global state ----
@@ -396,6 +192,30 @@ namespace ezmk::i18n
             g_current_lang = "en";
         }
 
+        // Development-time aid (0.2.6+): warn once if any I18nKey has no entry
+        // in the loaded locale (i.e. the JSON is missing a translation). This
+        // is distinct from an enum/key_name mismatch, which the X-macro single
+        // source of truth (i18n_keys.def) makes impossible. Silent in release
+        // builds to avoid noise for end users.
+        void audit_missing_keys()
+        {
+#ifndef NDEBUG
+            static const char *const all_keys[] = {
+#define EZMK_I18N_KEY(name) #name,
+#include "ezmk/i18n_keys.def"
+#undef EZMK_I18N_KEY
+            };
+            for (const char *k : all_keys)
+            {
+                if (g_strings.find(k) == g_strings.end())
+                {
+                    util::warn(std::string("i18n: locale '") + g_current_lang +
+                               "' is missing a translation for key '" + k + "'");
+                }
+            }
+#endif
+        }
+
     } // anonymous namespace
 
     // ---- public API ----
@@ -414,22 +234,24 @@ namespace ezmk::i18n
 
         // 1. Try runtime locale file first (allows user override)
         std::string file_json = load_runtime_locale_file(target_lang);
-        if (!file_json.empty())
+        if (!file_json.empty() && parse_locale_json(file_json, target_lang))
         {
-            if (parse_locale_json(file_json, target_lang))
-                return;
+            audit_missing_keys();
+            return;
         }
 
         // 2. Try embedded data
         auto it = get_embedded_locales().find(target_lang);
-        if (it != get_embedded_locales().end() && !it->second.empty())
+        if (it != get_embedded_locales().end() && !it->second.empty() &&
+            parse_locale_json(it->second, target_lang))
         {
-            if (parse_locale_json(it->second, target_lang))
-                return;
+            audit_missing_keys();
+            return;
         }
 
         // 3. Fallback to English
         load_en_fallback();
+        audit_missing_keys();
     }
 
     std::string get(I18nKey key)

@@ -57,6 +57,11 @@ void error(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& ar
 // ---- Color support (VT100/ANSI) ----
 // Call once at startup to enable VT100 processing on Windows.
 void init_console();
+// Global color output policy (0.2.6+). Auto = decide from TTY/NO_COLOR;
+// Always/Never force the decision (overriding NO_COLOR).
+enum class ColorMode { Auto, Always, Never };
+void set_color_mode(ColorMode mode);
+ColorMode get_color_mode();
 // Returns true if the output stream supports ANSI color codes.
 bool supports_color();
 // Wrap a message in color codes (no-op if color is not supported).

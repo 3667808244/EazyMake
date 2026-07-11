@@ -108,6 +108,24 @@ namespace color {
 
 static bool g_console_initialized = false;
 
+// 0.2.6+: global color policy, set once from --color=<mode> (or left Auto).
+static ColorMode g_color_mode = ColorMode::Auto;
+
+void set_color_mode(ColorMode mode) {
+    g_color_mode = mode;
+#ifdef EZMK_WIN
+    // Forcing color on may target a legacy conhost without VT100 enabled;
+    // try to turn it on so escape codes render instead of showing as garbage.
+    if (mode == ColorMode::Always) {
+        init_console();
+    }
+#endif
+}
+
+ColorMode get_color_mode() {
+    return g_color_mode;
+}
+
 void init_console() {
     if (g_console_initialized) return;
     g_console_initialized = true;
@@ -126,7 +144,12 @@ void init_console() {
 }
 
 bool supports_color() {
-    // Respect NO_COLOR convention: https://no-color.org/
+    // Explicit --color=always/never (0.2.6+) overrides everything, including
+    // the NO_COLOR environment variable (matching git/ls conventions).
+    if (g_color_mode == ColorMode::Always) return true;
+    if (g_color_mode == ColorMode::Never) return false;
+
+    // ColorMode::Auto — respect NO_COLOR convention: https://no-color.org/
     const char* no_color = std::getenv("NO_COLOR");
     if (no_color && no_color[0] != '\0') return false;
 
@@ -636,7 +659,12 @@ ProcResult run_command(const std::string& cmd) {
         return result;
     }
 
-    std::string cmd2 = cmd + " 1>" + out_tmpl + " 2>" + err_tmpl;
+    // Wrap the user command in a brace group so our stdout/stderr redirections
+    // apply to the whole command. Appending "1>out 2>err" directly composes
+    // incorrectly with any fd redirection inside `cmd` (e.g. `echo x >&2` would
+    // otherwise land in the stdout capture because the later `1>out` overrides
+    // the user's `>&2`). The group makes the outer redirections authoritative.
+    std::string cmd2 = "{ " + cmd + " ; } 1>" + out_tmpl + " 2>" + err_tmpl;
     int rc = std::system(cmd2.c_str());
     if (WIFEXITED(rc)) result.exit_code = WEXITSTATUS(rc);
     else result.exit_code = rc;

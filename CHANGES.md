@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.6 (2026-07-11) — 翻译补全与命令行改进
+
+可用性收尾版本，无新增构建/包管理能力，聚焦 i18n 系统性修复与命令行打磨。
+
+### Bug 修复
+- **根除 `{???}` 显示 bug**：`ezmk help` / `pkg list` / `repo list` 等命令输出的 `{???}` 占位符消失。根因是 `src/i18n.cpp` 手写的 `key_name()` switch 漏登记了 0.2.3~0.2.5 新增的约 50 个 `I18nKey` 枚举值（枚举 / switch / JSON 三处数据源手动同步时漏了中间一处），而非 JSON 缺翻译
+- **POSIX `run_command()` stderr 捕获修复**：用花括号组 `{ cmd ; } 1>out 2>err` 包裹重定向，确保被调命令自身的 fd 重定向（如 `>&2`）不污染 stdout/stderr 捕获（修复 Linux 上暴露的 2 个既有 `test_util` 失败）
+
+### 新增
+- **i18n 单一数据源（X-macro）**：新增 `include/ezmk/i18n_keys.def`，`I18nKey` 枚举与 `key_name()` 映射均由它生成，从结构上杜绝三处失配。新增键 = `.def` 加一行 + 两份 JSON 各加一条
+- **开发期缺失键审计**：`i18n::init()` 末尾的 `audit_missing_keys()`（仅 `NDEBUG` 未定义时启用），对枚举有键但 JSON 缺翻译的情况逐一告警一次
+- **命令简写**：顶层别名在 `cli::parse()` 分发前展开 —— `pn/pb/pr/pc/pw`（project）、`ki/kr/ks/kn/kl/ku`（pkg）、`ra/rr/rl/ru/ri`（repo）、`u/h/v`（utils/help/version）。仅在命令位生效，不进 zsh 补全，仅在帮助页展示
+- **全局 `--color=<mode>`**：`always`/`enable`、`auto`/`default`、`never`/`disable`（大小写不敏感）。显式 `always`/`never` 覆盖 `NO_COLOR`，仅 `auto` 尊重之（对齐 git/ls）；`always` 亦尝试开启 Windows VT100
+
+### 变更
+- **帮助正文全本地化**：`print_usage()` 每条命令/flag 的说明文字改走 i18n（约 30 个 `help_*` 键），命令用法串保持字面
+- **参数校验报错本地化**：`src/cli.cpp` 各 `parse_*_args()` 的硬编码英文 `util::fatal` 替换为 i18n 键（`cli_arg_required` / `cli_too_many_args` / `cli_unknown_subcommand` 等 + `arg_*` 名词键）
+- **`repo list` 专属键**：新增 `repo_list_title` / `repo_list_none`，不再复用语义为"已安装包"的 `pkg_list_*`
+- **代码卫生**：确认 `src/pkg.cpp` 全局安装确认处注释为正常 `// Safety:`
+
+### 测试
+- 测试套件：**476 个测试用例，2180 个断言全部通过**（Windows UCRT64 g++ + Linux Arch g++）
+- 新增回归防线：遍历全部 `I18nKey` 枚举，断言 `get(key)` 不以 `{` 开头（直接卡住 `{???}` 类 bug）
+- 新增 `[alias]`（26 断言）与 `[color]`（16 断言）用例组
+
+---
+
+## 0.2.5 (2026-07-09) — 生态与安全
+
+### 新增
+- **zsh 命令补全**：静态补全脚本 `completions/_ezmk`，覆盖全部命令、子命令与 flag
+- **Utils 细粒度权限管理**：`[utils.permissions]` read/write/run 白名单，脚本越权访问被拒；未声明权限的旧包行为不变 + deprecation warning（向后兼容）
+- **`ezmk repo info`**：显示仓库名称、作用域、URL、类型、分支、更新时间、缓存路径与包版本列表
+- **跨仓库版本选择**：同名包在多个仓库中出现时，按语义化版本比较选取最新
+- **仓库本地校验增强**：`index.toml` 中 file 存在性检查与 sha256 格式校验
+- **`--auto-update`**：`pkg install` / `search` 前自动 `git pull` 已注册仓库
+
+### 测试
+- 测试套件：**测试全部通过**（Windows + Linux）
+
+---
+
 ## 0.2.4 (2026-07-08) — 健壮性与完善
 
 ### Bug 修复

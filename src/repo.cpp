@@ -472,11 +472,11 @@ void list(const std::vector<cli::Scope>& scopes) {
 
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
-        std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_list_title,
+        std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_list_title,
                                       {{"scope", scope_label(scope)}}) << "\n";
 
         if (entries.empty()) {
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_list_none) << "\n";
+            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_list_none) << "\n";
         } else {
             for (auto& e : entries) {
                 std::cout << "  " << std::left << std::setw(16) << e.name

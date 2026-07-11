@@ -365,3 +365,67 @@ TEST_CASE("0.2.3 i18n keys: fmt works with new keys", "[i18n][0.2.3]") {
                          {{"path", "/src/main.cpp"}});
     REQUIRE(r3.find("/src/main.cpp") != std::string::npos);
 }
+
+// ===================================================================
+// 0.2.6+: exhaustive regression — EVERY I18nKey must resolve in both
+// languages (guards against the enum/key_name/JSON drift that produced
+// the {???} bug). Keys and their JSON names are generated from the same
+// single source of truth (i18n_keys.def) used by the enum itself.
+// ===================================================================
+
+namespace {
+static const I18nKey kAllKeys[] = {
+#define EZMK_I18N_KEY(name) I18nKey::name,
+#include "ezmk/i18n_keys.def"
+#undef EZMK_I18N_KEY
+};
+static const char* const kAllKeyNames[] = {
+#define EZMK_I18N_KEY(name) #name,
+#include "ezmk/i18n_keys.def"
+#undef EZMK_I18N_KEY
+};
+constexpr size_t kAllKeyCount = sizeof(kAllKeys) / sizeof(kAllKeys[0]);
+} // namespace
+
+TEST_CASE("Every I18nKey resolves (no missing-key fallback) in en and zh",
+          "[i18n][keys][regression]") {
+    for (const char* lang : {"en", "zh"}) {
+        init(lang);
+        for (size_t i = 0; i < kAllKeyCount; ++i) {
+            std::string s = get(kAllKeys[i]);
+            std::string fallback = std::string("{") + kAllKeyNames[i] + "}";
+            INFO("lang=" << lang << " key=" << kAllKeyNames[i]);
+            // The missing-key fallback is exactly "{<keyname>}". A real
+            // translation is never equal to that (even templates that contain
+            // placeholders differ from the bare key name).
+            REQUIRE(s != fallback);
+            REQUIRE(!s.empty());
+        }
+    }
+}
+
+TEST_CASE("0.2.6 i18n keys: help, cli-error and repo-list keys present",
+          "[i18n][0.2.6]") {
+    for (const char* lang : {"en", "zh"}) {
+        init(lang);
+        REQUIRE(!get(I18nKey::repo_list_title).empty());
+        REQUIRE(!get(I18nKey::repo_list_none).empty());
+        REQUIRE(!get(I18nKey::help_project_new).empty());
+        REQUIRE(!get(I18nKey::help_flag_color).empty());
+        REQUIRE(!get(I18nKey::cli_arg_required).empty());
+        REQUIRE(!get(I18nKey::cli_invalid_color).empty());
+    }
+}
+
+TEST_CASE("0.2.6 i18n: cli error templates format correctly", "[i18n][0.2.6]") {
+    init("en");
+    std::string r = fmt(I18nKey::cli_arg_required,
+                        {{"cmd", "ezmk project new"}, {"what", "project name"}});
+    REQUIRE(r.find("ezmk project new") != std::string::npos);
+    REQUIRE(r.find("project name") != std::string::npos);
+    REQUIRE(r.find("{cmd}") == std::string::npos);
+    REQUIRE(r.find("{what}") == std::string::npos);
+
+    std::string c = fmt(I18nKey::cli_invalid_color, {{"val", "bogus"}});
+    REQUIRE(c.find("bogus") != std::string::npos);
+}

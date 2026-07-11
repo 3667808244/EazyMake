@@ -38,6 +38,15 @@ Additional commands not yet in README:
 
 Scope flags (`-p`/`-u`/`-g`): `install` and `repo add` accept only one; others accept combined flags like `-pug`.
 
+### Command shorthands & global `--color` (0.2.6+)
+
+- **Shorthands**: `cli::parse()` expands a top-level alias in `argv[1]` before any other parsing (so downstream logic and error messages see the canonical command). Aliases: `pn/pb/pr/pc/pw` (project), `ki/kr/ks/kn/kl/ku` (pkg), `ra/rr/rl/ru/ri` (repo), `u`/`h`/`v` (utils/help/version). Only apply at the command position; `ezmk project pn` is still an unknown subcommand. Deliberately **not** added to `completions/_ezmk`.
+- **`--color=<mode>`**: global option consumed by `strip_color_option()` at the top of `cli::parse()` (before per-command parsing, which would reject it). Values (case-insensitive): `always`/`enable`, `auto`/`default`, `never`/`disable`. Tokens after `--` are left for pass-through. Sets `util::set_color_mode()`; explicit `always`/`never` override `NO_COLOR` (only `auto` honors it), matching git/ls. `always` also runs `init_console()` for Windows VT100.
+
+### Internationalization (i18n) — single source of truth (0.2.6+)
+
+All string keys live in **`include/ezmk/i18n_keys.def`** (X-macro list). Both the `I18nKey` enum (`i18n.hpp`) and the enum→JSON-name mapping `key_name()` (`i18n.cpp`) are generated from it, so they can never drift (this eliminated the historical `{???}` bug where new enum values were missing from a hand-written `key_name()` switch). Adding a key = one line in `i18n_keys.def` + a string in `locale/en.json` **and** `locale/zh.json`, then rebuild (`build.sh` re-runs `scripts/embed_locale.py`). Debug builds run `audit_missing_keys()` in `i18n::init()` to warn once per key that exists in the enum but is missing from the loaded locale.
+
 ### Configuration (`ezmk.toml`) — implementation notes
 
 See `README.md` for the TOML example and `docs/config_file.md` for the full spec. Key sections for implementation:

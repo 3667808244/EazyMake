@@ -141,6 +141,33 @@ EazyMake follows GNU argument syntax conventions:
 - **Option/value interleaving**: Options and positional arguments can be freely mixed
 - **`--` terminator**: Everything after `--` is treated as a positional argument, enabling pass-through for `utils` and `project run`
 
+### Command shorthands
+
+Every command has a short alias (shown in `ezmk help`). Aliases only apply at the command position:
+
+| Alias | Expands to | | Alias | Expands to | | Alias | Expands to |
+|---|---|---|---|---|---|---|---|
+| `pn` | `project new` | | `ki` | `pkg install` | | `ra` | `repo add` |
+| `pb` | `project build` | | `kr` | `pkg remove` | | `rr` | `repo remove` |
+| `pr` | `project run` | | `ks` | `pkg search` | | `rl` | `repo list` |
+| `pc` | `project clean` | | `kn` | `pkg info` | | `ru` | `repo update` |
+| `pw` | `project watch` | | `kl` | `pkg list` | | `ri` | `repo info` |
+| `u` | `utils` | | `ku` | `pkg update` | | `h` / `v` | `help` / `version` |
+
+For example, `ezmk pb -j4` is `ezmk project build -j4`. Shorthands are display/typing sugar only and are not part of the zsh completion.
+
+### Color output (`--color`)
+
+The global `--color=<mode>` option controls ANSI color (may appear on any command):
+
+| Mode | Aliases | Behavior |
+|---|---|---|
+| `always` | `enable` | Force color (also enables VT100 on legacy Windows terminals) |
+| `auto` | `default` | Color only on an interactive terminal (**default**) |
+| `never` | `disable` | Disable color |
+
+An explicit `--color=always` / `--color=never` overrides the `NO_COLOR` environment variable; only `--color=auto` honors `NO_COLOR`.
+
 ### Shell completion (zsh)
 
 EazyMake ships a static zsh completion script at `completions/_ezmk`:

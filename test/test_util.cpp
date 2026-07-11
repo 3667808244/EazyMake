@@ -89,7 +89,10 @@ TEST_CASE("native_path: forward slash conversion", "[util]") {
         // generic_string normalizes to forward slashes, then native_path converts to backslashes
         REQUIRE(result.find('/') == std::string::npos);
 #else
-        REQUIRE(result.find('\\') == std::string::npos);
+        // On POSIX '\\' is an ordinary filename character (not a separator) and
+        // '/' is already the native separator, so native_path is the identity
+        // on generic_string(). Backslashes are legitimately preserved.
+        REQUIRE(result == path.generic_string());
 #endif
     }
     SECTION("no path separators") {

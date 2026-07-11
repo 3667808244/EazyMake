@@ -1,0 +1,267 @@
+// include/ezmk/i18n_keys.def
+//
+// Single source of truth for all i18n string keys (0.2.6+).
+//
+// Each key is declared exactly once here with EZMK_I18N_KEY(name). Both the
+// `I18nKey` enum (i18n.hpp) and the enum→JSON-key-name mapping (i18n.cpp
+// key_name()) are generated from this list, so they can never drift out of
+// sync. Adding a new user-visible string is now a three-step, hard-to-forget
+// process:
+//   1. add EZMK_I18N_KEY(new_key) here,
+//   2. add "new_key" to locale/en.json and locale/zh.json,
+//   3. rebuild (build.sh re-embeds the locale data).
+//
+// The `name` MUST match the JSON key string verbatim.
+
+// ---- build ----
+EZMK_I18N_KEY(archive_failed)
+EZMK_I18N_KEY(build_failed)
+EZMK_I18N_KEY(build_success)
+EZMK_I18N_KEY(building)
+EZMK_I18N_KEY(compiling)
+EZMK_I18N_KEY(compilation_failed)
+EZMK_I18N_KEY(compile_options_changed)
+EZMK_I18N_KEY(compiler_not_found)
+EZMK_I18N_KEY(linking)
+EZMK_I18N_KEY(link_failed)
+EZMK_I18N_KEY(archiving)
+EZMK_I18N_KEY(main_missing)
+EZMK_I18N_KEY(no_source_files)
+EZMK_I18N_KEY(src_dir_missing)
+EZMK_I18N_KEY(cache_summary)
+EZMK_I18N_KEY(parallel_jobs_info)       // 0.2.3+
+EZMK_I18N_KEY(profile_not_found)        // 0.2.3+
+EZMK_I18N_KEY(pre_build_hook)           // 0.2.3+
+EZMK_I18N_KEY(post_build_hook)          // 0.2.3+
+EZMK_I18N_KEY(on_failure_hook)          // 0.2.3+
+EZMK_I18N_KEY(hook_not_found)           // 0.2.3+
+EZMK_I18N_KEY(hook_nonzero)             // 0.2.3+
+
+// ---- cache (verbose) ----
+EZMK_I18N_KEY(cache_hit)
+EZMK_I18N_KEY(cache_hit_brief)
+EZMK_I18N_KEY(cache_miss)
+EZMK_I18N_KEY(cache_miss_record)
+EZMK_I18N_KEY(cache_miss_source)
+EZMK_I18N_KEY(cache_miss_options)
+EZMK_I18N_KEY(cache_miss_header)
+EZMK_I18N_KEY(source_changed)
+EZMK_I18N_KEY(options_changed)
+EZMK_I18N_KEY(header_changed)
+EZMK_I18N_KEY(include_structure_changed)
+
+// ---- pkg ----
+EZMK_I18N_KEY(auto_yes)
+EZMK_I18N_KEY(circular_dep)
+EZMK_I18N_KEY(compiling_pkg)
+EZMK_I18N_KEY(confirm_continue)
+EZMK_I18N_KEY(confirm_script)
+EZMK_I18N_KEY(downloading)
+EZMK_I18N_KEY(extracting)
+EZMK_I18N_KEY(exec_question)
+EZMK_I18N_KEY(found_in_repo)
+EZMK_I18N_KEY(found_script)
+EZMK_I18N_KEY(global_confirm)
+EZMK_I18N_KEY(install_cancelled)
+EZMK_I18N_KEY(install_cancelled_user)
+EZMK_I18N_KEY(installed)
+EZMK_I18N_KEY(installing)
+EZMK_I18N_KEY(installing_to)
+EZMK_I18N_KEY(missing_dep)
+EZMK_I18N_KEY(not_found)
+EZMK_I18N_KEY(overwrite_confirm)
+EZMK_I18N_KEY(removed)
+EZMK_I18N_KEY(removing)
+EZMK_I18N_KEY(resolving_deps)
+EZMK_I18N_KEY(running_script)
+EZMK_I18N_KEY(script_completed)
+EZMK_I18N_KEY(script_failed)
+EZMK_I18N_KEY(searching)
+EZMK_I18N_KEY(searching_repos)
+EZMK_I18N_KEY(sha256_mismatch)
+EZMK_I18N_KEY(sha256_ok)
+EZMK_I18N_KEY(skipping)
+EZMK_I18N_KEY(verifying)
+EZMK_I18N_KEY(pkg_list_title)           // 0.2.3+
+EZMK_I18N_KEY(pkg_list_none)            // 0.2.3+
+EZMK_I18N_KEY(pkg_list_item)            // 0.2.3+
+EZMK_I18N_KEY(pkg_list_parse_error)     // 0.2.3+
+EZMK_I18N_KEY(pkg_list_no_toml)         // 0.2.3+
+EZMK_I18N_KEY(pkg_update_up_to_date)    // 0.2.3+
+EZMK_I18N_KEY(pkg_update_no_updates)    // 0.2.3+
+EZMK_I18N_KEY(pkg_update_updating)      // 0.2.3+
+EZMK_I18N_KEY(pkg_info_name)            // 0.2.3+
+EZMK_I18N_KEY(pkg_info_version)         // 0.2.3+
+EZMK_I18N_KEY(pkg_info_type)            // 0.2.3+
+EZMK_I18N_KEY(pkg_info_language)        // 0.2.3+
+EZMK_I18N_KEY(pkg_info_scope)           // 0.2.3+
+EZMK_I18N_KEY(pkg_info_location)        // 0.2.3+
+EZMK_I18N_KEY(pkg_info_installed)       // 0.2.3+
+EZMK_I18N_KEY(pkg_info_compile_flags)   // 0.2.3+
+EZMK_I18N_KEY(pkg_info_include_dirs)    // 0.2.3+
+EZMK_I18N_KEY(pkg_info_hard_deps)       // 0.2.3+
+EZMK_I18N_KEY(pkg_info_optional_deps)   // 0.2.3+
+EZMK_I18N_KEY(pkg_info_link_flags)      // 0.2.3+
+EZMK_I18N_KEY(pkg_info_link_dirs)       // 0.2.3+
+EZMK_I18N_KEY(pkg_info_system_targets)  // 0.2.3+
+EZMK_I18N_KEY(pkg_info_tools)           // 0.2.3+
+EZMK_I18N_KEY(pkg_info_artifacts)       // 0.2.3+
+EZMK_I18N_KEY(pkg_info_none)            // 0.2.3+
+EZMK_I18N_KEY(pkg_info_permissions)     // 0.2.5+
+
+// ---- config errors (0.2.3+) ----
+EZMK_I18N_KEY(config_err_invalid_type)
+EZMK_I18N_KEY(config_err_missing_ver)
+EZMK_I18N_KEY(config_err_invalid_lang)
+EZMK_I18N_KEY(config_err_invalid_macro)
+EZMK_I18N_KEY(config_err_empty_src_dirs)
+EZMK_I18N_KEY(config_err_ezmk_macros_type)
+EZMK_I18N_KEY(config_err_macros_val_type)
+EZMK_I18N_KEY(config_err_empty_profile)
+EZMK_I18N_KEY(config_err_invalid_profile)
+
+// ---- cli usage / parsing (0.2.3+) ----
+EZMK_I18N_KEY(cli_usage_header)
+EZMK_I18N_KEY(cli_usage_project)
+EZMK_I18N_KEY(cli_usage_pkg)
+EZMK_I18N_KEY(cli_usage_repo)
+EZMK_I18N_KEY(cli_usage_utils)
+EZMK_I18N_KEY(cli_usage_scopes)
+EZMK_I18N_KEY(cli_usage_build_flags)
+EZMK_I18N_KEY(cli_usage_install_flags)
+EZMK_I18N_KEY(cli_usage_usage)
+EZMK_I18N_KEY(cli_unknown_option)        // 0.2.5+
+EZMK_I18N_KEY(cli_missing_value)         // 0.2.5+
+EZMK_I18N_KEY(scope_project)             // 0.2.3+
+EZMK_I18N_KEY(scope_user)                // 0.2.3+
+EZMK_I18N_KEY(scope_global)              // 0.2.3+
+// cli argument-validation errors (0.2.6+)
+EZMK_I18N_KEY(cli_arg_required)
+EZMK_I18N_KEY(cli_too_many_args)
+EZMK_I18N_KEY(cli_takes_no_args)
+EZMK_I18N_KEY(cli_unexpected_arg)
+EZMK_I18N_KEY(cli_unknown_subcommand)
+EZMK_I18N_KEY(cli_requires_subcommand)
+EZMK_I18N_KEY(cli_unknown_group)
+EZMK_I18N_KEY(cli_one_scope)
+EZMK_I18N_KEY(cli_unknown_project_type)
+EZMK_I18N_KEY(cli_update_needs_name_or_all)
+EZMK_I18N_KEY(cli_all_ignores_name)
+EZMK_I18N_KEY(cli_invalid_jobs)
+EZMK_I18N_KEY(cli_jobs_negative)
+EZMK_I18N_KEY(cli_invalid_color)         // 0.2.6+
+// argument nouns for {what} placeholders (0.2.6+)
+EZMK_I18N_KEY(arg_project_name)
+EZMK_I18N_KEY(arg_package_name)
+EZMK_I18N_KEY(arg_package_arg)
+EZMK_I18N_KEY(arg_repo_name)
+EZMK_I18N_KEY(arg_repo_url)
+
+// ---- repo ----
+EZMK_I18N_KEY(cloning)
+EZMK_I18N_KEY(no_repos)
+EZMK_I18N_KEY(pulling)
+EZMK_I18N_KEY(re_cloning)
+EZMK_I18N_KEY(re_reading)
+EZMK_I18N_KEY(repo_added)
+EZMK_I18N_KEY(repo_not_found)
+EZMK_I18N_KEY(repo_removed)
+EZMK_I18N_KEY(repo_updated)
+EZMK_I18N_KEY(removing_cache)
+EZMK_I18N_KEY(repo_list_title)           // 0.2.6+
+EZMK_I18N_KEY(repo_list_none)            // 0.2.6+
+
+// ---- repo info (0.2.5+) ----
+EZMK_I18N_KEY(repo_info_name)
+EZMK_I18N_KEY(repo_info_scope)
+EZMK_I18N_KEY(repo_info_url)
+EZMK_I18N_KEY(repo_info_type)
+EZMK_I18N_KEY(repo_info_branch)
+EZMK_I18N_KEY(repo_info_updated)
+EZMK_I18N_KEY(repo_info_cache)
+EZMK_I18N_KEY(repo_info_packages)
+EZMK_I18N_KEY(repo_info_version_list)
+EZMK_I18N_KEY(repo_search_resolved)
+EZMK_I18N_KEY(repo_validate_missing_file)
+EZMK_I18N_KEY(repo_validate_bad_sha256)
+EZMK_I18N_KEY(auto_updating_repos)
+
+// ---- project ----
+EZMK_I18N_KEY(creating_project)
+EZMK_I18N_KEY(project_created)
+EZMK_I18N_KEY(init_git)
+EZMK_I18N_KEY(git_initialized)
+EZMK_I18N_KEY(git_not_found)
+EZMK_I18N_KEY(git_init_failed)
+
+// ---- run & clean ----
+EZMK_I18N_KEY(cleaned)
+EZMK_I18N_KEY(running)
+EZMK_I18N_KEY(clean_stale)
+
+// ---- editor ----
+EZMK_I18N_KEY(no_editor)
+EZMK_I18N_KEY(opening_editor)
+EZMK_I18N_KEY(editor_error)
+
+// ---- version ----
+EZMK_I18N_KEY(version_output)
+
+// ---- utils / Lua ----
+EZMK_I18N_KEY(utils_placeholder)
+EZMK_I18N_KEY(utils_not_found)
+EZMK_I18N_KEY(lua_init_failed)
+EZMK_I18N_KEY(lua_error)
+EZMK_I18N_KEY(lua_api_type_error)
+EZMK_I18N_KEY(lua_api_arg_count)
+
+// ---- watch (0.2.3+) ----
+EZMK_I18N_KEY(watch_started)
+EZMK_I18N_KEY(watch_skip_initial)
+EZMK_I18N_KEY(watch_config_changed)
+EZMK_I18N_KEY(watch_detected_change)
+EZMK_I18N_KEY(watch_stopping)
+
+// ---- help body (0.2.6+) ----
+EZMK_I18N_KEY(help_project_new)
+EZMK_I18N_KEY(help_project_build)
+EZMK_I18N_KEY(help_project_run)
+EZMK_I18N_KEY(help_project_clean)
+EZMK_I18N_KEY(help_project_watch)
+EZMK_I18N_KEY(help_pkg_install)
+EZMK_I18N_KEY(help_pkg_remove)
+EZMK_I18N_KEY(help_pkg_search)
+EZMK_I18N_KEY(help_pkg_info)
+EZMK_I18N_KEY(help_pkg_list)
+EZMK_I18N_KEY(help_pkg_update)
+EZMK_I18N_KEY(help_repo_add)
+EZMK_I18N_KEY(help_repo_remove)
+EZMK_I18N_KEY(help_repo_update)
+EZMK_I18N_KEY(help_repo_list)
+EZMK_I18N_KEY(help_repo_info)
+EZMK_I18N_KEY(help_utils)
+EZMK_I18N_KEY(help_help)
+EZMK_I18N_KEY(help_version)
+EZMK_I18N_KEY(help_flag_disable_cache)
+EZMK_I18N_KEY(help_flag_verbose)
+EZMK_I18N_KEY(help_flag_jobs)
+EZMK_I18N_KEY(help_flag_profile)
+EZMK_I18N_KEY(help_flag_auto_update)
+EZMK_I18N_KEY(help_flag_sha256)
+EZMK_I18N_KEY(help_flag_yes)
+EZMK_I18N_KEY(help_flag_color)
+EZMK_I18N_KEY(help_scope_project)
+EZMK_I18N_KEY(help_scope_user)
+EZMK_I18N_KEY(help_scope_global)
+EZMK_I18N_KEY(help_scope_combined)
+EZMK_I18N_KEY(help_global_options)
+EZMK_I18N_KEY(help_option_syntax_title)
+EZMK_I18N_KEY(help_option_syntax_long)
+EZMK_I18N_KEY(help_option_syntax_short)
+EZMK_I18N_KEY(help_option_syntax_dashdash)
+
+// ---- general ----
+EZMK_I18N_KEY(fatal_prefix)
+EZMK_I18N_KEY(error_prefix)
+EZMK_I18N_KEY(warn_prefix)
+EZMK_I18N_KEY(info_prefix)

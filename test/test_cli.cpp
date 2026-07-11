@@ -634,6 +634,128 @@ TEST_CASE("cli parse: project build without --auto-update defaults false", "[cli
     REQUIRE(args.build_opts.auto_update == false);
 }
 
+// ===================================================================
+// 0.2.6 — command shorthands (aliases)
+// ===================================================================
+
+TEST_CASE("cli parse: project aliases expand", "[cli][0.2.6][alias]") {
+    REQUIRE(TestArgs({"pn", "myapp"}).parse().cmd == Command::ProjectNew);
+    REQUIRE(TestArgs({"pn", "myapp"}).parse().project_name.value() == "myapp");
+    REQUIRE(TestArgs({"pb"}).parse().cmd == Command::ProjectBuild);
+    REQUIRE(TestArgs({"pr"}).parse().cmd == Command::ProjectRun);
+    REQUIRE(TestArgs({"pc"}).parse().cmd == Command::ProjectClean);
+    REQUIRE(TestArgs({"pw"}).parse().cmd == Command::ProjectWatch);
+}
+
+TEST_CASE("cli parse: pkg aliases expand", "[cli][0.2.6][alias]") {
+    REQUIRE(TestArgs({"ki", "foo.zip"}).parse().cmd == Command::PkgInstall);
+    REQUIRE(TestArgs({"kr", "foo"}).parse().cmd == Command::PkgRemove);
+    REQUIRE(TestArgs({"ks", "foo"}).parse().cmd == Command::PkgSearch);
+    REQUIRE(TestArgs({"kn", "foo"}).parse().cmd == Command::PkgInfo);
+    REQUIRE(TestArgs({"kl"}).parse().cmd == Command::PkgList);
+    REQUIRE(TestArgs({"ku", "foo"}).parse().cmd == Command::PkgUpdate);
+}
+
+TEST_CASE("cli parse: repo aliases expand", "[cli][0.2.6][alias]") {
+    REQUIRE(TestArgs({"ra", "http://x/y.git"}).parse().cmd == Command::RepoAdd);
+    REQUIRE(TestArgs({"rr", "foo"}).parse().cmd == Command::RepoRemove);
+    REQUIRE(TestArgs({"rl"}).parse().cmd == Command::RepoList);
+    REQUIRE(TestArgs({"ru"}).parse().cmd == Command::RepoUpdate);
+    REQUIRE(TestArgs({"ri", "foo"}).parse().cmd == Command::RepoInfo);
+}
+
+TEST_CASE("cli parse: single-letter aliases u/h/v", "[cli][0.2.6][alias]") {
+    auto u = TestArgs({"u", "fmt"}).parse();
+    REQUIRE(u.cmd == Command::Utils);
+    REQUIRE(u.utils_name == "fmt");
+    REQUIRE(TestArgs({"h"}).parse().cmd == Command::Help);
+    REQUIRE(TestArgs({"v"}).parse().cmd == Command::Version);
+}
+
+TEST_CASE("cli parse: alias preserves flags and positionals", "[cli][0.2.6][alias]") {
+    auto args = TestArgs({"ki", "-g", "foo.zip"}).parse();
+    REQUIRE(args.cmd == Command::PkgInstall);
+    REQUIRE(args.install_opts->pkg_file == "foo.zip");
+    REQUIRE(args.install_opts->scope == Scope::Global);
+}
+
+TEST_CASE("cli parse: alias with missing arg still errors", "[cli][0.2.6][alias]") {
+    // `pn` expands to `project new`, which requires a project name.
+    REQUIRE_THROWS_AS(TestArgs({"pn"}).parse(), ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: alias only applies at command position", "[cli][0.2.6][alias]") {
+    // `project pn` is NOT an alias — pn is an unknown project subcommand.
+    REQUIRE_THROWS_AS(TestArgs({"project", "pn"}).parse(), ezmk::fatal_error);
+}
+
+// ===================================================================
+// 0.2.6 — --color=<mode> global option
+// ===================================================================
+
+namespace {
+// Restore color mode to Auto after each color test to avoid cross-test leakage.
+struct ColorModeGuard {
+    ~ColorModeGuard() { ezmk::util::set_color_mode(ezmk::util::ColorMode::Auto); }
+};
+}
+
+TEST_CASE("cli parse: --color=<mode> sets color mode", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    TestArgs({"--color=always", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+    TestArgs({"--color=never", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Never);
+    TestArgs({"--color=auto", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Auto);
+}
+
+TEST_CASE("cli parse: --color aliases enable/disable/default", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    TestArgs({"--color=enable", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+    TestArgs({"--color=disable", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Never);
+    TestArgs({"--color=default", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Auto);
+}
+
+TEST_CASE("cli parse: --color is case-insensitive", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    TestArgs({"--color=ALWAYS", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+}
+
+TEST_CASE("cli parse: --color <mode> separate value form", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    TestArgs({"--color", "never", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Never);
+}
+
+TEST_CASE("cli parse: invalid --color value throws", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    REQUIRE_THROWS_AS(TestArgs({"--color=bogus", "help"}).parse(), ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: --color mid-subcommand is stripped, rest parses", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    auto args = TestArgs({"pkg", "install", "--color=never", "foo.zip"}).parse();
+    REQUIRE(args.cmd == Command::PkgInstall);
+    REQUIRE(args.install_opts->pkg_file == "foo.zip");
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Never);
+}
+
+TEST_CASE("cli parse: --color after -- is NOT consumed (utils passthrough)", "[cli][0.2.6][color]") {
+    ColorModeGuard g;
+    ezmk::util::set_color_mode(ezmk::util::ColorMode::Auto);
+    auto args = TestArgs({"utils", "fmt", "--", "--color=never"}).parse();
+    REQUIRE(args.cmd == Command::Utils);
+    REQUIRE(args.utils_args.size() == 1);
+    REQUIRE(args.utils_args[0] == "--color=never");
+    // Color mode untouched because the token was after "--".
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Auto);
+}
+
 TEST_CASE("cli parse: project run --auto-update", "[cli][gnu]") {
     auto args = TestArgs({"project", "run", "--auto-update"}).parse();
     REQUIRE(args.cmd == Command::ProjectRun);
