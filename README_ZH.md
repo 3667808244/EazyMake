@@ -1,5 +1,7 @@
 # EazyMake
 
+中文 · [English](README.md)
+
 简单的 C/C++ 构建工具 —— `ezmk`。基于 GCC/g++（Windows 上使用 MSYS2，Linux/macOS 原生）。
 
 **设计理念：** 易用优先，功能从简。复杂构建请使用 CMake。
@@ -18,6 +20,33 @@
 | MSYS2 (Windows) | — | **编译 & 运行时** | 提供 g++ 和 bash 环境 |
 
 ## 快速开始
+
+### 安装（Linux / macOS / MSYS2）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | bash
+```
+
+从源码构建并将 `ezmk` 安装到 `$HOME/.local/bin`。可用环境变量自定义：
+
+```bash
+# 系统级安装
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | PREFIX=/usr/local bash
+
+# 先审阅再执行（推荐）
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+| 变量 | 作用 | 默认值 |
+|---|---|---|
+| `PREFIX` | 安装前缀（二进制 → `$PREFIX/bin`） | `$HOME/.local` |
+| `EZMK_REF` | 要构建的 git tag/分支/提交 | 默认分支 |
+| `EZMK_NO_COMPLETIONS` | 设为 `1` 跳过 zsh 补全安装 | （检测到 zsh 则安装） |
+| `CXX` / `CC` / `CXXFLAGS` | 覆盖编译器（透传给 `build.sh`） | 自动探测 |
+
+> **裸 Windows（非 MSYS2）：** 请从 [GitHub Release](https://github.com/3667808244/EazyMake/releases) 下载预编译的 `ezmk.exe`。
 
 ### 构建 EazyMake 本身
 
@@ -200,6 +229,8 @@ tools = ["cc"]
 
 | 文档 | 内容 |
 |---|---|
+| `tutorial/` | 手把手上手教程（从零到用包） |
+| `docs/cli.md` | 命令行与环境变量权威参考 |
 | `docs/config_file.md` | `ezmk.toml` 完整格式说明 |
 | `docs/pkg.md` | 包格式与生命周期 |
 | `docs/repo.md` | 基于 git 的仓库系统 |

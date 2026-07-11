@@ -1,5 +1,7 @@
 # EazyMake
 
+[中文](README_ZH.md) · English
+
 A simple C/C++ build tool — `ezmk`. Based on GCC/g++ (MSYS2 on Windows, or native on Linux/macOS).
 
 **Design philosophy:** ease of use over feature richness. For complex builds, use CMake.
@@ -18,6 +20,33 @@ A simple C/C++ build tool — `ezmk`. Based on GCC/g++ (MSYS2 on Windows, or nat
 | MSYS2 (Windows) | — | **Build & runtime** | Provides g++ and bash environment |
 
 ## Quick start
+
+### Install (Linux / macOS / MSYS2)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | bash
+```
+
+Builds from source and installs `ezmk` to `$HOME/.local/bin`. Customize with environment variables:
+
+```bash
+# Install system-wide
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | PREFIX=/usr/local bash
+
+# Review before running (recommended)
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `PREFIX` | Install prefix (binary → `$PREFIX/bin`) | `$HOME/.local` |
+| `EZMK_REF` | git tag/branch/commit to build | default branch |
+| `EZMK_NO_COMPLETIONS` | Set to `1` to skip zsh completions | (installs if zsh found) |
+| `CXX` / `CC` / `CXXFLAGS` | Compiler override (passed to `build.sh`) | auto-detected |
+
+> **Bare Windows (non-MSYS2):** download the prebuilt `ezmk.exe` from the [GitHub Release](https://github.com/3667808244/EazyMake/releases) instead.
 
 ### Build EazyMake itself
 
@@ -259,6 +288,8 @@ A repo is a **git repository** containing `index.toml` + `packages/` directory. 
 
 | Document | Topic |
 |---|---|
+| `tutorial/` | Hands-on, zero-to-productive guide |
+| `docs/cli.md` | Authoritative CLI & environment variable reference |
 | `docs/config_file.md` | Full `ezmk.toml` specification |
 | `docs/pkg.md` | Package format and lifecycle |
 | `docs/repo.md` | Git-based repository system |

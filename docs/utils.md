@@ -197,6 +197,8 @@ ezmk pkg remove -u ezmk-cc
 
 ## 安全性
 
+> 全局安全模型概览见 [`@safety.md`](@safety.md);本节为 Lua sandbox 与权限的详细规范。
+
 Lua 脚本运行在受限环境：
 
 - `os.execute` 和 `io.popen` 被移除 — 必须通过 `ezmk.run()` 执行外部命令
