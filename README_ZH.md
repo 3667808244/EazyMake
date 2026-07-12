@@ -146,7 +146,7 @@ ezmk utils cc -o build/compile_commands.json
 |---|---|
 | `ezmk utils <名称> [参数...]` | 运行已安装 utils 包中的 Lua 工具 |
 
-Utils 工具是通过 `ezmk pkg install` 安装的包（`type = "utils"`），暴露 `utils/<name>.lua` 脚本。详见 `docs/utils.md`。
+Utils 工具是通过 `ezmk pkg install` 安装的包（`type = "utils"`），暴露 `utils/<name>.lua` 脚本。详见 [`docs/zh/utils.md`](docs/zh/utils.md)。
 
 **内置工具：**
 
@@ -227,20 +227,21 @@ tools = ["cc"]
 
 ## 仓库
 
-仓库是一个 **git 仓库**，包含 `index.toml` + `packages/` 目录。`ezmk repo add` 自动 clone 到本地缓存；`ezmk repo update` 执行 `git pull` 增量更新。也支持本地目录作为仓库源。详见 `docs/repo.md`。
+仓库是一个 **git 仓库**，包含 `index.toml` + `packages/` 目录。`ezmk repo add` 自动 clone 到本地缓存；`ezmk repo update` 执行 `git pull` 增量更新。也支持本地目录作为仓库源。详见 [`docs/zh/repo.md`](docs/zh/repo.md)。
 
 ## 设计文档
 
 | 文档 | 内容 |
 |---|---|
-| `tutorial/` | 手把手上手教程（从零到用包） |
-| `docs/cli.md` | 命令行与环境变量权威参考 |
-| `docs/config_file.md` | `ezmk.toml` 完整格式说明 |
-| `docs/pkg.md` | 包格式与生命周期 |
-| `docs/repo.md` | 基于 git 的仓库系统 |
-| `docs/utils.md` | Lua 插件系统与 API 参考 |
-| `docs/@cache.md` | 增量构建缓存 |
-| `docs/@safety.md` | 安全规范 |
+| `tutorial/zh/` | 手把手上手教程（从零到用包） |
+| `docs/zh/cli.md` | 命令行与环境变量权威参考 |
+| `docs/zh/config_file.md` | `ezmk.toml` 完整格式说明 |
+| `docs/zh/pkg.md` | 包格式与生命周期 |
+| `docs/zh/repo.md` | 基于 git 的仓库系统 |
+| `docs/zh/utils.md` | Lua 插件系统与 API 参考 |
+| `docs/zh/@cache.md` | 增量构建缓存 |
+| `docs/zh/@safety.md` | 安全规范 |
+| `docs/zh/glossary.md` | 术语表 |
 | `CHANGES.md` | 版本更新日志 |
 | `plans/` | 版本里程碑计划 |
 | `plan.md` | 当前执行计划 |

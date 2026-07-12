@@ -177,7 +177,7 @@ post_build = "scripts/post.lua"
 on_failure = "scripts/fail.lua"
 ```
 
-详见 `docs/utils.md`（Lua API 参考）和 CLAUDE.md（构建钩子实现细节）。
+详见 [`utils.md`](utils.md)（Lua API 参考）和 CLAUDE.md（构建钩子实现细节）。
 
 ---
 
@@ -196,7 +196,7 @@ on_failure = "scripts/fail.lua"
 tools = ["cc", "compile-commands"]
 ```
 
-详见 `docs/utils.md`。
+详见 [`utils.md`](utils.md)。
 
 ---
 

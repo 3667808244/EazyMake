@@ -73,6 +73,6 @@ $ ezmk pkg remove fmt          # uninstall
 > Build with `--auto-update` to run `ezmk repo update --pug` first, so names resolve
 > against the freshest index.
 
-See [`docs/pkg.md`](../docs/pkg.md) and [`docs/repo.md`](../docs/repo.md) for details.
+See [`docs/en/pkg.md`](../../docs/en/pkg.md) and [`docs/en/repo.md`](../../docs/en/repo.md) for details.
 
 Next: [Watch mode & hooks →](07-watch-hooks.md)

@@ -74,6 +74,6 @@ want = ["spdlog"]   # optional — used if installed, skipped otherwise
 optional.
 
 For the complete specification — including profiles and hooks — see
-[`docs/config_file.md`](../docs/config_file.md).
+[`docs/en/config_file.md`](../../docs/en/config_file.md).
 
 Next: [Incremental builds & caching →](04-cache.md)

@@ -52,11 +52,11 @@ The sandbox removes `os`/`io`; run external commands via `ezmk.run()`, and
 `ezmk.file_write()` refuses paths outside the project root. Packages can further
 restrict access with `[utils.permissions]`.
 
-See [`docs/utils.md`](../docs/utils.md) for the full plugin API and permission model.
+See [`docs/en/utils.md`](../../docs/en/utils.md) for the full plugin API and permission model.
 
 ---
 
 That's the tour. You can now scaffold, configure, build incrementally, use profiles and
 parallelism, pull in packages, watch, hook into the build, and integrate with clangd.
-For exact semantics of any command or option, [`docs/cli.md`](../docs/cli.md) is the
+For exact semantics of any command or option, [`docs/en/cli.md`](../../docs/en/cli.md) is the
 authoritative reference.

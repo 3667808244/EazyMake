@@ -18,7 +18,7 @@
     ezmk.toml
 ```
 
-utils 工具包（`type = "utils"`，详见 `docs/utils.md`）：
+utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 
 ```
 <utils_pkg>/
@@ -159,4 +159,4 @@ ezmk pkg install -p foo          # 自动在已注册仓库中搜索 "foo"
 2. 已注册仓库的本地缓存中按名称搜索（项目 → 用户 → 全局）
 3. 仍未找到 → 报错
 
-详见 `docs/repo.md`。
+详见 [`repo.md`](repo.md)。

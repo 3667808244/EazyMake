@@ -145,7 +145,7 @@ ezmk utils cc -o build/compile_commands.json
 |---|---|
 | `ezmk utils <name> [args...]` | Run a Lua-based tool from an installed utils package |
 
-Utils tools are packages (`type = "utils"`) installed via `ezmk pkg install`. They expose Lua scripts under `utils/<name>.lua`. See `docs/utils.md` for the full plugin API.
+Utils tools are packages (`type = "utils"`) installed via `ezmk pkg install`. They expose Lua scripts under `utils/<name>.lua`. See [`docs/en/utils.md`](docs/en/utils.md) for the full plugin API.
 
 **Built-in tools:**
 
@@ -286,20 +286,21 @@ tools = ["cc"]
 
 ## Repository
 
-A repo is a **git repository** containing `index.toml` + `packages/` directory. `ezmk repo add` clones to a local cache; `ezmk repo update` does `git pull`. Local directories also supported. See `docs/repo.md`.
+A repo is a **git repository** containing `index.toml` + `packages/` directory. `ezmk repo add` clones to a local cache; `ezmk repo update` does `git pull`. Local directories also supported. See [`docs/en/repo.md`](docs/en/repo.md).
 
 ## Design docs
 
 | Document | Topic |
 |---|---|
-| `tutorial/` | Hands-on, zero-to-productive guide |
-| `docs/cli.md` | Authoritative CLI & environment variable reference |
-| `docs/config_file.md` | Full `ezmk.toml` specification |
-| `docs/pkg.md` | Package format and lifecycle |
-| `docs/repo.md` | Git-based repository system |
-| `docs/utils.md` | Lua-based plugin tool system and API reference |
-| `docs/@cache.md` | Incremental build cache |
-| `docs/@safety.md` | Safety invariants |
+| `tutorial/en/` | Hands-on, zero-to-productive guide |
+| `docs/en/cli.md` | Authoritative CLI & environment variable reference |
+| `docs/en/config_file.md` | Full `ezmk.toml` specification |
+| `docs/en/pkg.md` | Package format and lifecycle |
+| `docs/en/repo.md` | Git-based repository system |
+| `docs/en/utils.md` | Lua-based plugin tool system and API reference |
+| `docs/en/@cache.md` | Incremental build cache |
+| `docs/en/@safety.md` | Safety invariants |
+| `docs/en/glossary.md` | Terminology reference |
 | `CHANGES.md` | Version changelog |
 | `plans/` | Version milestone plans |
 | `plan.md` | Current execution plan |

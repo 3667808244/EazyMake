@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS2 on Windows). Design philosophy: ease of use over feature richness. **See `README.md` for user-facing documentation** (quick start, CLI reference, project structure, config examples).
 
-Design specifications live in `docs/`. Source code is under active development; see `plans/` for milestones.
+Design specifications live in `docs/en/` (English) / `docs/zh/` (Chinese). Source code is under active development; see `plans/` for milestones.
 
 ## Build & test commands
 
@@ -49,7 +49,7 @@ All string keys live in **`include/ezmk/i18n_keys.def`** (X-macro list). Both th
 
 ### Configuration (`ezmk.toml`) — implementation notes
 
-See `README.md` for the TOML example and `docs/config_file.md` for the full spec. Key sections for implementation:
+See `README.md` for the TOML example and `docs/en/config_file.md` for the full spec. Key sections for implementation:
 
 - `[project]` — `name`, `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (required), `language` (default `"C++17"`, format `<语言><版本>`)
 - `[compile]` — `flags`, `msvc_flags` (0.2.1+), `include_dirs` (default `["include"]`), `src_dirs` (default `["src"]`, 0.2.2+), `ezmk_macros` (bool, default `true`, 0.2.2+). Sub-table `[compile.macros]` (0.2.2+) for semantic macro definitions (key-value, supports string/int/bool)
@@ -69,7 +69,7 @@ Install paths by scope:
 - User: `~/.local/ezmk/pkg/` (Unix) / `%LOCALAPPDATA%\ezmk\pkg\` (Windows)
 - Project: `<project_dir>/.ezmk/pkg/`
 
-See `docs/pkg.md` for full details.
+See `docs/en/pkg.md` for full details.
 
 ### Repository management
 
@@ -80,7 +80,7 @@ Repo registries (`list.toml`) per scope:
 - User: `~/.local/ezmk/repo/list.toml` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows)
 - Project: `.ezmk/repo/list.toml`
 
-See `docs/repo.md` for full details.
+See `docs/en/repo.md` for full details.
 
 ### Parallel compilation (0.2.3+)
 
@@ -100,7 +100,7 @@ Cross-platform `FileWatcher` class (`include/ezmk/file_watcher.hpp`): Windows us
 
 ### Build caching
 
-Content-hash-based incremental compilation. See `docs/@cache.md`. Algorithm:
+Content-hash-based incremental compilation. See `docs/en/@cache.md`. Algorithm:
 1. Hash the source file content
 2. Compare against `record.json` entry (source hash + compile flags)
 3. Recursively check all `#include`d header hashes
@@ -110,13 +110,13 @@ Atomic writes: `.o` and `record.json` written to temp files first, then `rename`
 
 ### Safety requirements
 
-See `docs/@safety.md`:
+See `docs/en/@safety.md`:
 - Global package installs require secondary confirmation
 - Installations that would overwrite existing files require secondary confirmation
 
 ### Lua scripting & utils (0.2.0+)
 
-Embedded Lua 5.4.7 (static-linked). `ezmk utils <name>` runs Lua-based tools from `type = "utils"` packages. See `docs/utils.md` for the full plugin API.
+Embedded Lua 5.4.7 (static-linked). `ezmk utils <name>` runs Lua-based tools from `type = "utils"` packages. See `docs/en/utils.md` for the full plugin API.
 
 **Sandbox:** `io` and `os` removed at compile time (`linit.c`). Scripts use `ezmk.*` API. `ezmk.file_write()` denies writes outside project root. Each invocation gets a fresh sandbox environment table.
 

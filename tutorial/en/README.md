@@ -4,7 +4,7 @@ A hands-on, zero-to-productive guide to `ezmk`. Each chapter builds on the previ
 one and ends with commands you can actually run.
 
 This tutorial teaches **how to get things done**. For precise definitions and the full
-option surface, see the [`docs/`](../docs/) reference (especially [`docs/cli.md`](../docs/cli.md)).
+option surface, see the [`docs/en/`](../../docs/en/) reference (especially [`docs/en/cli.md`](../../docs/en/cli.md)).
 
 ## Chapters
 
@@ -23,4 +23,4 @@ option surface, see the [`docs/`](../docs/) reference (especially [`docs/cli.md`
   `ezmk.exe` from the GitHub Release.
 - `$` marks a command you type; lines without it are output.
 - Every command has a short alias (e.g. `ezmk pb` = `ezmk project build`) — see
-  [`docs/cli.md`](../docs/cli.md#command-shorthands-026).
+  [`docs/en/cli.md`](../../docs/en/cli.md#command-shorthands-026).
