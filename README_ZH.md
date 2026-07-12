@@ -44,6 +44,7 @@ bash install.sh
 | `PREFIX` | 安装前缀（二进制 → `$PREFIX/bin`） | `$HOME/.local` |
 | `EZMK_REF` | 要构建的 git tag/分支/提交 | 默认分支 |
 | `EZMK_NO_COMPLETIONS` | 设为 `1` 跳过 zsh 补全安装 | （检测到 zsh 则安装） |
+| `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （ezmk 二进制可用则注册） |
 | `CXX` / `CC` / `CXXFLAGS` | 覆盖编译器（透传给 `build.sh`） | 自动探测 |
 
 > **裸 Windows（非 MSYS2）：** 请从 [GitHub Release](https://github.com/3667808244/EazyMake/releases) 下载预编译的 `ezmk.exe`。
@@ -88,10 +89,13 @@ ezmk pkg install -p ./foo-0.1.0.zip
 # 从 URL 安装
 ezmk pkg install -p https://example.com/packages/bar-1.2.0.tar.gz
 
-# 按名称安装（需先注册仓库）
-ezmk repo add -p git@github.com:user/ezmk-repo.git --name my-repo
-ezmk repo update
-ezmk pkg install -p foo
+# 按名称安装 — install.sh 已预注册官方仓库（可用 EZMK_NO_DEFAULT_REPO=1 跳过）
+ezmk pkg install -p hello-lib
+
+# 手动注册官方仓库，国内用户可使用 Gitee 镜像
+ezmk repo add -u https://github.com/3667808244/ezmk-repo.git --name official
+ezmk repo add -u https://gitee.com/egglzh/ezmk-repo.git --name official
+ezmk repo update -u official
 ```
 
 ### 运行工具

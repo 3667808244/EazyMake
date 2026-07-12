@@ -16,6 +16,7 @@ set -euo pipefail
 #   EZMK_VERSION         Version string baked into the binary.
 #                        Default: git describe --tags --always
 #   EZMK_NO_COMPLETIONS  Set to 1 to skip zsh completion installation.
+#   EZMK_NO_DEFAULT_REPO Set to 1 to skip official repo pre-registration.
 #   CXX / CC / CXXFLAGS  Passed through to build.sh (compiler override).
 #
 # Prefer to review before running:
@@ -102,6 +103,28 @@ if [ -d "$SRC_DIR/pkg" ]; then
     mkdir -p "$DEST_DIR/pkg"
     cp -R "$SRC_DIR/pkg/." "$DEST_DIR/pkg/"
     info "Installed bundled packages to $DEST_DIR/pkg"
+fi
+
+# ------------------------------------------------- default repo -----------
+# Pre-register the official EazyMake package repository (user scope) so that
+# `ezmk pkg install <name>` works without manual `ezmk repo add`.
+# Set EZMK_NO_DEFAULT_REPO=1 to skip this.
+OFFICIAL_REPO_URL="https://github.com/3667808244/ezmk-repo.git"
+OFFICIAL_REPO_NAME="official"
+
+if [ "${EZMK_NO_DEFAULT_REPO:-}" != "1" ]; then
+    if "$DEST" repo add -u "$OFFICIAL_REPO_URL" --name "$OFFICIAL_REPO_NAME" 2>/dev/null; then
+        info "Registered official repo ($OFFICIAL_REPO_NAME) to user scope"
+        if "$DEST" repo update -u "$OFFICIAL_REPO_NAME" 2>/dev/null; then
+            info "Updated official repo index"
+        else
+            warn "Could not update official repo (no network?); run 'ezmk repo update -u $OFFICIAL_REPO_NAME' later"
+        fi
+    else
+        warn "Could not register official repo (it may already exist or network is unavailable)"
+    fi
+else
+    info "EZMK_NO_DEFAULT_REPO=1 — skipping official repo registration"
 fi
 
 # ----------------------------------------------------- zsh completions ------

@@ -86,6 +86,24 @@ See [`pkg.md`](pkg.md) for the package format and dependency resolution.
 
 Local directories are supported via `type = "local"`. See [`repo.md`](repo.md).
 
+**Official default repository:** `install.sh` automatically pre-registers the official
+repo (user scope, `--name official`) so `ezmk pkg install` works by name out of the box.
+Set `EZMK_NO_DEFAULT_REPO=1` to skip this during install.
+
+| URL | Target |
+|-----|--------|
+| `https://github.com/3667808244/ezmk-repo.git` | GitHub (global) |
+| `https://gitee.com/egglzh/ezmk-repo.git` | Gitee mirror (China) |
+
+Manual registration (if skipped during install, or to add the mirror as a fallback):
+
+```bash
+ezmk repo add -u https://github.com/3667808244/ezmk-repo.git --name official
+ezmk repo update -u official
+```
+
+The registration is user-scoped (`-u`) so it can be removed with `ezmk repo remove -u official`.
+
 ---
 
 ## `utils` — Lua-based tools (0.2.0+)
@@ -179,6 +197,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `PREFIX` | install | Install prefix; binary goes to `$PREFIX/bin` (default `$HOME/.local`) (`install.sh`) |
 | `EZMK_REF` | install | git tag/branch/commit to build (`install.sh`) |
 | `EZMK_NO_COMPLETIONS` | install | Set to `1` to skip zsh completion install (`install.sh`) |
+| `EZMK_NO_DEFAULT_REPO` | install | Set to `1` to skip official repo pre-registration (`install.sh`) |
 
 ---
 

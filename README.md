@@ -44,6 +44,7 @@ bash install.sh
 | `PREFIX` | Install prefix (binary → `$PREFIX/bin`) | `$HOME/.local` |
 | `EZMK_REF` | git tag/branch/commit to build | default branch |
 | `EZMK_NO_COMPLETIONS` | Set to `1` to skip zsh completions | (installs if zsh found) |
+| `EZMK_NO_DEFAULT_REPO` | Set to `1` to skip official repo registration | (registers if ezmk binary available) |
 | `CXX` / `CC` / `CXXFLAGS` | Compiler override (passed to `build.sh`) | auto-detected |
 
 > **Bare Windows (non-MSYS2):** download the prebuilt `ezmk.exe` from the [GitHub Release](https://github.com/3667808244/EazyMake/releases) instead.
@@ -88,10 +89,13 @@ ezmk pkg install -p ./foo-0.1.0.zip
 # From a URL
 ezmk pkg install -p https://example.com/packages/bar-1.2.0.tar.gz
 
-# By name (requires registered repo)
-ezmk repo add -p git@github.com:user/ezmk-repo.git --name my-repo
-ezmk repo update
-ezmk pkg install -p foo
+# By name — official repo is pre-registered by install.sh (skipped with EZMK_NO_DEFAULT_REPO=1)
+ezmk pkg install -p hello-lib
+
+# Manually register the official repo, or use the Gitee mirror (China)
+ezmk repo add -u https://github.com/3667808244/ezmk-repo.git --name official
+ezmk repo add -u https://gitee.com/egglzh/ezmk-repo.git --name official
+ezmk repo update -u official
 ```
 
 ### Run utility tools
