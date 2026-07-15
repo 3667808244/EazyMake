@@ -96,13 +96,13 @@ chmod 755 "$TMP_DEST"
 mv -f "$TMP_DEST" "$DEST"
 info "Installed: $DEST"
 
-# ------------------------------------------------- bundled utils packages ---
-# Global-scope packages live next to the binary in <exe_dir>/pkg. Ship the
-# built-in ezmk-cc tool so `ezmk utils cc` works out of the box.
-if [ -d "$SRC_DIR/pkg" ]; then
-    mkdir -p "$DEST_DIR/pkg"
-    cp -R "$SRC_DIR/pkg/." "$DEST_DIR/pkg/"
-    info "Installed bundled packages to $DEST_DIR/pkg"
+# ------------------------------------------------- built-in ezmk-cc ------
+# ezmk-cc is the built-in compile_commands.json generator (`ezmk utils cc`).
+# It ships as a Lua script alongside the binary so it works out of the box.
+if [ -d "$SRC_DIR/pkg/ezmk-cc" ]; then
+    mkdir -p "$DEST_DIR/pkg/ezmk-cc"
+    cp -R "$SRC_DIR/pkg/ezmk-cc/." "$DEST_DIR/pkg/ezmk-cc/"
+    info "Installed built-in tool: ezmk-cc"
 fi
 
 # ------------------------------------------------- default repo -----------
