@@ -160,3 +160,44 @@ ezmk pkg install -p foo          # 自动在已注册仓库中搜索 "foo"
 3. 仍未找到 → 报错
 
 详见 [`repo.md`](repo.md)。
+
+---
+
+## 离线 / 无网络使用 [0.9.4+]
+
+在无法访问互联网的环境中，有三种方案安装包：
+
+### 方案一：本地仓库镜像
+
+在有网络的机器上克隆仓库，然后在离线机器上注册为本地仓库：
+
+```bash
+# 在有网络的机器上
+git clone https://github.com/3667808244/ezmk-repo.git /path/to/ezmk-repo
+
+# 复制到离线机器后：
+ezmk repo add /path/to/ezmk-repo --type local
+ezmk pkg install <名称>
+```
+
+### 方案二：手动下载归档并安装
+
+从 GitHub Releases（或任何来源）下载 `.tar.gz` / `.zip` 归档，传输到离线机器，然后从文件安装：
+
+```bash
+ezmk pkg install ./<包名>-<版本>.tar.gz --type file
+```
+
+### 方案三：USB / 内网共享上的预置镜像
+
+在便携介质或内网共享上准备完整的仓库镜像：
+
+```bash
+# 在有网络的机器上准备
+git clone https://github.com/3667808244/ezmk-repo.git /mnt/usb/ezmk-repo
+
+# 在每台离线机器上
+ezmk repo add /mnt/usb/ezmk-repo --type local
+```
+
+> 更多离线场景参见 [常见问题](faq.md)。

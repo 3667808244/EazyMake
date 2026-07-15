@@ -894,4 +894,41 @@ fs::path find_utils_script(const std::string& name) {
     return {};
 }
 
+// ---- Fuzzy matching (0.9.4+) ----
+
+// Levenshtein distance — standard dynamic programming algorithm.
+static int levenshtein_distance(const std::string& a, const std::string& b) {
+    size_t n = a.size(), m = b.size();
+    std::vector<int> prev(m + 1), cur(m + 1);
+    for (size_t j = 0; j <= m; ++j) prev[j] = static_cast<int>(j);
+    for (size_t i = 1; i <= n; ++i) {
+        cur[0] = static_cast<int>(i);
+        for (size_t j = 1; j <= m; ++j) {
+            int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+            cur[j] = std::min({cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost});
+        }
+        prev.swap(cur);
+    }
+    return prev[m];
+}
+
+std::vector<std::string> closest_match(
+    const std::string& input,
+    const std::vector<std::string>& candidates,
+    int max_distance)
+{
+    std::vector<std::pair<int, std::string>> matches;
+    for (const auto& c : candidates) {
+        int d = levenshtein_distance(input, c);
+        if (d <= max_distance) {
+            matches.emplace_back(d, c);
+        }
+    }
+    std::sort(matches.begin(), matches.end());
+    std::vector<std::string> result;
+    result.reserve(matches.size());
+    for (auto& [d, s] : matches) result.push_back(std::move(s));
+    return result;
+}
+
 } // namespace ezmk::util

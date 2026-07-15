@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.9.4 (2026-07-15) — 文档与质量完善
+
+文档补全与代码质量打磨，不新增核心功能。
+
+### 新增
+- **FAQ / 故障排除文档**：`docs/en/faq.md` + `docs/zh/faq.md`，覆盖安装/构建/包管理/配置/跨平台五大类 25+ 条常见问题及排错流程
+- **离线场景文档**：FAQ 新增离线使用章节，涵盖本地仓库镜像、手动下载归档、USB/内网共享镜像三种方案
+- **Lua API 版本化基础设施**：新增 `EZMK_LUA_API_VERSION` 常量（当前为 1）+ `ezmk.api_version` Lua 字段，脚本可通过 `if ezmk.api_version >= 2 then ... end` 做兼容性判断
+- **`util::closest_match()` 模糊匹配函数**：基于 Levenshtein 编辑距离，为未知命令/profile 提供 "did you mean" 建议
+- **API 版本化策略文档**：`docs/en/utils.md` + `docs/zh/utils.md` 新增"API 版本化"章节，定义向后兼容策略（仅不兼容变更触发版本号递增；废弃函数保留 ≥2 个 minor 版本后移除）
+
+### 变更
+- **错误信息打磨**：修复 `cli.cpp` 空异常消息（`throw std::invalid_argument("")` → i18n 化错误）；未知 profile 和未知命令增加 "did you mean" 模糊匹配建议
+- **`std::runtime_error` 审计**：排查 `src/` 中所有裸 `throw std::runtime_error(...)` 位置，面向用户的错误信息改为 i18n 化
+- **CHANGES.md 补全**：补全 0.9.0 ~ 0.9.4 版本条目
+
+---
+
+## 0.9.3 (2026-07-14) — 捆绑包迁移
+
+将 7 个捆绑预编译库包迁移至官方仓库，清理主项目冗余文件。
+
+### 变更
+- **7 个捆绑包迁移至官方仓库** (`ezmk-repo`)：catch2 (3.6.0), fmt (10.2.1), lua (5.4.7), nlohmann_json (3.11.3), spdlog (1.14.1), sqlite3 (3.46.0), tinyxml2 (11.0.0)
+- **逐包标准化**：补全 `version` 字段、TOML 格式更新 (`include_dir` → `include_dirs`)、补 `language` 字段、清理硬编码 `-Wall -O2`
+- **仓库侧**：`sources/` 新增 7 个源工程，`packages/` 新增 7 个归档，`index.toml` 含 9 个包条目，`validate.sh` 全部通过
+- **主项目清理**：删除 `pkg/` 下 7 个 `.tar.gz` 捆绑归档，`ezmk-cc/` 目录保留（内置工具源码参考）
+- **`install.sh` 清理**：移除捆绑包拷贝逻辑（已预注册官方仓库，`pkg install` 自动从仓库拉取）
+
+---
+
+## 0.9.2 (2026-07-13) — 文档多语言
+
+`docs/` 和 `tutorial/` 拆分为 `en/` + `zh/` 双语目录，补齐英文翻译。
+
+### 变更
+- **目录重组**：`docs/` → `docs/en/` + `docs/zh/`，`tutorial/` → `tutorial/en/` + `tutorial/zh/`
+- **英文翻译补齐**：`cli.md`, `pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `@cache.md`, `@safety.md` 全部提供英文版
+- **术语表** (`glossary.md`)：中英双语对照，随新功能扩展更新
+- **CI 文件对应检查**：确保 `docs/en/` ↔ `docs/zh/` 一一对应
+
+---
+
+## 0.9.1 (2026-07-12) — 默认仓库创建
+
+创建官方默认仓库，建立包生态基础设施。
+
+### 新增
+- **官方默认仓库** (`ezmk-repo`)：GitHub 托管，Gitee 镜像，符合 `docs/repo.md` 结构
+- **预注册策略**：`install.sh` 安装时自动将官方仓库注册到用户作用域，用户装完即可按名装包
+- **初始示例包**：`hello-lib` (static) + `example-utils` (utils)，含完整源工程
+- **打包流程**：`pack.sh` (打包 + SHA-256) + `validate.sh` (校验)，CI 可复现
+- **贡献流程文档**：`CONTRIBUTING.md` + `CONTRIBUTING_ZH.md`
+
+---
+
+## 0.9.0 (2026-07-10) — 准备发布正式版
+
+首个面向用户的正式版准备，聚焦"能装上、能看懂、能上手"。
+
+### 新增
+- **一键安装脚本** (`install.sh`)：`curl -fsSL <url> | bash` 一键安装，支持 Linux/macOS/MSYS2，幂等可重入，失败即清理
+- **文档整理**：`docs/cli.md` 完整 CLI 参考，`docs/@safety.md` 安全性集中化文档
+- **README 双语互链**：`README.md` (EN) ↔ `README_ZH.md` (ZH)
+- **上手教程** (`tutorial/`)：从零创建项目 → 添加依赖 → 构建运行的分步教程
+
+---
+
 ## 0.2.6 (2026-07-11) — 翻译补全与命令行改进
 
 可用性收尾版本，无新增构建/包管理能力，聚焦 i18n 系统性修复与命令行打磨。

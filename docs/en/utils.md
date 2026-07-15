@@ -172,6 +172,38 @@ ezmk.json_decode(string)  -- → table    Decode a JSON string into a Lua table
 
 ---
 
+## API Versioning [0.9.4+]
+
+`ezmk.api_version` is an integer that increments **only on backward-incompatible changes**. Scripts can check it for compatibility guards:
+
+```lua
+if ezmk.api_version >= 2 then
+    -- use newer API
+else
+    -- fallback for older ezmk versions
+end
+```
+
+### Versioning policy
+
+| Change type | Version bump? | Notes |
+|---|---|---|
+| Add a new function | **No** | Backward compatible — old scripts don't call it |
+| Add optional parameters to an existing function | **No** | Existing call sites are unaffected |
+| Deprecate a function (`@deprecated since v<N>`) | **No** | Function still works; removed after ≥2 minor versions |
+| Remove a deprecated function | **Yes** | Breaking change — scripts using it will fail |
+| Change a function's required parameter count or types | **Yes** | Breaking change |
+| Change a function's return value semantics | **Yes** | Breaking change |
+
+### Current version
+
+**`ezmk.api_version = 1`** (introduced in ezmk 0.9.4).
+
+- When the version is incremented, the old API surface is preserved for at least 2 minor versions with deprecation warnings in Lua (`ezmk.warn(...)`).
+- Deprecated APIs are clearly marked in this document with `@deprecated since v<N>` tags.
+
+---
+
 ## Installation and removal
 
 Utils packages use the exact same commands as regular library packages (see `pkg.md`):

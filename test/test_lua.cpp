@@ -183,6 +183,21 @@ TEST_CASE("lua: ezmk table has all API functions", "[lua][api]") {
     lua_pop(L, 1); // ezmk
 }
 
+// 0.9.4+ — api_version field
+TEST_CASE("lua: ezmk.api_version is an integer >= 1", "[lua][api]") {
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    lua_getglobal(L, "ezmk");
+    REQUIRE(lua_istable(L, -1));
+    lua_getfield(L, -1, "api_version");
+    REQUIRE(lua_isinteger(L, -1));
+    int ver = static_cast<int>(lua_tointeger(L, -1));
+    REQUIRE(ver >= 1);
+    lua_pop(L, 2); // api_version, ezmk
+}
+
 // ===================================================================
 // Project info API (3.1)
 // ===================================================================

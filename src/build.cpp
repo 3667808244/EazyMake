@@ -469,12 +469,34 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
         if (it != cfg.compile_profiles.end()) {
             st.compile_cfg = merge_compile_profile(st.compile_cfg, it->second);
         } else {
-            if (cfg.compile_profiles.empty() && cfg.link_profiles.empty()) {
+            // 0.9.4+: collect available profile names + suggest closest matches
+            std::vector<std::string> profile_names;
+            for (const auto& [name, _] : cfg.compile_profiles) profile_names.push_back(name);
+            for (const auto& [name, _] : cfg.link_profiles)
+                if (std::find(profile_names.begin(), profile_names.end(), name) == profile_names.end())
+                    profile_names.push_back(name);
+            std::sort(profile_names.begin(), profile_names.end());
+
+            auto matches = util::closest_match(opts.profile, profile_names, 2);
+            if (!matches.empty()) {
+                std::string suggestion = matches[0];
+                for (size_t i = 1; i < matches.size() && i < 3; ++i)
+                    suggestion += ", " + matches[i];
+                util::fatal(std::string("unknown profile: '") + opts.profile +
+                            "'. Did you mean: " + suggestion + "?");
+            }
+
+            if (profile_names.empty()) {
                 util::fatal(std::string("unknown profile: '") + opts.profile +
                             "'. No profiles defined in ezmk.toml.");
             } else {
+                std::string avail;
+                for (size_t i = 0; i < profile_names.size(); ++i) {
+                    if (i > 0) avail += ", ";
+                    avail += profile_names[i];
+                }
                 util::fatal(std::string("unknown profile: '") + opts.profile +
-                            "'. Available: check [compile.profile] and [link.profile] in ezmk.toml.");
+                            "'. Available: " + avail);
             }
         }
         auto lit = cfg.link_profiles.find(opts.profile);

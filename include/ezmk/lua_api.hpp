@@ -8,6 +8,10 @@
 
 #include "ezmk/config.hpp"
 
+// Lua API version — incremented only on backward-incompatible changes.
+// Scripts can read ezmk.api_version at runtime for compatibility guards.
+#define EZMK_LUA_API_VERSION 1
+
 // Forward-declare Lua state type (lua.h typedefs this to an opaque struct)
 struct lua_State;
 

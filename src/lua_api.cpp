@@ -924,6 +924,11 @@ void register_api(lua_State* L, const fs::path& project_root) {
     // Create the global "ezmk" table
     lua_newtable(L);
     luaL_setfuncs(L, ezmk_api, 0);
+
+    // 0.9.4+: expose API version for script compatibility checks
+    lua_pushinteger(L, EZMK_LUA_API_VERSION);
+    lua_setfield(L, -2, "api_version");
+
     lua_setglobal(L, "ezmk");
 
     // Invalidate cached config so next access re-reads

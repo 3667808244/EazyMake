@@ -160,3 +160,44 @@ Search order:
 3. Still not found → error
 
 See `repo.md` for details.
+
+---
+
+## Offline / Air-gapped Usage [0.9.4+]
+
+When working without internet access, you have three options for installing packages:
+
+### Option 1: Local repository mirror
+
+Clone the repository on a connected machine and register it as a local repo on the offline machine:
+
+```bash
+# On a connected machine
+git clone https://github.com/3667808244/ezmk-repo.git /path/to/ezmk-repo
+
+# Copy to the offline machine, then:
+ezmk repo add /path/to/ezmk-repo --type local
+ezmk pkg install <name>
+```
+
+### Option 2: Manual archive download and install
+
+Download the `.tar.gz` or `.zip` archive from GitHub Releases (or any source), transfer to the offline machine, then install from the file:
+
+```bash
+ezmk pkg install ./<pkg>-<version>.tar.gz --type file
+```
+
+### Option 3: Pre-staged mirror on USB / network share
+
+Prepare a full repo mirror on portable media or a network share:
+
+```bash
+# Prepare on a connected machine
+git clone https://github.com/3667808244/ezmk-repo.git /mnt/usb/ezmk-repo
+
+# On each offline machine
+ezmk repo add /mnt/usb/ezmk-repo --type local
+```
+
+> For more offline scenarios, see the [FAQ](faq.md).

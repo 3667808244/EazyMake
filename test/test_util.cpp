@@ -425,3 +425,48 @@ TEST_CASE("info/warn/error do not throw", "[util]") {
 TEST_CASE("fatal throws fatal_error", "[util]") {
     REQUIRE_THROWS_AS(fatal("test fatal error"), ezmk::fatal_error);
 }
+
+// ===================================================================
+// closest_match() — 0.9.4+
+// ===================================================================
+
+TEST_CASE("closest_match: exact match returns distance 0", "[util]") {
+    auto result = closest_match("build", {"build", "run", "clean"}, 2);
+    REQUIRE(result.size() == 1);
+    REQUIRE(result[0] == "build");
+}
+
+TEST_CASE("closest_match: single character typo", "[util]") {
+    auto result = closest_match("bild", {"build", "run", "clean"}, 2);
+    REQUIRE(result.size() >= 1);
+    REQUIRE(result[0] == "build"); // distance 1
+}
+
+TEST_CASE("closest_match: no match within max_distance", "[util]") {
+    auto result = closest_match("xyz", {"project", "pkg", "repo"}, 2);
+    REQUIRE(result.empty());
+}
+
+TEST_CASE("closest_match: multiple matches sorted by distance", "[util]") {
+    auto result = closest_match("projct", {"project", "protect", "pkg", "repo"}, 2);
+    REQUIRE(result.size() >= 1);
+    // "project" is distance 1, should be first
+    REQUIRE(result[0] == "project");
+}
+
+TEST_CASE("closest_match: case sensitivity", "[util]") {
+    // Levenshtein is case-sensitive; "Build" vs "build" = distance 1
+    auto result = closest_match("Build", {"build", "run", "clean"}, 2);
+    REQUIRE(result.size() >= 1);
+    REQUIRE(result[0] == "build");
+}
+
+TEST_CASE("closest_match: empty input", "[util]") {
+    auto result = closest_match("", {"project", "pkg"}, 2);
+    REQUIRE(result.empty()); // distance = length of candidate (>=3), > max_distance
+}
+
+TEST_CASE("closest_match: empty candidates", "[util]") {
+    auto result = closest_match("build", {}, 2);
+    REQUIRE(result.empty());
+}

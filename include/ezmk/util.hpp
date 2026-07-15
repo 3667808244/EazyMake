@@ -169,4 +169,13 @@ std::string escape_shell_arg(std::string_view s);
 // Returns empty path if not found.
 fs::path find_utils_script(const std::string& name);
 
+// ---- Fuzzy matching (0.9.4+) ----
+
+// Return candidates whose Levenshtein distance from `input` is ≤ max_distance,
+// sorted by distance ascending. Returns empty vector if no match.
+std::vector<std::string> closest_match(
+    const std::string& input,
+    const std::vector<std::string>& candidates,
+    int max_distance = 2);
+
 } // namespace ezmk::util

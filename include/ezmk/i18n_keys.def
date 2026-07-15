@@ -150,6 +150,10 @@ EZMK_I18N_KEY(cli_all_ignores_name)
 EZMK_I18N_KEY(cli_invalid_jobs)
 EZMK_I18N_KEY(cli_jobs_negative)
 EZMK_I18N_KEY(cli_invalid_color)         // 0.2.6+
+EZMK_I18N_KEY(cli_did_you_mean)          // 0.9.4+
+EZMK_I18N_KEY(cli_unknown_command)       // 0.9.4+
+EZMK_I18N_KEY(cli_available_commands)    // 0.9.4+
+EZMK_I18N_KEY(profile_available)         // 0.9.4+
 // argument nouns for {what} placeholders (0.2.6+)
 EZMK_I18N_KEY(arg_project_name)
 EZMK_I18N_KEY(arg_package_name)

@@ -62,7 +62,7 @@ namespace ezmk::cli
                 size_t pos = 0;
                 j = std::stoi(*v, &pos);
                 if (pos != v->size())
-                    throw std::invalid_argument("");
+                    util::fatal(ezmk::i18n::I18nKey::cli_invalid_jobs, {{"val", *v}});
             }
             catch (...)
             {
@@ -610,8 +610,29 @@ namespace ezmk::cli
         if (group == "utils")
             return parse_utils_args(argc, argv);
 
-        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_unknown_group,
-                                    {{"group", std::string(group)}}));
+        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_unknown_command,
+                                    {{"cmd", std::string(group)}}));
+        // 0.9.4+: suggest closest matching command
+        {
+            std::vector<std::string> cmds = {
+                "project", "pkg", "repo", "utils", "help", "version"
+            };
+            auto matches = util::closest_match(std::string(group), cmds, 2);
+            if (!matches.empty()) {
+                std::string suggestion = matches[0];
+                for (size_t i = 1; i < matches.size() && i < 3; ++i)
+                    suggestion += ", " + matches[i];
+                util::error(ezmk::i18n::I18nKey::cli_did_you_mean,
+                            {{"suggestion", suggestion}});
+            }
+            std::string avail;
+            for (size_t i = 0; i < cmds.size(); ++i) {
+                if (i > 0) avail += ", ";
+                avail += cmds[i];
+            }
+            util::error(ezmk::i18n::I18nKey::cli_available_commands,
+                        {{"commands", avail}});
+        }
         args.cmd = Command::Help;
         return args;
     }
