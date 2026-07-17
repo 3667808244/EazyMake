@@ -2,6 +2,8 @@
 
 ## Install
 
+### Linux / macOS / MSYS2
+
 On Linux, macOS, or MSYS2 (Windows), install with one line:
 
 ```bash
@@ -23,8 +25,32 @@ less install.sh
 bash install.sh
 ```
 
-> **Bare Windows (no MSYS2):** download the prebuilt `ezmk.exe` from the
-> [GitHub Release](https://github.com/3667808244/EazyMake/releases) and put it on your `PATH`.
+### Windows (native, no MSYS2)
+
+Download and run the PowerShell installer — no compiler or git required:
+
+```powershell
+# Recommended: review then run
+# 1. Open https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1
+# 2. Save as install.ps1, then run:
+.\install.ps1
+
+# Or one-line (convenient, but review first):
+irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
+```
+
+This downloads the prebuilt `ezmk.exe` from GitHub Releases, verifies SHA-256,
+installs to `%LOCALAPPDATA%\ezmk\bin`, and configures your user `PATH`.
+Customize with parameters:
+
+```powershell
+.\install.ps1 -Version "0.9.5"           # Install a specific version
+.\install.ps1 -InstallDir "D:\tools\ezmk" # Custom install directory
+.\install.ps1 -DryRun                     # Preview without making changes
+.\install.ps1 -NoPath                     # Skip PATH configuration
+```
+
+> **MSYS2 users:** use the `install.sh` method above (builds from source with g++).
 
 ## Requirements
 

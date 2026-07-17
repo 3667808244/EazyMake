@@ -16,6 +16,30 @@ Global options may appear on any command (see [Global options](#global-options))
 
 ---
 
+## Installation
+
+### Linux / macOS / MSYS2
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | bash
+```
+
+Builds from source and installs `ezmk` to `$HOME/.local/bin`. See [README](../../README.md#quick-start) for customization options and environment variables.
+
+### Windows (原生，无需 MSYS2)
+
+```powershell
+# 下载并运行 PowerShell 安装脚本：
+.\install.ps1
+
+# 或一行远程执行：
+irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
+```
+
+从 GitHub Releases 下载预编译的 `ezmk.exe`，校验 SHA-256，安装到 `%LOCALAPPDATA%\ezmk\bin`，并配置用户 PATH。支持 `-Version`、`-InstallDir`、`-NoPath`、`-DryRun` 参数。详见 [README](../../README.md#quick-start)。
+
+---
+
 ## `project` — build your code
 
 | Command | Description |
@@ -198,6 +222,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `EZMK_REF` | install | git tag/branch/commit to build (`install.sh`) |
 | `EZMK_NO_COMPLETIONS` | install | Set to `1` to skip zsh completion install (`install.sh`) |
 | `EZMK_NO_DEFAULT_REPO` | install | Set to `1` to skip official repo pre-registration (`install.sh`) |
+| `EZMK_TEST_BIN` | test | Path to the `ezmk` binary for integration tests (default `build/ezmk[.exe]`) |
 
 ---
 

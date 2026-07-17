@@ -17,8 +17,9 @@
 
 ## 约定
 
-- Shell 代码片段假定使用 Linux/macOS/MSYS2。在裸 Windows 上，使用 GitHub Release 中预编译的
-  `ezmk.exe`。
+- Shell 代码片段假定使用 Linux/macOS/MSYS2。在裸 Windows 上，使用
+  [PowerShell 安装脚本](01-install.md#windows原生无需-msys2) (`install.ps1`)
+  或从 [GitHub Release](https://github.com/3667808244/EazyMake/releases) 下载预编译的 `ezmk.exe`。
 - `$` 表示你输入的命令；不带 `$` 的行是输出。
 - 每个命令都有简写别名（例如 `ezmk pb` = `ezmk project build`）—— 参见
   [`docs/cli.md`](../../docs/zh/cli.md#command-shorthands-026)。

@@ -2,6 +2,8 @@
 
 ## 安装
 
+### Linux / macOS / MSYS2
+
 在 Linux、macOS 或 MSYS2（Windows）上，一行命令即可安装：
 
 ```bash
@@ -22,8 +24,32 @@ less install.sh
 bash install.sh
 ```
 
-> **裸 Windows（无 MSYS2）：**从
-> [GitHub Release](https://github.com/3667808244/EazyMake/releases) 下载预编译的 `ezmk.exe`，并将其放到你的 `PATH` 中。
+### Windows（原生，无需 MSYS2）
+
+下载并运行 PowerShell 安装脚本 — 无需编译器或 git：
+
+```powershell
+# 推荐方式：先审阅再运行
+# 1. 打开 https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1
+# 2. 另存为 install.ps1，然后执行：
+.\install.ps1
+
+# 或一行命令（方便，但建议先审阅）：
+irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
+```
+
+这会从 GitHub Releases 下载预编译的 `ezmk.exe`，校验 SHA-256，
+安装到 `%LOCALAPPDATA%\ezmk\bin`，并配置用户 `PATH`。
+可用参数自定义：
+
+```powershell
+.\install.ps1 -Version "0.9.5"           # 安装指定版本
+.\install.ps1 -InstallDir "D:\tools\ezmk" # 自定义安装目录
+.\install.ps1 -DryRun                     # 预览操作，不做实际更改
+.\install.ps1 -NoPath                     # 跳过 PATH 配置
+```
+
+> **MSYS2 用户：**请使用上面的 `install.sh` 方式（使用 g++ 从源码构建）。
 
 ## 环境要求
 

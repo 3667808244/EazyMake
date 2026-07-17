@@ -19,8 +19,10 @@ option surface, see the [`docs/en/`](../../docs/en/) reference (especially [`doc
 
 ## Conventions
 
-- Shell snippets assume Linux/macOS/MSYS2. On bare Windows, use the prebuilt
-  `ezmk.exe` from the GitHub Release.
+- Shell snippets assume Linux/macOS/MSYS2. On bare Windows, use the
+  [PowerShell installer](01-install.md#windows-native-no-msys2) (`install.ps1`)
+  or download the prebuilt `ezmk.exe` from the
+  [GitHub Release](https://github.com/3667808244/EazyMake/releases).
 - `$` marks a command you type; lines without it are output.
 - Every command has a short alias (e.g. `ezmk pb` = `ezmk project build`) — see
   [`docs/en/cli.md`](../../docs/en/cli.md#command-shorthands-026).

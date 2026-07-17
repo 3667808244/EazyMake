@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.5 (2026-07-17) — 跨平台体验与质量保障
+
+Windows 原生安装体验、端到端集成测试、三平台冒烟测试准备。1.0.0 之前的质量保障版本。
+
+### 新增
+- **PowerShell 安装脚本** (`install.ps1`)：Windows 原生一键安装，对标 `install.sh`。从 GitHub Release 下载预编译 `ezmk.exe`，SHA-256 校验，原子化安装到 `%LOCALAPPDATA%\ezmk\bin`，自动配置用户 PATH + 预注册官方仓库。支持 `-Version` / `-InstallDir` / `-NoPath` / `-DryRun` 参数
+- **端到端集成测试** (`test/test_integration.cpp`)：7 个场景、41 个断言，覆盖完整 build pipeline —— 从零创建项目 → 编译 → 运行、增量构建缓存命中、Watch 模式文件变更检测、`ezmk utils cc` 生成 compile_commands.json、项目目录布局验证、CLI 基本命令（version/help）。全部标记 `[integration]` tag，支持按需运行或跳过
+- **`build.sh` 测试模式扩展**：新增 `test-all`（单元 + 集成）、`integration`（仅集成测试）目标；test 模式默认跳过 `[integration]` 用例（`~"[integration]"`）；集成测试前自动编译 ezmk 二进制；通过 `EZMK_TEST_BIN` 环境变量传递给测试
+
+### 变更
+- **Windows 安装文档**：`README.md` / `README_ZH.md` / `docs/en/cli.md` / `docs/zh/cli.md` 新增 Windows 原生安装章节（`install.ps1` 使用说明 + 参数表）
+- **环境变量表扩展** (`docs/en/cli.md` / `docs/zh/cli.md`)：新增 `EZMK_TEST_BIN` 条目
+
+### 测试
+- 测试套件：**491 个测试用例，2250 个断言全部通过**（+9 用例，+41 断言）
+- 单元测试 482 用例 2209 断言；集成测试 9 用例 41 断言
+- Watch 模式测试为时序敏感型（Windows 上可能假阴性），使用 WARN 而非 FAIL
+
+---
+
 ## 0.9.4 (2026-07-15) — 文档与质量完善
 
 文档补全与代码质量打磨，不新增核心功能。
