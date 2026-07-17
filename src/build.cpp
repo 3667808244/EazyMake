@@ -661,6 +661,9 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     std::vector<cache::SingleCompileResult> single_results;
     single_results.reserve(cin.sources.size());
 
+    // INVARIANT: In parallel mode, compile_one_source() only reads from
+    // `record` (const ref). record.files is updated below after all
+    // threads complete, so no concurrent write occurs.
     if (num_jobs > 1 && cin.sources.size() > 1) {
         if (opts.verbose) {
             util::info(ezmk::i18n::I18nKey::parallel_jobs_info,
@@ -729,6 +732,39 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     return comp_result.objects;
 }
 
+// Execute a link/archive command with standard error handling and atomic rename.
+// Returns the final output path on success; throws fatal_error on failure.
+static fs::path execute_link(
+    const std::string& cmd,
+    const fs::path& output,
+    const fs::path& output_tmp,
+    bool verbose,
+    ezmk::i18n::I18nKey action_key,
+    const std::string& target_name,
+    ezmk::i18n::I18nKey fail_key,
+    bool show_stdout = false)
+{
+    std::error_code ec;
+    fs::remove(output_tmp, ec);
+
+    util::info(action_key, {{"target", target_name}});
+    if (verbose) util::info("    cmd: " + cmd);
+
+    auto res = util::run_command(cmd);
+    if (res.exit_code != 0) {
+        fs::remove(output_tmp, ec);
+        util::error(fail_key, {{"code", std::to_string(res.exit_code)}});
+        util::error("  cmd: " + cmd);
+        if (!res.err.empty()) util::error(res.err);
+        if (show_stdout && !res.out.empty()) util::error(res.out);
+        util::fatal(ezmk::i18n::I18nKey::build_failed);
+    }
+
+    fs::rename(output_tmp, output, ec);
+    util::info(ezmk::i18n::I18nKey::build_success, {{"path", output.string()}});
+    return output;
+}
+
 // Phase 3: Link objects into the final output.
 fs::path link_phase(const BuildState& st,
                     const std::vector<fs::path>& objects,
@@ -756,45 +792,21 @@ fs::path link_phase(const BuildState& st,
             return try_link([&]() -> fs::path {
                 fs::path lib = st.build_dir / (cfg.project.name + ".lib");
                 fs::path lib_tmp = st.build_dir / (cfg.project.name + ".lib.tmp");
-                { std::error_code ec; fs::remove(lib_tmp, ec); }
-                util::info(ezmk::i18n::I18nKey::archiving, {{"target", lib.filename().string()}});
-                std::string lib_cmd = make_msvc_lib_cmd(objects, lib_tmp);
-                if (opts.verbose) util::info("    cmd: " + lib_cmd);
-                auto lib_res = util::run_command(lib_cmd);
-                if (lib_res.exit_code != 0) {
-                    { std::error_code ec; fs::remove(lib_tmp, ec); }
-                    util::error(ezmk::i18n::I18nKey::archive_failed,
-                                {{"code", std::to_string(lib_res.exit_code)}});
-                    util::error("  cmd: " + lib_cmd);
-                    if (!lib_res.err.empty()) util::error(lib_res.err);
-                    util::fatal(ezmk::i18n::I18nKey::build_failed);
-                }
-                { std::error_code ec; fs::rename(lib_tmp, lib, ec); }
-                util::info(ezmk::i18n::I18nKey::build_success, {{"path", lib.string()}});
-                return lib;
+                return execute_link(make_msvc_lib_cmd(objects, lib_tmp), lib, lib_tmp,
+                                    opts.verbose, ezmk::i18n::I18nKey::archiving,
+                                    lib.filename().string(), ezmk::i18n::I18nKey::archive_failed);
             });
         } else {
             return try_link([&]() -> fs::path {
                 fs::path lib = st.build_dir / ("lib" + cfg.project.name + ".a");
                 fs::path lib_tmp = st.build_dir / ("lib" + cfg.project.name + ".a.tmp");
-                { std::error_code ec; fs::remove(lib_tmp, ec); }
-                util::info(ezmk::i18n::I18nKey::archiving, {{"target", lib.filename().string()}});
                 std::ostringstream ar_cmd;
                 ar_cmd << "ar rcs \"" << util::escape_shell_arg(lib_tmp.string()) << "\"";
                 for (auto& o : objects)
                     ar_cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
-                auto ar_res = util::run_command(ar_cmd.str());
-                if (ar_res.exit_code != 0) {
-                    { std::error_code ec; fs::remove(lib_tmp, ec); }
-                    util::error(ezmk::i18n::I18nKey::archive_failed,
-                                {{"code", std::to_string(ar_res.exit_code)}});
-                    util::error("  cmd: " + ar_cmd.str());
-                    if (!ar_res.err.empty()) util::error(ar_res.err);
-                    util::fatal(ezmk::i18n::I18nKey::build_failed);
-                }
-                { std::error_code ec; fs::rename(lib_tmp, lib, ec); }
-                util::info(ezmk::i18n::I18nKey::build_success, {{"path", lib.string()}});
-                return lib;
+                return execute_link(ar_cmd.str(), lib, lib_tmp, opts.verbose,
+                                    ezmk::i18n::I18nKey::archiving,
+                                    lib.filename().string(), ezmk::i18n::I18nKey::archive_failed);
             });
         }
     } else if (cfg.project.type == "shared") {
@@ -803,23 +815,9 @@ fs::path link_phase(const BuildState& st,
                 fs::path dll = st.build_dir / (cfg.project.name + ".dll");
                 fs::path implib = st.build_dir / (cfg.project.name + "_implib.lib");
                 fs::path dll_tmp = st.build_dir / (cfg.project.name + ".dll.tmp");
-                { std::error_code ec; fs::remove(dll_tmp, ec); }
-                util::info(ezmk::i18n::I18nKey::linking, {{"target", dll.filename().string()}});
-                std::string link_cmd = make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp, implib, merged_link);
-                if (opts.verbose) util::info("    cmd: " + link_cmd);
-                auto link_res = util::run_command(link_cmd);
-                if (link_res.exit_code != 0) {
-                    { std::error_code ec; fs::remove(dll_tmp, ec); }
-                    util::error(ezmk::i18n::I18nKey::link_failed,
-                                {{"code", std::to_string(link_res.exit_code)}});
-                    util::error("  cmd: " + link_cmd);
-                    if (!link_res.err.empty()) util::error(link_res.err);
-                    if (!link_res.out.empty()) util::error(link_res.out);
-                    util::fatal(ezmk::i18n::I18nKey::build_failed);
-                }
-                { std::error_code ec; fs::rename(dll_tmp, dll, ec); }
-                util::info(ezmk::i18n::I18nKey::build_success, {{"path", dll.string()}});
-                return dll;
+                return execute_link(make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp, implib, merged_link),
+                                    dll, dll_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                                    dll.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
             });
         } else {
             return try_link([&]() -> fs::path {
@@ -831,23 +829,9 @@ fs::path link_phase(const BuildState& st,
 #endif
                 fs::path lib = st.build_dir / lib_name;
                 fs::path lib_tmp = st.build_dir / (lib_name + ".tmp");
-                { std::error_code ec; fs::remove(lib_tmp, ec); }
-                util::info(ezmk::i18n::I18nKey::linking, {{"target", lib.filename().string()}});
-                std::string link_cmd = make_gcc_link_cmd(objects, st.pkg_archives, lib_tmp, merged_link, st.lang, true);
-                if (opts.verbose) util::info("    cmd: " + link_cmd);
-                auto link_res = util::run_command(link_cmd);
-                if (link_res.exit_code != 0) {
-                    { std::error_code ec; fs::remove(lib_tmp, ec); }
-                    util::error(ezmk::i18n::I18nKey::link_failed,
-                                {{"code", std::to_string(link_res.exit_code)}});
-                    util::error("  cmd: " + link_cmd);
-                    if (!link_res.err.empty()) util::error(link_res.err);
-                    if (!link_res.out.empty()) util::error(link_res.out);
-                    util::fatal(ezmk::i18n::I18nKey::build_failed);
-                }
-                { std::error_code ec; fs::rename(lib_tmp, lib, ec); }
-                util::info(ezmk::i18n::I18nKey::build_success, {{"path", lib.string()}});
-                return lib;
+                return execute_link(make_gcc_link_cmd(objects, st.pkg_archives, lib_tmp, merged_link, st.lang, true),
+                                    lib, lib_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                                    lib.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
             });
         }
     } else {
@@ -856,23 +840,9 @@ fs::path link_phase(const BuildState& st,
             return try_link([&]() -> fs::path {
                 fs::path exe = st.build_dir / (cfg.project.name + ".exe");
                 fs::path exe_tmp = st.build_dir / (cfg.project.name + ".exe.tmp");
-                { std::error_code ec; fs::remove(exe_tmp, ec); }
-                util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
-                std::string link_cmd = make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp, merged_link);
-                if (opts.verbose) util::info("    cmd: " + link_cmd);
-                auto link_res = util::run_command(link_cmd);
-                if (link_res.exit_code != 0) {
-                    { std::error_code ec; fs::remove(exe_tmp, ec); }
-                    util::error(ezmk::i18n::I18nKey::link_failed,
-                                {{"code", std::to_string(link_res.exit_code)}});
-                    util::error("  cmd: " + link_cmd);
-                    if (!link_res.err.empty()) util::error(link_res.err);
-                    if (!link_res.out.empty()) util::error(link_res.out);
-                    util::fatal(ezmk::i18n::I18nKey::build_failed);
-                }
-                { std::error_code ec; fs::rename(exe_tmp, exe, ec); }
-                util::info(ezmk::i18n::I18nKey::build_success, {{"path", exe.string()}});
-                return exe;
+                return execute_link(make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp, merged_link),
+                                    exe, exe_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                                    exe.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
             });
         } else {
             return try_link([&]() -> fs::path {
@@ -884,23 +854,9 @@ fs::path link_phase(const BuildState& st,
 #ifdef EZMK_WIN
                 exe_tmp += ".exe";
 #endif
-                { std::error_code ec; fs::remove(exe_tmp, ec); }
-                util::info(ezmk::i18n::I18nKey::linking, {{"target", exe.filename().string()}});
-                std::string link_cmd = make_gcc_link_cmd(objects, st.pkg_archives, exe_tmp, merged_link, st.lang);
-                if (opts.verbose) util::info("    cmd: " + link_cmd);
-                auto link_res = util::run_command(link_cmd);
-                if (link_res.exit_code != 0) {
-                    { std::error_code ec; fs::remove(exe_tmp, ec); }
-                    util::error(ezmk::i18n::I18nKey::link_failed,
-                                {{"code", std::to_string(link_res.exit_code)}});
-                    util::error("  cmd: " + link_cmd);
-                    if (!link_res.err.empty()) util::error(link_res.err);
-                    if (!link_res.out.empty()) util::error(link_res.out);
-                    util::fatal(ezmk::i18n::I18nKey::build_failed);
-                }
-                { std::error_code ec; fs::rename(exe_tmp, exe, ec); }
-                util::info(ezmk::i18n::I18nKey::build_success, {{"path", exe.string()}});
-                return exe;
+                return execute_link(make_gcc_link_cmd(objects, st.pkg_archives, exe_tmp, merged_link, st.lang),
+                                    exe, exe_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                                    exe.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
             });
         }
     }

@@ -37,6 +37,16 @@ static bool is_valid_macro_name(std::string_view name) {
     return true;
 }
 
+// Validate that a profile name contains only [a-zA-Z0-9_-].
+static bool is_valid_profile_name(std::string_view name) {
+    if (name.empty()) return false;
+    for (char c : name) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-')
+            return false;
+    }
+    return true;
+}
+
 } // anonymous namespace
 
 LanguageInfo parse_language(std::string_view language) {
@@ -225,17 +235,12 @@ EzConfig parse_config(const fs::path& toml_path) {
         if (auto profiles = (*comp)["profile"].as_table()) {
             for (auto& [key, val] : *profiles) {
                 std::string profile_name(key.str());
-                // Validate profile name: [a-zA-Z0-9_-]+
-                if (profile_name.empty()) {
+                if (!is_valid_profile_name(profile_name)) {
                     throw std::runtime_error(
-                        ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_profile));
-                }
-                for (char c : profile_name) {
-                    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
-                        throw std::runtime_error(
-                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_profile,
-                                            {{"name", profile_name}}));
-                    }
+                        profile_name.empty()
+                            ? ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_profile)
+                            : ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_profile,
+                                              {{"name", profile_name}}));
                 }
 
                 ProfileConfig pc;
@@ -279,16 +284,12 @@ EzConfig parse_config(const fs::path& toml_path) {
         if (auto profiles = (*link)["profile"].as_table()) {
             for (auto& [key, val] : *profiles) {
                 std::string profile_name(key.str());
-                if (profile_name.empty()) {
+                if (!is_valid_profile_name(profile_name)) {
                     throw std::runtime_error(
-                        ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_profile));
-                }
-                for (char c : profile_name) {
-                    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
-                        throw std::runtime_error(
-                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_profile,
-                                            {{"name", profile_name}}));
-                    }
+                        profile_name.empty()
+                            ? ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_empty_profile)
+                            : ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_profile,
+                                              {{"name", profile_name}}));
                 }
 
                 ProfileLinkConfig plc;

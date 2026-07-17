@@ -81,10 +81,33 @@ void FileWatcher::flush_pending() {
     }
 }
 
+// Check if debounce window has elapsed and flush pending paths if so.
+void FileWatcher::check_and_flush() {
+    bool should_flush = false;
+    {
+        std::lock_guard<std::mutex> lock(pending_mutex_);
+        if (!pending_paths_.empty() &&
+            last_event_ != std::chrono::steady_clock::time_point{}) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - last_event_).count();
+            if (elapsed >= debounce_ms_) {
+                should_flush = true;
+            }
+        }
+    }
+    if (should_flush) {
+        flush_pending();
+    }
+}
+
 // ===================================================================
 // Windows implementation (ReadDirectoryChangesW + IOCP)
 // ===================================================================
 #ifdef EZMK_FILEWATCHER_WIN
+
+// RAII ownership for OVERLAPPED structs (raw pointers stored in WatchEntry).
+static std::vector<std::unique_ptr<OVERLAPPED>> g_overlapped_pool;
 
 void FileWatcher::win32_add_watch(const fs::path& dir) {
     if (!util::file_exists(dir)) {
@@ -123,9 +146,10 @@ void FileWatcher::win32_add_watch(const fs::path& dir) {
     entry.dir_handle = hDir;
     entry.buffer.resize(64 * 1024); // 64KB buffer
 
-    // Allocate OVERLAPPED
-    OVERLAPPED* ov = new OVERLAPPED{};
-    entry.overlapped = ov;
+    // Allocate OVERLAPPED with RAII ownership
+    auto ov = std::make_unique<OVERLAPPED>();
+    entry.overlapped = ov.get();
+    g_overlapped_pool.push_back(std::move(ov));
 
     watches_.push_back(std::move(entry));
 }
@@ -230,9 +254,9 @@ void FileWatcher::win32_cleanup() {
             CancelIo(w.dir_handle);
             CloseHandle(w.dir_handle);
         }
-        delete static_cast<OVERLAPPED*>(w.overlapped);
     }
     watches_.clear();
+    g_overlapped_pool.clear();  // RAII cleanup of OVERLAPPED allocations
     if (iocp_) {
         CloseHandle(iocp_);
         iocp_ = nullptr;
@@ -408,23 +432,7 @@ void FileWatcher::run() {
     // Main loop: handle debounce flushing
     while (!stop_requested_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        bool should_flush = false;
-        {
-            std::lock_guard<std::mutex> lock(pending_mutex_);
-            if (!pending_paths_.empty() &&
-                last_event_ != std::chrono::steady_clock::time_point{}) {
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - last_event_).count();
-                if (elapsed >= debounce_ms_) {
-                    should_flush = true;
-                }
-            }
-        }
-        if (should_flush) {
-            flush_pending();
-        }
+        check_and_flush();
     }
 
     // Signal IOCP to wake up worker
@@ -469,23 +477,7 @@ void FileWatcher::run() {
     // Main loop: handle debounce flushing
     while (!stop_requested_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        bool should_flush = false;
-        {
-            std::lock_guard<std::mutex> lock(pending_mutex_);
-            if (!pending_paths_.empty() &&
-                last_event_ != std::chrono::steady_clock::time_point{}) {
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - last_event_).count();
-                if (elapsed >= debounce_ms_) {
-                    should_flush = true;
-                }
-            }
-        }
-        if (should_flush) {
-            flush_pending();
-        }
+        check_and_flush();
     }
 
     if (worker_.joinable()) worker_.join();
@@ -547,23 +539,7 @@ void FileWatcher::run() {
     // Main loop: handle debounce flushing
     while (!stop_requested_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        bool should_flush = false;
-        {
-            std::lock_guard<std::mutex> lock(pending_mutex_);
-            if (!pending_paths_.empty() &&
-                last_event_ != std::chrono::steady_clock::time_point{}) {
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - last_event_).count();
-                if (elapsed >= debounce_ms_) {
-                    should_flush = true;
-                }
-            }
-        }
-        if (should_flush) {
-            flush_pending();
-        }
+        check_and_flush();
     }
 
     if (worker_.joinable()) worker_.join();

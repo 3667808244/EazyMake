@@ -290,6 +290,11 @@ void clear_cache() {
 
 // ===================================================================
 // 0.2.3+: Single-source compile (thread-safe — read-only on record)
+//
+// INVARIANT: This function only reads from `record` (const ref).
+// In parallel compilation, multiple threads call this concurrently
+// with the same record. The caller (build.cpp) is responsible for
+// updating record.files after all threads complete.
 // ===================================================================
 
 SingleCompileResult compile_one_source(const fs::path& src,
@@ -351,9 +356,9 @@ SingleCompileResult compile_one_source(const fs::path& src,
                             auto it = record.files.find(result.rel_src);
                             if (it != record.files.end()) {
                                 util::info(util::color_msg(util::color::cyan,
-                                    "  [cached] " + result.rel_src +
-                                    "  (source hash matches, " +
-                                    std::to_string(it->second.dependencies.size()) + " headers unchanged)"));
+                                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::cache_hit,
+                                        {{"file", result.rel_src},
+                                         {"count", std::to_string(it->second.dependencies.size())}})));
                             }
                         }
                         return result;
@@ -551,313 +556,29 @@ SingleCompileResult compile_one_source(const fs::path& src,
 CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
     CompileResult result;
 
-    // Determine object file suffix based on toolchain
-    bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
-    const char* obj_suffix = is_msvc ? ".obj" : ".o";
-    const char* tmp_suffix = is_msvc ? ".tmp.obj" : ".tmp.o";
-
     for (auto& src : in.sources) {
-        // Compute paths
-        auto rel = fs::relative(src, in.proj_root);
-        fs::path obj = in.obj_dir / rel;
-        obj.replace_extension(obj_suffix);
-        fs::path obj_tmp = in.obj_dir / rel;
-        obj_tmp.replace_extension(tmp_suffix);
+        auto sr = compile_one_source(src, in, record);
 
-        fs::path cache_obj = in.cache_obj_dir / rel;
-        cache_obj.replace_extension(obj_suffix);
-
-        fs::create_directories(obj.parent_path());
-        fs::create_directories(cache_obj.parent_path());
-
-        // Check cache (unless disabled)
-        bool cache_hit = false;
-        if (!in.disable_cache) {
-            auto cached = check_cache(src, in.compile, record, in.proj_root,
-                                      in.extra_includes, in.lang.std_flag);
-            if (cached) {
-                auto cache_src = *cached;
-                bool same_dir = (fs::absolute(in.cache_obj_dir) == fs::absolute(in.obj_dir));
-                if (same_dir && util::file_exists(cache_src)) {
-                    result.objects.push_back(cache_src);
-                    ++result.cache_hits;
-                    cache_hit = true;
-                    if (in.verbose) {
-                        auto& entry = record.files[fs::relative(src, in.proj_root).generic_string()];
-                        util::info(util::color_msg(util::color::cyan,
-                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::cache_hit,
-                                {{"file", fs::relative(src, in.proj_root).string()},
-                                 {"count", std::to_string(entry.dependencies.size())}})));
-                    }
-                } else if (!same_dir && util::file_exists(cache_src)) {
-                    std::error_code ec;
-                    fs::copy_file(cache_src, obj_tmp, fs::copy_options::overwrite_existing, ec);
-                    if (!ec) {
-                        fs::rename(obj_tmp, obj, ec);
-                        if (!ec) {
-                            result.objects.push_back(obj);
-                            ++result.cache_hits;
-                            cache_hit = true;
-                            if (in.verbose) {
-                                auto& entry = record.files[fs::relative(src, in.proj_root).generic_string()];
-                                util::info(util::color_msg(util::color::cyan,
-                                    "  [cached] " + fs::relative(src, in.proj_root).string() +
-                                    "  (source hash matches, " +
-                                    std::to_string(entry.dependencies.size()) + " headers unchanged)"));
-                            }
-                        }
-                    }
-                    if (!cache_hit) {
-                        fs::remove(obj_tmp, ec);
-                    }
-                }
+        if (sr.cache_hit) {
+            result.objects.push_back(sr.object);
+            ++result.cache_hits;
+        } else if (sr.success) {
+            result.objects.push_back(sr.object);
+            ++result.cache_misses;
+            // Check if dependency path set changed (include structure change)
+            auto old_it = record.files.find(sr.rel_src);
+            if (old_it != record.files.end() &&
+                !same_dependency_paths(old_it->second.dependencies, sr.new_deps)) {
+                util::info(ezmk::i18n::I18nKey::include_structure_changed,
+                           {{"file", sr.rel_src}});
             }
-            // Verbose: explain cache miss
-            if (!cache_hit && in.verbose) {
-                auto rel_src = fs::relative(src, in.proj_root).generic_string();
-                auto it = record.files.find(rel_src);
-                if (it == record.files.end()) {
-                    util::info(ezmk::i18n::I18nKey::cache_miss_record,
-                               {{"file", rel_src}});
-                } else {
-                    std::string cur_hash = crypto::sha256_file(src);
-                    if (cur_hash != it->second.source_hash) {
-                        util::info(ezmk::i18n::I18nKey::cache_miss_source,
-                                   {{"file", rel_src}});
-                    } else {
-                        auto cur_sig = compile_options_signature(in.compile, in.extra_includes,
-                                                                in.lang.std_flag);
-                        if (cur_sig != record.compile_options_signature) {
-                            util::info(ezmk::i18n::I18nKey::cache_miss_options);
-                        } else {
-                            // Check which header changed
-                            for (auto& dep : it->second.dependencies) {
-                                fs::path dp(dep.path);
-                                if (dp.is_relative()) dp = in.proj_root / dp;
-                                std::string hdr_hash = crypto::sha256_file(dp);
-                                if (hdr_hash != dep.hash) {
-                                    util::info(ezmk::i18n::I18nKey::cache_miss_header,
-                                               {{"header", dep.path}});
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (cache_hit) continue;
-
-        // Cache miss: compile to temp file
-        ++result.cache_misses;
-
-        // Build compile command
-        std::ostringstream cmd;
-
-        if (is_msvc) {
-            // ---- MSVC compile command ----
-            cmd << "cl.exe /c ";
-
-            // Standard flag (GCC→MSVC translated)
-            auto translated = toolchain::translate_compile_flags(
-                std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
-            if (!translated.translated.empty()) {
-                cmd << util::escape_shell_arg(translated.translated[0]) << " ";
-            }
-
-            // Compile flags: translate GCC→MSVC, then add MSVC-specific flags
-            auto flag_trans = toolchain::translate_compile_flags(
-                in.compile.flags, toolchain::CompilerFamily::Msvc);
-            for (auto& f : flag_trans.translated) {
-                cmd << util::escape_shell_arg(f) << " ";
-            }
-            for (auto& f : flag_trans.unrecognized) {
-                if (in.verbose) {
-                    util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
-                }
-            }
-
-            // MSVC-specific flags (no translation needed)
-            for (auto& f : in.compile.msvc_flags) {
-                cmd << util::escape_shell_arg(f) << " ";
-            }
-
-            // Default MSVC flags
-            cmd << "/utf-8 /MD ";
-
-            // Default include: proj_root/include
-            auto def_inc = in.proj_root / "include";
-            if (util::file_exists(def_inc)) {
-                cmd << "/I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
-            }
-
-            // User include dirs
-            for (auto& d : in.compile.include_dirs) {
-                fs::path resolved = d;
-                if (resolved.is_relative()) resolved = in.proj_root / resolved;
-                cmd << "/I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
-            }
-
-            // Extra includes (dependency packages)
-            for (auto& inc : in.extra_includes) {
-                cmd << "/I\"" << util::escape_shell_arg(inc.string()) << "\" ";
-            }
-
-            // Output + source
-            cmd << "/Fo\"" << util::escape_shell_arg(obj_tmp.string()) << "\" ";
-            cmd << "/showIncludes ";
-            cmd << "\"" << util::escape_shell_arg(src.string()) << "\"";
-
+            // Update cache record with new entry
+            record.files[sr.rel_src] = std::move(sr.record_entry);
         } else {
-            // ---- GCC/Clang compile command ----
-            // Use detected compiler if available (e.g. clang++), fall back to default (g++)
-            std::string compiler = in.lang.detected_compiler.empty()
-                ? in.lang.compiler : in.lang.detected_compiler;
-            cmd << compiler << " " << in.lang.std_flag << " -c ";
-            for (auto& f : in.compile.flags) {
-                cmd << util::escape_shell_arg(f) << " ";
-            }
-            if (in.use_pic) {
-                cmd << "-fPIC ";
-            }
-
-            // Default include: proj_root/include
-            auto def_inc = in.proj_root / "include";
-            if (util::file_exists(def_inc)) {
-                cmd << "-I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
-            }
-
-            for (auto& d : in.compile.include_dirs) {
-                fs::path resolved = d;
-                if (resolved.is_relative()) resolved = in.proj_root / resolved;
-                cmd << "-I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
-            }
-            for (auto& inc : in.extra_includes) {
-                cmd << "-I\"" << util::escape_shell_arg(inc.string()) << "\" ";
-            }
-
-            // GCC: depfile for dependency tracking
-            fs::path dep = in.dep_dir / rel;
-            dep.replace_extension(".d");
-            cmd << "-MMD -MF \"" << util::escape_shell_arg(dep.string()) << "\" ";
-            cmd << "\"" << util::escape_shell_arg(src.string()) << "\" -o \"" << util::escape_shell_arg(obj_tmp.string()) << "\"";
-        }
-
-        if (in.verbose) {
-            util::info(ezmk::i18n::I18nKey::compiling,
-                       {{"file", fs::relative(src, in.proj_root).string()}});
-            util::info(util::color_msg(util::color::dim, "    cmd: " + cmd.str()));
-        }
-
-        auto res = util::run_command(cmd.str());
-        if (res.exit_code != 0) {
-            util::error(ezmk::i18n::I18nKey::compilation_failed,
-                        {{"file", src.string()},
-                         {"code", std::to_string(res.exit_code)}});
-            if (!res.err.empty()) util::error(res.err);
-            if (!res.out.empty()) util::error(res.out);
-            // Show the full command so user can reproduce
-            util::error("  cmd: " + cmd.str());
-            // Remove partial temp file
-            std::error_code ec;
-            fs::remove(obj_tmp, ec);
+            // Compilation failed
+            util::error(sr.error_msg);
             throw ezmk::fatal_error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::build_failed));
         }
-
-        // Atomically rename temp to final
-        {
-            std::error_code ec;
-            fs::rename(obj_tmp, obj, ec);
-            if (ec) {
-                // Fallback: copy + remove
-                fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
-                fs::remove(obj_tmp, ec);
-            }
-        }
-        result.objects.push_back(obj);
-
-        // Copy compiled object to cache (atomic: copy to tmp then rename)
-        {
-            std::error_code ec;
-            fs::path cache_tmp = cache_obj;
-            cache_tmp += ".tmp";
-            fs::copy_file(obj, cache_tmp, fs::copy_options::overwrite_existing, ec);
-            if (!ec) {
-                fs::rename(cache_tmp, cache_obj, ec);
-                if (ec) {
-                    // Fallback
-                    fs::copy_file(obj, cache_obj, fs::copy_options::overwrite_existing, ec);
-                }
-            }
-        }
-
-        // Update cache record
-        auto rel_src = rel.generic_string();
-        auto& entry = record.files[rel_src];
-
-        // Parse dependencies: GCC uses .d file, MSVC uses /showIncludes output
-        std::vector<DepEntry> new_deps;
-
-        if (is_msvc) {
-            // MSVC: parse /showIncludes output from stderr
-            // cl.exe writes include notes to stderr
-            auto includes = toolchain::parse_show_includes(res.err);
-            for (auto& inc_path : includes) {
-                DepEntry dep;
-                dep.path = inc_path.string();
-                // Hash the header file for cache validation
-                if (util::file_exists(inc_path)) {
-                    dep.hash = crypto::sha256_file(inc_path);
-                }
-                new_deps.push_back(std::move(dep));
-            }
-        } else {
-            // GCC: parse .d depfile
-            fs::path dep = in.dep_dir / rel;
-            dep.replace_extension(".d");
-            new_deps = parse_depfile_and_hash(dep);
-        }
-
-        // Normalize dep paths: absolute paths under proj_root → relative
-        // (so package caches survive relocation; system headers stay absolute)
-        for (auto& d : new_deps) {
-            fs::path dp(d.path);
-            if (dp.is_absolute()) {
-                auto r = fs::relative(dp, in.proj_root);
-                if (!r.empty() && r.string().find("..") == std::string::npos) {
-                    d.path = r.generic_string();
-                }
-            }
-        }
-
-        // Check if dependency path set changed (include structure change)
-        if (!record.files.empty()) {
-            auto old_it = record.files.find(rel_src);
-            if (old_it != record.files.end() &&
-                !same_dependency_paths(old_it->second.dependencies, new_deps)) {
-                util::info(ezmk::i18n::I18nKey::include_structure_changed,
-                           {{"file", rel_src}});
-            }
-        }
-
-        entry.source_hash = crypto::sha256_file(src);
-        entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
-        entry.compiler = is_msvc ? "cl.exe" : in.lang.compiler;
-        // Store the effective compile opts used for this file
-        if (is_msvc) {
-            // Store MSVC-translated flags
-            auto flag_trans = toolchain::translate_compile_flags(
-                in.compile.flags, toolchain::CompilerFamily::Msvc);
-            entry.compile_opts = flag_trans.translated;
-            for (auto& f : in.compile.msvc_flags) {
-                entry.compile_opts.push_back(f);
-            }
-        } else {
-            entry.compile_opts = in.compile.flags;
-        }
-        entry.dependencies = std::move(new_deps);
-        entry.last_build_time = iso_time();
     }
 
     return result;

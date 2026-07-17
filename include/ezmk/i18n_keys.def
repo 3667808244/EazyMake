@@ -264,6 +264,12 @@ EZMK_I18N_KEY(help_option_syntax_long)
 EZMK_I18N_KEY(help_option_syntax_short)
 EZMK_I18N_KEY(help_option_syntax_dashdash)
 
+// ---- toolchain ----
+EZMK_I18N_KEY(toolchain_msvc_detected)
+
+// ---- cache ----
+EZMK_I18N_KEY(cache_hit_detail)
+
 // ---- general ----
 EZMK_I18N_KEY(fatal_prefix)
 EZMK_I18N_KEY(error_prefix)

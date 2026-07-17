@@ -17,6 +17,16 @@
 #include <iostream>
 #include <thread>
 
+// 0.2.5+: Auto-update repos helper — shared by build/run/watch commands.
+static void auto_update_repos(const ezmk::cli::BuildOptions& opts) {
+    if (opts.auto_update) {
+        ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
+        ezmk::repo::update("", {ezmk::cli::Scope::Project,
+                                 ezmk::cli::Scope::User,
+                                 ezmk::cli::Scope::Global});
+    }
+}
+
 int main(int argc, char** argv) {
     ezmk::util::init_console();
     ezmk::i18n::init();  // detect language, load locale data
@@ -42,24 +52,14 @@ int main(int argc, char** argv) {
             break;
 
         case ezmk::cli::Command::ProjectBuild: {
-            if (args.build_opts.auto_update) {          // 0.2.5+
-                ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
-                ezmk::repo::update("", {ezmk::cli::Scope::Project,
-                                         ezmk::cli::Scope::User,
-                                         ezmk::cli::Scope::Global});
-            }
+            auto_update_repos(args.build_opts);
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             ezmk::build::build_project(cfg, args.build_opts);
             break;
         }
 
         case ezmk::cli::Command::ProjectRun: {
-            if (args.build_opts.auto_update) {          // 0.2.5+
-                ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
-                ezmk::repo::update("", {ezmk::cli::Scope::Project,
-                                         ezmk::cli::Scope::User,
-                                         ezmk::cli::Scope::Global});
-            }
+            auto_update_repos(args.build_opts);
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             auto exe = ezmk::build::build_project(cfg, args.build_opts);
             ezmk::util::info(ezmk::i18n::I18nKey::running,
@@ -86,12 +86,7 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::ProjectWatch: {
             // 0.2.3+: Watch mode — file monitoring + auto rebuild
-            if (args.build_opts.auto_update) {          // 0.2.5+
-                ezmk::util::info(ezmk::i18n::I18nKey::auto_updating_repos);
-                ezmk::repo::update("", {ezmk::cli::Scope::Project,
-                                         ezmk::cli::Scope::User,
-                                         ezmk::cli::Scope::Global});
-            }
+            auto_update_repos(args.build_opts);
             auto cfg = ezmk::config::parse_config("ezmk.toml");
             auto proj_root = std::filesystem::current_path();
 

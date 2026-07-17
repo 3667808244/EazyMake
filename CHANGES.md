@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.9.5.1 (2026-07-17) — 代码重构与质量清理
+
+不新增用户可见功能，专注代码质量：消除重复、修复资源管理、补全测试盲区、移除死代码。
+
+### 重构
+- **`build.cpp` — 链接阶段统一**：提取 `execute_link()` 通用函数，`link_phase()` 中 6 个重复块（static/shared/exe × MSVC/GCC）简化为单行调用，消除 ~150 行重复
+- **`cache.cpp` — 编译逻辑统一**：`compile_sources()` 改为委托 `compile_one_source()`，消除 ~270 行重复的编译管道代码
+- **`file_watcher.cpp` — debounce 统一**：提取 `check_and_flush()` 成员函数，Windows/Linux/macOS 三处 ~20 行重复的 sleep→elapsed→flush 逻辑统一为单行调用
+- **`main.cpp` — 仓库更新统一**：提取 `auto_update_repos()`，ProjectBuild/ProjectRun/ProjectWatch 三个分支中的重复 auto-update 代码块统一
+- **`config.cpp` — 配置名校验统一**：提取 `is_valid_profile_name()`，`[compile.profile.*]` 和 `[link.profile.*]` 中重复的 profile 名称校验逻辑合并
+
+### 资源管理修复
+- `lua_api.cpp`：`g_cached_config` 原始指针 → `std::unique_ptr<config::EzConfig>`（异常安全）
+- `file_watcher.cpp`：`OVERLAPPED*` 手动 new/delete → `std::unique_ptr<OVERLAPPED>` 池管理（消除泄漏风险）
+- `lua_api.cpp`：全局变量线程安全性假设注释文档化
+- `cache.cpp` + `build.cpp`：并行编译 record 只读不变量注释文档化
+
+### 死代码移除
+- 移除 `ParsedOptions::count()`（零调用方）
+- 移除 `native_path()`（零调用方）
+
+### i18n
+- 新增 2 个 i18n key：`toolchain_msvc_detected`、`cache_hit_detail`，含中英双语翻译
+- `toolchain.cpp` / `cache.cpp` 硬编码英文字符串 → i18n key
+
+### 测试
+- 测试套件：**497 个测试用例，2250 个断言全部通过**（+6 用例，+9 断言）
+- **`compare_version()` 完整覆盖**（`test_util.cpp`）：10 个 TEST_CASE，覆盖相等、主/次/补丁差异、缺失段默认 0、预发布标签剥离、构建元数据剥离、宽数字段、长版本号、边界值
+- **`extract_archive()` 基础覆盖**（`test_util.cpp`）：不支持格式抛出异常、无效 zip 抛出异常、不存在文件抛出异常
+- **`compile_options_signature` 补全**（`test_cache.cpp`）：新增 `msvc_flags` 影响签名、`std_flag` 影响签名两项测试
+- **`resolve_dependency_order` 增强**（`test_pkg.cpp`）：验证错误消息包含缺失包名
+- **共享测试基础设施**：新建 `test/test_helpers.hpp`，提取 TempDir / CwdGuard / EnvGuard / write_minimal_config 等跨文件复用 fixtures
+- `file_watcher.hpp` 平台宏复用 `util.hpp` 的 `EZMK_WIN`/`EZMK_MACOS`/`EZMK_LINUX`，删除重复检测逻辑
+
+---
+
 ## 0.9.5 (2026-07-17) — 跨平台体验与质量保障
 
 Windows 原生安装体验、端到端集成测试、三平台冒烟测试准备。1.0.0 之前的质量保障版本。

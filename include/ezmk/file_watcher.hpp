@@ -1,11 +1,13 @@
 #pragma once
 
-// Platform detection (must precede platform-specific members)
-#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+#include "ezmk/util.hpp"  // for EZMK_WIN / EZMK_MACOS / EZMK_LINUX platform macros
+
+// Platform aliases for internal use (reuse util.hpp definitions).
+#if defined(EZMK_WIN)
   #define EZMK_FILEWATCHER_WIN 1
-#elif defined(__APPLE__)
+#elif defined(EZMK_MACOS)
   #define EZMK_FILEWATCHER_MACOS 1
-#elif defined(__linux__)
+#elif defined(EZMK_LINUX)
   #define EZMK_FILEWATCHER_LINUX 1
 #endif
 
@@ -60,6 +62,7 @@ public:
 private:
     void process_events();
     void flush_pending();
+    void check_and_flush();
 
     Callback callback_;
     int debounce_ms_;
@@ -84,7 +87,7 @@ private:
         std::string dir_path;
         void* dir_handle;  // HANDLE
         std::vector<uint8_t> buffer;
-        void* overlapped;  // OVERLAPPED*
+        void* overlapped;  // OVERLAPPED* — lifetime managed via unique_ptr in .cpp
     };
     std::vector<WatchEntry> watches_;
 

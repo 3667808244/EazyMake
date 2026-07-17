@@ -67,6 +67,25 @@ TEST_CASE("compile_options_signature: with extra includes", "[cache]") {
     REQUIRE(sig1 != sig2);
 }
 
+TEST_CASE("compile_options_signature: msvc_flags affect signature", "[cache]") {
+    CompileSection cs1, cs2;
+    cs1.flags = {"-Wall"};
+    cs2.flags = {"-Wall"};
+    cs2.msvc_flags = {"/utf-8"};
+
+    REQUIRE(compile_options_signature(cs1) != compile_options_signature(cs2));
+}
+
+TEST_CASE("compile_options_signature: std_flag affects signature", "[cache]") {
+    CompileSection cs;
+    cs.flags = {"-Wall"};
+
+    auto sig1 = compile_options_signature(cs, {}, "-std=c++17");
+    auto sig2 = compile_options_signature(cs, {}, "-std=c++20");
+
+    REQUIRE(sig1 != sig2);
+}
+
 TEST_CASE("compile_options_signature: empty compile section", "[cache]") {
     CompileSection cs;
     auto sig = compile_options_signature(cs);

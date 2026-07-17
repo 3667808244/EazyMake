@@ -145,10 +145,6 @@ void open_in_editor(const fs::path& file);
 // cwd: working directory for the script.
 ProcResult run_script(const fs::path& script, const fs::path& cwd);
 
-// ---- Cross-platform ----
-// Make a path use forward slashes (MSYS2-compatible)
-std::string native_path(const fs::path& p);
-
 // ---- Version comparison ----
 // Compare two semantic version strings (major.minor.patch).
 // Returns -1 if a < b, 0 if equal, 1 if a > b.

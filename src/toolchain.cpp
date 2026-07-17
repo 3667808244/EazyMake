@@ -435,7 +435,7 @@ Toolchain detect_toolchain() {
                 tc.vcvars_path = vcvars;
                 cached = tc;
                 cached_valid = true;
-                util::info("MSVC toolchain detected (cl.exe + link.exe + lib.exe)");
+                util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);
                 return cached;
             }
         }

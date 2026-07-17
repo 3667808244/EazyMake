@@ -24,15 +24,6 @@ std::optional<std::string> ParsedOptions::value(std::string_view name) const {
     return result;
 }
 
-int ParsedOptions::count(std::string_view name) const {
-    int n = 0;
-    for (const auto& [k, v] : options) {
-        (void)v;
-        if (k == name) ++n;
-    }
-    return n;
-}
-
 namespace {
 
 const OptionSpec* find_long(const std::vector<OptionSpec>& spec,

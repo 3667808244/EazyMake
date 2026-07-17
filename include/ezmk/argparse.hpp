@@ -41,8 +41,6 @@ struct ParsedOptions {
     bool has(std::string_view name) const;
     // Value of the last occurrence, or nullopt if the option is absent.
     std::optional<std::string> value(std::string_view name) const;
-    // Number of times the option appeared (supports repeated flags).
-    int count(std::string_view name) const;
 };
 
 // Tokenize argv[begin, argc) per the GNU rules above.

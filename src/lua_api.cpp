@@ -34,6 +34,11 @@ namespace ezmk::lua {
 
 // ===================================================================
 // Global state
+//
+// THREAD SAFETY: These globals are accessed only from the main thread
+// during sequential script execution. No concurrent Lua API calls are
+// supported. If parallel script execution is introduced in the future,
+// protect these with a mutex.
 // ===================================================================
 
 static lua_State* g_L = nullptr;
@@ -313,19 +318,19 @@ static void check_arg_count(lua_State* L, int expected) {
 // Helper: read ezmk.toml config (cached after first read)
 // ===================================================================
 
-static config::EzConfig* g_cached_config = nullptr;
-static bool               g_config_loaded  = false;
+static std::unique_ptr<config::EzConfig> g_cached_config;
+static bool g_config_loaded = false;
 
 static config::EzConfig* get_config() {
-    if (g_config_loaded) return g_cached_config;
+    if (g_config_loaded) return g_cached_config.get();
     g_config_loaded = true;
 
     auto cfg_path = g_project_root / "ezmk.toml";
     if (!util::file_exists(cfg_path)) return nullptr;
 
     try {
-        g_cached_config = new config::EzConfig(config::parse_config(cfg_path));
-        return g_cached_config;
+        g_cached_config = std::make_unique<config::EzConfig>(config::parse_config(cfg_path));
+        return g_cached_config.get();
     } catch (const std::exception& e) {
         util::warn(std::string("failed to parse ezmk.toml: ") + e.what());
         return nullptr;
@@ -932,8 +937,7 @@ void register_api(lua_State* L, const fs::path& project_root) {
     lua_setglobal(L, "ezmk");
 
     // Invalidate cached config so next access re-reads
-    delete g_cached_config;
-    g_cached_config = nullptr;
+    g_cached_config.reset();
     g_config_loaded = false;
 }
 

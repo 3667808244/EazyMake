@@ -226,6 +226,8 @@
     "help_option_syntax_long": "Long options accept --flag=value or --flag value.",
     "help_option_syntax_short": "Short options can be grouped (-pug) and take attached values (-j4).",
     "help_option_syntax_dashdash": "Use -- to end option parsing and pass the rest through (utils, project run).",
+    "toolchain_msvc_detected": "MSVC toolchain detected (cl.exe + link.exe + lib.exe)",
+    "cache_hit_detail": "source hash matches, {count} headers unchanged",
     "fatal_prefix": "fatal: ",
     "error_prefix": "error: ",
     "warn_prefix": "warning: ",

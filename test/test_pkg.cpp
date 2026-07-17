@@ -210,7 +210,14 @@ TEST_CASE("resolve_dependency_order: missing dependency throws", "[pkg]") {
 
     PkgDir a(base, "a", {"nonexistent_dep"});
 
-    REQUIRE_THROWS_AS(resolve_dependency_order({a.dir}), std::runtime_error);
+    try {
+        resolve_dependency_order({a.dir});
+        FAIL("expected exception was not thrown");
+    } catch (const std::runtime_error& e) {
+        std::string msg(e.what());
+        REQUIRE(msg.find("missing dependency") != std::string::npos);
+        REQUIRE(msg.find("nonexistent_dep") != std::string::npos);
+    }
 
     fs::remove_all(base);
 }

@@ -821,18 +821,6 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
     return run_command(full_cmd.str());
 }
 
-// ===================================================================
-// Cross-platform
-// ===================================================================
-
-std::string native_path(const fs::path& p) {
-    auto s = p.generic_string();
-#ifdef EZMK_WIN
-    std::replace(s.begin(), s.end(), '/', '\\');
-#endif
-    return s;
-}
-
 std::string escape_shell_arg(std::string_view s) {
     std::string r;
     r.reserve(s.size() + 8); // small reserve for occasional escapes

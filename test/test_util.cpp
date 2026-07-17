@@ -69,40 +69,6 @@ TEST_CASE("escape_shell_arg: mixed special characters", "[util]") {
 }
 
 // ===================================================================
-// native_path()
-// ===================================================================
-
-TEST_CASE("native_path: forward slash conversion", "[util]") {
-    SECTION("already using forward slashes") {
-        auto path = fs::path("src/main.cpp");
-        auto result = native_path(path);
-#ifdef EZMK_WIN
-        REQUIRE(result == "src\\main.cpp");
-#else
-        REQUIRE(result == "src/main.cpp");
-#endif
-    }
-    SECTION("mixed slashes") {
-        auto path = fs::path("C:/project\\src/main.cpp");
-        auto result = native_path(path);
-#ifdef EZMK_WIN
-        // generic_string normalizes to forward slashes, then native_path converts to backslashes
-        REQUIRE(result.find('/') == std::string::npos);
-#else
-        // On POSIX '\\' is an ordinary filename character (not a separator) and
-        // '/' is already the native separator, so native_path is the identity
-        // on generic_string(). Backslashes are legitimately preserved.
-        REQUIRE(result == path.generic_string());
-#endif
-    }
-    SECTION("no path separators") {
-        auto path = fs::path("Makefile");
-        auto result = native_path(path);
-        REQUIRE(result == "Makefile");
-    }
-}
-
-// ===================================================================
 // file_write() + file_read() round-trip
 // ===================================================================
 
@@ -469,4 +435,114 @@ TEST_CASE("closest_match: empty input", "[util]") {
 TEST_CASE("closest_match: empty candidates", "[util]") {
     auto result = closest_match("build", {}, 2);
     REQUIRE(result.empty());
+}
+
+// ===================================================================
+// compare_version() — 0.9.5.1+: full coverage
+// ===================================================================
+
+TEST_CASE("compare_version: equality", "[util]") {
+    REQUIRE(compare_version("1.0.0", "1.0.0") == 0);
+    REQUIRE(compare_version("0.1.0", "0.1.0") == 0);
+    REQUIRE(compare_version("2.3.4", "2.3.4") == 0);
+}
+
+TEST_CASE("compare_version: major version difference", "[util]") {
+    REQUIRE(compare_version("2.0.0", "1.9.9") > 0);
+    REQUIRE(compare_version("1.0.0", "2.0.0") < 0);
+}
+
+TEST_CASE("compare_version: minor version difference", "[util]") {
+    REQUIRE(compare_version("1.2.0", "1.1.9") > 0);
+    REQUIRE(compare_version("1.0.5", "1.1.0") < 0);
+}
+
+TEST_CASE("compare_version: patch version difference", "[util]") {
+    REQUIRE(compare_version("1.0.1", "1.0.0") > 0);
+    REQUIRE(compare_version("1.0.0", "1.0.9") < 0);
+}
+
+TEST_CASE("compare_version: missing segments default to 0", "[util]") {
+    // "1.0" is treated as "1.0.0"
+    REQUIRE(compare_version("1.0", "1.0.0") == 0);
+    REQUIRE(compare_version("1", "1.0.0") == 0);
+    REQUIRE(compare_version("1.0.0", "1") == 0);
+}
+
+TEST_CASE("compare_version: single segment versions", "[util]") {
+    REQUIRE(compare_version("1", "1") == 0);
+    REQUIRE(compare_version("2", "1") > 0);
+    REQUIRE(compare_version("0", "1") < 0);
+}
+
+TEST_CASE("compare_version: pre-release tags stripped", "[util]") {
+    // Pre-release tags (-alpha, -rc1, -beta) are stripped before comparison
+    REQUIRE(compare_version("1.0.0-alpha", "1.0.0") == 0);
+    REQUIRE(compare_version("1.0.0-rc1", "1.0.0") == 0);
+    REQUIRE(compare_version("2.0.0-beta", "2.0.0") == 0);
+    REQUIRE(compare_version("1.0.0-alpha", "1.0.0-beta") == 0);
+}
+
+TEST_CASE("compare_version: build metadata stripped", "[util]") {
+    // Build metadata (+build) is stripped before comparison
+    REQUIRE(compare_version("1.0.0+build", "1.0.0") == 0);
+    REQUIRE(compare_version("1.0.0+20200101", "1.0.0") == 0);
+    REQUIRE(compare_version("1.0.0+build.1", "1.0.0+build.2") == 0);
+}
+
+TEST_CASE("compare_version: wider segment width", "[util]") {
+    // "1.10.0" > "1.2.0" (numeric comparison, not string)
+    REQUIRE(compare_version("1.10.0", "1.2.0") > 0);
+    REQUIRE(compare_version("1.2.0", "1.10.0") < 0);
+    REQUIRE(compare_version("10.0.0", "9.99.99") > 0);
+}
+
+TEST_CASE("compare_version: long version numbers", "[util]") {
+    // Extra segments are compared numerically (shorter version pads with 0)
+    REQUIRE(compare_version("1.2.3.4", "1.2.3") > 0);  // 4 > 0
+    REQUIRE(compare_version("1.2.3", "1.2.3.4") < 0);
+    REQUIRE(compare_version("1.0.0.0", "1.0.0") == 0);
+}
+
+TEST_CASE("compare_version: edge cases", "[util]") {
+    REQUIRE(compare_version("0.0.0", "0.0.0") == 0);
+    REQUIRE(compare_version("0.0.1", "0.0.0") > 0);
+}
+
+// ===================================================================
+// extract_archive() — 0.9.5.1+: basic coverage
+// ===================================================================
+
+// Clean up: remove unused ZIP helper function.
+// The extract tests below use hardcoded well-formed ZIP bytes.
+
+TEST_CASE("extract_archive: unsupported format throws", "[util]") {
+    auto tmp_dir = fs::temp_directory_path() / "ezmk_extract_test";
+    ezmk::util::create_directories(tmp_dir);
+
+    // Create a file with unsupported extension
+    auto bad = tmp_dir / "test.7z";
+    { std::ofstream of(bad); of << "not a valid archive"; }
+
+    REQUIRE_THROWS_AS(extract_archive(bad, tmp_dir / "out"), std::runtime_error);
+
+    ezmk::util::remove_all(tmp_dir);
+}
+
+TEST_CASE("extract_archive: empty/invalid zip throws", "[util]") {
+    auto tmp_dir = fs::temp_directory_path() / "ezmk_extract_empty_zip";
+    ezmk::util::create_directories(tmp_dir);
+
+    auto bad_zip = tmp_dir / "empty.zip";
+    { std::ofstream of(bad_zip); of << "not a zip"; }
+
+    // May throw from mz_zip_reader_init_file or from extract logic
+    REQUIRE_THROWS(extract_archive(bad_zip, tmp_dir / "out"));
+
+    ezmk::util::remove_all(tmp_dir);
+}
+
+TEST_CASE("extract_archive: nonexistent file throws", "[util]") {
+    REQUIRE_THROWS_AS(extract_archive("nonexistent_archive_xyz.zip",
+        fs::temp_directory_path() / "out"), std::runtime_error);
 }

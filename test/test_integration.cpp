@@ -1,7 +1,7 @@
-// End-to-end integration tests for EazyMake.
+﻿// End-to-end integration tests for EazyMake.
 //
 // These tests call the compiled `ezmk` binary as a subprocess and verify
-// complete workflows: project creation → dependency install → build → run.
+// complete workflows: project creation 鈫?dependency install 鈫?build 鈫?run.
 //
 // All tests are tagged [integration] so they can be run (or skipped) selectively:
 //   ./build/test_ezmk "[integration]"          # run all integration tests
@@ -16,6 +16,7 @@
 
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
+#include "test_helpers.hpp"
 #include "ezmk/util.hpp"
 
 #include <chrono>
@@ -28,10 +29,8 @@
 namespace fs = std::filesystem;
 using namespace ezmk::util;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Test helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Test helpers
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 namespace {
 
 // Find the repo root by walking up from the current directory.
@@ -72,7 +71,7 @@ std::string build_ezmk_cmd(const std::string& args, const fs::path& cwd) {
 
 #ifdef EZMK_WIN
     // cmd.exe: use cd /d to switch drive + directory. Double-quote paths
-    // (no bash escaping needed — cmd.exe doesn't interpret backslashes).
+    // (no bash escaping needed 鈥?cmd.exe doesn't interpret backslashes).
     return "cd /d \"" + cwd.string() + "\" && \"" + ezmk_path + "\" " + args;
 #else
     return "cd " + escape_shell_arg(cwd.string()) + " && " +
@@ -90,21 +89,7 @@ ProcResult run_ezmk(const std::string& args, const fs::path& cwd = fs::current_p
     return run_command(cmd);
 }
 
-// RAII temp directory — created on construction, cleaned up on destruction.
-struct TempDir {
-    fs::path path;
 
-    TempDir() {
-        auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
-        path = fs::temp_directory_path() / ("ezmk_int_" + std::to_string(ts));
-        fs::create_directories(path);
-    }
-
-    ~TempDir() {
-        std::error_code ec;
-        fs::remove_all(path, ec);
-    }
-};
 
 // Check if we can reach github.com (lightweight check).
 bool network_available() {
@@ -123,14 +108,12 @@ bool ezmk_available() {
 
 } // anonymous namespace
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 1: From zero to running project (single linear flow)
-//   project new → verify structure → build → verify binary → run → verify output
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 1: From zero to running project (single linear flow)
+//   project new 鈫?verify structure 鈫?build 鈫?verify binary 鈫?run 鈫?verify output
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: create project, build, and run (end-to-end)", "[integration]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     TempDir tmp;
@@ -177,13 +160,11 @@ TEST_CASE("integration: create project, build, and run (end-to-end)", "[integrat
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 2: Incremental build — cache hit on second build
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 2: Incremental build 鈥?cache hit on second build
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: incremental build cache hit", "[integration]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     TempDir tmp;
@@ -197,7 +178,7 @@ TEST_CASE("integration: incremental build cache hit", "[integration]") {
 
     fs::path proj_dir = tmp.path / proj_name;
 
-    // First build — full compilation
+    // First build 鈥?full compilation
     ProcResult first = run_ezmk("project build", proj_dir);
     INFO("first build stderr: " << first.err);
     INFO("first build stdout: " << first.out);
@@ -206,7 +187,7 @@ TEST_CASE("integration: incremental build cache hit", "[integration]") {
     // Small delay to ensure timestamps differ
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    // Second build — should hit cache
+    // Second build 鈥?should hit cache
     ProcResult second = run_ezmk("project build", proj_dir);
     INFO("second build stderr: " << second.err);
     INFO("second build stdout: " << second.out);
@@ -224,15 +205,13 @@ TEST_CASE("integration: incremental build cache hit", "[integration]") {
     REQUIRE(cache_hit);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 3: Watch mode — file change triggers rebuild
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 3: Watch mode 鈥?file change triggers rebuild
 // NOTE: This test is inherently timing-sensitive. It uses WARN instead of
 // REQUIRE so flakes don't block CI.
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: watch mode detects file changes", "[integration]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     TempDir tmp;
@@ -313,16 +292,14 @@ TEST_CASE("integration: watch mode detects file changes", "[integration]") {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 4: compile_commands.json generation (ezmk utils cc)
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 4: compile_commands.json generation (ezmk utils cc)
 // NOTE: ezmk-cc is a built-in Lua tool. The development fallback in
 // find_utils_script() looks for ./pkg/ezmk-cc/ relative to CWD, so we
 // run this test from the repo root.
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: utils cc generates compile_commands.json", "[integration]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     TempDir tmp;
@@ -358,8 +335,8 @@ TEST_CASE("integration: utils cc generates compile_commands.json", "[integration
     if (r.exit_code != 0 &&
         (r.err.find("unknown") != std::string::npos ||
          r.err.find("not found") != std::string::npos ||
-         r.err.find("未知") != std::string::npos)) {
-        SKIP("ezmk-cc built-in tool not found — skipping (dev env)");
+         r.err.find("鏈煡") != std::string::npos)) {
+        SKIP("ezmk-cc built-in tool not found 鈥?skipping (dev env)");
     }
 
     REQUIRE(r.exit_code == 0);
@@ -379,13 +356,11 @@ TEST_CASE("integration: utils cc generates compile_commands.json", "[integration
     REQUIRE(looks_like_json);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 5: project new creates expected directory layout
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 5: project new creates expected directory layout
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: project new creates expected directory layout", "[integration]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     TempDir tmp;
@@ -426,17 +401,15 @@ TEST_CASE("integration: project new creates expected directory layout", "[integr
     REQUIRE(toml.find("executable") != std::string::npos);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 6: Package install with network (requires network)
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 6: Package install with network (requires network)
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: pkg install downloads and installs a package", "[integration][network]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     if (!network_available()) {
-        SKIP("Network not available — skipping package install test");
+        SKIP("Network not available 鈥?skipping package install test");
     }
 
     TempDir tmp;
@@ -464,20 +437,18 @@ TEST_CASE("integration: pkg install downloads and installs a package", "[integra
 
     // pkg install may fail if the repo isn't set up or network issues.
     if (r.exit_code != 0) {
-        SKIP("pkg install failed (network or repo issue) — skipping");
+        SKIP("pkg install failed (network or repo issue) 鈥?skipping");
     }
 
     // Verify the package was installed
     REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg"));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Scenario 7: version and help commands work
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 7: version and help commands work
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: basic CLI commands", "[integration]") {
     if (!ezmk_available()) {
-        SKIP("ezmk binary not found — build it first with: bash build.sh");
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
 
     // --version
