@@ -655,4 +655,125 @@ PkgSearchResult search_package(std::string_view pkg_name,
     return {best->archive_path, best->sha256, best->version, best->repo_name};
 }
 
+// 0.9.6+ — Version-constrained variant.
+PkgSearchResult search_package(std::string_view pkg_name,
+                               const std::vector<cli::Scope>& scopes,
+                               const config::VersionConstraint& constraint) {
+    // Unconstrained? Delegate to the base overload.
+    if (constraint.op == config::VersionConstraint::None) {
+        return search_package(pkg_name, scopes);
+    }
+
+    struct Match {
+        std::string version;
+        fs::path archive_path;
+        std::string sha256;
+        std::string repo_name;
+        int scope_index;
+    };
+    std::vector<Match> matches;
+    int repos_searched = 0;
+
+    for (size_t si = 0; si < scopes.size(); ++si) {
+        auto scope = scopes[si];
+        auto entries = load_repo_list(scope);
+        for (auto& e : entries) {
+            fs::path repo_dir;
+            if (e.type == "git") {
+                repo_dir = cache_dir(scope, e.name);
+            } else {
+                repo_dir = fs::path(e.url);
+            }
+
+            if (!util::file_exists(repo_dir)) continue;
+            repos_searched++;
+
+            auto result = read_pkg_from_index(repo_dir, pkg_name);
+            if (!result.archive_path.empty() &&
+                util::file_exists(result.archive_path)) {
+                matches.push_back({result.version, result.archive_path,
+                                   result.sha256, result.repo_name,
+                                   static_cast<int>(si)});
+            }
+        }
+    }
+
+    // Filter by version constraint
+    std::vector<Match> filtered;
+    for (auto& m : matches) {
+        // Reuse the same logic as pkg.cpp's satisfies_constraint
+        int cmp = util::compare_version(m.version, constraint.version);
+        bool ok = false;
+        switch (constraint.op) {
+        case config::VersionConstraint::Exact:
+            ok = (cmp == 0); break;
+        case config::VersionConstraint::Gte:
+            ok = (cmp >= 0); break;
+        case config::VersionConstraint::Gt:
+            ok = (cmp > 0); break;
+        case config::VersionConstraint::Compatible: {
+            if (cmp >= 0) {
+                auto dot = constraint.version.find('.');
+                unsigned long major = dot == std::string::npos
+                    ? std::stoul(std::string(constraint.version))
+                    : std::stoul(std::string(constraint.version.substr(0, dot)));
+                ok = util::compare_version(m.version,
+                       std::to_string(major + 1) + ".0.0") < 0;
+            }
+            break;
+        }
+        case config::VersionConstraint::Approx: {
+            if (cmp >= 0) {
+                auto dot1 = constraint.version.find('.');
+                if (dot1 == std::string::npos) { ok = true; break; }
+                auto dot2 = constraint.version.find('.', dot1 + 1);
+                unsigned long major = std::stoul(
+                    std::string(constraint.version.substr(0, dot1)));
+                unsigned long minor = std::stoul(
+                    std::string(constraint.version.substr(dot1 + 1,
+                        dot2 - dot1 - 1)));
+                ok = util::compare_version(m.version,
+                       std::to_string(major) + "." + std::to_string(minor + 1) + ".0") < 0;
+            }
+            break;
+        }
+        default: ok = true; break;
+        }
+        if (ok) filtered.push_back(m);
+    }
+
+    if (filtered.empty()) {
+        // Build list of available versions for error message
+        std::string available;
+        for (auto& m : matches) {
+            if (!available.empty()) available += ", ";
+            available += m.version;
+        }
+        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                    {{"pkg", std::string(pkg_name)},
+                     {"constraint", std::string(constraint.version)},
+                     {"available", available}}));
+        return {};
+    }
+
+    // Find the highest version among filtered; tie-break by scope priority
+    const Match* best = &filtered[0];
+    for (size_t i = 1; i < filtered.size(); ++i) {
+        int cmp = util::compare_version(filtered[i].version, best->version);
+        if (cmp > 0 || (cmp == 0 && filtered[i].scope_index < best->scope_index)) {
+            best = &filtered[i];
+        }
+    }
+
+    if (filtered.size() > 1 || repos_searched > 1) {
+        util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_search_resolved,
+                   {{"pkg", std::string(pkg_name)},
+                    {"version", best->version},
+                    {"repo", best->repo_name},
+                    {"count", std::to_string(repos_searched)}}));
+    }
+
+    return {best->archive_path, best->sha256, best->version, best->repo_name};
+}
+
 } // namespace ezmk::repo

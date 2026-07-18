@@ -4,6 +4,7 @@
 #include <vector>
 #include <filesystem>
 #include "ezmk/cli.hpp"
+#include "ezmk/config.hpp"
 
 namespace ezmk::pkg {
 namespace fs = std::filesystem;
@@ -52,5 +53,10 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
 // dep_includes: extra -I paths for dependencies' include/ directories.
 fs::path compile_package(const fs::path& pkg_dir,
                          const std::vector<fs::path>& dep_includes = {});
+
+// 0.9.6+ — Check if a package version satisfies a version constraint.
+// Returns true if `version` satisfies `constraint`.
+bool satisfies_version_constraint(std::string_view version,
+                                  const config::VersionConstraint& constraint);
 
 } // namespace ezmk::pkg

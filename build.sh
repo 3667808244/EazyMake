@@ -31,6 +31,22 @@ extern const std::map<std::string, std::string> embedded_locales = {};
 CPPEOF
 fi
 
+# 0.9.6+: Generate embedded ASCII logo header from res/logo.txt
+if command -v python3 &> /dev/null; then
+    python3 scripts/embed_logo.py res/logo.txt include/ezmk/logo.gen.h
+elif command -v python &> /dev/null; then
+    python scripts/embed_logo.py res/logo.txt include/ezmk/logo.gen.h
+else
+    echo "Warning: Python not found — ASCII logo will be empty" >&2
+    cat > include/ezmk/logo.gen.h << 'CPPEOF'
+// Auto-generated stub — Python was not available at build time.
+#pragma once
+namespace ezmk {
+inline constexpr const char* EZMK_LOGO = "";
+}
+CPPEOF
+fi
+
 # Version tag — embedded in the binary for "ezmk version" output.
 # Write to a header file to avoid platform-specific -D quoting issues.
 EZMK_VERSION="${EZMK_VERSION:-0.9.5}"

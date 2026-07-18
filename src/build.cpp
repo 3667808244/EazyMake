@@ -3,10 +3,15 @@
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/lua_api.hpp"
+#include "ezmk/pkg.hpp"
 #include "ezmk/thread_pool.hpp"
 #include "ezmk/toolchain.hpp"
 #include "ezmk/util.hpp"
 #include "ezmk/version.hpp"
+
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 #include <algorithm>
 #include <atomic>
@@ -535,6 +540,8 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
 
     // Scan installed packages
     std::set<std::string> installed_pkgs;
+    // 0.9.6+: Track installed versions for constraint validation
+    std::map<std::string, std::string> installed_versions;
     fs::path pkg_dir = st.proj_root / ".ezmk/pkg";
     if (util::file_exists(pkg_dir)) {
         for (auto& entry : fs::directory_iterator(pkg_dir)) {
@@ -544,6 +551,7 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                 try {
                     auto pkg_cfg = config::parse_config(pkg_toml);
                     installed_pkgs.insert(pkg_cfg.project.name);
+                    installed_versions[pkg_cfg.project.name] = pkg_cfg.project.version;
                     auto pkg_include = entry.path() / "include";
                     if (util::file_exists(pkg_include)) {
                         st.extra_includes.push_back(pkg_include);
@@ -587,8 +595,10 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
 
     // want.lib: process optional dependencies
     {
-        std::set<std::string> lib_set(cfg.depends.libs.begin(), cfg.depends.libs.end());
-        for (auto& want_name : cfg.depends.want) {
+        std::set<std::string> lib_set;
+        for (auto& entry : cfg.depends.libs) lib_set.insert(entry.name);
+        for (auto& want_entry : cfg.depends.want) {
+            auto& want_name = want_entry.name;
             if (lib_set.count(want_name)) {
                 util::warn(std::string("package '") + want_name +
                            "' is in both [depends].lib and [depends].want — treating as hard dependency");
@@ -598,6 +608,30 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                 util::warn(std::string("optional dependency not installed: ") + want_name);
                 st.compile_cfg.flags.push_back("-D" + want_to_macro_name(want_name));
             }
+        }
+    }
+
+    // 0.9.6+: Validate installed package versions against declared constraints
+    for (auto& entry : cfg.depends.libs) {
+        if (entry.constraint.op == config::VersionConstraint::None) continue;
+        auto it = installed_versions.find(entry.name);
+        if (it == installed_versions.end()) continue; // not installed → handled by missing_dep later
+        if (!pkg::satisfies_version_constraint(it->second, entry.constraint)) {
+            util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                        {{"pkg", entry.name},
+                         {"constraint", entry.constraint.version},
+                         {"available", it->second}}));
+        }
+    }
+    for (auto& entry : cfg.depends.want) {
+        if (entry.constraint.op == config::VersionConstraint::None) continue;
+        auto it = installed_versions.find(entry.name);
+        if (it == installed_versions.end()) continue; // want dep not installed is OK
+        if (!pkg::satisfies_version_constraint(it->second, entry.constraint)) {
+            util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                       {{"pkg", entry.name},
+                        {"constraint", entry.constraint.version},
+                        {"available", it->second}}));
         }
     }
 
@@ -660,11 +694,14 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     cache::CompileResult comp_result;
     std::vector<cache::SingleCompileResult> single_results;
     single_results.reserve(cin.sources.size());
+    auto build_start = std::chrono::steady_clock::now();
 
     // INVARIANT: In parallel mode, compile_one_source() only reads from
     // `record` (const ref). record.files is updated below after all
     // threads complete, so no concurrent write occurs.
     if (num_jobs > 1 && cin.sources.size() > 1) {
+        // 0.9.6+: Use \r in-place refresh when non-verbose and stderr is a TTY
+        bool use_inplace = !opts.verbose && util::stderr_is_tty();
         if (opts.verbose) {
             util::info(ezmk::i18n::I18nKey::parallel_jobs_info,
                        {{"jobs", std::to_string(num_jobs)},
@@ -676,18 +713,29 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
         std::atomic<int> task_index{0};
         int total = static_cast<int>(cin.sources.size());
         for (size_t i = 0; i < cin.sources.size(); ++i) {
-            futures.push_back(pool.submit([&cin, &record, &task_index, total, i]() {
+            futures.push_back(pool.submit([&cin, &record, &task_index, total, i, use_inplace]() {
                 auto idx = task_index.fetch_add(1) + 1;
                 auto result = cache::compile_one_source(cin.sources[i], cin, record);
-                if (cin.verbose && result.success && !result.cache_hit) {
-                    util::info(std::string("[") + std::to_string(idx) + "/" +
-                               std::to_string(total) + "] compiled: " + result.rel_src);
+                // 0.9.6+: Always show progress in parallel mode
+                std::string msg = std::string("[") + std::to_string(idx) +
+                    "/" + std::to_string(total) + "] " + result.rel_src;
+                if (result.cache_hit) {
+                    msg += "  (cached)";
+                }
+                if (use_inplace) {
+                    util::progress(msg);
+                } else {
+                    util::info(msg);
                 }
                 return result;
             }));
         }
         for (auto& f : futures) {
             single_results.push_back(f.get());
+        }
+        // 0.9.6+: Move to next line after in-place progress
+        if (use_inplace) {
+            util::progress_newline();
         }
     } else {
         comp_result = cache::compile_sources(cin, record);
@@ -696,6 +744,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     // Process parallel results
     if (!single_results.empty()) {
         bool has_failure = false;
+        int error_count = 0;
         for (auto& sr : single_results) {
             if (sr.cache_hit) {
                 comp_result.objects.push_back(sr.object);
@@ -713,20 +762,39 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
                 entry = std::move(sr.record_entry);
             } else {
                 has_failure = true;
+                ++error_count;
                 util::error(sr.error_msg);
             }
         }
         if (has_failure) {
+            // 0.9.6+: Build failure summary before fatal exit
+            std::string summary = std::to_string(comp_result.cache_hits) + " cached, " +
+                                  std::to_string(comp_result.cache_misses) + " compiled, " +
+                                  std::to_string(error_count) + " error(s)";
+            util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::build_failed_summary,
+                                        {{"summary", summary}}));
             util::fatal(ezmk::i18n::I18nKey::build_failed);
         }
     }
 
     cache::save_record(record);
 
-    if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
-        util::info(ezmk::i18n::I18nKey::cache_summary,
-                   {{"cached", std::to_string(comp_result.cache_hits)},
-                    {"compiled", std::to_string(comp_result.cache_misses)}});
+    // 0.9.6+: Build completion summary with elapsed time
+    {
+        auto elapsed = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - build_start).count();
+        if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
+            util::info(ezmk::i18n::I18nKey::cache_summary,
+                       {{"cached", std::to_string(comp_result.cache_hits)},
+                        {"compiled", std::to_string(comp_result.cache_misses)}});
+        }
+        // 0.9.6+: Always show total elapsed time in parallel mode
+        if (num_jobs > 1 && cin.sources.size() > 1) {
+            std::ostringstream elapsed_str;
+            elapsed_str << std::fixed << std::setprecision(1) << elapsed << "s";
+            util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::build_elapsed_time,
+                        {{"time", elapsed_str.str()}}));
+        }
     }
 
     return comp_result.objects;

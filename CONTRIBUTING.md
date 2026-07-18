@@ -100,6 +100,40 @@ EazyMake maintains bilingual documentation: **Chinese (zh)** and **English (en)*
 - Use the existing `I18nKey` enum for any new user-visible strings — add keys to
   `include/ezmk/i18n_keys.def` and strings to both `locale/en.json` and `locale/zh.json`.
 
+### .clang-format
+
+A `.clang-format` configuration is provided in the project root (based on LLVM style,
+4-space indent, 120-column limit, Allman braces). To auto-format your changes:
+
+```bash
+# Check formatting without modifying files:
+clang-format --dry-run -Werror <file>
+
+# Apply formatting:
+clang-format -i <file>
+```
+
+**IDE integration**:
+- **VS Code**: Install the "C/C++" extension (Microsoft) — it picks up `.clang-format`
+  automatically. Set `"editor.formatOnSave": true` for convenience.
+- **CLion**: Enable "ClangFormat" in Settings → Editor → Code Style → C/C++.
+- **vim/neovim**: Use `clang-format.py` from the clang tools, or a plugin like
+  `rhysd/vim-clang-format`.
+
+Formatting existing code is **not** required for contributions — only new or modified
+code is expected to follow the style.
+
+## Pre-commit checklist
+
+Before submitting a pull request, please verify:
+
+- [ ] Code compiles with `bash build.sh` (MSYS2 or Linux)
+- [ ] All tests pass with `bash build.sh test`
+- [ ] New user-visible strings are added to `include/ezmk/i18n_keys.def` and both `locale/en.json` and `locale/zh.json`
+- [ ] Documentation is updated in both `docs/en/` and `docs/zh/` (if applicable)
+- [ ] Consider running `clang-format --dry-run` on modified files to verify style consistency
+- [ ] New features include test coverage in `test/`
+
 ## Reporting issues
 
 - Use the GitHub Issues tracker.

@@ -1,0 +1,12 @@
+# EazyMake clang-format configuration
+# Based on LLVM style with project-specific overrides
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 120
+AccessModifierOffset: -4
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+SpaceAfterCStyleCast: true
+UseTab: Never

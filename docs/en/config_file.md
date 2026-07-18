@@ -92,6 +92,39 @@ Setting `ezmk_macros = false` fully disables standard macro injection.
 | `lib` | string[] | No | `[]` | List of hard dependency library names. Missing → build fails |
 | `want` | string[] | No | `[]` | **0.2.2+** List of optional dependency library names. Missing → warn + define `EZMK_LIB_MISS_<NAME>` macro, does not block the build |
 
+### Version Constraints (0.9.6+)
+
+Each dependency entry can optionally include a version constraint using one of the following operators:
+
+| Syntax | Meaning | Example |
+|--------|---------|---------|
+| `pkg@1.2.3` | Exact version | `fmt@10.2.1` |
+| `pkg^1.2.3` | Compatible (same major) | `spdlog^1.14.0` → `>=1.14.0, <2.0.0` |
+| `pkg~1.2.3` | Approximate (same minor) | `nlohmann_json~3.11.0` → `>=3.11.0, <3.12.0` |
+| `pkg>=1.2.3` | Greater-than-or-equal | `zlib>=1.2.0` |
+| `pkg>1.2.3` | Strictly greater-than | `boost>1.80.0` |
+| `pkg` | No constraint (latest) | `fmt` — takes the highest available version |
+
+**Design notes:**
+- **Backward compatible**: entries without operators (`"fmt"`) behave exactly as in previous versions (take latest).
+- **No lockfile**: version resolution is performed at install time; a lockfile (`ezmk.lock`) is deferred to a future version.
+- **Constraint unsatisfied**: if no available version satisfies the constraint, installation fails with an error listing all available versions.
+
+**Example:**
+```toml
+[depends]
+lib = [
+    "fmt",              # no constraint — latest version
+    "spdlog@1.14.1",    # exact version
+    "catch2^3.6.0",     # compatible: >=3.6.0, <4.0.0
+    "nlohmann_json~3.11" # approximate: >=3.11.0, <3.12.0
+]
+want = [
+    "sqlite3",          # optional, no constraint
+    "yaml-cpp>=0.8.0"   # optional with GTE constraint
+]
+```
+
 When the same package name appears in both `lib` and `want`, `lib` takes priority (as a hard dependency) and a warning is issued about redundant configuration.
 
 Conversion rules from `want` package name to macro name:

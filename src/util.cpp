@@ -164,6 +164,32 @@ bool supports_color() {
 #endif
 }
 
+bool stderr_is_tty() {
+#ifdef EZMK_WIN
+    HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+    if (hErr == INVALID_HANDLE_VALUE || hErr == nullptr) return false;
+    DWORD mode = 0;
+    return GetConsoleMode(hErr, &mode) != 0;
+#else
+    return isatty(STDERR_FILENO);
+#endif
+}
+
+// 0.9.6+: Progress line with \r for in-place refresh.
+// Thread-safe: uses the same g_log_mutex as info/warn/error.
+void progress(std::string_view msg) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (supports_color())
+        std::cerr << "\r" << color::green << "[ezmk] " << color::reset << msg << std::flush;
+    else
+        std::cerr << "\r[ezmk] " << msg << std::flush;
+}
+
+void progress_newline() {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    std::cerr << "\n";
+}
+
 std::string color_msg(const char* color, std::string_view msg) {
     if (!supports_color()) return std::string(msg);
     std::string result;

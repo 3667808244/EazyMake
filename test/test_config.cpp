@@ -282,9 +282,9 @@ lib = ["foo", "bar", "baz"]
     fs::remove(toml);
 
     REQUIRE(cfg.depends.libs.size() == 3);
-    REQUIRE(cfg.depends.libs[0] == "foo");
-    REQUIRE(cfg.depends.libs[1] == "bar");
-    REQUIRE(cfg.depends.libs[2] == "baz");
+    REQUIRE(cfg.depends.libs[0].name == "foo");
+    REQUIRE(cfg.depends.libs[1].name == "bar");
+    REQUIRE(cfg.depends.libs[2].name == "baz");
 }
 
 TEST_CASE("parse_config: file not found", "[config]") {
@@ -580,10 +580,10 @@ want = ["sqlite3", "zlib"]
     fs::remove(toml);
 
     REQUIRE(cfg.depends.libs.size() == 1);
-    REQUIRE(cfg.depends.libs[0] == "fmt");
+    REQUIRE(cfg.depends.libs[0].name == "fmt");
     REQUIRE(cfg.depends.want.size() == 2);
-    REQUIRE(cfg.depends.want[0] == "sqlite3");
-    REQUIRE(cfg.depends.want[1] == "zlib");
+    REQUIRE(cfg.depends.want[0].name == "sqlite3");
+    REQUIRE(cfg.depends.want[1].name == "zlib");
 }
 
 TEST_CASE("parse_config: want defaults to empty", "[config][0.2.2]") {
@@ -598,6 +598,222 @@ version = "0.1.0"
     fs::remove(toml);
 
     REQUIRE(cfg.depends.want.empty());
+}
+
+// ===================================================================
+// 0.9.6+: depends version constraint parsing
+// ===================================================================
+
+TEST_CASE("parse_config: depends with exact version constraint (@)", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["fmt@10.2.1"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].name == "fmt");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Exact);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "10.2.1");
+}
+
+TEST_CASE("parse_config: depends with compatible version constraint (^)", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["spdlog^1.14.0"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].name == "spdlog");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Compatible);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "1.14.0");
+}
+
+TEST_CASE("parse_config: depends with approximate version constraint (~)", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["nlohmann_json~3.11.0"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].name == "nlohmann_json");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Approx);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "3.11.0");
+}
+
+TEST_CASE("parse_config: depends with >= constraint", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["zlib>=1.2.0"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].name == "zlib");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Gte);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "1.2.0");
+}
+
+TEST_CASE("parse_config: depends with > constraint", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["boost>1.80.0"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].name == "boost");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Gt);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "1.80.0");
+}
+
+TEST_CASE("parse_config: depends mixed old and new format", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["foo", "bar@1.0.0", "baz^2.0"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 3);
+    // foo — no constraint
+    REQUIRE(cfg.depends.libs[0].name == "foo");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::None);
+    // bar — exact
+    REQUIRE(cfg.depends.libs[1].name == "bar");
+    REQUIRE(cfg.depends.libs[1].constraint.op == VersionConstraint::Exact);
+    REQUIRE(cfg.depends.libs[1].constraint.version == "1.0.0");
+    // baz — compatible
+    REQUIRE(cfg.depends.libs[2].name == "baz");
+    REQUIRE(cfg.depends.libs[2].constraint.op == VersionConstraint::Compatible);
+    REQUIRE(cfg.depends.libs[2].constraint.version == "2.0");
+}
+
+TEST_CASE("parse_config: depends with whitespace around operator", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["pkg @ 3.0", "lib ^ 1.2", "dep>= 4.5"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 3);
+    REQUIRE(cfg.depends.libs[0].name == "pkg");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Exact);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "3.0");
+    REQUIRE(cfg.depends.libs[1].name == "lib");
+    REQUIRE(cfg.depends.libs[1].constraint.op == VersionConstraint::Compatible);
+    REQUIRE(cfg.depends.libs[1].constraint.version == "1.2");
+    REQUIRE(cfg.depends.libs[2].name == "dep");
+    REQUIRE(cfg.depends.libs[2].constraint.op == VersionConstraint::Gte);
+    REQUIRE(cfg.depends.libs[2].constraint.version == "4.5");
+}
+
+TEST_CASE("parse_config: depends want with version constraints", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["fmt@10.0.0"]
+want = ["sqlite3", "yaml-cpp~0.8"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Exact);
+    REQUIRE(cfg.depends.want.size() == 2);
+    REQUIRE(cfg.depends.want[0].name == "sqlite3");
+    REQUIRE(cfg.depends.want[0].constraint.op == VersionConstraint::None);
+    REQUIRE(cfg.depends.want[1].name == "yaml-cpp");
+    REQUIRE(cfg.depends.want[1].constraint.op == VersionConstraint::Approx);
+}
+
+TEST_CASE("parse_config: depends with operator but missing version throws", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["pkg@"]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+TEST_CASE("parse_config: depends with empty entry throws", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = [""]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
+TEST_CASE("parse_config: depends with spaces only entry throws", "[config][0.9.6]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["   "]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
 }
 
 // ===================================================================

@@ -47,6 +47,80 @@ static bool is_valid_profile_name(std::string_view name) {
     return true;
 }
 
+// 0.9.6+ — Parse a single dependency entry string into name + version constraint.
+// Syntax: "pkg" (no constraint), "pkg@1.2.3" (exact), "pkg^1.0" (compatible),
+//         "pkg~1.2" (approx), "pkg>=1.0" (gte), "pkg>1.0" (gt).
+static DependsEntry parse_depends_entry(std::string_view raw) {
+    DependsEntry entry;
+
+    // Trim leading/trailing whitespace
+    auto start = raw.find_first_not_of(" \t");
+    auto end   = raw.find_last_not_of(" \t");
+    if (start == std::string_view::npos) {
+        throw std::runtime_error(
+            i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
+    }
+    raw = raw.substr(start, end - start + 1);
+
+    // Scan for constraint operators. Order: longest match first (>= before >).
+    struct { std::string_view op; VersionConstraint::Op kind; } const ops[] = {
+        {">=", VersionConstraint::Gte},
+        {">",  VersionConstraint::Gt},
+        {"^",  VersionConstraint::Compatible},
+        {"~",  VersionConstraint::Approx},
+        {"@",  VersionConstraint::Exact},
+    };
+
+    for (auto& o : ops) {
+        auto pos = raw.find(o.op);
+        if (pos != std::string_view::npos && pos > 0) {
+            std::string_view name_part = raw.substr(0, pos);
+            std::string_view ver_part  = raw.substr(pos + o.op.size());
+
+            // Trim trailing whitespace from name
+            auto name_end = name_part.find_last_not_of(" \t");
+            if (name_end != std::string_view::npos)
+                name_part = name_part.substr(0, name_end + 1);
+
+            // Trim leading whitespace from version
+            auto ver_start = ver_part.find_first_not_of(" \t");
+            if (ver_start == std::string_view::npos) {
+                throw std::runtime_error(
+                    i18n::fmt(i18n::I18nKey::config_err_version_missing,
+                              {{"entry", std::string(raw)}}));
+            }
+            ver_part = ver_part.substr(ver_start);
+
+            if (name_part.empty()) {
+                throw std::runtime_error(
+                    i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
+            }
+
+            entry.name = std::string(name_part);
+            entry.constraint.op = o.kind;
+            entry.constraint.version = std::string(ver_part);
+            return entry;
+        }
+    }
+
+    // No operator found — plain package name, no constraint
+    entry.name = std::string(raw);
+    return entry;
+}
+
+// 0.9.6+ — Extract an array of DependsEntry from a TOML node.
+static std::vector<DependsEntry> extract_depends_array(const toml::node* node) {
+    std::vector<DependsEntry> result;
+    if (!node || !node->is_array()) return result;
+    auto& arr = *node->as_array();
+    for (size_t i = 0; i < arr.size(); ++i) {
+        if (auto val = arr[i].value<std::string>()) {
+            result.push_back(parse_depends_entry(*val));
+        }
+    }
+    return result;
+}
+
 } // anonymous namespace
 
 LanguageInfo parse_language(std::string_view language) {
@@ -225,9 +299,9 @@ EzConfig parse_config(const fs::path& toml_path) {
 
     // [depends]
     if (auto deps = root["depends"].as_table()) {
-        cfg.depends.libs = extract_string_array(deps->get("lib"));
+        cfg.depends.libs = extract_depends_array(deps->get("lib"));
         // 0.2.2+: optional dependencies
-        cfg.depends.want = extract_string_array(deps->get("want"));
+        cfg.depends.want = extract_depends_array(deps->get("want"));
     }
 
     // 0.2.3+: [compile.profile.<name>] — build configuration profiles

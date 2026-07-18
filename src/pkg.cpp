@@ -21,6 +21,52 @@
 
 namespace ezmk::pkg {
 
+// 0.9.6+ — Check if a package version satisfies a version constraint.
+// Returns true if `version` satisfies `constraint`.
+bool satisfies_version_constraint(std::string_view version,
+                                  const config::VersionConstraint& constraint) {
+    if (constraint.op == config::VersionConstraint::None)
+        return true;
+
+    int cmp = util::compare_version(version, constraint.version);
+
+    switch (constraint.op) {
+    case config::VersionConstraint::Exact:
+        return cmp == 0;
+    case config::VersionConstraint::Gte:
+        return cmp >= 0;
+    case config::VersionConstraint::Gt:
+        return cmp > 0;
+    case config::VersionConstraint::Compatible: {
+        // ^X.Y.Z → >= X.Y.Z, < (X+1).0.0
+        if (cmp < 0) return false;
+        // Parse the major version of the constraint and bump it
+        auto dot = constraint.version.find('.');
+        unsigned long major = dot == std::string::npos
+            ? std::stoul(std::string(constraint.version))
+            : std::stoul(std::string(constraint.version.substr(0, dot)));
+        std::string next_major = std::to_string(major + 1) + ".0.0";
+        return util::compare_version(version, next_major) < 0;
+    }
+    case config::VersionConstraint::Approx: {
+        // ~X.Y.Z → >= X.Y.Z, < X.(Y+1).0
+        if (cmp < 0) return false;
+        // Parse up to the minor version and bump it
+        auto dot1 = constraint.version.find('.');
+        if (dot1 == std::string::npos) return cmp >= 0; // ~X → >= X
+        auto dot2 = constraint.version.find('.', dot1 + 1);
+        unsigned long major = std::stoul(std::string(constraint.version.substr(0, dot1)));
+        unsigned long minor = std::stoul(
+            std::string(constraint.version.substr(dot1 + 1, dot2 - dot1 - 1)));
+        std::string next_minor = std::to_string(major) + "." +
+                                 std::to_string(minor + 1) + ".0";
+        return util::compare_version(version, next_minor) < 0;
+    }
+    default:
+        return true;
+    }
+}
+
 // ===================================================================
 // Path resolution
 // ===================================================================
@@ -280,13 +326,13 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
         std::string name = cfg.project.name;
         if (in_degree.find(name) == in_degree.end()) in_degree[name] = 0;
         for (auto& dep : cfg.depends.libs) {
-            adj[dep].push_back(name);
+            adj[dep.name].push_back(name);
             in_degree[name]++;
         }
         // 0.2.2+: want dependencies are included if the package is installed
         for (auto& dep : cfg.depends.want) {
-            if (name_to_dir.find(dep) != name_to_dir.end()) {
-                adj[dep].push_back(name);
+            if (name_to_dir.find(dep.name) != name_to_dir.end()) {
+                adj[dep.name].push_back(name);
                 in_degree[name]++;
             }
         }
@@ -488,24 +534,54 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
                 auto cur_cfg = config::parse_config(cur_dir / "ezmk.toml");
                 for (auto& dep : cur_cfg.depends.libs) {
-                    if (seen.insert(dep).second) {
-                        to_check.push_back(dep);
-                        fs::path dep_path = dest_dir / dep;
+                    if (seen.insert(dep.name).second) {
+                        to_check.push_back(dep.name);
+                        fs::path dep_path = dest_dir / dep.name;
                         if (util::file_exists(dep_path)) {
+                            // 0.9.6+: Validate installed version against constraint
+                            if (dep.constraint.op != config::VersionConstraint::None) {
+                                auto dep_cfg = config::parse_config(dep_path / "ezmk.toml");
+                                if (!satisfies_version_constraint(dep_cfg.project.version,
+                                                                  dep.constraint)) {
+                                    throw std::runtime_error(
+                                        ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                                                        {{"pkg", dep.name},
+                                                         {"constraint", dep.constraint.version},
+                                                         {"available", dep_cfg.project.version}}));
+                                }
+                            }
                             all_pkgs.push_back(dep_path);
                         } else {
                             throw std::runtime_error(
                                 ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
-                                                {{"dep", dep}}));
+                                                {{"dep", dep.name}}));
                         }
                     }
                 }
                 // 0.2.2+: want dependencies are optional — include if installed, skip if missing
                 for (auto& dep : cur_cfg.depends.want) {
-                    if (seen.insert(dep).second) {
-                        fs::path dep_path = dest_dir / dep;
+                    if (seen.insert(dep.name).second) {
+                        fs::path dep_path = dest_dir / dep.name;
                         if (util::file_exists(dep_path)) {
-                            to_check.push_back(dep);
+                            // 0.9.6+: Validate installed version against constraint
+                            if (dep.constraint.op != config::VersionConstraint::None) {
+                                try {
+                                    auto dep_cfg = config::parse_config(dep_path / "ezmk.toml");
+                                    if (!satisfies_version_constraint(dep_cfg.project.version,
+                                                                      dep.constraint)) {
+                                        util::warn(ezmk::i18n::fmt(
+                                            ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                                            {{"pkg", dep.name},
+                                             {"constraint", dep.constraint.version},
+                                             {"available", dep_cfg.project.version}}));
+                                        continue; // skip this dep — constraint not satisfied
+                                    }
+                                } catch (...) {
+                                    util::warn(std::string("failed to parse config for dependency: ") + dep.name);
+                                    continue;
+                                }
+                            }
+                            to_check.push_back(dep.name);
                             all_pkgs.push_back(dep_path);
                         }
                         // If not installed: silently skip (optional dependency)
@@ -532,14 +608,14 @@ void install(const std::string& pkg_file, cli::Scope scope,
             }
             std::vector<fs::path> dep_includes;
             for (auto& dep : cfg.depends.libs) {
-                auto it = name_to_dir.find(dep);
+                auto it = name_to_dir.find(dep.name);
                 if (it != name_to_dir.end()) {
                     dep_includes.push_back(it->second / "include");
                 }
             }
             // 0.2.2+: want deps also contribute include paths when installed
             for (auto& dep : cfg.depends.want) {
-                auto it = name_to_dir.find(dep);
+                auto it = name_to_dir.find(dep.name);
                 if (it != name_to_dir.end()) {
                     dep_includes.push_back(it->second / "include");
                 }
@@ -683,12 +759,20 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
             std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_hard_deps)
                       << ":";
             if (cfg.depends.libs.empty()) std::cout << none_str;
-            for (auto& d : cfg.depends.libs) std::cout << " " << d;
+            for (auto& d : cfg.depends.libs) {
+                std::cout << " " << d.name;
+                if (d.constraint.op != config::VersionConstraint::None)
+                    std::cout << "@" << d.constraint.version;
+            }
             std::cout << "\n";
             std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_optional_deps)
                       << ":";
             if (cfg.depends.want.empty()) std::cout << none_str;
-            for (auto& d : cfg.depends.want) std::cout << " " << d;
+            for (auto& d : cfg.depends.want) {
+                std::cout << " " << d.name;
+                if (d.constraint.op != config::VersionConstraint::None)
+                    std::cout << "@" << d.constraint.version;
+            }
             std::cout << "\n";
             std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_flags)
                       << ":";
@@ -809,7 +893,7 @@ void list(const std::vector<cli::Scope>& scopes) {
                         line += " (depends:";
                         for (size_t i = 0; i < cfg.depends.libs.size(); ++i) {
                             if (i > 0) line += ",";
-                            line += " " + cfg.depends.libs[i];
+                            line += " " + cfg.depends.libs[i].name;
                         }
                         line += ")";
                     }

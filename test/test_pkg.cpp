@@ -247,3 +247,83 @@ TEST_CASE("pkg update: non-existent package shows error", "[pkg][0.2.3]") {
     // and return without throwing
     REQUIRE_NOTHROW(update("nonexistent_pkg_xyz_12345", {Scope::Project}));
 }
+
+// ===================================================================
+// 0.9.6+: satisfies_version_constraint()
+// ===================================================================
+
+TEST_CASE("satisfies_version_constraint: None constraint always matches", "[pkg][0.9.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;  // op = None
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("1.0.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("0.0.1", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("99.99.99", c));
+}
+
+TEST_CASE("satisfies_version_constraint: Exact (@) matches only equal", "[pkg][0.9.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;
+    c.op = VersionConstraint::Exact;
+    c.version = "1.2.3";
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("1.2.3", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.2.2", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.2.4", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.3.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("2.0.0", c));
+}
+
+TEST_CASE("satisfies_version_constraint: Compatible (^) matches within major", "[pkg][0.9.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;
+    c.op = VersionConstraint::Compatible;
+    c.version = "3.6.0";
+    // >= 3.6.0, < 4.0.0
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.6.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.6.1", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.7.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.99.99", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("3.5.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("3.5.99", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("4.0.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("5.0.0", c));
+}
+
+TEST_CASE("satisfies_version_constraint: Approx (~) matches within minor", "[pkg][0.9.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;
+    c.op = VersionConstraint::Approx;
+    c.version = "3.11.0";
+    // >= 3.11.0, < 3.12.0
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.11.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.11.1", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.11.99", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("3.10.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("3.10.99", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("3.12.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("4.0.0", c));
+}
+
+TEST_CASE("satisfies_version_constraint: Gte (>=) matches equal or greater", "[pkg][0.9.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;
+    c.op = VersionConstraint::Gte;
+    c.version = "2.0.0";
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("2.0.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("2.0.1", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("2.1.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.0.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.99.99", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.0.0", c));
+}
+
+TEST_CASE("satisfies_version_constraint: Gt (>) matches strictly greater", "[pkg][0.9.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;
+    c.op = VersionConstraint::Gt;
+    c.version = "2.0.0";
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("2.0.1", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("2.1.0", c));
+    REQUIRE(ezmk::pkg::satisfies_version_constraint("3.0.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("2.0.0", c));
+    REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.99.99", c));
+}

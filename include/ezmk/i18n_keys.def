@@ -119,6 +119,11 @@ EZMK_I18N_KEY(config_err_ezmk_macros_type)
 EZMK_I18N_KEY(config_err_macros_val_type)
 EZMK_I18N_KEY(config_err_empty_profile)
 EZMK_I18N_KEY(config_err_invalid_profile)
+EZMK_I18N_KEY(config_err_empty_depends_entry)
+EZMK_I18N_KEY(config_err_version_missing)
+EZMK_I18N_KEY(pkg_constraint_unsatisfied)
+EZMK_I18N_KEY(build_failed_summary)
+EZMK_I18N_KEY(build_elapsed_time)
 
 // ---- cli usage / parsing (0.2.3+) ----
 EZMK_I18N_KEY(cli_usage_header)

@@ -64,6 +64,14 @@ void set_color_mode(ColorMode mode);
 ColorMode get_color_mode();
 // Returns true if the output stream supports ANSI color codes.
 bool supports_color();
+// Returns true if stderr is a terminal (raw TTY check, ignores NO_COLOR / --color).
+bool stderr_is_tty();
+// 0.9.6+: Output a progress line with \r (carriage return) for in-place refresh.
+// Uses the same mutex as info/warn/error for thread safety.
+// Does NOT append a newline — caller should call progress_newline() after the final update.
+void progress(std::string_view msg);
+// 0.9.6+: Print a newline to move past the last \r progress line (thread-safe).
+void progress_newline();
 // Wrap a message in color codes (no-op if color is not supported).
 std::string color_msg(const char* color, std::string_view msg);
 // ANSI escape codes for colored output.

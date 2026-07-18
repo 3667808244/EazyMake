@@ -4,6 +4,7 @@
 #include <vector>
 #include <filesystem>
 #include "ezmk/cli.hpp"
+#include "ezmk/config.hpp"
 
 namespace ezmk::repo {
 namespace fs = std::filesystem;
@@ -64,5 +65,12 @@ struct PkgSearchResult {
 // If not found, archive_path is empty.
 PkgSearchResult search_package(std::string_view pkg_name,
                                const std::vector<cli::Scope>& scopes);
+
+// 0.9.6+ — Version-constrained search.
+// Filters available versions by the given constraint and picks the highest match.
+// If no version satisfies the constraint, archive_path is empty (caller reports error).
+PkgSearchResult search_package(std::string_view pkg_name,
+                               const std::vector<cli::Scope>& scopes,
+                               const config::VersionConstraint& constraint);
 
 } // namespace ezmk::repo

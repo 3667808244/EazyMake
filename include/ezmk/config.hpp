@@ -49,9 +49,22 @@ struct LinkSection {
     std::vector<std::string> system_targets;  // -l libs (e.g. "pthread")
 };
 
+// 0.9.6+ — Version constraint for dependency entries
+struct VersionConstraint {
+    enum Op { None, Exact, Compatible, Approx, Gte, Gt };
+    Op op = None;
+    std::string version;  // e.g. "1.2.3"
+};
+
+// 0.9.6+ — A single dependency entry with optional version constraint
+struct DependsEntry {
+    std::string name;
+    VersionConstraint constraint;
+};
+
 struct DependsSection {
-    std::vector<std::string> libs;
-    std::vector<std::string> want;  // 0.2.2+ optional dependencies
+    std::vector<DependsEntry> libs;   // 0.9.6+: changed from std::vector<std::string>
+    std::vector<DependsEntry> want;   // 0.2.2+ optional dependencies
 };
 
 // 0.2.3+ — Build profile configuration for debug/release/etc.

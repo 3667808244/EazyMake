@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.9.6 (2026-07-18) — 功能补全与生态完善
+
+聚焦最后一个核心功能缺口（依赖版本锁定）和开发体验提升（构建进度、格式化基础设施、启动 Logo）。
+
+### 新增功能
+- **依赖版本锁定**：`ezmk.toml` 中 `[depends]` 支持 `pkg@1.2.3`（精确）、`pkg^1.0`（兼容）、`pkg~1.2`（近似）、`pkg>=1.0`（GTE）、`pkg>1.0`（GT）五种版本约束语法；纯字符串格式（无约束）向后兼容
+- **构建进度显示**：并行编译（`-j > 1`）时显示 `[N/M] src/file.cpp` 逐文件进度 + `(cached)` 缓存命中标记 + 构建耗时摘要
+- **ASCII Logo**：`ezmk` 裸运行时显示彩色 Logo（外部资源 `res/logo.txt`，编译期由 `scripts/embed_logo.py` 嵌入）
+- **.clang-format**：项目根目录新增 `.clang-format` 配置（LLVM 风格 + 项目定制）
+
+### 数据结构变更
+- `config.hpp`：新增 `VersionConstraint`（含 Op 枚举）和 `DependsEntry`（name + constraint）结构体；`DependsSection::libs` / `want` 从 `std::vector<std::string>` 改为 `std::vector<DependsEntry>`
+- `repo.hpp`：新增约束感知的 `search_package()` 重载
+
+### 构建增强
+- **构建失败摘要**：并行编译失败时显示 `Build failed (X cached, Y compiled, N error(s))` 摘要
+- **版本约束运行时校验**：`build.cpp` 构建阶段验证已安装包版本是否满足 `ezmk.toml` 约束；`pkg.cpp` 安装阶段验证依赖版本
+
+### i18n
+- 新增 5 个 i18n key：`config_err_empty_depends_entry`、`config_err_version_missing`、`pkg_constraint_unsatisfied`、`build_elapsed_time`、`build_failed_summary`，含中英双语翻译
+
+### 测试
+- 测试套件：**514 个测试用例，2353 个断言全部通过**（+17 用例，+103 断言 vs 0.9.5.1）
+- 新增 10 个解析测试：5 种运算符正向 + 新旧格式混用 + 空白处理 + want 约束 + 边界报错
+- 新增 7 个约束校验测试：5 种运算符的匹配/不匹配边界
+- 新增 1 个集成测试：5 个子场景覆盖精确/兼容约束匹配/不匹配 + 无约束向后兼容
+
+### 文档
+- `CONTRIBUTING.md`：新增 `.clang-format` 使用说明、IDE 集成指引、提交前检查清单
+
+---
+
 ## 0.9.5.1 (2026-07-17) — 代码重构与质量清理
 
 不新增用户可见功能，专注代码质量：消除重复、修复资源管理、补全测试盲区、移除死代码。

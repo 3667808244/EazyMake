@@ -478,3 +478,203 @@ TEST_CASE("integration: basic CLI commands", "[integration]") {
         REQUIRE(r.out.find("ezmk") != std::string::npos);
     }
 }
+
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 8: Dependency version constraint validation (0.9.6+)
+//   create mock pkg → set constraint → verify build accepts/rejects correctly
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+TEST_CASE("integration: version constraint validation in build", "[integration][0.9.6]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+
+    TempDir tmp;
+    std::string proj_name = "vconstraint_test";
+
+    // Step 1: Create the project
+    {
+        ProcResult r = run_ezmk(
+            "project new " + proj_name + " --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(r.exit_code == 0);
+    }
+
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Step 2: Create a mock installed package "mylib" v2.0.0 with include/ and src/
+    {
+        fs::path pkg_root = proj_dir / ".ezmk" / "pkg" / "mylib";
+        fs::create_directories(pkg_root / "include");
+        fs::create_directories(pkg_root / "src");
+        std::string pkg_toml =
+            "[project]\n"
+            "name = \"mylib\"\n"
+            "type = \"static\"\n"
+            "version = \"2.0.0\"\n"
+            "language = \"C++17\"\n";
+        file_write(pkg_root / "ezmk.toml", pkg_toml);
+        file_write(pkg_root / "include" / "mylib.hpp", "// mylib header\n");
+        file_write(pkg_root / "src" / "mylib.cpp", "// mylib source\n");
+    }
+
+    // Step 3a: Exact constraint satisfied — @2.0.0 matches installed 2.0.0
+    {
+        std::string toml =
+            "[project]\n"
+            "name = \"" + proj_name + "\"\n"
+            "type = \"executable\"\n"
+            "version = \"0.1.0\"\n"
+            "language = \"C++17\"\n"
+            "\n"
+            "[compile]\n"
+            "flags = [\"-Wall\"]\n"
+            "include_dirs = [\"include\"]\n"
+            "\n"
+            "[link]\n"
+            "flags = []\n"
+            "link_dirs = []\n"
+            "system_target = []\n"
+            "\n"
+            "[depends]\n"
+            "lib = [\"mylib@2.0.0\"]\n";
+        file_write(proj_dir / "ezmk.toml", toml);
+
+        ProcResult r = run_ezmk("project build", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+    }
+
+    // Step 3b: Exact constraint violated — @1.0.0 does NOT match installed 2.0.0
+    {
+        std::string toml =
+            "[project]\n"
+            "name = \"" + proj_name + "\"\n"
+            "type = \"executable\"\n"
+            "version = \"0.1.0\"\n"
+            "language = \"C++17\"\n"
+            "\n"
+            "[compile]\n"
+            "flags = [\"-Wall\"]\n"
+            "include_dirs = [\"include\"]\n"
+            "\n"
+            "[link]\n"
+            "flags = []\n"
+            "link_dirs = []\n"
+            "system_target = []\n"
+            "\n"
+            "[depends]\n"
+            "lib = [\"mylib@1.0.0\"]\n";
+        file_write(proj_dir / "ezmk.toml", toml);
+
+        {
+            std::error_code ec;
+            fs::remove_all(proj_dir / ".ezmk" / "cache", ec);
+        }
+
+        ProcResult r = run_ezmk("project build", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code != 0);
+        std::string combined = r.out + r.err;
+        REQUIRE(combined.find("mylib") != std::string::npos);
+    }
+
+    // Step 3c: Compatible constraint satisfied — ^2.0.0 matches installed 2.0.0
+    {
+        std::string toml =
+            "[project]\n"
+            "name = \"" + proj_name + "\"\n"
+            "type = \"executable\"\n"
+            "version = \"0.1.0\"\n"
+            "language = \"C++17\"\n"
+            "\n"
+            "[compile]\n"
+            "flags = [\"-Wall\"]\n"
+            "include_dirs = [\"include\"]\n"
+            "\n"
+            "[link]\n"
+            "flags = []\n"
+            "link_dirs = []\n"
+            "system_target = []\n"
+            "\n"
+            "[depends]\n"
+            "lib = [\"mylib^2.0.0\"]\n";
+        file_write(proj_dir / "ezmk.toml", toml);
+
+        {
+            std::error_code ec;
+            fs::remove_all(proj_dir / ".ezmk" / "cache", ec);
+        }
+
+        ProcResult r = run_ezmk("project build", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+    }
+
+    // Step 3d: Compatible constraint violated — ^3.0.0 does NOT match 2.0.0
+    {
+        std::string toml =
+            "[project]\n"
+            "name = \"" + proj_name + "\"\n"
+            "type = \"executable\"\n"
+            "version = \"0.1.0\"\n"
+            "language = \"C++17\"\n"
+            "\n"
+            "[compile]\n"
+            "flags = [\"-Wall\"]\n"
+            "include_dirs = [\"include\"]\n"
+            "\n"
+            "[link]\n"
+            "flags = []\n"
+            "link_dirs = []\n"
+            "system_target = []\n"
+            "\n"
+            "[depends]\n"
+            "lib = [\"mylib^3.0.0\"]\n";
+        file_write(proj_dir / "ezmk.toml", toml);
+
+        {
+            std::error_code ec;
+            fs::remove_all(proj_dir / ".ezmk" / "cache", ec);
+        }
+
+        ProcResult r = run_ezmk("project build", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code != 0);
+    }
+
+    // Step 3e: No constraint — backward compatible, any version works
+    {
+        std::string toml =
+            "[project]\n"
+            "name = \"" + proj_name + "\"\n"
+            "type = \"executable\"\n"
+            "version = \"0.1.0\"\n"
+            "language = \"C++17\"\n"
+            "\n"
+            "[compile]\n"
+            "flags = [\"-Wall\"]\n"
+            "include_dirs = [\"include\"]\n"
+            "\n"
+            "[link]\n"
+            "flags = []\n"
+            "link_dirs = []\n"
+            "system_target = []\n"
+            "\n"
+            "[depends]\n"
+            "lib = [\"mylib\"]\n";
+        file_write(proj_dir / "ezmk.toml", toml);
+
+        {
+            std::error_code ec;
+            fs::remove_all(proj_dir / ".ezmk" / "cache", ec);
+        }
+
+        ProcResult r = run_ezmk("project build", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+    }
+}
