@@ -590,6 +590,16 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                     }
                 }
             }
+            // 0.9.7+: also collect precompiled archives from lib/
+            auto pkg_lib = entry.path() / "lib";
+            if (util::file_exists(pkg_lib)) {
+                for (auto& f : fs::directory_iterator(pkg_lib)) {
+                    auto ext = f.path().extension().string();
+                    if (ext == ".a" || (st.is_msvc && ext == ".lib")) {
+                        st.pkg_archives.push_back(f.path());
+                    }
+                }
+            }
         }
     }
 

@@ -14,6 +14,8 @@ struct ProjectSection {
     std::string type = "executable"; // "executable" | "static" | "shared" | "utils"
     std::string version;             // required, e.g. "0.1.0"
     std::string language = "C++17";  // <Lang><Ver>, e.g. "C++17", "C11"
+    bool header_only = false;        // 0.9.7+ header-only package (no compilation needed)
+    bool precompiled = false;        // 0.9.7+ precompiled package (use lib/*.a, skip compilation)
 };
 
 // 0.2.5+ — Fine-grained utils permission declaration ([utils.permissions]).

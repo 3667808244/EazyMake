@@ -207,6 +207,14 @@ EzConfig parse_config(const fs::path& toml_path) {
         if (auto lang = (*proj)["language"].value<std::string>()) {
             cfg.project.language = *lang;
         }
+        // 0.9.7+: header_only — skip compilation for header-only packages
+        if (auto ho = (*proj)["header_only"].as_boolean()) {
+            cfg.project.header_only = ho->get();
+        }
+        // 0.9.7+: precompiled — use lib/*.a directly, skip compilation
+        if (auto pc = (*proj)["precompiled"].as_boolean()) {
+            cfg.project.precompiled = pc->get();
+        }
     }
 
     // project.version is required

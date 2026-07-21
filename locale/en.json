@@ -31,6 +31,8 @@
     "include_structure_changed": "    include structure changed for {file}",
     "installing": "Installing {pkg}...",
     "installing_to": "Installing to {path}",
+    "installing_header_only": "    header-only package {name} — skipping compilation",
+    "installing_precompiled": "    precompiled package {name} — using lib/ artifacts",
     "installed": "Package {pkg} installed successfully.",
     "removing": "Removing {pkg}...",
     "removing_cache": "Removing cache: {path}",

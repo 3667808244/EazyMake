@@ -31,6 +31,8 @@
     "include_structure_changed": "    包含结构已更改: {file}",
     "installing": "正在安装 {pkg}...",
     "installing_to": "正在安装到 {path}",
+    "installing_header_only": "    header-only 包 {name} — 跳过编译",
+    "installing_precompiled": "    预编译包 {name} — 使用 lib/ 产物",
     "installed": "包 {pkg} 安装成功。",
     "removing": "正在移除 {pkg}...",
     "removing_cache": "正在删除缓存: {path}",

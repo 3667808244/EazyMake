@@ -176,13 +176,28 @@ static void validate_pkg(const fs::path& dir) {
     auto cfg = config::parse_config(dir / "ezmk.toml");
     bool is_utils = (cfg.project.type == "utils");
 
-    // include/ and src/ are optional for utils packages (they may have only utils/ scripts)
-    if (!is_utils) {
-        if (!util::file_exists(dir / "include")) {
-            throw std::runtime_error("package missing include/ directory: " + dir.string());
-        }
+    // include/ is always required; src/ is optional for header-only, utils, and precompiled packages
+    if (!is_utils && !cfg.project.header_only && !cfg.project.precompiled) {
         if (!util::file_exists(dir / "src")) {
             throw std::runtime_error("package missing src/ directory: " + dir.string());
+        }
+    }
+    if (!util::file_exists(dir / "include")) {
+        // header-only packages may have only include/
+        throw std::runtime_error("package missing include/ directory: " + dir.string());
+    }
+    // 0.9.7+: precompiled packages must have lib/ with at least one .a
+    if (cfg.project.precompiled) {
+        if (!util::file_exists(dir / "lib")) {
+            throw std::runtime_error("precompiled package missing lib/ directory: " + dir.string());
+        }
+        bool has_archive = false;
+        for (auto& e : fs::directory_iterator(dir / "lib")) {
+            auto ext = e.path().extension().string();
+            if (ext == ".a" || ext == ".lib") { has_archive = true; break; }
+        }
+        if (!has_archive) {
+            throw std::runtime_error("precompiled package has no .a/.lib in lib/: " + dir.string());
         }
     }
 }
@@ -201,11 +216,27 @@ fs::path compile_package(const fs::path& pkg_dir,
                          const std::vector<fs::path>& dep_includes) {
     auto cfg = config::parse_config(pkg_dir / "ezmk.toml");
     std::string name = cfg.project.name;
+
+    // 0.9.7+: precompiled packages — use lib/*.a directly, skip compilation
+    if (cfg.project.precompiled) {
+        fs::path lib_dir = pkg_dir / "lib";
+        for (auto& e : fs::directory_iterator(lib_dir)) {
+            auto ext = e.path().extension().string();
+            if (ext == ".a" || ext == ".lib") {
+                return e.path();
+            }
+        }
+        util::warn("precompiled package has no .a/.lib in lib/: " + name);
+        return {};
+    }
+
     fs::path build_dir = pkg_dir / "build";
     fs::create_directories(build_dir);
 
     auto sources = util::list_files(pkg_dir / "src", {".c", ".cc", ".cpp", ".cxx"});
     if (sources.empty()) {
+        // 0.9.7+: header-only packages have no source files — skip silently
+        if (cfg.project.header_only) return {};
         util::warn("package has no source files: " + name);
         return {};
     }
@@ -604,6 +635,19 @@ void install(const std::string& pkg_file, cli::Scope scope,
             auto cfg = config::parse_config(dir / "ezmk.toml");
             // Skip compilation for utils packages without source files
             if (cfg.project.type == "utils" && !util::file_exists(dir / "src")) {
+                continue;
+            }
+            // 0.9.7+: skip compilation for header-only packages
+            if (cfg.project.header_only) {
+                util::info(ezmk::i18n::I18nKey::installing_header_only,
+                           {{"name", cfg.project.name}});
+                continue;
+            }
+            // 0.9.7+: skip compilation for precompiled packages
+            if (cfg.project.precompiled) {
+                compile_package(dir);  // validates & returns lib/*.a path
+                util::info(ezmk::i18n::I18nKey::installing_precompiled,
+                           {{"name", cfg.project.name}});
                 continue;
             }
             std::vector<fs::path> dep_includes;
