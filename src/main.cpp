@@ -36,6 +36,12 @@ int main(int argc, char** argv) {
     try {
         auto args = ezmk::cli::parse(argc, argv);
 
+        // 0.9.8+: show shorthand expansion hint in verbose mode
+        if (!args.shorthand_expansion.empty()) {
+            ezmk::util::info_line(ezmk::i18n::fmt(ezmk::i18n::I18nKey::shorthand_expansion,
+                                                  {{"mapping", args.shorthand_expansion}}));
+        }
+
         switch (args.cmd) {
 
         case ezmk::cli::Command::Help: {

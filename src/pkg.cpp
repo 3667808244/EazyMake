@@ -776,90 +776,108 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
         fs::path pkg_path = dir / pkg_name;
         if (util::file_exists(pkg_path)) {
             auto cfg = config::parse_config(pkg_path / "ezmk.toml");
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_name)
-                      << ": " << cfg.project.name << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_version)
-                      << ": " << cfg.project.version << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_type)
-                      << ": " << cfg.project.type << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_language)
-                      << ": " << cfg.project.language << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_scope)
-                      << ": " << scope_name(scope) << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_location)
-                      << ": " << pkg_path.string() << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_installed)
-                      << ": " << format_time(pkg_path) << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_compile_flags)
-                      << ":";
-            for (auto& f : cfg.compile.flags) std::cout << " " << f;
-            if (cfg.compile.flags.empty()) std::cout << none_str;
-            std::cout << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_include_dirs)
-                      << ":";
-            for (auto& d : cfg.compile.include_dirs) std::cout << " " << d;
-            if (cfg.compile.include_dirs.empty()) std::cout << none_str;
-            std::cout << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_hard_deps)
-                      << ":";
-            if (cfg.depends.libs.empty()) std::cout << none_str;
-            for (auto& d : cfg.depends.libs) {
-                std::cout << " " << d.name;
-                if (d.constraint.op != config::VersionConstraint::None)
-                    std::cout << "@" << d.constraint.version;
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_name)
+                            + ": " + cfg.project.name);
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_version)
+                            + ": " + cfg.project.version);
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_type)
+                            + ": " + cfg.project.type);
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_language)
+                            + ": " + cfg.project.language);
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_scope)
+                            + ": " + scope_name(scope));
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_location)
+                            + ": " + pkg_path.string());
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_installed)
+                            + ": " + format_time(pkg_path));
+            // compile flags
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_compile_flags) + ":";
+                for (auto& f : cfg.compile.flags) line += " " + f;
+                if (cfg.compile.flags.empty()) line += none_str;
+                util::info_line(line);
             }
-            std::cout << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_optional_deps)
-                      << ":";
-            if (cfg.depends.want.empty()) std::cout << none_str;
-            for (auto& d : cfg.depends.want) {
-                std::cout << " " << d.name;
-                if (d.constraint.op != config::VersionConstraint::None)
-                    std::cout << "@" << d.constraint.version;
+            // include dirs
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_include_dirs) + ":";
+                for (auto& d : cfg.compile.include_dirs) line += " " + d;
+                if (cfg.compile.include_dirs.empty()) line += none_str;
+                util::info_line(line);
             }
-            std::cout << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_flags)
-                      << ":";
-            for (auto& f : cfg.link.flags) std::cout << " " << f;
-            if (cfg.link.flags.empty()) std::cout << none_str;
-            std::cout << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_dirs)
-                      << ":";
-            for (auto& d : cfg.link.link_dirs) std::cout << " " << d;
-            if (cfg.link.link_dirs.empty()) std::cout << none_str;
-            std::cout << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_system_targets)
-                      << ":";
-            for (auto& t : cfg.link.system_targets) std::cout << " " << t;
-            if (cfg.link.system_targets.empty()) std::cout << none_str;
-            std::cout << "\n";
+            // hard deps
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_hard_deps) + ":";
+                if (cfg.depends.libs.empty()) {
+                    line += none_str;
+                } else {
+                    for (auto& d : cfg.depends.libs) {
+                        line += " " + d.name;
+                        if (d.constraint.op != config::VersionConstraint::None)
+                            line += "@" + d.constraint.version;
+                    }
+                }
+                util::info_line(line);
+            }
+            // optional deps
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_optional_deps) + ":";
+                if (cfg.depends.want.empty()) {
+                    line += none_str;
+                } else {
+                    for (auto& d : cfg.depends.want) {
+                        line += " " + d.name;
+                        if (d.constraint.op != config::VersionConstraint::None)
+                            line += "@" + d.constraint.version;
+                    }
+                }
+                util::info_line(line);
+            }
+            // link flags
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_flags) + ":";
+                for (auto& f : cfg.link.flags) line += " " + f;
+                if (cfg.link.flags.empty()) line += none_str;
+                util::info_line(line);
+            }
+            // link dirs
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_link_dirs) + ":";
+                for (auto& d : cfg.link.link_dirs) line += " " + d;
+                if (cfg.link.link_dirs.empty()) line += none_str;
+                util::info_line(line);
+            }
+            // system targets
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_system_targets) + ":";
+                for (auto& t : cfg.link.system_targets) line += " " + t;
+                if (cfg.link.system_targets.empty()) line += none_str;
+                util::info_line(line);
+            }
 
             // Show tools for utils packages
             if (cfg.project.type == "utils") {
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_tools)
-                          << ":";
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_tools) + ":";
                 if (cfg.utils.tools.empty()) {
-                    std::cout << none_str;
+                    line += none_str;
                 } else {
                     for (size_t i = 0; i < cfg.utils.tools.size(); ++i) {
-                        if (i > 0) std::cout << ",";
-                        std::cout << " " << cfg.utils.tools[i];
+                        if (i > 0) line += ",";
+                        line += " " + cfg.utils.tools[i];
                     }
                 }
-                std::cout << "\n";
+                util::info_line(line);
             }
 
             // 0.2.5+: Show declared utils permissions, if any.
             if (cfg.utils.permissions.has_value()) {
                 const auto& pm = *cfg.utils.permissions;
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_permissions)
-                          << ":\n";
+                util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_permissions) + ":");
                 auto print_list = [&](const char* label,
                                       const std::vector<std::string>& v) {
                     if (v.empty()) return;
-                    std::cout << "    " << label << ":";
-                    for (auto& e : v) std::cout << " " << e;
-                    std::cout << "\n";
+                    std::string line = std::string("    ") + label + ":";
+                    for (auto& e : v) line += " " + e;
+                    util::info_line(line);
                 };
                 print_list("read", pm.read);
                 print_list("read-deny", pm.read_deny);
@@ -867,22 +885,21 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                 print_list("write-deny", pm.write_deny);
                 print_list("run", pm.run);
                 print_list("run-deny", pm.run_deny);
-                std::cout << "    (unlisted access will prompt at runtime)\n";
+                util::info_line("    (unlisted access will prompt at runtime)");
             }
             fs::path build_dir = pkg_path / "build";
             if (util::file_exists(build_dir)) {
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_artifacts)
-                          << ":";
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_artifacts) + ":";
                 bool found = false;
                 for (auto& f : fs::directory_iterator(build_dir)) {
                     auto ext = f.path().extension().string();
                     if (ext == ".a" || ext == ".dll" || ext == ".so") {
-                        std::cout << " " << f.path().filename().string();
+                        line += " " + f.path().filename().string();
                         found = true;
                     }
                 }
-                if (!found) std::cout << none_str;
-                std::cout << "\n";
+                if (!found) line += none_str;
+                util::info_line(line);
             }
             return;
         }

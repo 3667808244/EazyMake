@@ -47,6 +47,13 @@ namespace ezmk::cli
         spec.push_back({'g', "", false});
     }
 
+    // 0.9.8+: add -v/--verbose as an accepted (ignored) flag to commands
+    // that don't otherwise use it, so it doesn't cause "unknown option" errors.
+    static void add_verbose_spec(std::vector<OptionSpec> &spec)
+    {
+        spec.push_back({'v', "verbose", false});
+    }
+
     // Read build-related options (build / run / watch share these).
     static void fill_build_opts(const ParsedOptions &p, BuildOptions &b)
     {
@@ -195,6 +202,7 @@ namespace ezmk::cli
                 {'y', "yes", false},
             };
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk pkg install");
 
             auto scopes = collect_scopes(p);
@@ -233,6 +241,7 @@ namespace ezmk::cli
 
             std::vector<OptionSpec> spec;
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec,
                                    "ezmk pkg " + std::string(action));
 
@@ -259,6 +268,7 @@ namespace ezmk::cli
             args.cmd = Command::PkgList;
             std::vector<OptionSpec> spec;
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk pkg list");
             if (!p.positionals.empty())
                 util::fatal(ezmk::i18n::I18nKey::cli_takes_no_args, {{"cmd", "ezmk pkg list"}});
@@ -278,6 +288,7 @@ namespace ezmk::cli
                 {'\0', "all", false},
             };
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk pkg update");
 
             QueryOptions opts;
@@ -327,6 +338,7 @@ namespace ezmk::cli
                 {'\0', "branch", true},
             };
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk repo add");
 
             auto scopes = collect_scopes(p);
@@ -360,6 +372,7 @@ namespace ezmk::cli
 
             std::vector<OptionSpec> spec;
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec,
                                    "ezmk repo " + std::string(action));
 
@@ -387,6 +400,7 @@ namespace ezmk::cli
             args.cmd = Command::RepoList;
             std::vector<OptionSpec> spec;
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk repo list");
             if (!p.positionals.empty())
                 util::fatal(ezmk::i18n::I18nKey::cli_takes_no_args, {{"cmd", "ezmk repo list"}});
@@ -404,6 +418,7 @@ namespace ezmk::cli
             args.cmd = Command::RepoInfo;
             std::vector<OptionSpec> spec;
             add_scope_specs(spec);
+            add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk repo info");
 
             if (p.positionals.empty())
@@ -541,6 +556,19 @@ namespace ezmk::cli
             return args;
         }
 
+        // 0.9.8+: pre-scan for --verbose/-v before shorthand expansion,
+        // so we can record the expansion hint when verbose mode is active.
+        // Stop at "--" (end-of-options marker — what follows is positional args).
+        bool any_verbose = false;
+        for (int i = 1; i < argc; ++i) {
+            std::string_view a(argv[i]);
+            if (a == "--") break;
+            if (a == "-v" || a == "--verbose") {
+                any_verbose = true;
+                break;
+            }
+        }
+
         // 0.2.6+: top-level command shorthands. Expand toks[1] into its full
         // group[/action] form BEFORE any further parsing, so downstream logic
         // and error messages all see the canonical command names. Aliases only
@@ -563,6 +591,15 @@ namespace ezmk::cli
 
         if (auto it = kAliases.find(std::string_view(toks[1])); it != kAliases.end())
         {
+            // 0.9.8+: record expansion for --verbose display
+            if (any_verbose) {
+                std::string alias(toks[1]);
+                std::string full = it->second.first;
+                if (it->second.second)
+                    full += std::string(" ") + it->second.second;
+                args.shorthand_expansion = alias + " → " + full;
+            }
+
             std::vector<std::string> expanded;
             expanded.emplace_back(toks[0]);
             expanded.emplace_back(it->second.first);
@@ -601,14 +638,26 @@ namespace ezmk::cli
 
         std::string_view group = argv[1];
 
-        if (group == "project")
-            return parse_project_args(argc, argv);
-        if (group == "pkg")
-            return parse_pkg_args(argc, argv);
-        if (group == "repo")
-            return parse_repo_args(argc, argv);
-        if (group == "utils")
-            return parse_utils_args(argc, argv);
+        if (group == "project") {
+            auto result = parse_project_args(argc, argv);
+            result.shorthand_expansion = std::move(args.shorthand_expansion);
+            return result;
+        }
+        if (group == "pkg") {
+            auto result = parse_pkg_args(argc, argv);
+            result.shorthand_expansion = std::move(args.shorthand_expansion);
+            return result;
+        }
+        if (group == "repo") {
+            auto result = parse_repo_args(argc, argv);
+            result.shorthand_expansion = std::move(args.shorthand_expansion);
+            return result;
+        }
+        if (group == "utils") {
+            auto result = parse_utils_args(argc, argv);
+            result.shorthand_expansion = std::move(args.shorthand_expansion);
+            return result;
+        }
 
         util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_unknown_command,
                                     {{"cmd", std::string(group)}}));

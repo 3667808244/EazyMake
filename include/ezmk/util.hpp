@@ -46,6 +46,9 @@ void info(std::string_view msg);
 void warn(std::string_view msg);
 void error(std::string_view msg);
 [[noreturn]] void fatal(std::string_view msg);  // throws ezmk::fatal_error
+// 0.9.8+: structured info line — [ezmk] prefix, no color, stderr, with newline.
+// Intended for multi-line structured output (pkg info, repo info, repo list).
+void info_line(std::string_view msg);
 
 // I18n-aware logging overloads — format a localized string by key + args,
 // then output with the same prefix/color conventions as the raw overloads.

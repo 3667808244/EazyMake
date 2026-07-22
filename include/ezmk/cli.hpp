@@ -92,6 +92,10 @@ struct CliArgs {
 
     // 0.2.3+: Watch mode flags
     bool watch_no_build_on_start = false;   // --no-build-on-start
+
+    // 0.9.8+: Shorthand expansion hint (e.g. "ri → repo info").
+    // Non-empty only when a shorthand alias was expanded AND --verbose was passed.
+    std::string shorthand_expansion;
 };
 
 CliArgs parse(int argc, char** argv);

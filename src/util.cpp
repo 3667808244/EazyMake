@@ -77,6 +77,13 @@ void fatal(std::string_view msg) {
     throw ezmk::fatal_error(msg);
 }
 
+// 0.9.8+: structured info line — same prefix as info() but without color,
+// intended for multi-line data output (pkg info, repo info, repo list).
+void info_line(std::string_view msg) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    std::cerr << "[ezmk] " << msg << "\n";
+}
+
 // ---- I18n-aware logging overloads ----
 
 void info(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {

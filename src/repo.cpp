@@ -472,28 +472,28 @@ void list(const std::vector<cli::Scope>& scopes) {
 
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
-        std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_list_title,
-                                      {{"scope", scope_label(scope)}}) << "\n";
+        util::info_line(ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_list_title,
+                                        {{"scope", scope_label(scope)}}));
 
         if (entries.empty()) {
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_list_none) << "\n";
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_list_none));
         } else {
             for (auto& e : entries) {
-                std::cout << "  " << std::left << std::setw(16) << e.name
-                          << " " << std::setw(48) << e.url;
+                std::ostringstream line;
+                line << "  " << std::left << std::setw(16) << e.name
+                     << " " << std::setw(48) << e.url;
                 if (e.type == "git") {
-                    std::cout << " (" << e.branch << ")";
+                    line << " (" << e.branch << ")";
                 } else {
-                    std::cout << " (local)";
+                    line << " (local)";
                 }
                 if (!e.last_update.empty()) {
-                    std::cout << "  " << e.last_update;
+                    line << "  " << e.last_update;
                 }
-                std::cout << "\n";
+                util::info_line(line.str());
             }
             found_any = true;
         }
-        std::cout << "\n";
     }
 
     if (!found_any) {
@@ -522,22 +522,25 @@ void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
             }
 
             // Print repo header
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_name) << ": " << name << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_scope) << ": "
-                      << scope_label(scope) << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_url) << ": " << e.url << "\n";
-            std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_type) << ": " << e.type << "\n";
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_name)
+                            + ": " + std::string(name));
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_scope)
+                            + ": " + scope_label(scope));
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_url)
+                            + ": " + e.url);
+            util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_type)
+                            + ": " + e.type);
             if (e.type == "git") {
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_branch) << ": "
-                          << e.branch << "\n";
+                util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_branch)
+                                + ": " + e.branch);
             }
             if (!e.last_update.empty()) {
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_updated) << ": "
-                          << e.last_update << "\n";
+                util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_updated)
+                                + ": " + e.last_update);
             }
             if (e.type == "git") {
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_cache) << ": "
-                          << cache_path.string() << "\n";
+                util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_cache)
+                                + ": " + cache_path.string());
             }
 
             // Parse index.toml for package stats
@@ -556,8 +559,8 @@ void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
                                 pkg_versions[*pkg_name].push_back(ver ? *ver : "0.0.0");
                             }
                         }
-                        std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages) << ": "
-                                  << pkg_versions.size() << "\n";
+                        util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages)
+                                        + ": " + std::to_string(pkg_versions.size()));
                         for (auto& [pkg, vers] : pkg_versions) {
                             // Sort versions descending
                             std::sort(vers.begin(), vers.end(),
@@ -569,20 +572,19 @@ void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
                                 if (i > 0) version_list += ", ";
                                 version_list += vers[i];
                             }
-                            std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_info_version_list,
-                                                          {{"name", pkg},
-                                                           {"versions", version_list}})
-                                      << "\n";
+                            util::info_line(ezmk::i18n::fmt(ezmk::i18n::I18nKey::repo_info_version_list,
+                                                            {{"name", pkg},
+                                                             {"versions", version_list}}));
                         }
                     } else {
-                        std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages) << ": 0\n";
+                        util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages) + ": 0");
                     }
                 } catch (const std::exception& e) {
-                    std::cout << "  (parse error: " << e.what() << ")\n";
+                    util::info_line(std::string("  (parse error: ") + e.what() + ")");
                 }
             } else {
-                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages)
-                          << ": (index.toml not found)\n";
+                util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages)
+                                + ": (index.toml not found)");
             }
             return;
         }

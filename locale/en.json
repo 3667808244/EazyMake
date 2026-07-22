@@ -192,6 +192,7 @@
     "cli_unknown_command": "unknown command: {cmd}",
     "cli_available_commands": "  Available commands: {commands}",
     "profile_available": "  Available profiles: {profiles}",
+    "shorthand_expansion": "shorthand: {mapping}",
     "arg_project_name": "project name",
     "arg_package_name": "package name",
     "arg_package_arg": "package file or URL",

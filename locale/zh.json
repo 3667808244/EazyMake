@@ -192,6 +192,7 @@
     "cli_unknown_command": "未知命令: {cmd}",
     "cli_available_commands": "  可用命令: {commands}",
     "profile_available": "  可用 profiles: {profiles}",
+    "shorthand_expansion": "简写展开: {mapping}",
     "arg_project_name": "项目名称",
     "arg_package_name": "包名",
     "arg_package_arg": "包文件或 URL",

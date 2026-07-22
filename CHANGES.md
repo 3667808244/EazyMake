@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.9.8 (2026-07-22) — CLI 改进、默认仓库扩充与文档检查
+
+1.0.0 之前最后一个功能版本，聚焦 CLI 输出一致性与仓库生态再扩充。
+
+### 新增功能
+- **CLI 输出统一 `[ezmk]` 前缀**：`ezmk pkg info`、`ezmk repo info`、`ezmk repo list` 输出统一添加 `[ezmk]` 前缀，新增 `util::info_line()` 辅助函数（无色、stderr、线程安全），与 `util::info()`/`warn()`/`error()` 形成一致的输出规范
+- **`--verbose` 简写展开提示**：使用简写命令（`ri`/`ki`/`pb` 等 18 个）时，`-v`/`--verbose` 显示展开映射（如 `[ezmk] 简写展开: ri → repo info`）；`-v`/`--verbose` 提升为全局标志，所有子命令接受且静默忽略
+- **默认仓库新增 20 个包**：
+  - **stb 系列（10 个）**：`stb-image`、`stb-image-write`、`stb-image-resize`、`stb-truetype`、`stb-rect-pack`、`stb-perlin`、`stb-sprintf`、`stb-ds`、`stb-textedit`（header-only）+ `stb-vorbis`（需编译），均为 MIT/Public Domain 单文件 C 库
+  - **Boost header-only 系列（10 个）**：`boost-config`、`boost-assert`、`boost-core`、`boost-static-assert`、`boost-throw-exception`、`boost-lexical-cast`、`boost-algorithm`、`boost-optional`、`boost-variant2`、`boost-mp11`（BSL-1.0，C++17，v1.87.0）
+
+### 修复
+- 子命令解析器返回新 `CliArgs` 时丢失顶层设置的字段（如 `shorthand_expansion`）— 捕获结果后传递
+- `-v`/`--verbose` 作为全局标志时错误消费 `--` 之后的位置参数 — 添加 `--` 边界检查
+
+### i18n
+- 新增 i18n key：`shorthand_expansion`（en: `"shorthand: {mapping}"`, zh: `"简写展开: {mapping}"`）
+
+### 测试
+- 全量测试：**524 用例 / 2413 断言**，零失败、零回归
+
+---
+
+## 0.9.7 (2026-07-21) — 默认仓库生态扩展
+
+仓库从 9 个包扩展到 31 个包，新增 header-only 和预编译包支持。
+
+### 新增功能
+- **22 个新包**：5 个独立包（`cli11`/`zlib`/`glfw`/`sdl2`/`yaml-cpp`）+ 1 个 `imgui` 核心 + 16 个 imgui 后端（7 平台 + 9 渲染器）
+- **Header-only 包支持**：`ezmk.toml` 新增 `header_only = true`，安装时跳过编译步骤，仅复制头文件
+- **预编译包支持**：`ezmk.toml` 新增 `precompiled = true`，支持分发预编译 `.a`/`.lib` 文件
+- **包制作指南**：新增 `docs/en/package_authoring.md` + `docs/zh/package_authoring.md`
+
+---
+
 ## 0.9.6 (2026-07-18) — 功能补全与生态完善
 
 聚焦最后一个核心功能缺口（依赖版本锁定）和开发体验提升（构建进度、格式化基础设施、启动 Logo）。
