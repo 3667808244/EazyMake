@@ -77,31 +77,82 @@ Circular dependencies or missing packages cause an error.
 
 ---
 
-## Install Hook Scripts (0.2.1+)
+## Install Hook Scripts (0.2.1+, Lua support in 0.9.9+)
 
-A `script/` directory may be placed at the package root, containing install lifecycle hooks:
+A `script/` directory may be placed at the package root, containing install lifecycle hooks.
+
+**Directory structure**:
 
 ```
 <pkg_dir>/
     script/
-        preinstall.sh     # Executed after extraction, before install (Linux/macOS)
-        preinstall.ps1    # Executed after extraction, before install (Windows)
-        preinstall.bat    # Executed after extraction, before install (Windows fallback)
-        postinstall.sh    # Executed after install completes (Linux/macOS)
-        postinstall.ps1   # Executed after install completes (Windows)
-        postinstall.bat   # Executed after install completes (Windows fallback)
+        preinstall.lua    # Executed after extraction, before install (cross-platform, 0.9.9+, **recommended**)
+        preinstall.sh     # Executed after extraction, before install (Linux/macOS, legacy fallback)
+        preinstall.ps1    # Executed after extraction, before install (Windows, legacy fallback)
+        preinstall.bat    # Executed after extraction, before install (Windows legacy fallback)
+        postinstall.lua   # Executed after install completes (cross-platform, 0.9.9+, **recommended**)
+        postinstall.sh    # Executed after install completes (Linux/macOS, legacy fallback)
+        postinstall.ps1   # Executed after install completes (Windows, legacy fallback)
+        postinstall.bat   # Executed after install completes (Windows legacy fallback)
 ```
+
+**Detection priority (0.9.9+)**:
+1. `.lua` — cross-platform, highest priority (if present, used directly)
+2. Platform-specific fallback: `.ps1` → `.bat` (Windows) or `.sh` (Linux/macOS)
 
 **Execution flow**:
 1. Extract package to temporary directory
-2. Detect and execute `preinstall` script (if present) → open editor for user review → ask for confirmation
+2. Detect and execute `preinstall` script (if present):
+   - **Lua scripts** (0.9.9+): ask for confirmation → execute in sandbox (no editor review needed, API is sandbox-limited)
+   - **Shell scripts** (legacy): open editor for user review → ask for confirmation → execute
 3. Check existing installation → secondary confirmation if overwriting
 4. Compile dependencies + copy files to install directory
-5. Detect and execute `postinstall` script (if present) → same review + confirmation
+5. Detect and execute `postinstall` script (if present) → same flow as step 2
 
-- Platform selection: Windows prefers `.ps1`, falls back to `.bat`; Linux/macOS uses `.sh`
 - If the user declines script execution, installation continues (skipping that phase)
 - If script execution fails (exit != 0), the user may choose to continue or abort
+
+### Lua Hook Scripts (0.9.9+)
+
+Lua install hooks provide a cross-platform, sandbox-safe alternative to shell scripts. They share the same `ezmk.*` API as utils and build hooks (see [Utils documentation](utils.md)).
+
+**Entry point**: Each Lua hook must define a `run(ctx)` function that returns an integer exit code (0 = success, non-zero = failure).
+
+```lua
+-- script/preinstall.lua
+function run(ctx)
+    ezmk.info("preinstall hook for " .. ctx.pkg_name)
+
+    -- Example: backup existing config file
+    if ezmk.file_exists(ctx.install_path .. "/config.ini") then
+        ezmk.warn("found existing config.ini, backing up...")
+        local backup = ctx.install_path .. "/config.ini.bak"
+        local ok = ezmk.file_write(backup,
+            ezmk.file_read(ctx.install_path .. "/config.ini"))
+        if not ok then
+            ezmk.error("failed to backup config.ini")
+            return 1
+        end
+    end
+
+    return 0
+end
+```
+
+**Context table `ctx`**:
+
+| Field | Type | Description |
+|---|---|---|
+| `ctx.pkg_name` | string | Package name (from `ezmk.toml` `[project].name`) |
+| `ctx.pkg_root` | string | Extracted package root directory (absolute path) |
+| `ctx.install_path` | string | Target installation directory (absolute path) |
+| `ctx.scope` | string | Installation scope: `"project"` / `"user"` / `"global"` |
+| `ctx.pkg_version` | string | Package version (from `ezmk.toml` `[project].version`) |
+| `ctx.pkg_type` | string | Package type: `"executable"` / `"static"` / `"shared"` / `"utils"` |
+
+**Safety**: Lua hooks run in a sandboxed environment (no `os.execute`, no `io.open`). All system access must go through `ezmk.*` API functions. Unlike shell scripts, Lua hooks do not require editor review — the sandbox boundary limits what the script can do.
+
+**Note**: If a `run()` function is not defined, ezmk prints a warning and skips the hook (continues installation).
 
 ---
 

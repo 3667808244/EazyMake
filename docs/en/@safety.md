@@ -37,6 +37,7 @@ See [`@cache.md`](@cache.md) for details.
 - `ezmk.file_write()` refuses writes to absolute paths outside the project root directory (hard limit, cannot be bypassed).
 - Does not expose `require` for loading C extensions (pure Lua modules only).
 - Each invocation receives an independent sandbox environment table; global variables do not leak between scripts.
+- **Install hooks (0.9.9+)**: Install lifecycle hooks (`preinstall`/`postinstall`) share the same sandbox infrastructure as build hooks and utils. Lua install hooks do NOT open the editor for review — the sandbox boundary (removed `os`/`io`, `file_write` limits, `ezmk.run()` permission checks) already bounds what the script can do. Only a user confirmation prompt (`[y/N]`) is required before execution.
 
 ## Utils Permission Management (`[utils.permissions]`, 0.2.5+)
 
@@ -68,3 +69,5 @@ See [`utils.md` Permission Management](utils.md#permission-management-version--0
 | Lua `os`/`io` | Removed at compile time |
 | Lua `file_write` out-of-bounds | Deny (hard limit) |
 | Utils controlled access | deny > allow > ask |
+| Lua install hook execution | Sandbox + confirmation prompt (no editor review, 0.9.9+) |
+| Shell install hook execution | Open editor for review + confirmation prompt (legacy) |

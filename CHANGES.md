@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.9 (2026-07-22) — 安装钩子 Lua 化
+
+消除最后的技术债务——将安装生命周期钩子从 Shell 脚本迁移至 Lua，与构建钩子（0.2.3）形成统一技术栈。
+
+### 功能
+
+- **安装钩子 Lua 化**：`preinstall`/`postinstall` 钩子支持 `.lua` 脚本（跨平台统一），`detect_install_script()` 优先检测 `.lua` 再 fallback 到平台特定脚本（`.ps1`/`.bat`/`.sh`）
+- **统一上下文传递**：Lua 钩子通过 `ctx` 表接收安装上下文（`pkg_name`/`pkg_root`/`install_path`/`scope`/`pkg_version`/`pkg_type`）
+- **安全模型对齐**：Lua 安装钩子运行在 sandbox 中（已移除 `os`/`io`，`ezmk.*` API 沙箱限制），无需打开编辑器审查，仅需用户确认
+- **向后兼容**：旧包的 `.sh`/`.ps1`/`.bat` 脚本继续工作，无需立即迁移
+- **新增 i18n 键**：`install_hook_lua_error`、`install_hook_no_run`（中英文）
+
+### 代码与测试
+
+- 新增 `lua::run_install_hook_script()`（`src/lua_api.cpp` + `include/ezmk/lua_api.hpp`）
+- 重构 `run_install_script()` 和 `detect_install_script()` 支持 Lua 优先检测（`src/pkg.cpp`）
+- 新增 9 个测试用例覆盖：基本执行、ctx 表完整性、退出码、空 L 指针、缺失 run()、Lua error、语法错误、作用域、无配置文件的降级行为
+- 测试总计：533 用例 / 2430 断言，零回归
+
+### 文档
+
+- 更新安装钩子章节（`docs/en/pkg.md` + `docs/zh/pkg.md`）：Lua 钩子规范、`ctx` 表定义、示例代码、检测优先级
+- 更新安全模型文档（`docs/en/@safety.md` + `docs/zh/@safety.md`）：新增安装钩子安全说明与汇总表
+
+---
+
 ## 0.9.8 (2026-07-22) — CLI 改进、默认仓库扩充与文档检查
 
 1.0.0 之前最后一个功能版本，聚焦 CLI 输出一致性与仓库生态再扩充。

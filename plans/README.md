@@ -6,7 +6,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[0.9.9](0.9.9.md)** - 安装钩子 Lua 化
+- **[0.9.10](0.9.10.md)** - 代码质量重构
 
 ## 待执行
 
@@ -35,6 +35,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 - **[0.9.6](0.9.6.md)** - 功能补全与生态完善:依赖版本锁定,构建进度显示,.clang-format 基础设施,ASCII Logo
 - **[0.9.7](0.9.7.md)** - 仓库扩展:22 个新包(cli11/zlib/glfw/yaml-cpp/sdl2/imgui+16 backends),header-only 支持,预编译包支持,包制作指南
 - **[0.9.8](0.9.8.md)** - 改进扩充检查:CLI 输出统一(`[ezmk]` 前缀),`--verbose` 简写展开提示,默认仓库再扩充 20 个包(stb×10 + Boost×10)
+- **[0.9.9](0.9.9.md)** - 安装钩子 Lua 化:`.lua` 脚本优先,`run_install_hook_script()`,sandbox 安全模型对齐,向后兼容旧 shell 脚本
 
 ---
 
@@ -62,6 +63,8 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 | 0.9.6   | 功能补全     | 依赖版本锁定(`foo@1.2.3`/`^1.0`/`~1.2`/`>=1.0`),构建进度显示(逐文件 `[N/M]`),`.clang-format` 基础设施,ASCII Logo,魔术字符串常量化(`ezmk::path::*`,0.9.5.1 延后)  | 0.9.5.1(代码清理完成)                           |
 | 0.9.7   | 仓库扩展     | 22 个新包,header-only 支持(`ezmk.toml`),预编译包支持(`precompiled = true`),包制作指南(en+zh)                                                                        | 0.9.6(依赖版本锁定)                             |
 | 0.9.8   | 改进扩充检查 | CLI 输出统一(`[ezmk]` 前缀 + `info_line()`),`--verbose` 简写展开提示,默认仓库新增 20 个包(stb×10 + Boost header-only×10)                                                | 0.9.7(header-only 支持)                         |
+| 0.9.9   | 技术栈统一   | 安装钩子 Lua 化(`.lua` 优先,`run_install_hook_script()`,sandbox 对齐),向后兼容 shell 脚本                                                                               | 0.2.3(构建钩子 Lua 基础设施)                    |
+| 0.9.10  | 代码质量重构 | 消除 `run_install_hook_script`/`run_hook_script` ~70 行重复,压缩 `run_install_script` 参数(9→6),Lua 栈断言加固,`detect_install_script` 可测试化                          | 0.9.9(安装钩子 Lua 化完成)                      |
 
 ## 依赖关系图
 
@@ -87,6 +90,8 @@ graph TD
     v096["0.9.6 功能补全"]
     v097["0.9.7 仓库扩展"]
     v098["0.9.8 改进扩充检查"]
+    v099["0.9.9 安装钩子 Lua 化"]
+    v0910["0.9.10 代码质量重构"]
     v100["1.0.0 正式版发布"]
 
     v018 --> v021
@@ -107,14 +112,16 @@ graph TD
     v0951 --> v096
     v096 --> v097
     v097 --> v098
-    v097 --> v100
+    v098 --> v099
+    v099 --> v0910
+    v0910 --> v100
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724;
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
-    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098 done;
-    class v099 active;
+    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099 done;
+    class v0910 active;
     class v100 todo;
 ```
 

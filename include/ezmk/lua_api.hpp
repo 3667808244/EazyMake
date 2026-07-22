@@ -100,4 +100,17 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
                     const fs::path& project_root,
                     const std::string& profile);
 
+// 0.9.9: Run an install hook script (preinstall/postinstall).
+// script_path: absolute path to the .lua file
+// pkg_name: package name (from ezmk.toml [project].name)
+// pkg_root: root directory of the extracted package
+// install_path: target installation directory
+// scope: installation scope ("project" / "user" / "global")
+// Returns 0 on success, non-zero on Lua error or if run() returns non-zero.
+int run_install_hook_script(lua_State* L, const fs::path& script_path,
+                             const std::string& pkg_name,
+                             const fs::path& pkg_root,
+                             const fs::path& install_path,
+                             const std::string& scope);
+
 } // namespace ezmk::lua

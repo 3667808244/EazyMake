@@ -34,6 +34,8 @@
     "installing_header_only": "    header-only package {name} — skipping compilation",
     "installing_precompiled": "    precompiled package {name} — using lib/ artifacts",
     "installed": "Package {pkg} installed successfully.",
+    "install_hook_lua_error": "install hook Lua error in {script}: {msg}",
+    "install_hook_no_run": "install hook {script} does not define a run() function, skipping",
     "removing": "Removing {pkg}...",
     "removing_cache": "Removing cache: {path}",
     "removed": "Package {pkg} removed.",

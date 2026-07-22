@@ -1207,4 +1207,120 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
     return exit_code;
 }
 
+// 0.9.9
+int run_install_hook_script(lua_State* L, const fs::path& script_path,
+                             const std::string& pkg_name,
+                             const fs::path& pkg_root,
+                             const fs::path& install_path,
+                             const std::string& scope) {
+    if (!L) return 1;
+
+    // Set current script package root for ezmk API context
+    g_current_script_pkg_root = pkg_root;
+
+    // Ensure ezmk API is registered
+    lua_getglobal(L, "ezmk");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        // Use pkg_root as project_root for the sandbox context
+        register_api(L, pkg_root);
+    } else {
+        lua_pop(L, 1);
+    }
+
+    // Build sandbox environment
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_getglobal(L, "_G");
+    lua_setfield(L, -2, "__index");
+    lua_setmetatable(L, -2);
+    int sandbox_idx = lua_gettop(L);
+
+    // Inject ezmk table into sandbox
+    lua_getglobal(L, "ezmk");
+    lua_setfield(L, sandbox_idx, "ezmk");
+
+    // Load the script file
+    if (luaL_loadfile(L, script_path.string().c_str())) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_lua_error,
+                                     {{"script", script_path.filename().string()},
+                                      {"msg", err}}));
+        lua_pop(L, 2); // error + sandbox
+        return 1;
+    }
+
+    // Set _ENV upvalue to sandbox
+    lua_pushvalue(L, sandbox_idx);
+    lua_setupvalue(L, -2, 1);
+
+    // Execute the script chunk (define run function)
+    if (lua_pcall(L, 0, 0, 0)) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_lua_error,
+                                     {{"script", script_path.filename().string()},
+                                      {"msg", err}}));
+        lua_pop(L, 2); // error + sandbox
+        return 1;
+    }
+
+    // Get run function from sandbox
+    lua_getfield(L, sandbox_idx, "run");
+    if (!lua_isfunction(L, -1)) {
+        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_no_run,
+                                     {{"script", script_path.filename().string()}}));
+        lua_pop(L, 2); // nil + sandbox
+        return 1;
+    }
+
+    // Read pkg_version and pkg_type from ezmk.toml if available
+    std::string pkg_version;
+    std::string pkg_type;
+    auto pkg_toml = pkg_root / "ezmk.toml";
+    if (util::file_exists(pkg_toml)) {
+        try {
+            auto cfg = config::parse_config(pkg_toml);
+            pkg_version = cfg.project.version;
+            pkg_type = cfg.project.type;
+        } catch (...) {
+            // Non-fatal: fields will be empty strings
+        }
+    }
+
+    // Build ctx table
+    lua_createtable(L, 0, 6);
+    lua_pushstring(L, pkg_name.c_str());
+    lua_setfield(L, -2, "pkg_name");
+    lua_pushstring(L, pkg_root.string().c_str());
+    lua_setfield(L, -2, "pkg_root");
+    lua_pushstring(L, install_path.string().c_str());
+    lua_setfield(L, -2, "install_path");
+    lua_pushstring(L, scope.c_str());
+    lua_setfield(L, -2, "scope");
+    lua_pushstring(L, pkg_version.c_str());
+    lua_setfield(L, -2, "pkg_version");
+    lua_pushstring(L, pkg_type.c_str());
+    lua_setfield(L, -2, "pkg_type");
+
+    // Call run(ctx)
+    if (lua_pcall(L, 1, 1, 0)) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_lua_error,
+                                     {{"script", script_path.filename().string()},
+                                      {"msg", err}}));
+        lua_pop(L, 2); // error + sandbox
+        return 1;
+    }
+
+    int exit_code = 0;
+    if (lua_isinteger(L, -1)) {
+        exit_code = (int)lua_tointeger(L, -1);
+    } else if (lua_isnumber(L, -1)) {
+        exit_code = (int)lua_tonumber(L, -1);
+    }
+
+    lua_pop(L, 2); // return value + sandbox
+    return exit_code;
+}
+
 } // namespace ezmk::lua

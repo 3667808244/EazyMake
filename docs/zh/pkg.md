@@ -77,31 +77,82 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 
 ---
 
-## 安装钩子脚本（0.2.1+）
+## 安装钩子脚本（0.2.1+，Lua 支持 0.9.9+）
 
-包根目录下可放置 `script/` 目录，包含安装生命周期钩子：
+包根目录下可放置 `script/` 目录，包含安装生命周期钩子。
+
+**目录结构**：
 
 ```
 <pkg_dir>/
     script/
-        preinstall.sh     # 解压后、安装前执行（Linux/macOS）
-        preinstall.ps1    # 解压后、安装前执行（Windows）
-        preinstall.bat    # 解压后、安装前执行（Windows 备选）
-        postinstall.sh    # 安装完成后执行（Linux/macOS）
-        postinstall.ps1   # 安装完成后执行（Windows）
-        postinstall.bat   # 安装完成后执行（Windows 备选）
+        preinstall.lua    # 解压后、安装前执行（跨平台，0.9.9+，**推荐**）
+        preinstall.sh     # 解压后、安装前执行（Linux/macOS，旧版兼容）
+        preinstall.ps1    # 解压后、安装前执行（Windows，旧版兼容）
+        preinstall.bat    # 解压后、安装前执行（Windows 备选，旧版兼容）
+        postinstall.lua   # 安装完成后执行（跨平台，0.9.9+，**推荐**）
+        postinstall.sh    # 安装完成后执行（Linux/macOS，旧版兼容）
+        postinstall.ps1   # 安装完成后执行（Windows，旧版兼容）
+        postinstall.bat   # 安装完成后执行（Windows 备选，旧版兼容）
 ```
+
+**检测优先级（0.9.9+）**：
+1. `.lua` — 跨平台，最高优先级（若存在则直接使用）
+2. 平台特定脚本作为 fallback：`.ps1` → `.bat`（Windows）或 `.sh`（Linux/macOS）
 
 **执行流程**：
 1. 解压包到临时目录
-2. 检测并执行 `preinstall` 脚本（若存在）→ 打开编辑器供用户审查 → 询问确认
+2. 检测并执行 `preinstall` 脚本（若存在）：
+   - **Lua 脚本**（0.9.9+）：询问确认 → 在沙箱中执行（无需编辑器审查，API 受沙箱限制）
+   - **Shell 脚本**（旧版）：打开编辑器供用户审查 → 询问确认 → 执行
 3. 检查已有安装 → 若覆盖则二次确认
 4. 编译依赖 + 复制文件到安装目录
-5. 检测并执行 `postinstall` 脚本（若存在）→ 同样审查+确认
+5. 检测并执行 `postinstall` 脚本（若存在）→ 流程同步骤 2
 
-- 平台选择：Windows 优先 `.ps1` 其次 `.bat`；Linux/macOS 使用 `.sh`
 - 若用户拒绝执行脚本，安装继续（跳过该阶段）
 - 若脚本执行失败（exit ≠ 0），用户可选择继续或中止
+
+### Lua 钩子脚本（0.9.9+）
+
+Lua 安装钩子提供了跨平台、沙箱安全的替代方案，与 utils 和构建钩子共享相同的 `ezmk.*` API（参见 [Utils 文档](utils.md)）。
+
+**入口约定**：每个 Lua 钩子需定义 `run(ctx)` 函数，返回整数 exit code（0 = 成功，非 0 = 失败）。
+
+```lua
+-- script/preinstall.lua
+function run(ctx)
+    ezmk.info("preinstall hook for " .. ctx.pkg_name)
+
+    -- 示例：备份已有的配置文件
+    if ezmk.file_exists(ctx.install_path .. "/config.ini") then
+        ezmk.warn("发现已有 config.ini，正在备份...")
+        local backup = ctx.install_path .. "/config.ini.bak"
+        local ok = ezmk.file_write(backup,
+            ezmk.file_read(ctx.install_path .. "/config.ini"))
+        if not ok then
+            ezmk.error("备份 config.ini 失败")
+            return 1
+        end
+    end
+
+    return 0
+end
+```
+
+**上下文表 `ctx`**：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `ctx.pkg_name` | string | 包名（来自 `ezmk.toml` `[project].name`） |
+| `ctx.pkg_root` | string | 包解压后的根目录（绝对路径） |
+| `ctx.install_path` | string | 目标安装路径（绝对路径） |
+| `ctx.scope` | string | 安装作用域：`"project"` / `"user"` / `"global"` |
+| `ctx.pkg_version` | string | 包版本号（来自 `ezmk.toml` `[project].version`） |
+| `ctx.pkg_type` | string | 包类型：`"executable"` / `"static"` / `"shared"` / `"utils"` |
+
+**安全性**：Lua 钩子在沙箱环境中运行（无 `os.execute`、无 `io.open`）。所有系统访问必须通过 `ezmk.*` API。与 Shell 脚本不同，Lua 钩子无需打开编辑器审查——沙箱边界已限定了脚本的能力范围。
+
+**注意**：若未定义 `run()` 函数，ezmk 打印警告并跳过该钩子（继续安装流程）。
 
 ---
 

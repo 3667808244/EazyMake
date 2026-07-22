@@ -1143,3 +1143,142 @@ TEST_CASE("run_hook_script: null L returns error", "[lua][hook][0.2.3]") {
                               fs::path("output"), fs::path("."), "");
     REQUIRE(rc != 0);
 }
+
+// ===================================================================
+// 0.9.9: run_install_hook_script() tests
+// ===================================================================
+
+TEST_CASE("run_install_hook_script: basic execution", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "install_hook", R"(
+function run(ctx)
+    return 0
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "project");
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_install_hook_script: receives ctx table with all fields", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    // Write a config so pkg_version and pkg_type can be read
+    {
+        std::ofstream of(tmp.path / "ezmk.toml");
+        of << "[project]\nname = \"testpkg\"\ntype = \"static\"\nversion = \"1.2.3\"\nlanguage = \"C++17\"\n";
+    }
+
+    auto script = write_lua_script(tmp.path, "install_hook_ctx", R"(
+function run(ctx)
+    assert(type(ctx) == "table", "ctx must be a table")
+    assert(ctx.pkg_name == "testpkg", "pkg_name mismatch")
+    assert(type(ctx.pkg_root) == "string", "pkg_root must be a string")
+    assert(type(ctx.install_path) == "string", "install_path must be a string")
+    assert(ctx.scope == "user", "scope mismatch")
+    assert(ctx.pkg_version == "1.2.3", "pkg_version mismatch")
+    assert(ctx.pkg_type == "static", "pkg_type mismatch")
+    return 0
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "user");
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_install_hook_script: returns run() exit code", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "install_hook_rc", R"(
+function run(ctx)
+    return 42
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "project");
+    REQUIRE(rc == 42);
+}
+
+TEST_CASE("run_install_hook_script: null L returns error", "[lua][hook][0.9.9]") {
+    int rc = run_install_hook_script(nullptr, fs::path("test.lua"),
+                                      "pkg", fs::path("."),
+                                      fs::path("."), "project");
+    REQUIRE(rc != 0);
+}
+
+TEST_CASE("run_install_hook_script: missing run() function returns error", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "no_run", R"(
+-- no run() function defined
+x = 1
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "project");
+    REQUIRE(rc != 0);
+}
+
+TEST_CASE("run_install_hook_script: Lua error returns error code", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "install_error", R"(
+function run(ctx)
+    error("something went wrong in install hook")
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "project");
+    REQUIRE(rc != 0);
+}
+
+TEST_CASE("run_install_hook_script: syntax error returns error code", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "install_syntax", R"(
+function run(ctx)
+    this is not valid lua
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "project");
+    REQUIRE(rc != 0);
+}
+
+TEST_CASE("run_install_hook_script: scope is 'global'", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "install_scope", R"(
+function run(ctx)
+    assert(ctx.scope == "global", "scope must be global")
+    return 0
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "global");
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_install_hook_script: pkg_version and pkg_type empty without ezmk.toml", "[lua][hook][0.9.9]") {
+    TempDir tmp;
+    // No ezmk.toml — fields should be empty strings
+    auto script = write_lua_script(tmp.path, "install_no_toml", R"(
+function run(ctx)
+    assert(ctx.pkg_version == "", "pkg_version should be empty without ezmk.toml")
+    assert(ctx.pkg_type == "", "pkg_type should be empty without ezmk.toml")
+    return 0
+end
+)");
+
+    int rc = run_install_hook_script(state(), script,
+                                      "testpkg", tmp.path,
+                                      tmp.path / "install", "project");
+    REQUIRE(rc == 0);
+}
