@@ -6,11 +6,11 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[0.9.10](0.9.10.md)** - 代码质量重构
+- **[1.0.0](1.0.0.md)** - 正式发布
 
 ## 待执行
 
-- **[1.0.0](1.0.0.md)** - 正式发布
+（无）
 
 ## 已完成
 
@@ -36,6 +36,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 - **[0.9.7](0.9.7.md)** - 仓库扩展:22 个新包(cli11/zlib/glfw/yaml-cpp/sdl2/imgui+16 backends),header-only 支持,预编译包支持,包制作指南
 - **[0.9.8](0.9.8.md)** - 改进扩充检查:CLI 输出统一(`[ezmk]` 前缀),`--verbose` 简写展开提示,默认仓库再扩充 20 个包(stb×10 + Boost×10)
 - **[0.9.9](0.9.9.md)** - 安装钩子 Lua 化:`.lua` 脚本优先,`run_install_hook_script()`,sandbox 安全模型对齐,向后兼容旧 shell 脚本
+- **[0.9.10](0.9.10.md)** - 代码质量重构:消除 ~70 行重复代码(`run_lua_script_with_ctx`),`InstallHookContext` 参数压缩(9→6),Lua 栈断言,`detect_install_script` 可测试化
 
 ---
 
@@ -120,9 +121,8 @@ graph TD
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
-    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099 done;
-    class v0910 active;
-    class v100 todo;
+    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910 done;
+    class v100 active;
 ```
 
 > 说明:绿色=已完成,黄色=当前执行,灰色=待执行;虚线为可选依赖。

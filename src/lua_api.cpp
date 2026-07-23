@@ -9,10 +9,12 @@
 #include "lauxlib.h"
 #include "nlohmann_json.hpp"
 
+#include <cassert>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <regex>
@@ -1113,34 +1115,43 @@ int run_script(lua_State* L, const fs::path& script_path,
     return exit_code;
 }
 
-// 0.2.3+
-int run_hook_script(lua_State* L, const fs::path& script_path,
-                    const fs::path& output,
-                    const fs::path& project_root,
-                    const std::string& profile) {
+// ===================================================================
+// Common sandbox execution framework (0.9.10)
+//
+// Eliminates ~70 lines of duplicated code between run_hook_script and
+// run_install_hook_script. Handles the shared pipeline:
+//   register_api → sandbox → load → chunk → run() lookup → ctx → run(ctx)
+//
+// Returns the exit code from run(), or 1 on error.
+// ===================================================================
+
+// Callback type: builds the ctx table on the Lua stack.
+// The ctx table itself is at the top of the stack on entry.
+using BuildCtxFn = std::function<void(lua_State* L)>;
+
+static int run_lua_script_with_ctx(lua_State* L,
+                                    const fs::path& script_path,
+                                    const fs::path& api_project_root,
+                                    BuildCtxFn build_ctx) {
     if (!L) return 1;
 
-    // Set current script package root for ezmk API context
-    g_current_script_pkg_root.clear();
-    {
-        auto parent = script_path.parent_path();
-        if (parent.filename() == "utils") {
-            g_current_script_pkg_root = parent.parent_path();
-        }
-    }
+    // 0.9.10: stack position assertion — register_api must not leak/pop
+    int top_before = lua_gettop(L);
 
     // Ensure ezmk API is registered
     lua_getglobal(L, "ezmk");
     if (lua_isnil(L, -1)) {
         lua_pop(L, 1);
-        register_api(L, project_root);
+        register_api(L, api_project_root);
     } else {
         lua_pop(L, 1);
     }
 
+    assert(lua_gettop(L) == top_before && "register_api must not change stack size");
+
     // Build sandbox environment
-    lua_newtable(L);
-    lua_newtable(L);
+    lua_newtable(L);                          // sandbox
+    lua_newtable(L);                          // sandbox mt
     lua_getglobal(L, "_G");
     lua_setfield(L, -2, "__index");
     lua_setmetatable(L, -2);
@@ -1174,19 +1185,14 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
     lua_getfield(L, sandbox_idx, "run");
     if (!lua_isfunction(L, -1)) {
         util::error(ezmk::i18n::I18nKey::lua_error,
-                    {{"msg", "hook script does not define a run() function"}});
+                    {{"msg", "script does not define a run() function"}});
         lua_pop(L, 2); // nil + sandbox
         return 1;
     }
 
-    // Build ctx table
-    lua_createtable(L, 0, 3);
-    lua_pushstring(L, output.string().c_str());
-    lua_setfield(L, -2, "output");
-    lua_pushstring(L, project_root.string().c_str());
-    lua_setfield(L, -2, "project_root");
-    lua_pushstring(L, profile.c_str());
-    lua_setfield(L, -2, "profile");
+    // Build ctx table (via callback)
+    build_ctx(L);
+    // Stack: sandbox, run_func, ctx_table
 
     // Call run(ctx)
     if (lua_pcall(L, 1, 1, 0)) {
@@ -1196,6 +1202,7 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
         return 1;
     }
 
+    // Extract exit code
     int exit_code = 0;
     if (lua_isinteger(L, -1)) {
         exit_code = (int)lua_tointeger(L, -1);
@@ -1207,73 +1214,42 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
     return exit_code;
 }
 
+// 0.2.3+
+int run_hook_script(lua_State* L, const fs::path& script_path,
+                    const fs::path& output,
+                    const fs::path& project_root,
+                    const std::string& profile) {
+    // Set current script package root for ezmk API context
+    g_current_script_pkg_root.clear();
+    {
+        auto parent = script_path.parent_path();
+        if (parent.filename() == "utils") {
+            g_current_script_pkg_root = parent.parent_path();
+        }
+    }
+
+    return run_lua_script_with_ctx(L, script_path, project_root, [&](lua_State* L) {
+        lua_createtable(L, 0, 3);
+        lua_pushstring(L, output.string().c_str());
+        lua_setfield(L, -2, "output");
+        lua_pushstring(L, project_root.string().c_str());
+        lua_setfield(L, -2, "project_root");
+        lua_pushstring(L, profile.c_str());
+        lua_setfield(L, -2, "profile");
+    });
+}
+
 // 0.9.9
 int run_install_hook_script(lua_State* L, const fs::path& script_path,
                              const std::string& pkg_name,
                              const fs::path& pkg_root,
                              const fs::path& install_path,
                              const std::string& scope) {
-    if (!L) return 1;
-
     // Set current script package root for ezmk API context
     g_current_script_pkg_root = pkg_root;
 
-    // Ensure ezmk API is registered
-    lua_getglobal(L, "ezmk");
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        // Use pkg_root as project_root for the sandbox context
-        register_api(L, pkg_root);
-    } else {
-        lua_pop(L, 1);
-    }
-
-    // Build sandbox environment
-    lua_newtable(L);
-    lua_newtable(L);
-    lua_getglobal(L, "_G");
-    lua_setfield(L, -2, "__index");
-    lua_setmetatable(L, -2);
-    int sandbox_idx = lua_gettop(L);
-
-    // Inject ezmk table into sandbox
-    lua_getglobal(L, "ezmk");
-    lua_setfield(L, sandbox_idx, "ezmk");
-
-    // Load the script file
-    if (luaL_loadfile(L, script_path.string().c_str())) {
-        std::string err = lua_tostring(L, -1);
-        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_lua_error,
-                                     {{"script", script_path.filename().string()},
-                                      {"msg", err}}));
-        lua_pop(L, 2); // error + sandbox
-        return 1;
-    }
-
-    // Set _ENV upvalue to sandbox
-    lua_pushvalue(L, sandbox_idx);
-    lua_setupvalue(L, -2, 1);
-
-    // Execute the script chunk (define run function)
-    if (lua_pcall(L, 0, 0, 0)) {
-        std::string err = lua_tostring(L, -1);
-        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_lua_error,
-                                     {{"script", script_path.filename().string()},
-                                      {"msg", err}}));
-        lua_pop(L, 2); // error + sandbox
-        return 1;
-    }
-
-    // Get run function from sandbox
-    lua_getfield(L, sandbox_idx, "run");
-    if (!lua_isfunction(L, -1)) {
-        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_no_run,
-                                     {{"script", script_path.filename().string()}}));
-        lua_pop(L, 2); // nil + sandbox
-        return 1;
-    }
-
-    // Read pkg_version and pkg_type from ezmk.toml if available
+    // Read pkg_version and pkg_type from ezmk.toml (captured by value for
+    // the lambda, since they must outlive the function scope)
     std::string pkg_version;
     std::string pkg_type;
     auto pkg_toml = pkg_root / "ezmk.toml";
@@ -1287,40 +1263,21 @@ int run_install_hook_script(lua_State* L, const fs::path& script_path,
         }
     }
 
-    // Build ctx table
-    lua_createtable(L, 0, 6);
-    lua_pushstring(L, pkg_name.c_str());
-    lua_setfield(L, -2, "pkg_name");
-    lua_pushstring(L, pkg_root.string().c_str());
-    lua_setfield(L, -2, "pkg_root");
-    lua_pushstring(L, install_path.string().c_str());
-    lua_setfield(L, -2, "install_path");
-    lua_pushstring(L, scope.c_str());
-    lua_setfield(L, -2, "scope");
-    lua_pushstring(L, pkg_version.c_str());
-    lua_setfield(L, -2, "pkg_version");
-    lua_pushstring(L, pkg_type.c_str());
-    lua_setfield(L, -2, "pkg_type");
-
-    // Call run(ctx)
-    if (lua_pcall(L, 1, 1, 0)) {
-        std::string err = lua_tostring(L, -1);
-        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_hook_lua_error,
-                                     {{"script", script_path.filename().string()},
-                                      {"msg", err}}));
-        lua_pop(L, 2); // error + sandbox
-        return 1;
-    }
-
-    int exit_code = 0;
-    if (lua_isinteger(L, -1)) {
-        exit_code = (int)lua_tointeger(L, -1);
-    } else if (lua_isnumber(L, -1)) {
-        exit_code = (int)lua_tonumber(L, -1);
-    }
-
-    lua_pop(L, 2); // return value + sandbox
-    return exit_code;
+    return run_lua_script_with_ctx(L, script_path, pkg_root, [&](lua_State* L) {
+        lua_createtable(L, 0, 6);
+        lua_pushstring(L, pkg_name.c_str());
+        lua_setfield(L, -2, "pkg_name");
+        lua_pushstring(L, pkg_root.string().c_str());
+        lua_setfield(L, -2, "pkg_root");
+        lua_pushstring(L, install_path.string().c_str());
+        lua_setfield(L, -2, "install_path");
+        lua_pushstring(L, scope.c_str());
+        lua_setfield(L, -2, "scope");
+        lua_pushstring(L, pkg_version.c_str());
+        lua_setfield(L, -2, "pkg_version");
+        lua_pushstring(L, pkg_type.c_str());
+        lua_setfield(L, -2, "pkg_type");
+    });
 }
 
 } // namespace ezmk::lua

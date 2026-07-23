@@ -327,3 +327,96 @@ TEST_CASE("satisfies_version_constraint: Gt (>) matches strictly greater", "[pkg
     REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("2.0.0", c));
     REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("1.99.99", c));
 }
+
+// ===================================================================
+// detect_install_script() — 0.9.10
+// ===================================================================
+
+namespace {
+// RAII helper for temporary test directories
+struct TempPkg {
+    fs::path dir;
+    fs::path script_dir;
+
+    explicit TempPkg(const fs::path& base) {
+        dir = base / "test_pkg";
+        script_dir = dir / "script";
+        fs::create_directories(script_dir);
+    }
+
+    void create_file(const std::string& name) {
+        std::ofstream ofs(script_dir / name);
+        ofs << "-- test\n";
+    }
+
+    ~TempPkg() {
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    }
+};
+} // anonymous namespace
+
+TEST_CASE("detect_install_script: returns .lua when only .lua exists", "[pkg][0.9.10]") {
+    TempPkg pkg(fs::temp_directory_path());
+    pkg.create_file("test-hook.lua");
+
+    auto result = ezmk::pkg::detect_install_script(pkg.dir, "test-hook");
+    REQUIRE_FALSE(result.empty());
+    REQUIRE(result.extension() == ".lua");
+    REQUIRE(result.filename() == "test-hook.lua");
+}
+
+TEST_CASE("detect_install_script: returns empty path when no script exists", "[pkg][0.9.10]") {
+    TempPkg pkg(fs::temp_directory_path());
+    // script/ directory exists but is empty
+
+    auto result = ezmk::pkg::detect_install_script(pkg.dir, "no-script");
+    REQUIRE(result.empty());
+}
+
+TEST_CASE("detect_install_script: returns empty path when script/ dir is missing", "[pkg][0.9.10]") {
+    fs::path tmp = fs::temp_directory_path() / "ezmk_no_script_dir_test";
+    fs::create_directory(tmp);
+    // No script/ subdirectory
+
+    auto result = ezmk::pkg::detect_install_script(tmp, "anything");
+    REQUIRE(result.empty());
+
+    std::error_code ec;
+    fs::remove_all(tmp, ec);
+}
+
+TEST_CASE("detect_install_script: .lua preferred over platform-specific script", "[pkg][0.9.10]") {
+    TempPkg pkg(fs::temp_directory_path());
+    // Create both .lua and platform-specific scripts
+    pkg.create_file("hook.lua");
+#ifdef EZMK_WIN
+    pkg.create_file("hook.ps1");
+#else
+    pkg.create_file("hook.sh");
+#endif
+
+    auto result = ezmk::pkg::detect_install_script(pkg.dir, "hook");
+    REQUIRE_FALSE(result.empty());
+    // .lua must be preferred regardless of platform
+    REQUIRE(result.extension() == ".lua");
+    REQUIRE(result.filename() == "hook.lua");
+}
+
+TEST_CASE("detect_install_script: falls back to platform script when no .lua", "[pkg][0.9.10]") {
+    TempPkg pkg(fs::temp_directory_path());
+#ifdef EZMK_WIN
+    pkg.create_file("setup.ps1");
+#else
+    pkg.create_file("setup.sh");
+#endif
+
+    auto result = ezmk::pkg::detect_install_script(pkg.dir, "setup");
+    REQUIRE_FALSE(result.empty());
+    // Must return the platform-specific script
+#ifdef EZMK_WIN
+    REQUIRE(result.extension() == ".ps1");
+#else
+    REQUIRE(result.extension() == ".sh");
+#endif
+}

@@ -59,4 +59,10 @@ fs::path compile_package(const fs::path& pkg_dir,
 bool satisfies_version_constraint(std::string_view version,
                                   const config::VersionConstraint& constraint);
 
+// 0.9.10: Detect an install script in the package's script/ directory.
+// Priority: .lua (cross-platform) → platform-specific fallback (.ps1/.bat on
+// Windows, .sh on Linux/macOS). Returns the path if found, empty path otherwise.
+fs::path detect_install_script(const fs::path& pkg_root,
+                                std::string_view basename);
+
 } // namespace ezmk::pkg

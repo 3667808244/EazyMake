@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.10 (2026-07-23) — 代码质量重构
+
+消除 0.9.9 引入的代码重复与技术债务，为 1.0.0 正式发布做最后的代码质量门禁。**只重构、不新增功能、不改变外部行为。**
+
+### 重构
+
+- **提取通用 sandbox 执行框架**：新增内部函数 `run_lua_script_with_ctx()`（`BuildCtxFn` 回调模式），统一 sandbox 构建→脚本加载→chunk 执行→`run()` 调用→退出码提取的完整流水线；`run_hook_script()` 和 `run_install_hook_script()` 退化为薄封装（消除 ~70 行重复代码）
+- **压缩 `run_install_script()` 参数**：引入 `InstallHookContext` 结构体（`pkg_name`/`pkg_root`/`install_path`/`scope`），函数参数 9→6
+- **Lua 栈安全加固**：`register_api()` 调用前后增加 `lua_gettop` 断言（debug build），防止栈泄漏
+- **`detect_install_script()` 可测试化**：从 `static` 函数提升为 `pkg.hpp` 公开 API，新增 5 个单元测试用例（`.lua` 优先、仅 `.lua`、无脚本、无脚本目录、平台脚本 fallback）
+
+### 测试
+
+- 新增 5 个 `detect_install_script` 测试用例
+- 全量测试：**538 用例 / 2440 断言**（含 integration），零回归
+
+---
+
 ## 0.9.9 (2026-07-22) — 安装钩子 Lua 化
 
 消除最后的技术债务——将安装生命周期钩子从 Shell 脚本迁移至 Lua，与构建钩子（0.2.3）形成统一技术栈。

@@ -120,11 +120,8 @@ static bool confirm(std::string_view msg, bool assume_yes = false) {
     return line == "y" || line == "Y" || line == "yes";
 }
 
-// Detect the install script in the script/ directory.
-// Priority: .lua (cross-platform) → platform-specific fallback.
-// Returns the path if found, empty path otherwise.
-static fs::path detect_install_script(const fs::path& pkg_root,
-                                       std::string_view basename) {
+fs::path detect_install_script(const fs::path& pkg_root,
+                                std::string_view basename) {
     auto script_dir = pkg_root / "script";
     if (!util::file_exists(script_dir)) return {};
 
@@ -145,6 +142,14 @@ static fs::path detect_install_script(const fs::path& pkg_root,
     return {};
 }
 
+// 0.9.10: Bundle install-hook context into a struct to reduce parameter count (9→6).
+struct InstallHookContext {
+    std::string pkg_name;
+    fs::path    pkg_root;
+    fs::path    install_path;
+    std::string scope;       // "project" / "user" / "global"
+};
+
 // Run an install script with user review + confirmation.
 // Returns true if execution succeeded or was skipped (continue install).
 // Returns false if user chose to abort.
@@ -152,10 +157,7 @@ static fs::path detect_install_script(const fs::path& pkg_root,
 static bool run_install_script(const fs::path& script, const fs::path& cwd,
                                 bool assume_yes, std::string_view label,
                                 bool is_lua,
-                                const std::string& pkg_name,
-                                const fs::path& pkg_root,
-                                const fs::path& install_path,
-                                const std::string& scope) {
+                                const InstallHookContext& hook_ctx) {
     std::string desc = std::string(label) + " " + script.filename().string();
 
     util::info(ezmk::i18n::I18nKey::found_script, {{"label", desc}});
@@ -170,8 +172,8 @@ static bool run_install_script(const fs::path& script, const fs::path& cwd,
 
         util::info(ezmk::i18n::I18nKey::running_script, {{"label", desc}});
         int rc = ezmk::lua::run_install_hook_script(ezmk::lua::state(), script,
-                                                     pkg_name, pkg_root,
-                                                     install_path, scope);
+                                                     hook_ctx.pkg_name, hook_ctx.pkg_root,
+                                                     hook_ctx.install_path, hook_ctx.scope);
         if (rc != 0) {
             std::string code_str = std::to_string(rc);
             std::string err_msg = ezmk::i18n::fmt(ezmk::i18n::I18nKey::script_failed,
@@ -569,10 +571,11 @@ void install(const std::string& pkg_file, cli::Scope scope,
         fs::path preinstall_script = detect_install_script(pkg_root, "preinstall");
         if (!preinstall_script.empty()) {
             bool is_lua = (preinstall_script.extension() == ".lua");
+            InstallHookContext hook_ctx{pkg_name, pkg_root,
+                                        dest_dir / pkg_name, scope_to_string(scope)};
             if (!run_install_script(preinstall_script, dest_dir / pkg_name,
                                     assume_yes, "preinstall", is_lua,
-                                    pkg_name, pkg_root,
-                                    dest_dir / pkg_name, scope_to_string(scope))) {
+                                    hook_ctx)) {
                 util::info(ezmk::i18n::I18nKey::install_cancelled_user,
                            {{"hook", "preinstall"}});
                 util::remove_all(stage);
@@ -728,10 +731,11 @@ void install(const std::string& pkg_file, cli::Scope scope,
         fs::path postinstall_script = detect_install_script(install_path, "postinstall");
         if (!postinstall_script.empty()) {
             bool is_lua = (postinstall_script.extension() == ".lua");
+            InstallHookContext hook_ctx{pkg_name, install_path,
+                                        install_path, scope_to_string(scope)};
             if (!run_install_script(postinstall_script, install_path,
                                     assume_yes, "postinstall", is_lua,
-                                    pkg_name, install_path,
-                                    install_path, scope_to_string(scope))) {
+                                    hook_ctx)) {
                 util::info(ezmk::i18n::I18nKey::install_cancelled_user,
                            {{"hook", "postinstall"}});
                 // Installation files are already in place; leave them
