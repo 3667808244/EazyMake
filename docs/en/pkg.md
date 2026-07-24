@@ -172,7 +172,7 @@ Note: `ezmk pkg install` does not support multiple scopes.
 
 ## Package Sources
 
-EazyMake has no central repository. Package archives can be provided in the following ways:
+An official default repository is pre-registered during installation so packages can be installed by name (`ezmk pkg install fmt -u`). Packages can also be installed from the following sources:
 
 ### Local Files
 
