@@ -6,7 +6,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[1.0.0](1.0.0.md)** - 正式发布
+- **[1.0.0](release/1.0.0.md)** - 正式发布
 
 ## 待执行
 
@@ -15,28 +15,28 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 ## 已完成
 
 - `0.1.1` ~ `0.1.5`(文件已移除,可以查看对应提交的`plan.md`文件)
-- **[0.1.6](0.1.6.md)** - 测试(Catch2 单元测试 + 集成测试)
-- **[0.1.7](0.1.7.md)** - 基本国际化(i18n):编译期 JSON 嵌入 + I18nKey 枚举,85+ 个用户可见字符串,中英文双语
-- **[0.1.8](0.1.8.md)** - 跨平台支持与编译器探测:Linux/macOS/Windows 多编译器自动检测(g++/clang++),环境变量覆盖,标准库验证
-- **[0.2.0](0.2.0.md)** - Lua 工具链:嵌入 Lua 5.4.7 解释器,22 个 ezmk C++ API(项目信息/编译选项/文件系统/进程执行/日志/JSON),sandbox 安全模型,`find_utils_script()` 三作用域查找,内置 `ezmk-cc`(compile_commands.json 生成器),798 断言,零回归
-- **[0.2.1](0.2.1.md)** - MSVC 支持:`cl.exe` + `link.exe` + `lib.exe` 完整编译流程,GCC->MSVC 标志翻译层,`/showIncludes` 依赖解析
-- **[0.2.2](0.2.2.md)** - 精细化编译控制:可选依赖(`want.lib`),语义化宏定义(`compile.macros`),非标项目结构支持(`compile.src_dirs`)
-- **[0.2.3](0.2.3.md)** - 开发者体验提升:并行编译(`-j`),构建 Profile(`--profile`),Build Hooks(`[hooks]`),Watch 模式,`pkg list`/`pkg update`,Bug 修复
-- **[0.2.4](0.2.4.md)** - 健壮性与完善:Bug 修复(版本比较统一,Shell 注入,`/tmp` 路径),代码质量(`build_project` 重构,CLI 去重,帮助 i18n),功能补全(C23,`pkg update --all`,MSVC 标志扩展)
-- **[0.2.5](0.2.5.md)** - 生态与安全:zsh 命令补全,Utils 细粒度权限管理(read/write/run 白名单),仓库系统完善(`repo info`,跨仓库版本选择,本地仓库校验增强,`--auto-update`)
-- **[0.2.6](0.2.6.md)** - 翻译补全和命令行改进:i18n 单一数据源(X-macro,根除 `{???}`),帮助正文与参数校验报错全本地化,命令简写(`pb`/`ki`/…),全局 `--color=<mode>`;附带修复 POSIX `run_command` stderr 捕获
-- **[0.9.0](0.9.0.md)** - 准备发布正式版
-- **[0.9.1](0.9.1.md)** - 默认仓库创建
-- **[0.9.2](0.9.2.md)** - 文档多语言
-- **[0.9.3](0.9.3.md)** - 捆绑包迁移:7 个预编译包→官方仓库,ezmk-cc 保留内置
-- **[0.9.4](0.9.4.md)** - 文档与质量完善:FAQ/故障排除,CHANGES.md 补全,错误信息打磨,Lua API 版本化,离线文档
-- **[0.9.5](0.9.5.md)** - 跨平台体验与质量保障:PowerShell 安装脚本(`install.ps1`),端到端集成测试(7 个场景),三平台冒烟测试准备
-- **[0.9.5.1](0.9.5.1.md)** - 代码重构与质量清理:消除 ~500 行重复代码,RAII 资源管理修复,测试盲区补全(497→497 用例/2250 断言),死代码移除,共享测试 fixtures
-- **[0.9.6](0.9.6.md)** - 功能补全与生态完善:依赖版本锁定,构建进度显示,.clang-format 基础设施,ASCII Logo
-- **[0.9.7](0.9.7.md)** - 仓库扩展:22 个新包(cli11/zlib/glfw/yaml-cpp/sdl2/imgui+16 backends),header-only 支持,预编译包支持,包制作指南
-- **[0.9.8](0.9.8.md)** - 改进扩充检查:CLI 输出统一(`[ezmk]` 前缀),`--verbose` 简写展开提示,默认仓库再扩充 20 个包(stb×10 + Boost×10)
-- **[0.9.9](0.9.9.md)** - 安装钩子 Lua 化:`.lua` 脚本优先,`run_install_hook_script()`,sandbox 安全模型对齐,向后兼容旧 shell 脚本
-- **[0.9.10](0.9.10.md)** - 代码质量重构:消除 ~70 行重复代码(`run_lua_script_with_ctx`),`InstallHookContext` 参数压缩(9→6),Lua 栈断言,`detect_install_script` 可测试化
+- **[0.1.6](dev/0.1.6.md)** - 测试(Catch2 单元测试 + 集成测试)
+- **[0.1.7](dev/0.1.7.md)** - 基本国际化(i18n):编译期 JSON 嵌入 + I18nKey 枚举,85+ 个用户可见字符串,中英文双语
+- **[0.1.8](dev/0.1.8.md)** - 跨平台支持与编译器探测:Linux/macOS/Windows 多编译器自动检测(g++/clang++),环境变量覆盖,标准库验证
+- **[0.2.0](dev/0.2.0.md)** - Lua 工具链:嵌入 Lua 5.4.7 解释器,22 个 ezmk C++ API(项目信息/编译选项/文件系统/进程执行/日志/JSON),sandbox 安全模型,`find_utils_script()` 三作用域查找,内置 `ezmk-cc`(compile_commands.json 生成器),798 断言,零回归
+- **[0.2.1](dev/0.2.1.md)** - MSVC 支持:`cl.exe` + `link.exe` + `lib.exe` 完整编译流程,GCC->MSVC 标志翻译层,`/showIncludes` 依赖解析
+- **[0.2.2](dev/0.2.2.md)** - 精细化编译控制:可选依赖(`want.lib`),语义化宏定义(`compile.macros`),非标项目结构支持(`compile.src_dirs`)
+- **[0.2.3](dev/0.2.3.md)** - 开发者体验提升:并行编译(`-j`),构建 Profile(`--profile`),Build Hooks(`[hooks]`),Watch 模式,`pkg list`/`pkg update`,Bug 修复
+- **[0.2.4](dev/0.2.4.md)** - 健壮性与完善:Bug 修复(版本比较统一,Shell 注入,`/tmp` 路径),代码质量(`build_project` 重构,CLI 去重,帮助 i18n),功能补全(C23,`pkg update --all`,MSVC 标志扩展)
+- **[0.2.5](dev/0.2.5.md)** - 生态与安全:zsh 命令补全,Utils 细粒度权限管理(read/write/run 白名单),仓库系统完善(`repo info`,跨仓库版本选择,本地仓库校验增强,`--auto-update`)
+- **[0.2.6](dev/0.2.6.md)** - 翻译补全和命令行改进:i18n 单一数据源(X-macro,根除 `{???}`),帮助正文与参数校验报错全本地化,命令简写(`pb`/`ki`/…),全局 `--color=<mode>`;附带修复 POSIX `run_command` stderr 捕获
+- **[0.9.0](release/0.9.0.md)** - 准备发布正式版
+- **[0.9.1](release/0.9.1.md)** - 默认仓库创建
+- **[0.9.2](release/0.9.2.md)** - 文档多语言
+- **[0.9.3](release/0.9.3.md)** - 捆绑包迁移:7 个预编译包→官方仓库,ezmk-cc 保留内置
+- **[0.9.4](release/0.9.4.md)** - 文档与质量完善:FAQ/故障排除,CHANGES.md 补全,错误信息打磨,Lua API 版本化,离线文档
+- **[0.9.5](release/0.9.5.md)** - 跨平台体验与质量保障:PowerShell 安装脚本(`install.ps1`),端到端集成测试(7 个场景),三平台冒烟测试准备
+- **[0.9.5.1](release/0.9.5.1.md)** - 代码重构与质量清理:消除 ~500 行重复代码,RAII 资源管理修复,测试盲区补全(497→497 用例/2250 断言),死代码移除,共享测试 fixtures
+- **[0.9.6](release/0.9.6.md)** - 功能补全与生态完善:依赖版本锁定,构建进度显示,.clang-format 基础设施,ASCII Logo
+- **[0.9.7](release/0.9.7.md)** - 仓库扩展:22 个新包(cli11/zlib/glfw/yaml-cpp/sdl2/imgui+16 backends),header-only 支持,预编译包支持,包制作指南
+- **[0.9.8](release/0.9.8.md)** - 改进扩充检查:CLI 输出统一(`[ezmk]` 前缀),`--verbose` 简写展开提示,默认仓库再扩充 20 个包(stb×10 + Boost×10)
+- **[0.9.9](release/0.9.9.md)** - 安装钩子 Lua 化:`.lua` 脚本优先,`run_install_hook_script()`,sandbox 安全模型对齐,向后兼容旧 shell 脚本
+- **[0.9.10](release/0.9.10.md)** - 代码质量重构:消除 ~70 行重复代码(`run_lua_script_with_ctx`),`InstallHookContext` 参数压缩(9→6),Lua 栈断言,`detect_install_script` 可测试化
 
 ---
 
