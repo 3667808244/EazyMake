@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS2 on Windows). Design philosophy: ease of use over feature richness. **See `README.md` for user-facing documentation** (quick start, CLI reference, project structure, config examples).
 
-Design specifications live in `docs/en/` (English) / `docs/zh/` (Chinese). Source code is under active development; see `plans/` for milestones.
+Design specifications live in `docs/en/` (English) / `docs/zh/` (Chinese). Version milestones are in `plans/dev/` (0.1.6~0.2.6) and `plans/release/` (0.9.0~1.0.0), indexed by `plans/README.md`. Current execution plan: `plan.md`.
 
 ## Build & test commands
 
@@ -90,9 +90,13 @@ See `docs/en/repo.md` for full details.
 
 Predefined compile/link configs in `[compile.profile.<name>]` / `[link.profile.<name>]`. Activated via `--profile <name>`. Profiles do NOT auto-apply. Profile flags append after base flags (later overrides earlier, matching GCC/Clang behavior). Profile macros merge into base macros (profile wins on key conflict).
 
-### Build hooks (0.2.3+)
+### Build hooks (0.2.3+) + Install hooks (0.9.9+)
 
-Lua scripts executed at build lifecycle points: `pre_build` (before compilation), `post_build` (after successful link), `on_failure` (on build error). Hooks run in sandboxed Lua environments with `ctx` table (`ctx.output`, `ctx.project_root`, `ctx.profile`). Hook scripts not found → warn + skip (non-fatal). Hooks only apply to user projects, not package compilation.
+Build hooks (`pre_build`/`post_build`/`on_failure`) and install hooks (`preinstall`/`postinstall`) share the same Lua sandbox execution framework. The internal function `run_lua_script_with_ctx()` (`src/lua_api.cpp`, 0.9.10+) provides a unified pipeline: sandbox creation → script loading → chunk execution → `run(ctx)` invocation → exit code extraction. Both `run_hook_script()` and `run_install_hook_script()` are thin wrappers.
+
+**Install hook detection** (0.9.10+): `detect_install_script()` is a public API in `include/ezmk/pkg.hpp` — priority: `.lua` → platform script (`.ps1`/`.bat` on Windows, `.sh` on POSIX). Returns `std::optional<fs::path>`.
+
+Build hooks receive `ctx` table (`ctx.output`, `ctx.project_root`, `ctx.profile`); install hooks receive (`ctx.pkg_name`, `ctx.pkg_root`, `ctx.install_path`, `ctx.scope`, `ctx.pkg_version`, `ctx.pkg_type`). Hooks run in sandboxed Lua environments. Script not found → warn + skip (non-fatal). Hooks only apply to user projects/packages, not during package compilation.
 
 ### File watcher (0.2.3+)
 
@@ -113,6 +117,7 @@ Atomic writes: `.o` and `record.json` written to temp files first, then `rename`
 See `docs/en/@safety.md`:
 - Global package installs require secondary confirmation
 - Installations that would overwrite existing files require secondary confirmation
+- Install hook scripts (`.lua`/`.sh`/`.ps1`/`.bat`) are detected via `detect_install_script()` (`include/ezmk/pkg.hpp`, public API since 0.9.10)
 
 ### Lua scripting & utils (0.2.0+)
 
@@ -131,6 +136,7 @@ Embedded Lua 5.4.7 (static-linked). `ezmk utils <name>` runs Lua-based tools fro
 | Logging | `info()`, `warn()`, `error()` |
 | Path tools | `pkg_dir()`, `temp_dir()`, `cache_dir()` |
 | JSON | `json_encode()`, `json_decode()` |
+| Version | `api_version` (integer field, not a function; introduced 0.9.4) |
 
 **Built-in tool:** `ezmk-cc` — generates `compile_commands.json` (clangd-compatible) via `ezmk utils cc`.
 

@@ -129,8 +129,8 @@ bash build.sh integration
 bash build.sh test -v
 ```
 
-- **Unit tests** (`test/test_*.cpp`): 482 test cases covering all modules
-- **Integration tests** (`test/test_integration.cpp`): 9 end-to-end scenarios tagged `[integration]`
+- **Unit tests** (`test/test_*.cpp`): 538 test cases covering all modules
+- **Integration tests** (`test/test_integration.cpp`): 8 end-to-end scenarios tagged `[integration]`
 - Tests use [Catch2](https://github.com/catchorg/Catch2) v3 (header-only)
 - Set `EZMK_TEST_BIN` to override the ezmk binary path for integration tests
 

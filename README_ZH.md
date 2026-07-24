@@ -129,8 +129,8 @@ bash build.sh integration
 bash build.sh test -v
 ```
 
-- **单元测试** (`test/test_*.cpp`)：482 个用例，覆盖全部模块
-- **集成测试** (`test/test_integration.cpp`)：9 个端到端场景，标记为 `[integration]`
+- **单元测试** (`test/test_*.cpp`)：538 个用例，覆盖全部模块
+- **集成测试** (`test/test_integration.cpp`)：8 个端到端场景，标记为 `[integration]`
 - 测试框架使用 [Catch2](https://github.com/catchorg/Catch2) v3（header-only）
 - 可通过 `EZMK_TEST_BIN` 环境变量覆盖集成测试中 ezmk 二进制的路径
 
