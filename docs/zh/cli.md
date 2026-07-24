@@ -1,22 +1,19 @@
-# CLI Reference
+# 命令行参考
 
-Authoritative reference for the `ezmk` command line and environment variables.
-This document is the single source of truth; the README command tables are a
-quick-start subset. For behavior details see the per-topic docs
-(`pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `@cache.md`, `@safety.md`).
+`ezmk` 命令行和环境变量的权威参考文档。本文档是唯一真相来源；README 中的命令表格是快速上手的子集。行为细节请参阅各专题文档（`pkg.md`、`repo.md`、`utils.md`、`config_file.md`、`@cache.md`、`@safety.md`）。
 
-## Synopsis
+## 概要
 
 ```
 ezmk <command> [subcommand] [options] [arguments]
 ezmk <shorthand> [options] [arguments]
 ```
 
-Global options may appear on any command (see [Global options](#global-options)).
+全局选项可出现在任何命令中（参见[全局选项](#全局选项)）。
 
 ---
 
-## Installation
+## 安装
 
 ### Linux / macOS / MSYS2
 
@@ -24,9 +21,9 @@ Global options may appear on any command (see [Global options](#global-options))
 curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | bash
 ```
 
-Builds from source and installs `ezmk` to `$HOME/.local/bin`. See [README](../../README.md#quick-start) for customization options and environment variables.
+从源码构建并安装 `ezmk` 到 `$HOME/.local/bin`。自定义选项和环境变量参见 [README](../../README.md#quick-start)。
 
-### Windows (原生，无需 MSYS2)
+### Windows（原生，无需 MSYS2）
 
 ```powershell
 # 下载并运行 PowerShell 安装脚本：
@@ -40,136 +37,130 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 ---
 
-## `project` — build your code
+## `project` — 构建你的代码
 
-| Command | Description |
+| 命令 | 描述 |
 |---|---|
-| `ezmk project new <name> [--type <t>]` | Scaffold a new project |
-| `ezmk project build [build-opts]` | Incremental build |
-| `ezmk project run [build-opts] [-- <program args>]` | Build and execute |
-| `ezmk project clean` | Remove cache and temp files |
-| `ezmk project watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild |
+| `ezmk project new <name> [--type <t>]` | 创建新项目 |
+| `ezmk project build [build-opts]` | 增量构建 |
+| `ezmk project run [build-opts] [-- <program args>]` | 构建并运行 |
+| `ezmk project clean` | 清除缓存和临时文件 |
+| `ezmk project watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建 |
 
-**`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
+**`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
 
-**`build-opts`** (shared by `build` / `run` / `watch`):
+**`build-opts`**（`build` / `run` / `watch` 共用）：
 
-| Flag | Purpose |
+| 标志 | 用途 |
 |---|---|
-| `--disable-cache` | Force recompilation (cache is still updated afterward) |
-| `--verbose` / `-v` | Show full compile commands and cache hits |
-| `-j <N>` / `--jobs <N>` | Parallel compile jobs; `0` = auto (`hardware_concurrency`), the default |
-| `--profile <name>` | Apply a build profile from `[compile.profile.<name>]` / `[link.profile.<name>]` |
-| `--auto-update` | Run `ezmk repo update --pug` before building (default off) |
+| `--disable-cache` | 强制重新编译（之后仍会更新缓存） |
+| `--verbose` / `-v` | 显示完整编译命令和缓存命中情况 |
+| `-j <N>` / `--jobs <N>` | 并行编译任务数；`0` = 自动（`hardware_concurrency`），默认值 |
+| `--profile <name>` | 应用 `[compile.profile.<name>]` / `[link.profile.<name>]` 中的构建配置 |
+| `--auto-update` | 构建前运行 `ezmk repo update --pug`（默认关闭） |
 
-**`new`-only flags:**
+**`new` 专属标志：**
 
-| Flag | Purpose |
+| 标志 | 用途 |
 |---|---|
-| `--disable-git-init` | Skip `git init` |
-| `--disable-gitignore` | Skip `.gitignore` generation |
+| `--disable-git-init` | 跳过 `git init` |
+| `--disable-gitignore` | 跳过 `.gitignore` 生成 |
 
-**`watch`-only flag:** `--no-build-on-start` — skip the initial build; wait for the first change.
+**`watch` 专属标志：** `--no-build-on-start` — 跳过初始构建，等待文件首次变更。
 
-`ezmk project run` passes everything after `--` to the built program.
+`ezmk project run` 将 `--` 之后的所有内容传递给构建后的程序。
 
 ---
 
-## `pkg` — manage packages
+## `pkg` — 管理包
 
-| Command | Description |
+| 命令 | 描述 |
 |---|---|
-| `ezmk pkg install [scope] [pkg-opts] <file\|url\|name>` | Install a package |
-| `ezmk pkg remove [scope] <name>` | Remove a package |
-| `ezmk pkg search [scope] <name>` | Search registered repos |
-| `ezmk pkg info [scope] <name>` | Show package details |
-| `ezmk pkg list [scope]` | List installed packages (0.2.3+) |
-| `ezmk pkg update [scope] <name>` | Update a package from repos (0.2.3+) |
-| `ezmk pkg update [scope] --all` | Update all installed packages (0.2.4+) |
+| `ezmk pkg install [scope] [pkg-opts] <file\|url\|name>` | 安装包 |
+| `ezmk pkg remove [scope] <name>` | 移除包 |
+| `ezmk pkg search [scope] <name>` | 在已注册仓库中搜索 |
+| `ezmk pkg info [scope] <name>` | 显示包详情 |
+| `ezmk pkg list [scope]` | 列出已安装的包（0.2.3+） |
+| `ezmk pkg update [scope] <name>` | 从仓库更新包（0.2.3+） |
+| `ezmk pkg update [scope] --all` | 更新所有已安装的包（0.2.4+） |
 
-**`install`-only options:**
+**`install` 专属选项：**
 
-| Flag | Purpose |
+| 标志 | 用途 |
 |---|---|
-| `--sha256 <hash>` | Verify archive integrity before installing |
-| `-y` / `--yes` | Skip confirmation prompts (non-interactive) |
+| `--sha256 <hash>` | 安装前校验归档文件完整性 |
+| `-y` / `--yes` | 跳过确认提示（非交互模式） |
 
-See [`pkg.md`](pkg.md) for the package format and dependency resolution.
+包格式和依赖解析参见 [`pkg.md`](pkg.md)。
 
 ---
 
-## `repo` — manage repositories
+## `repo` — 管理仓库
 
-| Command | Description |
+| 命令 | 描述 |
 |---|---|
-| `ezmk repo add [scope] <git_url\|path> [--name <n>] [--branch <b>]` | Register and clone |
-| `ezmk repo remove [scope] <name>` | Unregister and delete cache |
-| `ezmk repo update [scope] [<name>]` | `git pull` to refresh (all if `<name>` omitted) |
-| `ezmk repo list [scope]` | List registered repos |
-| `ezmk repo info [scope] <name>` | Show repo details (packages, versions) |
+| `ezmk repo add [scope] <git_url\|path> [--name <n>] [--branch <b>]` | 注册并克隆仓库 |
+| `ezmk repo remove [scope] <name>` | 取消注册并删除缓存 |
+| `ezmk repo update [scope] [<name>]` | `git pull` 刷新（省略 `<name>` 则刷新全部） |
+| `ezmk repo list [scope]` | 列出已注册仓库 |
+| `ezmk repo info [scope] <name>` | 显示仓库详情（包列表、版本） |
 
-Local directories are supported via `type = "local"`. See [`repo.md`](repo.md).
+支持本地目录（`type = "local"`）。参见 [`repo.md`](repo.md)。
 
-**Official default repository:** `install.sh` automatically pre-registers the official
-repo (user scope, `--name official`) so `ezmk pkg install` works by name out of the box.
-Set `EZMK_NO_DEFAULT_REPO=1` to skip this during install.
+**官方默认仓库：** `install.sh` 会自动预注册官方仓库（用户作用域，`--name official`），使 `ezmk pkg install` 可直接按包名安装。设置 `EZMK_NO_DEFAULT_REPO=1` 可在安装时跳过此步骤。
 
-| URL | Target |
-|-----|--------|
-| `https://github.com/3667808244/ezmk-repo.git` | GitHub (global) |
-| `https://gitee.com/egglzh/ezmk-repo.git` | Gitee mirror (China) |
+| URL | 目标 |
+|-----|------|
+| `https://github.com/3667808244/ezmk-repo.git` | GitHub（全球） |
+| `https://gitee.com/egglzh/ezmk-repo.git` | Gitee 镜像（国内） |
 
-Manual registration (if skipped during install, or to add the mirror as a fallback):
+手动注册（如果在安装时跳过，或需添加镜像作为备用）：
 
 ```bash
 ezmk repo add -u https://github.com/3667808244/ezmk-repo.git --name official
 ezmk repo update -u official
 ```
 
-The registration is user-scoped (`-u`) so it can be removed with `ezmk repo remove -u official`.
+注册为用户作用域（`-u`），因此可通过 `ezmk repo remove -u official` 移除。
 
 ---
 
-## `utils` — Lua-based tools (0.2.0+)
+## `utils` — 基于 Lua 的工具（0.2.0+）
 
-| Command | Description |
+| 命令 | 描述 |
 |---|---|
-| `ezmk utils <name> [args...]` | Run a Lua tool from an installed `type = "utils"` package |
+| `ezmk utils <name> [args...]` | 运行已安装 `type = "utils"` 包中的 Lua 工具 |
 
-Everything after `<name>` is passed through to the tool. Built-in: `ezmk utils cc`
-generates `compile_commands.json` (`-o <path>` for a custom location). See
-[`utils.md`](utils.md) for the plugin API.
+`<name>` 之后的所有内容透传给工具。内置工具：`ezmk utils cc` 生成 `compile_commands.json`（使用 `-o <path>` 指定自定义位置）。插件 API 参见 [`utils.md`](utils.md)。
 
 ---
 
 ## `version` · `help`
 
-| Command | Description |
+| 命令 | 描述 |
 |---|---|
-| `ezmk version` / `-V` / `--version` / `v` | Print version |
-| `ezmk help` / `-h` / `--help` / `h` | Print usage |
+| `ezmk version` / `-V` / `--version` / `v` | 显示版本信息 |
+| `ezmk help` / `-h` / `--help` / `h` | 显示使用帮助 |
 
 ---
 
-## Scope flags
+## 作用域标志
 
-| Flag | Scope | Install path |
+| 标志 | 作用域 | 安装路径 |
 |---|---|---|
-| `-p` | Project | `<project>/.ezmk/pkg/` |
-| `-u` | User | `~/.local/ezmk/pkg/` (Unix) · `%LOCALAPPDATA%\ezmk\pkg\` (Windows) |
-| `-g` | Global | `<ezmk_install_dir>/pkg/` |
+| `-p` | 项目 | `<project>/.ezmk/pkg/` |
+| `-u` | 用户 | `~/.local/ezmk/pkg/`（Unix）· `%LOCALAPPDATA%\ezmk\pkg\`（Windows） |
+| `-g` | 全局 | `<ezmk_install_dir>/pkg/` |
 
-`pkg install` and `repo add` accept **only one** scope flag. Other commands accept
-combined flags like `-pug` (equivalent to `-p -u -g`).
+`pkg install` 和 `repo add` 只接受**一个**作用域标志。其他命令接受组合标志，如 `-pug`（等价于 `-p -u -g`）。
 
 ---
 
-## Command shorthands (0.2.6+)
+## 命令简写（0.2.6+）
 
-Aliases apply only at the command position (`argv[1]`); `ezmk project pn` is still an
-unknown subcommand. Shorthands are typing sugar and are **not** part of zsh completion.
+简写仅在命令位置（`argv[1]`）生效；`ezmk project pn` 仍为未知子命令。简写仅为输入便利，**不属于** zsh 补全。
 
-| Alias | Expands to | Alias | Expands to | Alias | Expands to |
+| 简写 | 展开为 | 简写 | 展开为 | 简写 | 展开为 |
 |---|---|---|---|---|---|
 | `pn` | `project new` | `ki` | `pkg install` | `ra` | `repo add` |
 | `pb` | `project build` | `kr` | `pkg remove` | `rr` | `repo remove` |
@@ -180,57 +171,54 @@ unknown subcommand. Shorthands are typing sugar and are **not** part of zsh comp
 
 ---
 
-## Option syntax (GNU conventions)
+## 选项语法（GNU 约定）
 
-- **Long options:** `--flag=value` and `--flag value` are equivalent.
-- **Short grouping:** `-pug` equals `-p -u -g`.
-- **Attached values:** `-j4` equals `-j 4`.
-- **Interleaving:** options and positional arguments can be freely mixed.
-- **`--` terminator:** everything after `--` is a positional argument (pass-through
-  for `utils` and `project run`).
+- **长选项：** `--flag=value` 和 `--flag value` 等价。
+- **短选项合并：** `-pug` 等价于 `-p -u -g`。
+- **附带值：** `-j4` 等价于 `-j 4`。
+- **交错排列：** 选项和位置参数可自由混合。
+- **`--` 终止符：** `--` 之后的所有内容均为位置参数（透传给 `utils` 和 `project run`）。
 
 ---
 
-## Global options
+## 全局选项
 
-These may appear on any command and are consumed before per-command parsing.
+以下选项可出现在任何命令中，并在各命令解析之前处理。
 
-### `--color=<mode>` (0.2.6+)
+### `--color=<mode>`（0.2.6+）
 
-| Mode | Aliases | Behavior |
+| 模式 | 别名 | 行为 |
 |---|---|---|
-| `always` | `enable` | Force color (also enables VT100 on legacy Windows terminals) |
-| `auto` | `default` | Color only on an interactive terminal (**default**) |
-| `never` | `disable` | Disable color |
+| `always` | `enable` | 强制彩色输出（同时启用在旧版 Windows 终端上的 VT100 支持） |
+| `auto` | `default` | 仅在交互终端输出彩色（**默认**） |
+| `never` | `disable` | 禁用彩色输出 |
 
-Values are case-insensitive. Both `--color=always` and `--color always` are accepted.
-An explicit `always` / `never` overrides `NO_COLOR`; only `auto` honors it (matching
-git/ls). Tokens after `--` are left untouched for pass-through.
+选项值不区分大小写。`--color=always` 和 `--color always` 均接受。显式指定 `always` / `never` 会覆盖 `NO_COLOR`；仅 `auto` 遵守 `NO_COLOR`（行为与 git/ls 对齐）。`--` 之后的 token 保持原样以用于透传。
 
 ---
 
-## Environment variables
+## 环境变量
 
-| Variable | Scope | Purpose |
+| 变量 | 作用范围 | 用途 |
 |---|---|---|
-| `EZMK_LANG` | runtime | UI language (`zh` / `en`), overrides system detection (`src/i18n.cpp`) |
-| `NO_COLOR` | runtime | Disable colored output (honored only by `--color=auto`) (`src/util.cpp`) |
-| `CXX` / `CC` | runtime + build | Override compiler detection (0.1.8+) |
-| `CXXFLAGS` | build | Extra compiler flags, passed through by `build.sh` |
-| `EZMK_VERSION` | build | Version string baked into the binary (`build.sh`) |
-| `PREFIX` | install | Install prefix; binary goes to `$PREFIX/bin` (default `$HOME/.local`) (`install.sh`) |
-| `EZMK_REF` | install | git tag/branch/commit to build (`install.sh`) |
-| `EZMK_NO_COMPLETIONS` | install | Set to `1` to skip zsh completion install (`install.sh`) |
-| `EZMK_NO_DEFAULT_REPO` | install | Set to `1` to skip official repo pre-registration (`install.sh`) |
-| `EZMK_TEST_BIN` | test | Path to the `ezmk` binary for integration tests (default `build/ezmk[.exe]`) |
+| `EZMK_LANG` | 运行时 | 界面语言（`zh` / `en`），覆盖系统检测（`src/i18n.cpp`） |
+| `NO_COLOR` | 运行时 | 禁用彩色输出（仅 `--color=auto` 时遵守）（`src/util.cpp`） |
+| `CXX` / `CC` | 运行时 + 构建 | 覆盖编译器检测（0.1.8+） |
+| `CXXFLAGS` | 构建 | 额外编译器标志，由 `build.sh` 透传 |
+| `EZMK_VERSION` | 构建 | 编译进二进制的版本字符串（`build.sh`） |
+| `PREFIX` | 安装 | 安装前缀；二进制安装至 `$PREFIX/bin`（默认 `$HOME/.local`）（`install.sh`） |
+| `EZMK_REF` | 安装 | 要构建的 git tag/分支/提交（`install.sh`） |
+| `EZMK_NO_COMPLETIONS` | 安装 | 设为 `1` 跳过 zsh 补全安装（`install.sh`） |
+| `EZMK_NO_DEFAULT_REPO` | 安装 | 设为 `1` 跳过官方仓库预注册（`install.sh`） |
+| `EZMK_TEST_BIN` | 测试 | 集成测试使用的 `ezmk` 二进制路径（默认 `build/ezmk[.exe]`） |
 
 ---
 
-## Related documents
+## 相关文档
 
-- [`config_file.md`](config_file.md) — full `ezmk.toml` spec
-- [`pkg.md`](pkg.md) — package format and management
-- [`repo.md`](repo.md) — repository system
-- [`utils.md`](utils.md) — Lua plugin API
-- [`@cache.md`](@cache.md) — build cache algorithm
-- [`@safety.md`](@safety.md) — security model (confirmations, sha256, sandbox)
+- [`config_file.md`](config_file.md) — 完整的 `ezmk.toml` 规范
+- [`pkg.md`](pkg.md) — 包格式与管理
+- [`repo.md`](repo.md) — 仓库系统
+- [`utils.md`](utils.md) — Lua 插件 API
+- [`@cache.md`](@cache.md) — 构建缓存算法
+- [`@safety.md`](@safety.md) — 安全模型（确认机制、sha256、sandbox）
