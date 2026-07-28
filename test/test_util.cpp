@@ -546,3 +546,32 @@ TEST_CASE("extract_archive: nonexistent file throws", "[util]") {
     REQUIRE_THROWS_AS(extract_archive("nonexistent_archive_xyz.zip",
         fs::temp_directory_path() / "out"), std::runtime_error);
 }
+
+// ===================================================================
+// detect_platform_tag() — 1.1.0-dev.2
+// ===================================================================
+
+TEST_CASE("detect_platform_tag: returns non-empty", "[util]") {
+    std::string tag = ezmk::util::detect_platform_tag();
+    REQUIRE(!tag.empty());
+}
+
+TEST_CASE("detect_platform_tag: format is os-arch", "[util]") {
+    std::string tag = ezmk::util::detect_platform_tag();
+    // Must contain exactly one dash
+    auto dash_pos = tag.find('-');
+    REQUIRE(dash_pos != std::string::npos);
+    REQUIRE(tag.find('-', dash_pos + 1) == std::string::npos);
+    // OS part before dash
+    std::string os_part = tag.substr(0, dash_pos);
+    REQUIRE((os_part == "win" || os_part == "linux" || os_part == "mac"));
+    // Arch part after dash
+    std::string arch_part = tag.substr(dash_pos + 1);
+    REQUIRE((arch_part == "x64" || arch_part == "x86" || arch_part == "arm64" || arch_part == "unknown"));
+}
+
+TEST_CASE("detect_platform_tag: consistent on repeated calls", "[util]") {
+    std::string t1 = ezmk::util::detect_platform_tag();
+    std::string t2 = ezmk::util::detect_platform_tag();
+    REQUIRE(t1 == t2);
+}

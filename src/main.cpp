@@ -117,6 +117,14 @@ int main(int argc, char** argv) {
             break;
         }
 
+        case ezmk::cli::Command::ProjectPack: {
+            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            auto proj_root = std::filesystem::current_path();
+
+            ezmk::build::pack_project(cfg, *args.project_pack_opts, proj_root);
+            break;
+        }
+
         case ezmk::cli::Command::ProjectWatch: {
             // 0.2.3+: Watch mode — file monitoring + auto rebuild
             auto_update_repos(args.build_opts);

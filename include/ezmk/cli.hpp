@@ -12,6 +12,7 @@ enum class Command {
     ProjectRun,
     ProjectClean,
     ProjectInstall,  // 1.1.0
+    ProjectPack,     // 1.1.0-dev.2
     PkgInstall,
     PkgRemove,
     PkgSearch,
@@ -52,6 +53,12 @@ struct ProjectInstallOptions {
     bool verbose = false;      // -v: show each file path
 };
 
+// 1.1.0-dev.2: project pack options
+struct ProjectPackOptions {
+    std::string output_dir;    // --output <dir> (default: ".")
+    bool verbose = false;      // -v: show index.toml snippet
+};
+
 struct InstallOptions {
     Scope scope = Scope::Project;
     std::string pkg_file;    // local path or URL
@@ -88,6 +95,9 @@ struct CliArgs {
 
     // Only valid for ProjectInstall (1.1.0)
     ProjectInstallOptions project_install_opts;
+
+    // Only valid for ProjectPack (1.1.0-dev.2)
+    std::optional<ProjectPackOptions> project_pack_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;

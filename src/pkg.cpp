@@ -237,7 +237,8 @@ static void validate_pkg(const fs::path& dir) {
         // header-only packages may have only include/
         throw std::runtime_error("package missing include/ directory: " + dir.string());
     }
-    // 0.9.7+: precompiled packages must have lib/ with at least one .a
+    // 0.9.7+: precompiled packages must have lib/ with at least one .a/.lib
+    // 1.1.0-dev.2: platform-tagged files (lib<name>.<tag>.a) also covered
     if (cfg.project.precompiled) {
         if (!util::file_exists(dir / "lib")) {
             throw std::runtime_error("precompiled package missing lib/ directory: " + dir.string());
@@ -263,6 +264,57 @@ static std::string pkg_name_from_dir(const fs::path& dir) {
 // Compile a package to .a static library
 // ===================================================================
 
+// 1.1.0-dev.2: Select the best precompiled archive for the current platform.
+// Priority: exact platform match > bare lib<name>.a/.lib (backward compat) > error.
+fs::path select_precompiled_archive(const fs::path& lib_dir,
+                                            const std::string& pkg_name) {
+    std::string platform_tag = util::detect_platform_tag();
+    fs::path bare_match;                // fallback: lib<name>.a / lib<name>.lib
+    std::vector<std::string> available; // for error reporting
+
+    std::string tagged_prefix = "lib" + pkg_name + ".";
+    std::string bare_a  = "lib" + pkg_name + ".a";
+    std::string bare_lib = "lib" + pkg_name + ".lib";
+
+    for (auto& e : fs::directory_iterator(lib_dir)) {
+        auto ext = e.path().extension().string();
+        if (ext != ".a" && ext != ".lib") continue;
+
+        std::string filename = e.path().filename().string();
+
+        // Exact bare match: lib<name>.a or lib<name>.lib
+        if (filename == bare_a || filename == bare_lib) {
+            bare_match = e.path();
+            continue;
+        }
+
+        // Platform-tagged: lib<name>.<tag>.a / lib<name>.<tag>.lib
+        if (filename.find(tagged_prefix) == 0) {
+            std::string tag = filename.substr(tagged_prefix.size(),
+                filename.size() - tagged_prefix.size() - ext.size());
+            if (tag == platform_tag) {
+                return e.path(); // exact platform match — highest priority
+            }
+            available.push_back(tag);
+        }
+    }
+
+    // Fallback to bare match (backward compatible — single .a in lib/)
+    if (!bare_match.empty()) return bare_match;
+
+    // Error: no platform match and no bare fallback
+    std::string msg = "precompiled package '" + pkg_name +
+        "' has no build for platform '" + platform_tag + "'";
+    if (!available.empty()) {
+        msg += " — available: ";
+        for (size_t i = 0; i < available.size(); ++i) {
+            if (i > 0) msg += ", ";
+            msg += available[i];
+        }
+    }
+    throw std::runtime_error(msg);
+}
+
 fs::path compile_package(const fs::path& pkg_dir,
                          const std::vector<fs::path>& dep_includes,
                          const toolchain::Toolchain& tc) {
@@ -270,16 +322,10 @@ fs::path compile_package(const fs::path& pkg_dir,
     std::string name = cfg.project.name;
 
     // 0.9.7+: precompiled packages — use lib/*.a directly, skip compilation
+    // 1.1.0-dev.2: multi-platform — select by platform tag, fallback to bare archive
     if (cfg.project.precompiled) {
         fs::path lib_dir = pkg_dir / "lib";
-        for (auto& e : fs::directory_iterator(lib_dir)) {
-            auto ext = e.path().extension().string();
-            if (ext == ".a" || ext == ".lib") {
-                return e.path();
-            }
-        }
-        util::warn("precompiled package has no .a/.lib in lib/: " + name);
-        return {};
+        return select_precompiled_archive(lib_dir, name);
     }
 
     fs::path build_dir = pkg_dir / "build";

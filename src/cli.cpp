@@ -206,6 +206,25 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.1.0-dev.2: project pack
+        if (action == "pack")
+        {
+            args.cmd = Command::ProjectPack;
+            ProjectPackOptions opts;
+            std::vector<OptionSpec> spec = {
+                {'v', "verbose", false},
+                {'\0', "output", true},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project pack");
+            if (p.has("verbose"))     opts.verbose = true;
+            if (auto v = p.value("output"))
+                opts.output_dir = *v;
+            else
+                opts.output_dir = ".";
+            args.project_pack_opts = opts;
+            return args;
+        }
+
         util::fatal(ezmk::i18n::I18nKey::cli_unknown_subcommand,
                     {{"group", "project"}, {"sub", std::string(action)}});
     }
@@ -606,7 +625,8 @@ namespace ezmk::cli
             kAliases = {
                 {"pn", {"project", "new"}},   {"pb", {"project", "build"}},
                 {"pr", {"project", "run"}},   {"pc", {"project", "clean"}},
-                {"pi", {"project", "install"}}, {"pw", {"project", "watch"}},
+                {"pi", {"project", "install"}}, {"pp", {"project", "pack"}},
+                {"pw", {"project", "watch"}},
                 {"ki", {"pkg", "install"}},
                 {"kr", {"pkg", "remove"}},    {"ks", {"pkg", "search"}},
                 {"kn", {"pkg", "info"}},      {"kl", {"pkg", "list"}},

@@ -36,8 +36,25 @@
 
 ### 测试
 
-- 全量测试：**538 用例 / 2452 断言**，零回归
+- 全量测试：**538 用例 / 2504 断言**，零回归
 - `record.json` v1→v2 测试更新（version 字段 1→2）
+
+### 多平台共包支持（dev.2）
+
+- **`util::detect_platform_tag()`**：新增简化平台标签（`win-x64` / `linux-x64` / `mac-arm64`），用于文件名匹配和索引过滤
+- **`select_precompiled_archive()`**：预编译包 `lib/` 下按 `lib<name>.<tag>.a` 自动选择当前平台产物；fallback 到无后缀文件（向后兼容）
+- **`index.toml` `platform` 字段**：`[[packages]]` 条目新增可选 `platform` 字段（`os-arch` 格式），`read_pkg_from_index()` 搜索时自动按平台过滤；缺失字段的旧条目视为全平台可用
+
+### `ezmk project pack`（dev.2）
+
+- **`util::create_targz()`**：新增 tar.gz 创建函数（ustar tar + raw deflate gzip），基于现有 miniz 库，零新依赖
+- **CLI**：`ezmk project pack [--output <dir>] [-v]`，简写 `pp`；将 `static` 项目一键打包为 `<name>-<version>.tar.gz`
+- **输出**：自动构建（如未构建）→ 收集 `include/` + `lib<name>.a` + `ezmk.toml` → 打包 → 打印 SHA-256；`-v` 模式额外输出 `index.toml` 条目模板
+
+### 其他（dev.2）
+
+- **`build.cpp`**：依赖包预编译归档收集改为平台感知（`select_precompiled_archive()`），避免多平台文件冲突
+- **i18n**：新增 5 个 key（`pack_*`），中英双语翻译
 
 ---
 

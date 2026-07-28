@@ -100,17 +100,27 @@ void copy_recursive(const fs::path& from, const fs::path& to);
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);
 
+// ---- Platform detection ----
+// 1.1.0-dev.2: Returns a simplified platform tag in "os-arch" format.
+// Examples: "win-x64", "linux-x64", "mac-arm64".
+// Used for filename matching (lib<name>.<tag>.a) and index.toml platform filtering.
+// Different from repo.cpp's build_platform_key() which uses "os_arch_toolchain" triplets.
+std::string detect_platform_tag();
+
 // Platform-specific paths
 fs::path get_home_dir();
 fs::path get_exe_dir();
 
-// ---- Archive extraction ----
+// ---- Archive extraction & creation ----
 // Wraps miniz for zip; wraps miniz+gzip + custom tar parser for .tar.gz
 void extract_zip(const fs::path& archive, const fs::path& dest);
 void extract_targz(const fs::path& archive, const fs::path& dest);
 
 // Auto-detect archive type by extension and extract
 void extract_archive(const fs::path& archive, const fs::path& dest);
+
+// 1.1.0-dev.2: Create a .tar.gz from a source directory (ustar tar + raw deflate gzip)
+void create_targz(const fs::path& source_dir, const fs::path& output_file);
 
 // ---- HTTP download ----
 // Downloads a URL to a local file. On Windows uses WinHTTP; Linux falls back to curl.

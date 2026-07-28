@@ -59,4 +59,12 @@ void install_project(const config::EzConfig& cfg,
                      const cli::ProjectInstallOptions& opts,
                      const fs::path& proj_root);
 
+// 1.1.0-dev.2: Pack a static library project into a distributable .tar.gz.
+// Builds the project first (if needed), then collects include/ + lib + ezmk.toml
+// into a temporary directory and creates <name>-<version>.tar.gz.
+// Prints the SHA-256 of the resulting archive.
+void pack_project(const config::EzConfig& cfg,
+                  const cli::ProjectPackOptions& opts,
+                  const fs::path& proj_root);
+
 } // namespace ezmk::build

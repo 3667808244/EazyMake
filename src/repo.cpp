@@ -291,6 +291,9 @@ static std::string resolve_platform_prefix(const toml::table& root) {
 }
 
 // Read a package's file path and sha256 from a repo's index.toml.
+// 1.1.0-dev.2: filters [[packages]] entries by optional `platform` field
+// (os-arch format, e.g. "win-x64"). Entries without `platform` are kept
+// for backward compatibility (treated as "all platforms").
 // Returns {file_path, sha256} where sha256 may be empty if not provided.
 static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
                                             std::string_view pkg_name) {
@@ -304,6 +307,8 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
 
         // 1.1.0: resolve platform prefix from [platform] section
         std::string platform_prefix = resolve_platform_prefix(root);
+        // 1.1.0-dev.2: current platform tag for [[packages]].platform filtering
+        std::string current_platform = util::detect_platform_tag();
 
         std::string best_file;
         std::string best_version;
@@ -315,6 +320,12 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
 
             auto name = (*tbl)["name"].value<std::string>();
             if (!name || *name != pkg_name) continue;
+
+            // 1.1.0-dev.2: platform filtering — skip entries targeting a
+            // different platform. Entries without a `platform` field are
+            // treated as "all platforms" (backward compatible).
+            auto entry_platform = (*tbl)["platform"].value<std::string>();
+            if (entry_platform && *entry_platform != current_platform) continue;
 
             auto ver = (*tbl)["version"].value<std::string>();
             auto file = (*tbl)["file"].value<std::string>();

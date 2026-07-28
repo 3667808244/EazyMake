@@ -72,4 +72,10 @@ bool satisfies_version_constraint(std::string_view version,
 fs::path detect_install_script(const fs::path& pkg_root,
                                 std::string_view basename);
 
+// 1.1.0-dev.2: Select the precompiled archive matching the current platform
+// from a lib/ directory. Priority: exact platform tag match (lib<name>.<tag>.a)
+// > bare fallback (lib<name>.a). Throws std::runtime_error if no match.
+fs::path select_precompiled_archive(const fs::path& lib_dir,
+                                     const std::string& pkg_name);
+
 } // namespace ezmk::pkg

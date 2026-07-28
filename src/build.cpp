@@ -629,13 +629,16 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                 }
             }
             // 0.9.7+: also collect precompiled archives from lib/
+            // 1.1.0-dev.2: platform-aware — select only the archive for current platform
             auto pkg_lib = entry.path() / "lib";
             if (util::file_exists(pkg_lib)) {
-                for (auto& f : fs::directory_iterator(pkg_lib)) {
-                    auto ext = f.path().extension().string();
-                    if (ext == ".a" || (st.is_msvc && ext == ".lib")) {
-                        st.pkg_archives.push_back(f.path());
-                    }
+                try {
+                    auto archive = pkg::select_precompiled_archive(pkg_lib,
+                        entry.path().filename().string());
+                    st.pkg_archives.push_back(archive);
+                } catch (const std::exception& e) {
+                    util::warn(std::string("skipping precompiled archive for '") +
+                               entry.path().filename().string() + "': " + e.what());
                 }
             }
         }
@@ -1161,6 +1164,100 @@ void install_project(const config::EzConfig& cfg,
          {"prefix", prefix.string()},
          {"files", std::to_string(files_copied)},
          {"size", size_str}}));
+}
+
+// 1.1.0-dev.2: pack_project — create a distributable .tar.gz from a static project
+void pack_project(const config::EzConfig& cfg,
+                  const cli::ProjectPackOptions& opts,
+                  const fs::path& proj_root) {
+    std::string name = cfg.project.name;
+    std::string version = cfg.project.version;
+
+    // Step 1: Validate project type
+    if (cfg.project.type != "static") {
+        util::fatal("project pack requires type=\"static\", got type=\"" +
+                     cfg.project.type + "\"");
+    }
+
+    // Step 2: Build the project if needed
+    auto archive_path = proj_root / "build" / ("lib" + name + ".a");
+    // On MSVC, the built archive may be .lib
+    if (!util::file_exists(archive_path)) {
+        auto alt = proj_root / "build" / ("lib" + name + ".lib");
+        if (util::file_exists(alt)) archive_path = alt;
+    }
+
+    if (!util::file_exists(archive_path)) {
+        util::info("building project before packing...");
+        cli::BuildOptions build_opts;
+        build_opts.jobs = 0; // auto-detect
+        build_project(cfg, build_opts);
+
+        // Re-check
+        if (!util::file_exists(archive_path)) {
+            auto alt = proj_root / "build" / ("lib" + name + ".lib");
+            if (util::file_exists(alt)) archive_path = alt;
+        }
+        if (!util::file_exists(archive_path)) {
+            util::fatal("build did not produce lib" + name + ".a/.lib — "
+                        "cannot pack");
+        }
+    }
+
+    // Step 3: Create staging directory
+    fs::path output_dir = fs::absolute(opts.output_dir);
+    std::string archive_name = name + "-" + version + ".tar.gz";
+    std::string stage_name = name + "-" + version;
+    fs::path stage_dir = output_dir / stage_name;
+
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_collecting,
+                                {{"name", name}, {"version", version}}));
+    // Clean up any leftover staging
+    if (util::file_exists(stage_dir)) util::remove_all(stage_dir);
+    fs::create_directories(stage_dir / "lib");
+
+    // Step 4: Copy files
+    // include/
+    auto include_src = proj_root / "include";
+    if (util::file_exists(include_src)) {
+        util::copy_recursive(include_src, stage_dir / "include");
+    }
+
+    // lib/lib<name>.a
+    auto lib_dst = stage_dir / "lib" / archive_path.filename();
+    fs::copy_file(archive_path, lib_dst);
+
+    // ezmk.toml
+    fs::copy_file(proj_root / "ezmk.toml", stage_dir / "ezmk.toml");
+
+    // Step 5: Create archive
+    fs::path output_archive = output_dir / archive_name;
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_creating,
+                                {{"file", archive_name}}));
+    util::create_targz(stage_dir, output_archive);
+
+    // Step 6: SHA-256
+    std::string sha = crypto::sha256_file(output_archive);
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_sha256,
+                                {{"sha256", sha}}));
+
+    // Step 7: Cleanup staging
+    util::remove_all(stage_dir);
+
+    // Step 8: Verbose output — index.toml snippet
+    if (opts.verbose) {
+        util::info_line("-- index.toml entry --");
+        std::string entry = "[[packages]]\n"
+                            "name = \"" + name + "\"\n"
+                            "version = \"" + version + "\"\n"
+                            "file = \"" + archive_name + "\"\n"
+                            "platform = \"" + util::detect_platform_tag() + "\"\n"
+                            "sha256 = \"" + sha + "\"\n";
+        util::info_line(entry);
+    }
+
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_success,
+                                {{"file", (output_dir / archive_name).string()}}));
 }
 
 } // namespace ezmk::build

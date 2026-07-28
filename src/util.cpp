@@ -1,6 +1,7 @@
 #include "ezmk/util.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -273,6 +274,33 @@ std::vector<fs::path> list_files(const fs::path& dir,
     return result;
 }
 
+// 1.1.0-dev.2: Returns a simplified platform tag (e.g. "win-x64", "linux-x64", "mac-arm64").
+// Used for precompiled package file matching and index.toml platform filtering.
+// Distinct from repo.cpp's build_platform_key() which uses "os_arch_toolchain" triplets.
+std::string detect_platform_tag() {
+    std::string os;
+#ifdef EZMK_WIN
+    os = "win";
+#elif defined(EZMK_MACOS)
+    os = "mac";
+#else
+    os = "linux";
+#endif
+
+    std::string arch;
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)
+    arch = "x64";
+#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+    arch = "arm64";
+#elif defined(__i386__) || defined(__i686__) || defined(_M_IX86)
+    arch = "x86";
+#else
+    arch = "unknown";
+#endif
+
+    return os + "-" + arch;
+}
+
 fs::path get_home_dir() {
 #ifdef EZMK_WIN
     // 0.2.3+: Check HOME first for Git Bash / MSYS2 compatibility
@@ -309,6 +337,165 @@ fs::path get_exe_dir() {
     if (n > 0) return fs::path(std::string(buf, n)).parent_path();
     return fs::current_path();
 #endif
+}
+
+// ===================================================================
+// Archive creation (1.1.0-dev.2)
+// ===================================================================
+
+// 1.1.0-dev.2: Create a .tar.gz archive from a source directory.
+// Uses miniz for gzip compression (raw deflate) + hand-rolled ustar tar.
+void create_targz(const fs::path& source_dir, const fs::path& output_file) {
+    // --- Step 1: walk source_dir and collect sorted entries ---
+    struct TarEntry {
+        std::string name;
+        std::vector<uint8_t> content;
+        bool is_dir = false;
+    };
+    std::vector<TarEntry> entries;
+    for (auto& e : fs::recursive_directory_iterator(source_dir)) {
+        TarEntry te;
+        auto rel = fs::relative(e.path(), source_dir);
+        te.name = rel.generic_string();
+        // tar convention: forward slashes
+        std::replace(te.name.begin(), te.name.end(), '\\', '/');
+        if (e.is_directory()) {
+            te.is_dir = true;
+            if (!te.name.empty() && te.name.back() != '/') te.name += '/';
+        } else {
+            std::string raw = file_read(e.path());
+            te.content.assign(raw.begin(), raw.end());
+        }
+        entries.push_back(std::move(te));
+    }
+    std::sort(entries.begin(), entries.end(),
+              [](const TarEntry& a, const TarEntry& b) { return a.name < b.name; });
+
+    // --- Step 2: build tar byte stream (ustar format) ---
+    std::vector<uint8_t> tar;
+    auto pad512 = [&]() {
+        size_t rem = tar.size() % 512;
+        if (rem) tar.insert(tar.end(), 512 - rem, 0);
+    };
+
+    for (auto& entry : entries) {
+        // Split name into prefix+name if > 100 chars (ustar extension)
+        std::string hdr_name = entry.name;
+        std::string hdr_prefix;
+        if (hdr_name.size() > 100) {
+            // Find a '/' within the first ~155 chars to split at
+            auto slash = hdr_name.find('/', hdr_name.size() > 155 ? hdr_name.size() - 155 : 0);
+            if (slash != std::string::npos && slash < 155) {
+                hdr_prefix = hdr_name.substr(0, slash);
+                hdr_name = hdr_name.substr(slash + 1);
+            }
+        }
+        if (hdr_name.size() > 100) hdr_name.resize(100);
+
+        std::array<char, 512> hdr{};
+        auto set_field = [&](int off, int len, const std::string& v) {
+            for (size_t i = 0; i < v.size() && i < (size_t)len - 1; ++i)
+                hdr[off + i] = v[i];
+        };
+        auto set_octal = [&](int off, int len, size_t v) {
+            char buf[32];
+            int n = snprintf(buf, sizeof(buf), "%zo", v);
+            // right-align: pad with '0's on the left
+            int start = len - 1 - n;
+            if (start < 0) start = 0;
+            for (int i = 0; i < n && (start + i) < len - 1; ++i)
+                hdr[off + start + i] = buf[i];
+            // null terminate
+            hdr[off + len - 1] = '\0';
+        };
+
+        set_field(0, 100, hdr_name);
+        set_octal(100, 8, entry.is_dir ? 0755 : 0644); // mode
+        set_octal(108, 8, 0);                           // uid
+        set_octal(116, 8, 0);                           // gid
+        set_octal(124, 12, entry.content.size());       // size
+        set_octal(136, 12, 0);                          // mtime = 0 (deterministic)
+        hdr[156] = entry.is_dir ? '5' : '0';            // typeflag
+        set_field(157, 100, "");                        // linkname
+        set_field(257, 6, "ustar");                     // magic
+        set_field(263, 2, "00");                        // version
+        set_field(265, 32, "");                         // uname
+        set_field(297, 32, "");                         // gname
+        set_field(329, 8, "");                          // devmajor
+        set_field(337, 8, "");                          // devminor
+        set_field(345, 155, hdr_prefix);                // prefix
+
+        // Checksum: sum all bytes with chksum field treated as 8 spaces
+        for (int i = 148; i < 156; ++i) hdr[i] = ' ';
+        unsigned sum = 0;
+        for (auto c : hdr) sum += static_cast<unsigned char>(c);
+        set_octal(148, 7, sum); // 6 octal digits + null = 7 bytes, null at 155
+
+        tar.insert(tar.end(), hdr.begin(), hdr.end());
+        if (!entry.is_dir && !entry.content.empty()) {
+            tar.insert(tar.end(), entry.content.begin(), entry.content.end());
+            pad512();
+        }
+    }
+    // Two zero blocks mark end of archive
+    tar.insert(tar.end(), 1024, 0);
+
+    // --- Step 3: gzip compress with miniz (raw deflate) ---
+    // Gzip header: ID1=0x1f, ID2=0x8b, CM=0x08(deflate), FLG=0, MTIME=0, XFL=0, OS=255(unknown)
+    const uint8_t gzip_hdr[] = {0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff};
+
+    z_stream strm{};
+    // -MZ_DEFAULT_WINDOW_BITS = raw deflate (no zlib/adler32 wrapper)
+    mz_deflateInit2(&strm, MZ_DEFAULT_COMPRESSION, Z_DEFLATED,
+                    -MZ_DEFAULT_WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
+
+    mz_ulong bound = mz_deflateBound(&strm, static_cast<mz_ulong>(tar.size()));
+    std::vector<uint8_t> deflated(bound);
+
+    strm.next_in = tar.data();
+    strm.avail_in = static_cast<mz_uint>(tar.size());
+    strm.next_out = deflated.data();
+    strm.avail_out = static_cast<mz_uint>(deflated.size());
+
+    int rc = mz_deflate(&strm, MZ_FINISH);
+    if (rc != MZ_STREAM_END) {
+        mz_deflateEnd(&strm);
+        throw std::runtime_error("gzip compression failed (rc=" + std::to_string(rc) + ")");
+    }
+    mz_deflateEnd(&strm);
+
+    size_t deflated_size = strm.total_out;
+    deflated.resize(deflated_size);
+
+    // --- Step 4: write gzip file (header + deflated data + footer) ---
+    // Gzip footer: CRC32 (4 bytes LE) + uncompressed size (4 bytes LE, mod 2^32)
+    mz_ulong crc = mz_crc32(MZ_CRC32_INIT, tar.data(), tar.size());
+    mz_uint32 isize = static_cast<mz_uint32>(tar.size());
+
+    std::vector<uint8_t> gz;
+    gz.insert(gz.end(), gzip_hdr, gzip_hdr + sizeof(gzip_hdr));
+    gz.insert(gz.end(), deflated.begin(), deflated.end());
+    gz.push_back(static_cast<uint8_t>(crc & 0xff));
+    gz.push_back(static_cast<uint8_t>((crc >> 8) & 0xff));
+    gz.push_back(static_cast<uint8_t>((crc >> 16) & 0xff));
+    gz.push_back(static_cast<uint8_t>((crc >> 24) & 0xff));
+    gz.push_back(static_cast<uint8_t>(isize & 0xff));
+    gz.push_back(static_cast<uint8_t>((isize >> 8) & 0xff));
+    gz.push_back(static_cast<uint8_t>((isize >> 16) & 0xff));
+    gz.push_back(static_cast<uint8_t>((isize >> 24) & 0xff));
+
+    // Atomic write
+    fs::create_directories(output_file.parent_path());
+    auto tmp = output_file.string() + ".tmp";
+    {
+        std::ofstream of(tmp, std::ios::binary);
+        if (!of) throw std::runtime_error("cannot create: " + tmp);
+        of.write(reinterpret_cast<const char*>(gz.data()), gz.size());
+        if (!of) throw std::runtime_error("write failed: " + tmp);
+    }
+    std::error_code ec;
+    fs::rename(tmp, output_file, ec);
+    if (ec) throw std::runtime_error("rename failed: " + output_file.string());
 }
 
 // ===================================================================

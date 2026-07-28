@@ -29,6 +29,11 @@ EZMK_I18N_KEY(lock_locked_depends_mismatch)// 1.1.0
 EZMK_I18N_KEY(lock_sha256_mismatch)        // 1.1.0
 EZMK_I18N_KEY(install_summary)             // 1.1.0
 EZMK_I18N_KEY(install_dry_run)             // 1.1.0
+EZMK_I18N_KEY(pack_not_static)             // 1.1.0-dev.2
+EZMK_I18N_KEY(pack_collecting)             // 1.1.0-dev.2
+EZMK_I18N_KEY(pack_creating)              // 1.1.0-dev.2
+EZMK_I18N_KEY(pack_sha256)                // 1.1.0-dev.2
+EZMK_I18N_KEY(pack_success)               // 1.1.0-dev.2
 EZMK_I18N_KEY(compile_options_changed)
 EZMK_I18N_KEY(compiler_not_found)
 EZMK_I18N_KEY(linking)
