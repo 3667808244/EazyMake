@@ -8,6 +8,18 @@ EazyMake is a simple C/C++ build tool (CLI named `ezmk`), based on GCC/g++ (MSYS
 
 Design specifications live in `docs/en/` (English) / `docs/zh/` (Chinese). Version milestones are in `plans/dev/` (0.1.6~0.2.6) and `plans/release/` (0.9.0~1.0.0), indexed by `plans/README.md`. Current execution plan: `plan.md`.
 
+## Workflow rules
+
+When implementing a version plan (e.g. `plan.md`):
+
+1. **Commit per phase** — after completing each execution phase (阶段一/二/三…), make a Git commit with a clear message summarizing the phase's deliverables. Do NOT squash unrelated phases into one commit.
+2. **All phases done** → before pushing, review and update related documentation:
+   - `CLAUDE.md` — new architecture/API additions
+   - `CHANGES.md` — version changelog entry
+   - `plan.md` — mark completed checkboxes `[x]`
+   - `plans/README.md` — move completed items to 已完成
+3. **Push** after documentation is current.
+
 ## Build & test commands
 
 - Build: `bash build.sh` (generates locale data + version header, then compiles)
