@@ -104,6 +104,19 @@ int main(int argc, char** argv) {
             ezmk::util::info(ezmk::i18n::I18nKey::cleaned);
             break;
 
+        // 1.1.0: project install
+        case ezmk::cli::Command::ProjectInstall: {
+            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            auto proj_root = std::filesystem::current_path();
+
+            // Build first
+            ezmk::build::build_project(cfg, args.build_opts);
+
+            // Install
+            ezmk::build::install_project(cfg, args.project_install_opts, proj_root);
+            break;
+        }
+
         case ezmk::cli::Command::ProjectWatch: {
             // 0.2.3+: Watch mode — file monitoring + auto rebuild
             auto_update_repos(args.build_opts);
@@ -226,7 +239,8 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::PkgInstall: {
             auto& opts = *args.install_opts;
-            ezmk::pkg::install(opts.pkg_file, opts.scope, opts.sha256, opts.assume_yes);
+            ezmk::pkg::install(opts.pkg_file, opts.scope, opts.sha256, opts.assume_yes,
+                                opts.locked, opts.no_lock);
             break;
         }
 

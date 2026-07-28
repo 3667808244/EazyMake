@@ -168,7 +168,7 @@ static fs::path temp_record_path() {
 
 TEST_CASE("load_record: empty when file doesn't exist", "[cache]") {
     auto rec = load_record("nonexistent_record_12345.json");
-    REQUIRE(rec.version == 1);
+    REQUIRE(rec.version == 2);
     REQUIRE(rec.compile_options_signature.empty());
     REQUIRE(rec.files.empty());
 }
@@ -177,7 +177,7 @@ TEST_CASE("save_record + load_record: round-trip", "[cache]") {
     auto path = temp_record_path();
 
     CacheRecord rec;
-    rec.version = 1;
+    rec.version = 2;
     rec.compile_options_signature = "test_signature_abc";
 
     FileEntry fe;
@@ -196,7 +196,7 @@ TEST_CASE("save_record + load_record: round-trip", "[cache]") {
     REQUIRE(ezmk::util::file_exists(path));
 
     auto loaded = load_record(path);
-    REQUIRE(loaded.version == 1);
+    REQUIRE(loaded.version == 2);
     REQUIRE(loaded.compile_options_signature == "test_signature_abc");
     REQUIRE(loaded.files.size() == 1);
 
@@ -250,7 +250,7 @@ TEST_CASE("save_record + load_record: empty record", "[cache]") {
     save_record(rec, path);
     auto loaded = load_record(path);
 
-    REQUIRE(loaded.version == 1);
+    REQUIRE(loaded.version == 2);
     REQUIRE(loaded.files.empty());
 
     fs::remove(path);
@@ -266,7 +266,7 @@ TEST_CASE("load_record: corrupted JSON returns empty record", "[cache]") {
 
     auto rec = load_record(path);
     // Should return empty record on parse failure (not throw)
-    REQUIRE(rec.version == 1);
+    REQUIRE(rec.version == 2);
     REQUIRE(rec.files.empty());
 
     fs::remove(path);

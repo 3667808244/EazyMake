@@ -26,9 +26,12 @@ struct FileEntry {
 };
 
 struct CacheRecord {
-    int version = 1;
+    int version = 2;                             // 1.1.0: v1 → v2 (added compiler_version + deterministic)
+    std::string compiler;                        // compiler name (e.g. "g++", "cl.exe")
+    std::string compiler_version;                // 1.1.0: compiler version string
     std::string compile_options_signature;
-    std::map<std::string, FileEntry> files; // keyed by source path relative to project root
+    bool deterministic = false;                  // 1.1.0: whether deterministic build was used
+    std::map<std::string, FileEntry> files;      // keyed by source path relative to project root
 };
 
 // ===================================================================

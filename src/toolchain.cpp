@@ -320,6 +320,17 @@ static Toolchain detect_gcc_like(const std::string& cxx, const std::string& cc) 
     tc.linker = fs::path(cxx);
     tc.archiver = fs::path("ar");
 
+    // 1.1.0: capture compiler version (first line of --version output)
+    auto ver_res = util::run_command(cxx + " --version 2>&1");
+    if (ver_res.exit_code == 0 && !ver_res.out.empty()) {
+        auto nl = ver_res.out.find('\n');
+        tc.version = (nl != std::string::npos)
+            ? ver_res.out.substr(0, nl) : ver_res.out;
+        // Trim trailing \r
+        if (!tc.version.empty() && tc.version.back() == '\r')
+            tc.version.pop_back();
+    }
+
     return tc;
 }
 
@@ -374,16 +385,6 @@ static fs::path find_vcvars64() {
     return {};
 }
 
-static std::string find_msvc_cl() {
-    // Check if cl.exe is in PATH (via run_command)
-    auto res = util::run_command("cl 2>&1");
-    if (res.exit_code == 0) return "cl.exe";
-
-    // If cl.exe isn't directly callable, we need vcvars first.
-    // Return "cl.exe" — the caller will load vcvars environment and retry.
-    return "cl.exe";
-}
-
 #endif // EZMK_WIN
 
 Toolchain detect_toolchain() {
@@ -433,6 +434,17 @@ Toolchain detect_toolchain() {
                 tc.linker = fs::path("link.exe");
                 tc.archiver = fs::path("lib.exe");
                 tc.vcvars_path = vcvars;
+                // 1.1.0: capture MSVC version from cl output
+                {
+                    auto cl_ver_res = util::run_command(test_cmd.str());
+                    if (cl_ver_res.exit_code == 0 && !cl_ver_res.out.empty()) {
+                        auto nl = cl_ver_res.out.find('\n');
+                        tc.version = (nl != std::string::npos)
+                            ? cl_ver_res.out.substr(0, nl) : cl_ver_res.out;
+                        if (!tc.version.empty() && tc.version.back() == '\r')
+                            tc.version.pop_back();
+                    }
+                }
                 cached = tc;
                 cached_valid = true;
                 util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);

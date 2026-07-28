@@ -3,9 +3,11 @@
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/i18n.hpp"
+#include "ezmk/lockfile.hpp"
 #include "ezmk/lua_api.hpp"
 #include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
+#include "ezmk/version.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -262,7 +264,8 @@ static std::string pkg_name_from_dir(const fs::path& dir) {
 // ===================================================================
 
 fs::path compile_package(const fs::path& pkg_dir,
-                         const std::vector<fs::path>& dep_includes) {
+                         const std::vector<fs::path>& dep_includes,
+                         const toolchain::Toolchain& tc) {
     auto cfg = config::parse_config(pkg_dir / "ezmk.toml");
     std::string name = cfg.project.name;
 
@@ -290,7 +293,10 @@ fs::path compile_package(const fs::path& pkg_dir,
         return {};
     }
 
-    fs::path lib = build_dir / ("lib" + name + ".a");
+    // 1.1.0: MSVC uses .lib, GCC/Clang use .a
+    bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
+    const char* lib_ext = is_msvc ? ".lib" : ".a";
+    fs::path lib = build_dir / ("lib" + name + lib_ext);
 
     // Clean stale temps from previous crashed builds
     {
@@ -307,8 +313,27 @@ fs::path compile_package(const fs::path& pkg_dir,
     fs::path cache_path = build_dir / ".pkg_cache.json";
     auto record = cache::load_record(cache_path);
 
+    // 1.1.0: check compiler version — if changed, invalidate all caches
+    std::string compiler_name = tc.cxx_compiler.filename().string();
+    if (!record.compiler_version.empty() && record.compiler_version != tc.version) {
+        util::info("    compiler version changed, invalidating package cache");
+        record.files.clear();
+    }
+    record.compiler = compiler_name;
+    record.compiler_version = tc.version;
+
+    // 1.1.0: deterministic flag
+    record.deterministic = cfg.compile.deterministic;
+
     // Check global compile options signature
     auto cur_sig = cache::compile_options_signature(cfg.compile);
+    // 1.1.0: deterministic build — include lockfile hash
+    if (cfg.compile.deterministic) {
+        auto lock_path = fs::current_path() / "ezmk.lock";
+        if (util::file_exists(lock_path)) {
+            cur_sig += ":" + crypto::sha256_file(lock_path);
+        }
+    }
     if (record.compile_options_signature != cur_sig) {
         if (!record.compile_options_signature.empty()) {
             util::info("    compile options changed, invalidating package cache");
@@ -353,24 +378,41 @@ fs::path compile_package(const fs::path& pkg_dir,
     // (handles nested source directories correctly, unlike filename-based reconstruction)
 
     // Archive to temp file, then atomic rename
-    fs::path lib_tmp = build_dir / ("lib" + name + ".a.tmp");
+    const char* tmp_ext = is_msvc ? ".lib.tmp" : ".a.tmp";
+    fs::path lib_tmp = build_dir / ("lib" + name + tmp_ext);
     {
         std::error_code ec;
         fs::remove(lib_tmp, ec);
     }
 
-    std::ostringstream ar_cmd;
-    ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
-    for (auto& o : comp_result.objects) {
-        ar_cmd << " \"" << o.string() << "\"";
-    }
-
-    auto ar_res = util::run_command(ar_cmd.str());
-    if (ar_res.exit_code != 0) {
-        std::error_code ec;
-        fs::remove(lib_tmp, ec);
-        util::error(ar_res.err);
-        throw std::runtime_error("failed to create archive for: " + name);
+    if (is_msvc) {
+        // 1.1.0: MSVC — use lib.exe to create static library
+        std::ostringstream lib_cmd;
+        lib_cmd << "lib.exe /OUT:\"" << lib_tmp.string() << "\"";
+        for (auto& o : comp_result.objects) {
+            lib_cmd << " \"" << o.string() << "\"";
+        }
+        auto lib_res = util::run_command(lib_cmd.str());
+        if (lib_res.exit_code != 0) {
+            std::error_code ec;
+            fs::remove(lib_tmp, ec);
+            util::error(lib_res.err);
+            throw std::runtime_error("failed to create library (lib.exe) for: " + name);
+        }
+    } else {
+        // GCC/Clang: use ar
+        std::ostringstream ar_cmd;
+        ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
+        for (auto& o : comp_result.objects) {
+            ar_cmd << " \"" << o.string() << "\"";
+        }
+        auto ar_res = util::run_command(ar_cmd.str());
+        if (ar_res.exit_code != 0) {
+            std::error_code ec;
+            fs::remove(lib_tmp, ec);
+            util::error(ar_res.err);
+            throw std::runtime_error("failed to create archive for: " + name);
+        }
     }
 
     {
@@ -457,7 +499,23 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
 
 void install(const std::string& pkg_file, cli::Scope scope,
              std::string_view expected_sha256,
-             bool assume_yes) {
+             bool assume_yes,
+             bool locked,
+             bool no_lock) {
+    // 1.1.0: --locked mode — install from lockfile only
+    if (locked) {
+        auto lf = lockfile::load(fs::current_path());
+        if (!lf.has_value()) {
+            util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_locked_missing));
+        }
+        if (lockfile::depends_changed(config::parse_config("ezmk.toml"), *lf)) {
+            util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_locked_depends_mismatch));
+        }
+        // Continue with install but verify against lockfile
+    }
+
+    // 1.1.0: detect toolchain once for the entire install (MSVC-aware archiving)
+    auto tc = toolchain::detect_toolchain();
     fs::path dest_dir = pkg_install_dir(scope);
 
     // Determine if it's a URL or local file
@@ -698,7 +756,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
             }
             // 0.9.7+: skip compilation for precompiled packages
             if (cfg.project.precompiled) {
-                compile_package(dir);  // validates & returns lib/*.a path
+                compile_package(dir, {}, tc);  // validates & returns lib/*.a path
                 util::info(ezmk::i18n::I18nKey::installing_precompiled,
                            {{"name", cfg.project.name}});
                 continue;
@@ -719,7 +777,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
             }
             util::info(ezmk::i18n::I18nKey::compiling_pkg,
                        {{"name", cfg.project.name}});
-            compile_package(dir, dep_includes);
+            compile_package(dir, dep_includes, tc);
         }
 
         // Copy to install directory
@@ -752,6 +810,69 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
     // Cleanup temp
     util::remove_all(stage);
+
+    auto now_iso = []() -> std::string {
+        auto t = std::time(nullptr);
+        auto* tm = std::localtime(&t);
+        char buf[32];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
+        return buf;
+    };
+
+    // 1.1.0: generate/update ezmk.lock with resolved dependency snapshot
+    if (scope == cli::Scope::Project && !no_lock) {
+        try {
+            config::Lockfile lf;
+            lf.version = 1;
+            lf.generated_by = "ezmk " EZMK_VERSION;
+            lf.generated_at = now_iso();
+            lf.toolchain = (tc.family == toolchain::CompilerFamily::Msvc) ? "msvc"
+                         : (tc.family == toolchain::CompilerFamily::Clang) ? "clang" : "gcc";
+            lf.toolchain_version = tc.version;
+
+            // Scan installed packages in project scope
+            fs::path pkg_dir = dest_dir;
+            if (util::file_exists(pkg_dir)) {
+                for (auto& entry : fs::directory_iterator(pkg_dir)) {
+                    if (!entry.is_directory()) continue;
+                    auto pkg_toml = entry.path() / "ezmk.toml";
+                    if (!util::file_exists(pkg_toml)) continue;
+                    try {
+                        auto pkg_cfg = config::parse_config(pkg_toml);
+                        config::LockedPackage lp;
+                        lp.name = pkg_cfg.project.name;
+                        lp.version = pkg_cfg.project.version;
+                        lp.type = pkg_cfg.project.header_only ? "header-only"
+                                : pkg_cfg.project.type;
+                        lp.scope = "project";
+                        lp.platform = (tc.family == toolchain::CompilerFamily::Msvc) ? "windows_x86_64_msvc"
+                                    : "windows_x86_64_gcc";
+                        for (auto& d : pkg_cfg.depends.libs) lp.dependencies.push_back(d.name);
+                        for (auto& d : pkg_cfg.depends.want) lp.dependencies.push_back(d.name);
+
+                        // Hash the built library
+                        auto build_dir = entry.path() / "build";
+                        if (util::file_exists(build_dir)) {
+                            for (auto& f : fs::directory_iterator(build_dir)) {
+                                auto ext = f.path().extension().string();
+                                if (ext == ".a" || ext == ".lib") {
+                                    lp.sha256 = crypto::sha256_file(f.path());
+                                    break;
+                                }
+                            }
+                        }
+                        lf.packages.push_back(std::move(lp));
+                    } catch (...) {
+                        // Skip packages with broken configs
+                    }
+                }
+            }
+
+            lockfile::save(fs::current_path(), lf);
+        } catch (...) {
+            // Lockfile generation failure is non-fatal
+        }
+    }
 }
 
 // ===================================================================
@@ -837,8 +958,11 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                             + ": " + cfg.project.name);
             util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_version)
                             + ": " + cfg.project.version);
+            std::string type_str = cfg.project.header_only
+                ? ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_header_only)
+                : cfg.project.type;
             util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_type)
-                            + ": " + cfg.project.type);
+                            + ": " + type_str);
             util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_language)
                             + ": " + cfg.project.language);
             util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_scope)

@@ -185,6 +185,27 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.1.0: project install
+        if (action == "install")
+        {
+            args.cmd = Command::ProjectInstall;
+            std::vector<OptionSpec> spec = {
+                {'v', "verbose", false},
+                {'\0', "prefix", true},
+                {'\0', "dry-run", false},
+                {'\0', "no-headers", false},
+                {'\0', "no-data", false},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project install");
+            if (p.has("verbose"))       args.project_install_opts.verbose = true;
+            if (p.has("dry-run"))       args.project_install_opts.dry_run = true;
+            if (p.has("no-headers"))    args.project_install_opts.no_headers = true;
+            if (p.has("no-data"))       args.project_install_opts.no_data = true;
+            if (auto v = p.value("prefix"))
+                args.project_install_opts.prefix = *v;
+            return args;
+        }
+
         util::fatal(ezmk::i18n::I18nKey::cli_unknown_subcommand,
                     {{"group", "project"}, {"sub", std::string(action)}});
     }
@@ -200,6 +221,8 @@ namespace ezmk::cli
             std::vector<OptionSpec> spec = {
                 {'\0', "sha256", true},
                 {'y', "yes", false},
+                {'\0', "locked", false},    // 1.1.0
+                {'\0', "no-lock", false},   // 1.1.0
             };
             add_scope_specs(spec);
             add_verbose_spec(spec);
@@ -226,6 +249,10 @@ namespace ezmk::cli
                 opts.sha256 = *s;
             if (p.has("yes"))
                 opts.assume_yes = true;
+            if (p.has("locked"))       // 1.1.0
+                opts.locked = true;
+            if (p.has("no-lock"))      // 1.1.0
+                opts.no_lock = true;
             args.install_opts = opts;
             return args;
         }
@@ -579,7 +606,8 @@ namespace ezmk::cli
             kAliases = {
                 {"pn", {"project", "new"}},   {"pb", {"project", "build"}},
                 {"pr", {"project", "run"}},   {"pc", {"project", "clean"}},
-                {"pw", {"project", "watch"}}, {"ki", {"pkg", "install"}},
+                {"pi", {"project", "install"}}, {"pw", {"project", "watch"}},
+                {"ki", {"pkg", "install"}},
                 {"kr", {"pkg", "remove"}},    {"ks", {"pkg", "search"}},
                 {"kn", {"pkg", "info"}},      {"kl", {"pkg", "list"}},
                 {"ku", {"pkg", "update"}},    {"ra", {"repo", "add"}},
@@ -707,6 +735,7 @@ namespace ezmk::cli
         row("ezmk project build  (pb)  [flags]", I18nKey::help_project_build);
         row("ezmk project run    (pr)  [flags] [-- args]", I18nKey::help_project_run);
         row("ezmk project clean  (pc)", I18nKey::help_project_clean);
+        row("ezmk project install (pi) [flags]", I18nKey::help_project_install);   // 1.1.0
         row("ezmk project watch  (pw)  [flags]", I18nKey::help_project_watch);
         std::cout << "\n";
 

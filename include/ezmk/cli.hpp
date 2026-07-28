@@ -11,6 +11,7 @@ enum class Command {
     ProjectBuild,
     ProjectRun,
     ProjectClean,
+    ProjectInstall,  // 1.1.0
     PkgInstall,
     PkgRemove,
     PkgSearch,
@@ -42,11 +43,22 @@ struct BuildOptions {
     bool auto_update = false;   // 0.2.5+: auto-update repo indices before build
 };
 
+// 1.1.0: project install options
+struct ProjectInstallOptions {
+    std::string prefix;        // override [install].prefix
+    bool dry_run = false;      // --dry-run: show what would be installed
+    bool no_headers = false;   // --no-headers: skip header installation
+    bool no_data = false;      // --no-data: skip data file installation
+    bool verbose = false;      // -v: show each file path
+};
+
 struct InstallOptions {
     Scope scope = Scope::Project;
     std::string pkg_file;    // local path or URL
     std::string sha256;      // optional: expected SHA-256 for verification
     bool assume_yes = false; // -y: skip all interactive prompts
+    bool locked = false;     // 1.1.0: --locked: install from lockfile only, error on mismatch
+    bool no_lock = false;    // 1.1.0: --no-lock: skip lockfile generation
 };
 
 struct QueryOptions {
@@ -73,6 +85,9 @@ struct CliArgs {
 
     // Only valid for ProjectBuild / ProjectRun
     BuildOptions build_opts;
+
+    // Only valid for ProjectInstall (1.1.0)
+    ProjectInstallOptions project_install_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;

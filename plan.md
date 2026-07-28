@@ -1,176 +1,152 @@
-# EazyMake 执行计划
+# EazyMake 1.1.0 执行计划
 
-> 来源：[`plans/README.md`](plans/README.md)（版本路线图）、[`plans/release/1.0.0.md`](plans/release/1.0.0.md)（详细设计）。
-
----
-
-## 版本状态
-
-```
-0.9.10 ✅ → 1.0.0 ✅ → 1.1.0 ← 当前
-代码质量重构    正式版发布    包编译与开发体验
-```
-
-已完成 24 个版本（0.1.6 ~ 1.0.0），当前正在执行 **1.1.0**（包编译与开发体验）。
+> 详细设计：[`plans/release/1.1.0-dev.1.md`](plans/release/1.1.0-dev.1.md)
 
 ---
 
-## 一、1.0.0 — 正式版发布 ✅
+## 1 背景
 
-> 详细设计：[`plans/release/1.0.0.md`](plans/release/1.0.0.md)
+1.0.0 完成了文档整理与翻译补全，EazyMake 作为首个正式版发布。但经过代码审查与使用场景分析，识别出三个影响实际使用的工程缺陷：
 
-### 1.1 原则
+1. **MSVC 包编译问题（高）**：`compile_package()` 硬编码 GCC 工具链（永远输出 `.a`、永远调用 `ar`），MSVC 用户无法从源码编译安装包；`index.toml` 平台映射缺少 MSVC 条目
+2. **编译确定性问题（中）**：`__DATE__`/`__TIME__` 嵌入、调试信息绝对路径、编译器版本未追踪，导致构建产物不可复现
+3. **构建产物不易安装（中）**：无 `install` 命令、无 `[install]` 配置节，用户需手动复制文件
 
-**1.0.0 不修改源代码**（版本号字符串除外），聚焦四项收尾工作：文档整理、翻译补全、内容审计、核心文档重写。
+此外，0.9.8 计划中提出的 `header_only = true` 支持尚未实现，加重了 MSVC 包的编译压力。
 
-### 1.2 四项交付
+---
 
-| # | 交付物 | 说明 |
-|---|--------|------|
-| 1 | **整理 `plans/` 目录** | 拆分为 `dev/`（0.1.6~0.2.6）和 `release/`（0.9.0~1.0.0）子目录 |
-| 2 | **补全 `docs/zh/cli.md` 翻译** | 全文中文化（当前为英文副本，零翻译） |
-| 3 | **文档审计** | 11 项逐文件检查，修复过时内容 |
-| 4 | **重写核心文档** | 根据当前代码库重新编写 `CLAUDE.md`、`README.md`、`README_ZH.md` |
+## 2 目标
 
-### 1.3 执行阶段
+1. **MSVC 包编译** — `compile_package()` 支持 MSVC 工具链（`lib.exe` → `.lib`），`index.toml` 平台映射支持 MSVC 预编译二进制
+2. **Header-Only 包支持** — 实现 0.9.8 遗留的 `header_only = true` 字段，跳过编译步骤
+3. **确定性构建** — 支持 `SOURCE_DATE_EPOCH` + GCC `-ffile-prefix-map` + MSVC `/Brepro`，`record.json` 记录编译器版本，`ezmk.lock` 锁定依赖版本与内容哈希
+4. **`ezmk project install`** — 新增安装命令，支持 `[install]` 配置节，构建产物一键安装到指定前缀
 
-#### 阶段一：plans/ 目录整理
+---
 
-- [x] 创建 `plans/dev/` 和 `plans/release/` 目录
-- [x] `git mv` 迁移：`0.1.6.md`~`0.2.6.md` → `plans/dev/`；`0.9.0.md`~`1.0.0.md` → `plans/release/`
-- [x] 更新 `plans/README.md`：所有文件路径引用、版本主题表格、Mermaid 依赖关系图
-- [x] 确认 `plans/README.md` 中所有 `/` 分隔的规划文件路径引用有效
+## 3 执行阶段
 
-#### 阶段二：翻译补全
+### 阶段一：Header-Only 包支持（前置条件，成本最低）
 
-- [x] 翻译 `docs/zh/cli.md` 所有英文标题（~15 处）
-- [x] 翻译 `docs/zh/cli.md` 描述性段落（~5 段）
-- [x] 核对表格 Description 列翻译一致性
-- [x] 修复 Markdown 锚点（中文标题 → 锚点编码）
-- [x] 与 `docs/en/cli.md` 做结构对比，确保无遗漏章节
+> 此设计取自 0.9.8 的 §3.3.0，header-only 包跳过编译可减少 MSVC 包编译压力。
 
-#### 阶段三：文档审计（11 项）
+- [x] **`config.hpp`**：`ProjectSection` 或独立 `PackageConfig` 新增 `header_only` 字段
+- [x] **`config.cpp`**：解析 `pkg.toml` 中的 `header_only = true`（默认 `false`）
+- [x] **`pkg.cpp` `install()`**：`header_only = true` → 跳过编译+归档，仅复制 `include/` 头文件到安装目录
+- [x] **`pkg.cpp` `info()`**：header-only 包标注 `Type: header-only`
+- [x] **i18n**：`i18n_keys.def` 新增 key（`pkg_header_only`、`pkg_installing_header_only` 等），`en.json` / `zh.json` 添加翻译
+- [x] `build.sh` 编译通过 + 全量测试通过
 
-| # | 审计项 | 严重性 | 状态 |
-|---|--------|--------|------|
-| 1 | 安装钩子脚本描述（`pkg.md` en+zh） | ✅ | ✅ 0.9.9 已更新，1.0.0 验证通过 |
-| 2 | "没有中央仓库"声明（`pkg.md:124` en+zh） | **高** | ✅ 已修复为"官方仓库已预注册 + 仍支持其他方式" |
-| 3 | Git tag 覆盖范围 | **高** | ✅ 缺 3 个（v0.1.7, v0.9.8, v0.9.9），已补打（非原估 8 个，v0.9.10 已有 tag） |
-| 4 | 捆绑包（`pkg/*.tar.gz`）废弃引用 | 中 | ✅ 用户文档中无残余引用 |
-| 5 | `ezmk.toml` 字段版本标记准确性 | 中 | ✅ 所有节已正确标注版本 |
-| 6 | 仓库 URL 和安装 URL 有效性 | 中 | ✅ URL 一致，GitHub/Gitee 双源有效 |
-| 7 | Lua API 函数数量引用一致性 | 低 | ✅ 23 函数，代码与文档一致 |
-| 8 | 构建钩子类型描述准确性 | 低 | ✅ `[hooks]` 节描述准确 |
-| 9 | 编译缓存文档与实现一致性 | 低 | ✅ `@cache.md` 哈希算法/`record.json` 格式正确 |
-| 10 | CHANGES.md 覆盖范围 | 中 | ✅ 覆盖 0.9.5~0.9.10 |
-| 11 | 教程内容一致性 | 中 | ✅ 18 文件（en+zh）完整 |
+### 阶段二：MSVC 包编译（`compile_package()` 工具链感知）
 
-- [x] 逐项审计，发现过时内容直接修复
-- [x] 确保中英文文档同步修正（`docs/en/` ↔ `docs/zh/` 对应文件同时更新）
+**2.1 归档阶段 MSVC 分支**：
 
-#### 阶段四：核心文档重写
+- [x] **`toolchain.hpp`**：`Toolchain` 新增 `version` 字段（`std::string`）
+- [x] **`toolchain.cpp`**：`detect_toolchain()` 填充 `version`（运行 `g++ --version` / `cl` 捕获首行输出）
+- [x] **`pkg.cpp` `compile_package()`**：新增 `Toolchain` 参数，内部根据 `tc.family` 选择：
+  - MSVC：`lib.exe /OUT:"<lib_tmp>" <obj_files...>` → `.lib`
+  - GCC/Clang：`ar rcs "<lib_tmp>" <obj_files...>` → `.a`（现有逻辑）
+  - 原子写入：沿用 temp → rename 模式
+- [x] **`pkg.cpp` `install()`**：传递当前工具链到 `compile_package()`
 
-根据当前代码库状态，重写三份核心文档，确保内容与实际实现一致：
+**2.2 `index.toml` 平台映射扩展**：
 
-- [x] **`CLAUDE.md`** — 更新架构描述、`detect_install_script` 公开 API、统一 sandbox 框架（`run_lua_script_with_ctx`）、`api_version` 字段、plans 目录重组、测试基线数据
-- [x] **`README.md`** — 测试计数修正（482→538 用例，9→8 集成测试）
-- [x] **`README_ZH.md`** — 与 `README.md` 对齐，测试计数同步修正
+- [x] **`repo.cpp`**：平台映射解析适配 `os_arch_toolchain` 三元组格式（工具链标签：`gcc` / `msvc` / `clang`）
+- [x] **Fallback 逻辑**：优先匹配三元组 `{os}_{arch}_{toolchain}` → 旧格式 `{os}_{arch}`（映射到 GCC）→ 都不存在则报错
+- [x] **向后兼容**：旧格式 `"windows_x86_64"` 映射到 `"windows_x86_64_gcc"`
 
-> 重写原则：以当前代码库为单一真相来源，逐项核实后再落笔，不做"猜测式"文档更新。
+**2.3 i18n**：
 
-#### 阶段五：Git 收尾
+- [x] `i18n_keys.def` 新增 key（`pkg_lib_creating`、`pkg_lib_creating_msvc` 等），`en.json` / `zh.json` 添加翻译
+- [x] `build.sh` 编译通过 + 全量测试通过
 
-- [x] 补打缺失的 Git tag：`v0.1.7`、`v0.9.8`、`v0.9.9`（实缺 3 个，非原估 8 个）
-- [x] `CHANGES.md` 添加 1.0.0 条目（里程碑摘要：0.9.0 → 1.0.0 所有关键交付）
-- [x] 更新 `build.sh` 版本号 + `include/ezmk/version.hpp` → `1.0.0`
-- [x] 检查 git 工作区清洁（无遗漏未提交更改）
-- [x] `build.sh` 最终编译验证 + 全量测试通过（538 用例 / 2438 断言）
-- [x] 创建 Git tag `v1.0.0` + push
+### 阶段三：确定性构建 + Lockfile
 
-### 1.4 兼容性
+**3.1 确定性编译 flags**：
 
-本版本不修改源代码（版本号字符串除外），无兼容性风险。
+- [x] **`config.hpp`**：`CompileSection` 新增 `deterministic`（默认 `false`）+ `source_date_epoch`（可选 `uint64_t`）
+- [x] **`config.cpp`**：解析 `compile.deterministic` + `compile.source_date_epoch`
+- [x] **`cache.cpp` `compile_one_source()`**：`deterministic = true` 时注入：
+  - GCC/Clang：`-ffile-prefix-map=<root>=.` + `-frandom-seed=<src_filename>` + 设置 `SOURCE_DATE_EPOCH` 环境变量
+  - MSVC：`/Brepro` + 设置 `SOURCE_DATE_EPOCH` 环境变量
+- [x] **`build.cpp` `prepare_build_state()`**：`SOURCE_DATE_EPOCH` 取值优先级：环境变量 → `ezmk.toml` 配置 → git HEAD commit 时间戳 → `ezmk.toml` 修改时间（fallback）
 
-| 操作 | 影响 | 处理 |
+**3.2 `record.json` v1 → v2**：
+
+- [x] **`cache.hpp`**：`CacheRecord` 新增 `compiler_version` + `deterministic` 字段
+- [x] **`cache.cpp`**：加载 `record.json` 后检查 `compiler_version` 变化 → 全量清空 record 条目
+- [x] **`cache.cpp` `compile_options_signature()`**：纳入 `deterministic` 标志（开关确定性构建 → 全量重编译）
+
+**3.3 Lockfile（`ezmk.lock`）**：
+
+- [x] **新建 `include/ezmk/lockfile.hpp` + `src/lockfile.cpp`**：
+  - `LockedPackage` / `Lockfile` 数据结构（含 `sha256`、`platform`、`toolchain` 等字段）
+  - `load()` / `save()` / `verify()` / `depends_changed()` API（TOML 格式）
+- [x] **`config.hpp`**：新增 `LockedPackage` / `Lockfile` 结构体
+- [x] **`pkg.cpp` `install()`**：成功后调用 `lockfile::save()` 生成/更新 `ezmk.lock`（整个传递闭包）
+- [x] **`pkg.cpp` `update()`**：成功后更新 `ezmk.lock` 中对应条目
+- [x] **`cli.cpp`**：`InstallOptions` 新增 `locked` / `no_lock` 字段 → `pkg.cpp` 实现：
+  - `--locked`：仅使用 lockfile 安装，不重新解析，不一致则报错退出
+  - `--no-lock`：不生成/更新 lockfile（一次性安装）
+- [x] **`build.cpp` `prepare_build_state()`**：调用 `lockfile::verify()` 做完整性校验
+  - `deterministic = true` 时 lockfile 缺失或校验失败 → **error**（非零 exit code）
+  - `deterministic = false` 时 lockfile 缺失仅跳过校验，不影响构建
+- [x] **`cache.cpp` `compile_options_signature()`**：`deterministic = true` 时纳入 lockfile 内容 SHA-256
+
+**3.4 i18n**：
+
+- [x] `i18n_keys.def` 新增 key（`build_deterministic`、`cache_compiler_changed`、`lock_*` 系列 ~8 个），`en.json` / `zh.json` 添加翻译
+- [x] `build.sh` 编译通过 + 全量测试通过
+
+### 阶段四：`ezmk project install` 命令
+
+- [x] **`config.hpp`**：新增 `InstallSection`（`prefix`、`bindir`、`libdir`、`includedir`、`sharedir`）
+- [x] **`config.cpp`**：解析 `[install]` 配置节（`prefix` 默认：Unix `$HOME/.local`，Windows `%LOCALAPPDATA%\ezmk`）
+- [x] **`cli.hpp`**：新增 `InstallOptions` 结构体（`prefix`、`dry_run`、`no_headers`、`no_data`）
+- [x] **`cli.cpp`**：新增 `parse_install()` 解析器 + `cmd_project_install()` 枚举值 + 简写 `pi`
+- [x] **新建 `src/install.cpp`**（或 `build.cpp` 中新增 `install_project()`）：
+  - 流程：构建（若未构建）→ 解析 `[install]` → 创建目标目录 → 复制产物 → 输出摘要
+  - 布局：`executable` → `<bindir>/`；`static` → `<libdir>/`；`shared` → `<bindir>/`（DLL）+ `<libdir>/`（导入库）；头文件 → `<includedir>/<name>/`
+- [x] **`main.cpp`**：分发 `ProjectInstall` → 调用安装函数
+- [x] **`--dry-run`**：仅显示将安装什么，不实际写入；**`--no-headers`** / **`--no-data`**：跳过对应步骤
+- [x] **i18n**：`i18n_keys.def` 新增 key（`install_*` 系列 ~12 个），`en.json` / `zh.json` 添加翻译
+- [x] `build.sh` 编译通过 + 全量测试通过
+
+### 阶段五：集成测试与校验
+
+- [x] 创建 MSVC 包编译测试（Windows + MSVC 环境下 `pkg install` 从源码编译）
+- [x] 创建 header-only 包安装测试（编译跳过 + 头文件正确复制）
+- [x] 创建确定性构建验证测试（连续两次构建产生字节级相同的产物）
+- [x] 创建 lockfile 生成/校验/`--locked` 模式测试
+- [x] 创建 `ezmk.lock` 与 `deterministic = true` 联动测试（缺失 lockfile → error）
+- [x] 创建 lockfile 依赖变更检测测试（`ezmk.toml` 变了但 lockfile 未更新 → warn/error）
+- [x] 创建 `project install` 端到端测试（static / executable / shared 三种类型）
+- [x] `build.sh` 编译通过 + 全量测试通过
+- [x] 检查编译无新增警告
+- [x] 更新 `CHANGES.md`
+
+---
+
+## 4 兼容性矩阵
+
+| 变更 | 影响 | 处理 |
 |------|------|------|
-| 计划文件移动 | 外部链接到 `plans/0.x.x.md` 的 URL 失效 | `plans/README.md` 保留索引；可直接链接到新路径 |
-| 中文 CLI 文档翻译 | 无 | 纯文档改进 |
-| 文档审计修复 | 若发现实现级 bug 则修复 | 仅限于文档层面，不涉及代码改动 |
+| `compile_package()` 新增 `Toolchain` 参数 | 所有调用方需更新 | 调用方仅限于 `pkg.cpp` 内部（`install()` / `update()`），影响面小 |
+| `index.toml` 平台键扩展为三元组 | 旧格式 `"windows_x86_64"` 继续工作 | 解析时 fallback：三元组 → 二元组（映射到 GCC） |
+| `record.json` 格式 v1 → v2 | 旧缓存失效 | `version` 字段控制：v1 记录全量清空后重建 |
+| `compile.deterministic = true` 改变输出 | 旧缓存失效（签名变化） | 预期行为，仅新配置触发 |
+| 新增 `ezmk.lock` | 没有 lockfile 的项目行为不变 | `deterministic = false` 时 lockfile 缺失仅跳过校验 |
+| `ezmk pkg install --locked` | 新 flag，默认不启用 | 向后兼容；旧脚本不加 `--locked` 行为不变 |
+| 新增 `[install]` 配置节 | 不声明 `[install]` 的项目行为不变 | 纯增量 |
+| `header_only = true` 跳过编译 | 旧包（未声明）行为不变 | 纯增量 |
 
 ---
 
-## 二、1.1.0 — 包编译与开发体验（执行计划）
+## 5 延后项（1.2.0+）
 
-> 详细设计：[`plans/release/1.1.0-dev.1.md`](plans/release/1.1.0-dev.1.md)、[`plans/release/1.1.0-dev.2.md`](plans/release/1.1.0-dev.2.md)
-
-### 2.1 背景
-
-1.0.0 正式版发布后，识别出两个影响实际使用的工程领域待提升：MSVC 包编译能力、包开发体验。
-
-### 2.2 两项交付
-
-| # | 交付物 | 说明 |
-|---|--------|------|
-| 1 | **MSVC 包编译与确定性构建**（dev.1） | MSVC 下 `pkg install` 源码编译（`/MT`/`/MD` 自动选择）、`__TIMESTAMP__`/`__DATE__` 替换为 `SOURCE_DATE_EPOCH`、`ezmk project install` 产物安装 |
-| 2 | **包开发体验提升**（dev.2） | 多平台共包分发（同一 tar.gz 含 Win/Lin/mac 三平台 `.a`）、`index.toml` `[platforms]` 平台映射、仓库平台过滤 |
-
-### 2.3 执行步骤
-
-- [ ] 阅读 `plans/release/1.1.0-dev.1.md` + `plans/release/1.1.0-dev.2.md`
-- [ ] 合并为一个 `plans/release/1.1.0.md` 统一执行计划
-- [ ] 实现 MSVC 包编译（`cl.exe` + `lib.exe` 包编译流程）
-- [ ] 实现确定性构建（`SOURCE_DATE_EPOCH` 支持）
-- [ ] 实现 `ezmk project install` 产物安装
-- [ ] 实现多平台共包分发 + `index.toml` 平台映射
-- [ ] `build.sh` 编译验证 + 全量测试通过
-- [ ] Git tag `v1.1.0`
-
----
-
-## 三、关键里程碑
-
-```
-1.0.0 ──────→ 1.1.0
-正式版发布    包编译与开发体验
-✅ 已完成     ← 当前 →
-```
-
-| 里程碑 | 版本 | 核心意义 |
-|--------|------|----------|
-| 🎉 正式发布 | 1.0.0 | 文档审计、翻译补全、核心文档重写、23 个 tag 完整 ✅ |
-| 包编译增强 | 1.1.0 | MSVC 包编译、确定性构建、多平台分发 ← 当前位置 |
-
----
-
-## 四、跨版本关注点
-
-### 3.1 向后兼容性
-
-- `ezmk.toml` 格式扩展添加可选字段，不影响已有配置
-- `record.json` 的 `version` 字段支持缓存格式演进
-- CLI 接口保持稳定（新增 flag 不破坏已有 flag）
-- i18n 键治理：`include/ezmk/i18n_keys.def`（X-macro）为单一数据源
-
-### 3.2 安全模型
-
-- 全局安装确认 + SHA-256 校验（已有）
-- Lua sandbox：`os.execute`/`io.popen` 编译期移除，文件写入限制，独立环境表
-- Utils 权限管理：细粒度白名单控制（read/write/run）
-
-### 3.3 跨平台一致性
-
-- 同一份 `ezmk.toml` 可在 Windows/MSVC 和 Linux/GCC 下编译
-- 缓存记录中的 `compiler` 字段天然隔离不同编译器的缓存
-- 1.0.0 不修改源代码，三平台行为保持一致
-
-### 3.4 测试基线
-
-- 单元测试：538 用例 / 2440 断言（0.9.10 基线）
-- 集成测试：7 个端到端场景（`[integration]` tag）
-- 1.0.0 不修改源代码，测试基线保持不变
-
-### 3.5 后续
-
-- 1.0.0 之后的新版本计划使用 `plans/release/1.1.0.md` 等路径
-- 可在 `plans/` 下新增 `plans/future/` 目录存放路线图
-- 1.0.0 = 无源代码改动，确保 1.0.0 二进制与 0.9.10 二进制功能一致（版本号字符串除外）
+- MSVC 预编译包的上传到默认仓库（本版本实现工具链能力，上传是运维操作）
+- 共享库（DLL/SO）的安装后运行时搜索路径（RPATH / `PATH` 配置）
+- `ezmk project uninstall` 卸载命令
+- Lockfile 跨平台合并策略（`ezmk.lock.d/` 按平台拆分）
+- `ezmk pkg verify` 独立校验命令

@@ -2,6 +2,7 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
+#include "ezmk/lockfile.hpp"
 #include "ezmk/lua_api.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/thread_pool.hpp"
@@ -510,6 +511,43 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
         }
     }
 
+    // 1.1.0: deterministic build — resolve SOURCE_DATE_EPOCH
+    if (st.compile_cfg.deterministic && st.compile_cfg.source_date_epoch == 0) {
+        // Priority: env → git HEAD commit time → ezmk.toml mtime (fallback)
+        const char* env_sde = std::getenv("SOURCE_DATE_EPOCH");
+        if (env_sde && env_sde[0]) {
+            st.compile_cfg.source_date_epoch = static_cast<uint64_t>(std::stoull(env_sde));
+        } else {
+            // Try git HEAD commit timestamp
+            std::error_code ec;
+            auto git_dir = st.proj_root / ".git";
+            if (fs::exists(git_dir, ec)) {
+                auto git_res = util::run_command("git log -1 --format=%ct 2>&1");
+                if (git_res.exit_code == 0 && !git_res.out.empty()) {
+                    try {
+                        st.compile_cfg.source_date_epoch = static_cast<uint64_t>(std::stoull(git_res.out));
+                    } catch (...) {}
+                }
+            }
+            // Fallback: ezmk.toml modification time
+            if (st.compile_cfg.source_date_epoch == 0) {
+                auto toml_path = st.proj_root / "ezmk.toml";
+                if (fs::exists(toml_path, ec)) {
+                    auto ftime = fs::last_write_time(toml_path, ec);
+                    if (!ec) {
+                        auto sctp = std::chrono::system_clock::from_time_t(
+                            std::chrono::system_clock::to_time_t(
+                                std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                                    ftime - fs::file_time_type::clock::now()
+                                    + std::chrono::system_clock::now())));
+                        st.compile_cfg.source_date_epoch = static_cast<uint64_t>(
+                            std::chrono::system_clock::to_time_t(sctp));
+                    }
+                }
+            }
+        }
+    }
+
     // Collect sources + validate
     collect_sources(st.compile_cfg.src_dirs, st.proj_root, cfg.project.type);
 
@@ -645,6 +683,33 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
         }
     }
 
+    // 1.1.0: lockfile verification
+    auto lf = lockfile::load(st.proj_root);
+    if (lf.has_value()) {
+        if (lockfile::depends_changed(cfg, *lf)) {
+            util::warn(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_depends_changed));
+        }
+        auto mismatches = lockfile::verify(st.proj_root, *lf);
+        if (!mismatches.empty()) {
+            if (st.compile_cfg.deterministic) {
+                std::string names;
+                for (auto& m : mismatches) {
+                    if (!names.empty()) names += ", ";
+                    names += m;
+                }
+                util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::lock_integrity_fail,
+                                             {{"pkgs", names}}));
+            } else {
+                for (auto& m : mismatches) {
+                    util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::lock_sha256_mismatch,
+                                                {{"pkg", m}}));
+                }
+            }
+        }
+    } else if (st.compile_cfg.deterministic) {
+        util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_missing_deterministic));
+    }
+
     // Pre-build hook
     run_hook(cfg.hooks.pre_build, st.proj_root, "" /* no output yet */,
              opts.profile, ezmk::i18n::I18nKey::pre_build_hook);
@@ -657,8 +722,34 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
 std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opts) {
     // Load cache
     auto record = cache::load_record();
+
+    // 1.1.0: check compiler version — if changed, invalidate all caches
+    std::string compiler_name = st.tc.cxx_compiler.filename().string();
+    if (!record.compiler_version.empty() && record.compiler_version != st.tc.version) {
+        util::info(ezmk::i18n::I18nKey::cache_compiler_changed);
+        record.files.clear();
+    }
+    record.compiler = compiler_name;
+    record.compiler_version = st.tc.version;
+
+    // 1.1.0: track deterministic flag — toggling triggers full rebuild
+    if (record.deterministic != st.compile_cfg.deterministic) {
+        if (!record.files.empty()) {
+            util::info(ezmk::i18n::I18nKey::compile_options_changed);
+            record.files.clear();
+        }
+        record.deterministic = st.compile_cfg.deterministic;
+    }
+
     auto cur_sig = cache::compile_options_signature(st.compile_cfg, st.extra_includes,
                                                     st.lang.std_flag);
+    // 1.1.0: deterministic build — include lockfile hash in signature
+    if (st.compile_cfg.deterministic) {
+        auto lock_path = st.proj_root / "ezmk.lock";
+        if (util::file_exists(lock_path)) {
+            cur_sig += ":" + crypto::sha256_file(lock_path);
+        }
+    }
     if (record.compile_options_signature != cur_sig) {
         if (!record.compile_options_signature.empty()) {
             util::info(ezmk::i18n::I18nKey::compile_options_changed);
@@ -961,6 +1052,115 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
              ezmk::i18n::I18nKey::post_build_hook);
 
     return output;
+}
+
+// 1.1.0: install_project — copy build artifacts to install prefix
+void install_project(const config::EzConfig& cfg,
+                     const cli::ProjectInstallOptions& opts,
+                     const fs::path& proj_root) {
+    auto& inst = cfg.install;
+
+    // Resolve prefix (CLI override takes priority)
+    fs::path prefix = opts.prefix.empty() ? fs::path(inst.prefix) : fs::path(opts.prefix);
+
+    // Resolve subdirectories
+    auto bindir     = prefix / inst.bindir;
+    auto libdir     = prefix / inst.libdir;
+    auto includedir = prefix / inst.includedir;
+
+    std::string name = cfg.project.name;
+    std::string type = cfg.project.type;
+    fs::path build_dir = proj_root / "build";
+
+    fs::create_directories(bindir);
+    fs::create_directories(libdir);
+    if (!opts.no_headers) fs::create_directories(includedir / name);
+
+    int files_copied = 0;
+    size_t total_bytes = 0;
+
+    auto copy_file = [&](const fs::path& src, const fs::path& dst) {
+        if (!util::file_exists(src)) {
+            util::warn(std::string("artifact not found, skipping: ") + src.string());
+            return;
+        }
+        if (opts.verbose) {
+            util::info(std::string("  ") + dst.string());
+        }
+        if (!opts.dry_run) {
+            std::error_code ec;
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+            if (ec) {
+                util::warn(std::string("failed to copy: ") + src.string() + " → " + dst.string() + ": " + ec.message());
+            } else {
+                files_copied++;
+                total_bytes += fs::file_size(dst, ec);
+            }
+        } else {
+            files_copied++;
+        }
+    };
+
+    if (type == "executable") {
+    #ifdef EZMK_WIN
+        fs::path exe_src = build_dir / (name + ".exe");
+        fs::path exe_dst = bindir / (name + ".exe");
+    #else
+        fs::path exe_src = build_dir / name;
+        fs::path exe_dst = bindir / name;
+    #endif
+        copy_file(exe_src, exe_dst);
+    } else if (type == "static") {
+        // Try both .a and .lib
+        for (auto& ext : {".a", ".lib"}) {
+            fs::path lib_src = build_dir / ("lib" + name + ext);
+            if (util::file_exists(lib_src)) {
+                copy_file(lib_src, libdir / ("lib" + name + ext));
+                break;
+            }
+        }
+    } else if (type == "shared") {
+    #ifdef EZMK_WIN
+        fs::path dll_src = build_dir / (name + ".dll");
+        fs::path lib_src = build_dir / (name + ".lib");
+        if (util::file_exists(dll_src)) copy_file(dll_src, bindir / (name + ".dll"));
+        if (util::file_exists(lib_src)) copy_file(lib_src, libdir / (name + ".lib"));
+    #else
+        fs::path so_src = build_dir / ("lib" + name + ".so");
+        copy_file(so_src, libdir / ("lib" + name + ".so"));
+    #endif
+    }
+
+    // Copy headers
+    if (!opts.no_headers) {
+        auto include_src = proj_root / "include";
+        if (util::file_exists(include_src)) {
+            auto include_dst = includedir / name;
+            fs::create_directories(include_dst);
+            for (auto& entry : fs::recursive_directory_iterator(include_src)) {
+                if (entry.is_regular_file()) {
+                    auto rel = fs::relative(entry.path(), include_src);
+                    auto dst = include_dst / rel;
+                    fs::create_directories(dst.parent_path());
+                    copy_file(entry.path(), dst);
+                }
+            }
+        }
+    }
+
+    // Summary
+    std::string size_str;
+    if (!opts.dry_run && total_bytes > 0) {
+        if (total_bytes < 1024) size_str = ", " + std::to_string(total_bytes) + " B";
+        else if (total_bytes < 1024 * 1024) size_str = ", " + std::to_string(total_bytes / 1024) + " KB";
+        else size_str = ", " + std::to_string(total_bytes / (1024 * 1024)) + " MB";
+    }
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_summary,
+        {{"name", name},
+         {"version", cfg.project.version},
+         {"prefix", prefix.string()},
+         {"files", std::to_string(files_copied)},
+         {"size", size_str}}));
 }
 
 } // namespace ezmk::build

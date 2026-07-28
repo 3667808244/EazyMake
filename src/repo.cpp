@@ -1,5 +1,7 @@
 #include "ezmk/repo.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/i18n.hpp"
+#include "ezmk/toolchain.hpp"
 #include "ezmk/util.hpp"
 
 #include "toml.hpp"
@@ -230,6 +232,64 @@ static void validate_local_repo(const fs::path& dir) {
     }
 }
 
+// 1.1.0: Build a platform key string from the current system and toolchain.
+// Format: "{os}_{arch}_{toolchain}" (triple) or "{os}_{arch}" (double, fallback).
+// Toolchain tag: "gcc", "clang", or "msvc".
+static std::string build_platform_key(const toolchain::Toolchain& tc, bool triple) {
+    std::string os;
+#ifdef EZMK_WIN
+    os = "windows";
+#elif defined(EZMK_MACOS)
+    os = "darwin";
+#else
+    os = "linux";
+#endif
+
+    std::string arch;
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)
+    arch = "x86_64";
+#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+    arch = "arm64";
+#elif defined(__i386__) || defined(__i686__) || defined(_M_IX86)
+    arch = "x86";
+#else
+    arch = "unknown";
+#endif
+
+    if (!triple) return os + "_" + arch;
+
+    std::string toolchain_tag;
+    switch (tc.family) {
+    case toolchain::CompilerFamily::Msvc:  toolchain_tag = "msvc";  break;
+    case toolchain::CompilerFamily::Clang: toolchain_tag = "clang"; break;
+    default:                               toolchain_tag = "gcc";   break;
+    }
+    return os + "_" + arch + "_" + toolchain_tag;
+}
+
+// 1.1.0: Resolve a platform-specific path prefix from index.toml's [platform] section.
+// Tries triple key first, then double key (fallback to GCC), then empty string.
+static std::string resolve_platform_prefix(const toml::table& root) {
+    auto tc = toolchain::detect_toolchain();
+
+    auto platform_tbl = root["platform"].as_table();
+    if (!platform_tbl) return "";
+
+    // 1. Try triple key: e.g. "windows_x86_64_msvc"
+    std::string triple = build_platform_key(tc, true);
+    if (auto val = (*platform_tbl)[triple].value<std::string>()) {
+        return *val;
+    }
+
+    // 2. Fallback to double key: e.g. "windows_x86_64" (maps to GCC)
+    std::string double_key = build_platform_key(tc, false);
+    if (auto val = (*platform_tbl)[double_key].value<std::string>()) {
+        return *val;
+    }
+
+    return "";
+}
+
 // Read a package's file path and sha256 from a repo's index.toml.
 // Returns {file_path, sha256} where sha256 may be empty if not provided.
 static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
@@ -241,6 +301,9 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
         auto root = toml::parse_file(index_path.string());
         auto pkgs = root["packages"].as_array();
         if (!pkgs) return {};
+
+        // 1.1.0: resolve platform prefix from [platform] section
+        std::string platform_prefix = resolve_platform_prefix(root);
 
         std::string best_file;
         std::string best_version;
@@ -268,7 +331,12 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
 
         if (best_file.empty()) return {};
         PkgSearchResult result;
-        result.archive_path = repo_dir / best_file;
+        // 1.1.0: prepend platform prefix to file path
+        if (!platform_prefix.empty()) {
+            result.archive_path = repo_dir / platform_prefix / best_file;
+        } else {
+            result.archive_path = repo_dir / best_file;
+        }
         result.sha256 = best_sha256;
         result.version = best_version;
         result.repo_name = repo_dir.filename().string();

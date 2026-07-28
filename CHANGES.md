@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.1.0 (2026-07-28) — MSVC 包编译、确定性构建与产物安装
+
+首个次版本升级。补齐 MSVC 工具链在包管理中的完整支持，引入确定性构建与 lockfile 机制，新增 `project install` 命令。
+
+### MSVC 包编译
+
+- **`compile_package()` MSVC 感知**：归档阶段根据工具链选择 `lib.exe` → `.lib`（MSVC）或 `ar rcs` → `.a`（GCC/Clang），原子写入不变
+- **`Toolchain::version`**：`detect_toolchain()` 捕获编译器版本字符串（`g++ --version` / `cl` 首行输出），用于缓存失效判定
+- **`index.toml` `[platform]` 三元组**：平台键格式 `{os}_{arch}_{toolchain}`（如 `windows_x86_64_msvc`），解析时 fallback 到旧二元格式（映射到 GCC），向后兼容
+
+### Header-Only 包支持
+
+- **`pkg.toml` `header_only = true`**：0.9.8 遗留字段完成收尾 — 安装时跳过编译+归档，仅复制 `include/`；`ezmk pkg info` 显示 `Type: header-only`
+
+### 确定性构建
+
+- **`[compile]` 新增 `deterministic` + `source_date_epoch`**：GCC/Clang 注入 `-ffile-prefix-map` + `-frandom-seed`；MSVC 注入 `/Brepro`；自动设置 `SOURCE_DATE_EPOCH` 环境变量
+- **`SOURCE_DATE_EPOCH` 自动解析**：优先级：环境变量 → `ezmk.toml` 配置 → git HEAD commit 时间戳 → `ezmk.toml` mtime（fallback）
+- **`record.json` v1 → v2**：新增 `compiler` / `compiler_version` / `deterministic` 字段；编译器版本变化 → 自动清空缓存；`deterministic` 标志纳入编译选项签名
+
+### Lockfile（`ezmk.lock`）
+
+- **依赖版本与内容锁定**：TOML 格式，记录每个包的精确版本、`sha256`、平台、依赖图
+- **API**：`load()` / `save()` / `verify()` / `depends_changed()`
+- **集成点**：`ezmk pkg install` 自动生成/更新；`ezmk project build` 启动时校验完整性
+- **`--locked` / `--no-lock` CLI flags**：锁模式仅使用 lockfile 安装（不一致则报错）；`--no-lock` 跳过 lockfile 生成
+- **确定性构建联动**：`deterministic = true` 时 — lockfile 缺失或校验失败 → error；lockfile 内容哈希纳入编译缓存签名
+
+### `ezmk project install`
+
+- **`[install]` 配置节**：`prefix` / `bindir` / `libdir` / `includedir` / `sharedir`，支持 `~` 展开
+- **CLI**：`ezmk project install [--prefix <path>] [--dry-run] [--no-headers] [--no-data] [-v]`，简写 `pi`
+- **安装布局**：`executable` → `<bindir>/`；`static` → `<libdir>/`；`shared` → `<bindir>/`（DLL）+ `<libdir>/`（导入库）；头文件 → `<includedir>/<name>/`
+
+### 测试
+
+- 全量测试：**538 用例 / 2452 断言**，零回归
+- `record.json` v1→v2 测试更新（version 字段 1→2）
+
+---
+
 ## 1.0.0 (2026-07-24) — 正式版发布
 
 首个正式版本。**不修改源代码**（版本号字符串除外），聚焦文档与元数据收尾工作。

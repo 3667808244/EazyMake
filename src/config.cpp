@@ -248,6 +248,16 @@ EzConfig parse_config(const fs::path& toml_path) {
                     ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_ezmk_macros_type));
             }
         }
+
+        // 1.1.0: deterministic — reproducible builds
+        if (auto det = (*comp)["deterministic"].as_boolean()) {
+            cfg.compile.deterministic = det->get();
+        }
+
+        // 1.1.0: source_date_epoch — SOURCE_DATE_EPOCH override
+        if (auto sde = (*comp)["source_date_epoch"].value<int64_t>()) {
+            if (*sde >= 0) cfg.compile.source_date_epoch = static_cast<uint64_t>(*sde);
+        }
     }
 
     // Apply default for include_dirs if empty
@@ -395,6 +405,38 @@ EzConfig parse_config(const fs::path& toml_path) {
         if (auto fail = (*hooks)["on_failure"].value<std::string>()) {
             cfg.hooks.on_failure = *fail;
         }
+    }
+
+    // 1.1.0: [install] — project install configuration
+    if (auto inst = root["install"].as_table()) {
+        if (auto v = (*inst)["prefix"].value<std::string>())
+            cfg.install.prefix = *v;
+        if (auto v = (*inst)["bindir"].value<std::string>())
+            cfg.install.bindir = *v;
+        if (auto v = (*inst)["libdir"].value<std::string>())
+            cfg.install.libdir = *v;
+        if (auto v = (*inst)["includedir"].value<std::string>())
+            cfg.install.includedir = *v;
+        if (auto v = (*inst)["sharedir"].value<std::string>())
+            cfg.install.sharedir = *v;
+    }
+    // Apply defaults for install section
+    if (cfg.install.bindir.empty()) cfg.install.bindir = "bin";
+    if (cfg.install.libdir.empty()) cfg.install.libdir = "lib";
+    if (cfg.install.includedir.empty()) cfg.install.includedir = "include";
+    if (cfg.install.sharedir.empty()) cfg.install.sharedir = "share";
+    if (cfg.install.prefix.empty()) {
+#ifdef EZMK_WIN
+        const char* appdata = std::getenv("LOCALAPPDATA");
+        if (appdata) cfg.install.prefix = std::string(appdata) + "\\ezmk";
+        else cfg.install.prefix = (util::get_home_dir() / "AppData/Local/ezmk").string();
+#else
+        cfg.install.prefix = (util::get_home_dir() / ".local").string();
+#endif
+    }
+    // Expand ~ in prefix
+    if (!cfg.install.prefix.empty() && cfg.install.prefix[0] == '~') {
+        cfg.install.prefix = (util::get_home_dir() / cfg.install.prefix.substr(2)).string();
     }
 
     // [utils] (only relevant for type = "utils")

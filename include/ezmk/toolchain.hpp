@@ -21,6 +21,7 @@ struct Toolchain {
     fs::path linker;           // link.exe / g++ / clang++
     fs::path archiver;         // lib.exe / ar
     fs::path vcvars_path;      // path to vcvars64.bat (MSVC only)
+    std::string version;       // 1.1.0: compiler version string (first line of --version)
 };
 
 // Detect the available toolchain on the current platform.

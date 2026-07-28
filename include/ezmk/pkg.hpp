@@ -5,6 +5,7 @@
 #include <filesystem>
 #include "ezmk/cli.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/toolchain.hpp"
 
 namespace ezmk::pkg {
 namespace fs = std::filesystem;
@@ -20,9 +21,13 @@ std::vector<fs::path> pkg_search_dirs(const std::vector<cli::Scope>& scopes);
 // Install a package from a local file or URL into the given scope.
 // expected_sha256: if non-empty, verify archive hash before extracting.
 // assume_yes: skip all interactive prompts (for CI/scripts).
+// locked: 1.1.0 — install from lockfile only, error on mismatch.
+// no_lock: 1.1.0 — skip lockfile generation.
 void install(const std::string& pkg_file, cli::Scope scope,
              std::string_view expected_sha256 = {},
-             bool assume_yes = false);
+             bool assume_yes = false,
+             bool locked = false,
+             bool no_lock = false);
 
 // Remove a package: search scopes in order, delete the first match.
 void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
@@ -48,11 +53,13 @@ void update_all(const std::vector<cli::Scope>& scopes);
 // Throws if a cycle is detected or a dependency is missing.
 std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_dirs);
 
-// ---- Compile a package to a .a static library ----
-// Returns the path to the compiled .a file.
+// ---- Compile a package to a static library (.a / .lib) ----
+// Returns the path to the compiled library file.
 // dep_includes: extra -I paths for dependencies' include/ directories.
+// tc: the detected toolchain (controls archiver selection + output extension).
 fs::path compile_package(const fs::path& pkg_dir,
-                         const std::vector<fs::path>& dep_includes = {});
+                         const std::vector<fs::path>& dep_includes = {},
+                         const toolchain::Toolchain& tc = {});
 
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.

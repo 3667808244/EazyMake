@@ -20,6 +20,15 @@ EZMK_I18N_KEY(build_success)
 EZMK_I18N_KEY(building)
 EZMK_I18N_KEY(compiling)
 EZMK_I18N_KEY(compilation_failed)
+EZMK_I18N_KEY(cache_compiler_changed)     // 1.1.0
+EZMK_I18N_KEY(lock_depends_changed)        // 1.1.0
+EZMK_I18N_KEY(lock_integrity_fail)         // 1.1.0
+EZMK_I18N_KEY(lock_missing_deterministic)  // 1.1.0
+EZMK_I18N_KEY(lock_locked_missing)         // 1.1.0
+EZMK_I18N_KEY(lock_locked_depends_mismatch)// 1.1.0
+EZMK_I18N_KEY(lock_sha256_mismatch)        // 1.1.0
+EZMK_I18N_KEY(install_summary)             // 1.1.0
+EZMK_I18N_KEY(install_dry_run)             // 1.1.0
 EZMK_I18N_KEY(compile_options_changed)
 EZMK_I18N_KEY(compiler_not_found)
 EZMK_I18N_KEY(linking)
@@ -69,6 +78,7 @@ EZMK_I18N_KEY(install_hook_lua_error)   // 0.9.9
 EZMK_I18N_KEY(install_hook_no_run)      // 0.9.9
 EZMK_I18N_KEY(installing)
 EZMK_I18N_KEY(installing_to)
+EZMK_I18N_KEY(pkg_header_only)            // 0.9.7+
 EZMK_I18N_KEY(installing_header_only)
 EZMK_I18N_KEY(installing_precompiled)
 EZMK_I18N_KEY(missing_dep)
@@ -241,6 +251,7 @@ EZMK_I18N_KEY(help_project_new)
 EZMK_I18N_KEY(help_project_build)
 EZMK_I18N_KEY(help_project_run)
 EZMK_I18N_KEY(help_project_clean)
+EZMK_I18N_KEY(help_project_install)      // 1.1.0
 EZMK_I18N_KEY(help_project_watch)
 EZMK_I18N_KEY(help_pkg_install)
 EZMK_I18N_KEY(help_pkg_remove)

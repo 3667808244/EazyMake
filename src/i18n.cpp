@@ -65,12 +65,6 @@ namespace ezmk::i18n
 
         // ---- helpers ----
 
-        // Get the directory where the ezmk executable lives (for runtime locale loading).
-        std::string exe_parent_dir()
-        {
-            return util::get_exe_dir().string();
-        }
-
         // Try to load a locale JSON file from the runtime filesystem.
         // Looks in: ../locale/ relative to exe dir (for installed layout).
         std::string load_runtime_locale_file(const std::string &lang)

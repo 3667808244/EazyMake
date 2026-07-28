@@ -28,19 +28,27 @@ These implementation-relevant flags are not documented in the README command tab
 | `--disable-gitignore` | `project new` | Skip `.gitignore` generation |
 | `--sha256 <hash>` | `pkg install` | Verify package integrity |
 | `-y` | `pkg install` | Skip confirmation prompts |
+| `--locked` | `pkg install` | 1.1.0: install from lockfile only, error on mismatch |
+| `--no-lock` | `pkg install` | 1.1.0: skip lockfile generation |
+| `--prefix <path>` | `project install` | 1.1.0: override `[install].prefix` |
+| `--dry-run` | `project install` | 1.1.0: show what would be installed, don't write |
+| `--no-headers` | `project install` | 1.1.0: skip header installation |
+| `--no-data` | `project install` | 1.1.0: skip data file installation |
 | `-j` / `--jobs <N>` | `project build/run/watch` | Parallel compile jobs (0=auto, default) |
 | `--profile <name>` | `project build/run/watch` | Apply a build profile (e.g. debug/release) |
 | `--no-build-on-start` | `project watch` | Skip initial build in watch mode |
 
 Additional commands not yet in README:
+- `ezmk project install [-v] [--prefix <path>] [--dry-run] [--no-headers] [--no-data]` — install build artifacts (1.1.0+)
 - `ezmk pkg list [-p|-u|-g]` — list installed packages (0.2.3+)
 - `ezmk pkg update [-p|-u|-g] <pkg>` — update a package from repos (0.2.3+)
+- `ezmk pkg install --locked / --no-lock` — lockfile-aware install modes (1.1.0+)
 
 Scope flags (`-p`/`-u`/`-g`): `install` and `repo add` accept only one; others accept combined flags like `-pug`.
 
 ### Command shorthands & global `--color` (0.2.6+)
 
-- **Shorthands**: `cli::parse()` expands a top-level alias in `argv[1]` before any other parsing (so downstream logic and error messages see the canonical command). Aliases: `pn/pb/pr/pc/pw` (project), `ki/kr/ks/kn/kl/ku` (pkg), `ra/rr/rl/ru/ri` (repo), `u`/`h`/`v` (utils/help/version). Only apply at the command position; `ezmk project pn` is still an unknown subcommand. Deliberately **not** added to `completions/_ezmk`.
+- **Shorthands**: `cli::parse()` expands a top-level alias in `argv[1]` before any other parsing (so downstream logic and error messages see the canonical command). Aliases: `pn/pb/pr/pc/pi/pw` (project), `ki/kr/ks/kn/kl/ku` (pkg), `ra/rr/rl/ru/ri` (repo), `u`/`h`/`v` (utils/help/version). Only apply at the command position; `ezmk project pn` is still an unknown subcommand. Deliberately **not** added to `completions/_ezmk`. Only apply at the command position; `ezmk project pn` is still an unknown subcommand. Deliberately **not** added to `completions/_ezmk`.
 - **`--color=<mode>`**: global option consumed by `strip_color_option()` at the top of `cli::parse()` (before per-command parsing, which would reject it). Values (case-insensitive): `always`/`enable`, `auto`/`default`, `never`/`disable`. Tokens after `--` are left for pass-through. Sets `util::set_color_mode()`; explicit `always`/`never` override `NO_COLOR` (only `auto` honors it), matching git/ls. `always` also runs `init_console()` for Windows VT100.
 
 ### Internationalization (i18n) — single source of truth (0.2.6+)
@@ -59,10 +67,21 @@ See `README.md` for the TOML example and `docs/en/config_file.md` for the full s
 - `[compile.profile.<name>]` (0.2.3+) — profile-specific `flags`, `msvc_flags`, `macros` (sub-table). Flags append to base; macros override base on key conflict.
 - `[link.profile.<name>]` (0.2.3+) — profile-specific link `flags`, `msvc_flags`
 - `[hooks]` (0.2.3+) — `pre_build`, `post_build`, `on_failure`: paths to Lua hook scripts (relative to project root)
+- `[install]` (1.1.0+) — `prefix`, `bindir`, `libdir`, `includedir`, `sharedir`: install layout for `ezmk project install`
+
+**Compile section additions (1.1.0):**
+- `deterministic` (bool, default `false`) — enable reproducible builds (`-ffile-prefix-map` / `/Brepro` + `SOURCE_DATE_EPOCH`)
+- `source_date_epoch` (uint64, optional, default 0=auto) — override `SOURCE_DATE_EPOCH` timestamp
 
 ### Package management
 
-Packages are `.zip` or `.tar.gz` archives compiled to `*.a` static libraries following dependency chain. Circular dependencies or missing packages are errors. `type = "utils"` packages additionally provide Lua-based tools via `ezmk utils`.
+Packages are `.zip` or `.tar.gz` archives compiled to static libraries following dependency chain. Circular dependencies or missing packages are errors. `type = "utils"` packages additionally provide Lua-based tools via `ezmk utils`.
+
+**MSVC-aware compilation (1.1.0):** `compile_package()` accepts a `Toolchain` parameter and selects the archiver based on `tc.family`: MSVC → `lib.exe /OUT:*.lib`, GCC/Clang → `ar rcs *.a`. `pkg::install()` auto-detects the toolchain once and passes it through. The output extension (`.a` vs `.lib`) is determined by the toolchain, not hard-coded.
+
+**Header-only packages (0.9.7/1.1.0):** `pkg.toml` field `header_only = true` skips compilation and archiving entirely — only the `include/` directory is copied. `ezmk pkg info` displays `Type: header-only` for these packages.
+
+**Platform mapping (1.1.0):** `index.toml`'s `[platform]` section now supports `os_arch_toolchain` triple keys (e.g. `"windows_x86_64_msvc"`) with fallback to legacy `os_arch` double keys (mapped to GCC). The `resolve_platform_prefix()` helper in `repo.cpp` tries triple → double → empty.
 
 Install paths by scope:
 - Global: `<ezmk_install_dir>/pkg/`
@@ -98,6 +117,8 @@ Build hooks (`pre_build`/`post_build`/`on_failure`) and install hooks (`preinsta
 
 Build hooks receive `ctx` table (`ctx.output`, `ctx.project_root`, `ctx.profile`); install hooks receive (`ctx.pkg_name`, `ctx.pkg_root`, `ctx.install_path`, `ctx.scope`, `ctx.pkg_version`, `ctx.pkg_type`). Hooks run in sandboxed Lua environments. Script not found → warn + skip (non-fatal). Hooks only apply to user projects/packages, not during package compilation.
 
+**Toolchain version (1.1.0):** `Toolchain::version` captures the compiler version string (first line of `g++ --version` / `cl` output) during `detect_toolchain()`. Used for cache invalidation — if `record.json`'s `compiler_version` differs from current, all cache entries are cleared.
+
 ### File watcher (0.2.3+)
 
 Cross-platform `FileWatcher` class (`include/ezmk/file_watcher.hpp`): Windows uses `ReadDirectoryChangesW` + IOCP; Linux uses `inotify`; macOS uses `kqueue`. Watch mode (`ezmk project watch`) monitors `src_dirs`, `include_dirs`, and `ezmk.toml`. 300ms debounce coalesces rapid edits. `ezmk.toml` changes trigger cache clear + full rebuild. Build failures don't exit the watch loop.
@@ -111,6 +132,37 @@ Content-hash-based incremental compilation. See `docs/en/@cache.md`. Algorithm:
 4. All match → cache hit, reuse `.o`; otherwise → recompile and update record
 
 Atomic writes: `.o` and `record.json` written to temp files first, then `rename` to avoid corruption on mid-build failure. Cache stored in `.ezmk/cache/obj/` and `.ezmk/cache/record.json`. `--disable-cache` forces recompilation but still updates the cache afterward.
+
+**record.json v2 (1.1.0):** Added `compiler`, `compiler_version`, and `deterministic` fields. When loading a record, if `compiler_version` differs from the current toolchain, all entries are cleared (full rebuild). The `deterministic` flag is folded into `compile_options_signature` — toggling it triggers a full rebuild. When `deterministic = true`, the SHA-256 of `ezmk.lock` is also appended to the signature, so dependency content changes invalidate the cache.
+
+### Deterministic builds (1.1.0)
+
+`[compile]` section supports `deterministic = true` and optional `source_date_epoch` (uint64 Unix timestamp). When enabled:
+
+- **GCC/Clang**: injects `-ffile-prefix-map=<proj_root>=.` (relative debug paths) + `-frandom-seed=<src_filename>` (stable RNG) + sets `SOURCE_DATE_EPOCH` env var (fixed `__DATE__`/`__TIME__`).
+- **MSVC**: injects `/Brepro` (removes absolute paths/timestamps) + sets `SOURCE_DATE_EPOCH` env var.
+- **`SOURCE_DATE_EPOCH` resolution priority** (in `build.cpp prepare_build_state()`): environment variable → `ezmk.toml` config → git HEAD commit timestamp → `ezmk.toml` mtime (fallback).
+- **Env var**: set per-compile using `_putenv_s`/`setenv`, restored after `run_command()`.
+
+### Lockfile — `ezmk.lock` (1.1.0)
+
+TOML file in project root that pins exact dependency versions and content hashes for reproducible builds. Data structures in `include/ezmk/config.hpp` (`LockedPackage` / `Lockfile`); implementation in `src/lockfile.cpp` + `include/ezmk/lockfile.hpp`.
+
+- **API**: `lockfile::load()` / `lockfile::save()` / `lockfile::verify()` / `lockfile::depends_changed()`.
+- **Generation**: `pkg::install()` auto-generates after successful install (project scope only, skipped when `--no-lock`). Scans all installed packages in `.ezmk/pkg/` and writes their name, version, sha256 (of `.a`/`.lib`), type, scope, platform, and dependencies.
+- **Verification**: `build.cpp prepare_build_state()` loads the lockfile before building. Warns if `ezmk.toml` depends differ from lockfile; checks sha256 of installed artifacts.
+- **Strict mode**: when `deterministic = true` — missing lockfile → fatal error; sha256 mismatch → fatal error. When `deterministic = false` — lockfile absence is silently skipped, mismatches are warnings.
+- **`--locked` mode**: `pkg install --locked` requires lockfile to exist and match `ezmk.toml`; refuses to proceed otherwise. Used in CI to prevent accidental dependency drift.
+
+### `ezmk project install` (1.1.0)
+
+New command that copies build artifacts to a configurable install prefix.
+
+- **Config**: `[install]` section in `ezmk.toml` — `prefix`, `bindir` (default `"bin"`), `libdir` (default `"lib"`), `includedir` (default `"include"`), `sharedir` (default `"share"`). Default prefix: Unix `$HOME/.local`, Windows `%LOCALAPPDATA%\ezmk`. Supports `~` expansion.
+- **CLI**: `ezmk project install` (shorthand `pi`) with flags: `--prefix <path>` (override), `--dry-run`, `--no-headers`, `--no-data`, `-v`/`--verbose`.
+- **Layout**: `executable` → `<prefix>/<bindir>/`; `static` → `<prefix>/<libdir>/lib<name>.a`; `shared` → `<prefix>/<bindir>/<name>.dll` + `<prefix>/<libdir>/<name>.lib`; headers → `<prefix>/<includedir>/<name>/`.
+- **Implementation**: `build::install_project()` in `src/build.cpp`. Builds first (via `build_project()`), then copies artifacts. Uses atomic `fs::copy_file` with overwrite.
+- **Data structures**: `config::InstallSection` in `config.hpp`, `cli::ProjectInstallOptions` in `cli.hpp`.
 
 ### Safety requirements
 

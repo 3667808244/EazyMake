@@ -42,6 +42,8 @@ struct CompileSection {
     std::vector<std::string> src_dirs;         // 0.2.2+ source dirs (default ["src"])
     std::map<std::string, std::string> macros; // 0.2.2+ [compile.macros] key→value
     bool ezmk_macros = true;                   // 0.2.2+ inject EZMK_* standard macros
+    bool deterministic = false;                // 1.1.0: reproducible builds
+    uint64_t source_date_epoch = 0;            // 1.1.0: SOURCE_DATE_EPOCH override (0 = auto)
 };
 
 struct LinkSection {
@@ -89,6 +91,15 @@ struct HooksSection {
     std::string on_failure;   // executed on build/link failure
 };
 
+// 1.1.0: Install section for ezmk project install
+struct InstallSection {
+    std::string prefix;       // install root (default: Unix ~/.local, Windows %LOCALAPPDATA%\ezmk)
+    std::string bindir;       // executable subdir (default: "bin")
+    std::string libdir;       // library subdir (default: "lib")
+    std::string includedir;   // header subdir (default: "include")
+    std::string sharedir;     // data subdir (default: "share")
+};
+
 struct EzConfig {
     ProjectSection project;
     CompileSection compile;
@@ -96,8 +107,31 @@ struct EzConfig {
     DependsSection depends;
     UtilsSection utils;
     HooksSection hooks;                                          // 0.2.3+
+    InstallSection install;                                      // 1.1.0 [install]
     std::map<std::string, ProfileConfig> compile_profiles;       // 0.2.3+ [compile.profile.*]
     std::map<std::string, ProfileLinkConfig> link_profiles;      // 0.2.3+ [link.profile.*]
+};
+
+// 1.1.0: Lockfile — dependency version & content pinning for reproducible builds.
+struct LockedPackage {
+    std::string name;
+    std::string version;
+    std::string source;            // repo name
+    std::string source_url;
+    std::string sha256;            // SHA-256 of the installed artifact
+    std::string type;              // "static" / "shared" / "header-only"
+    std::string scope;             // "project" / "user" / "global"
+    std::string platform;          // e.g. "windows_x86_64_msvc"
+    std::vector<std::string> dependencies;
+};
+
+struct Lockfile {
+    int version = 1;
+    std::string generated_by;
+    std::string generated_at;
+    std::string toolchain;         // "gcc" / "clang" / "msvc"
+    std::string toolchain_version;
+    std::vector<LockedPackage> packages;
 };
 
 // Parse an ezmk.toml file. Throws on parse errors.

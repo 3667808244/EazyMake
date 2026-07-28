@@ -6,8 +6,11 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[1.1.0-dev.1](release/1.1.0-dev.1.md)** — MSVC 包编译、确定性构建与产物安装
 - **[1.1.0-dev.2](release/1.1.0-dev.2.md)** — 包开发体验提升
+- **[1.1.0-dev.3](release/1.1.0-dev.3.md)** — 常见编程 Agent Skills 支持（含用户侧 skills）
+- **[1.1.0-dev.4](release/1.1.0-dev.4.md)** — 编译器与语言配置增强
+- **[1.1.0-dev.5](release/1.1.0-dev.5.md)** — 更多默认 util（含链接机制、watch 修复）
+- **[1.1.0-dev.6](release/1.1.0-dev.6.md)** — 测试系统
 
 ## 待执行
 
@@ -15,9 +18,11 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 未来规划
 
-- **[1.1.0](release/)** — 包编译与开发体验（dev.1 + dev.2 合并）
+- **[1.1.0](release/)** — 包编译与开发体验（dev.1 ~ dev.6 合并）
 
 ## 已完成
+
+- **[1.1.0-dev.1](release/1.1.0-dev.1.md)** — MSVC 包编译、确定性构建与产物安装 ✅
 
 - `0.1.1` ~ `0.1.5`(文件已移除,可以查看对应提交的`plan.md`文件)
 - **[0.1.6](dev/0.1.6.md)** - 测试(Catch2 单元测试 + 集成测试)
@@ -73,7 +78,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 | 0.9.9   | 技术栈统一   | 安装钩子 Lua 化(`.lua` 优先,`run_install_hook_script()`,sandbox 对齐),向后兼容 shell 脚本                                                                               | 0.2.3(构建钩子 Lua 基础设施)                    |
 | 0.9.10  | 代码质量重构 | 消除 `run_install_hook_script`/`run_hook_script` ~70 行重复,压缩 `run_install_script` 参数(9→6),Lua 栈断言加固,`detect_install_script` 可测试化                          | 0.9.9(安装钩子 Lua 化完成)                      |
 | 1.0.0   | 正式版发布   | plans 目录整理（dev/release 拆分）、`docs/zh/cli.md` 全中文翻译、11 项文档审计、核心文档重写、Git tag 补全（3 个缺失 tag）                                           | 0.9.10(代码质量重构完成)                         |
-| 1.1.0   | 包编译与开发 | MSVC 包编译（`/MT`/`/MD` 自动选择）、确定性构建（`__TIMESTAMP__`/`__DATE__` 替换 `SOURCE_DATE_EPOCH`）、`ezmk project install` 产物安装、多平台共包分发、`index.toml` 平台映射 | 1.0.0(正式版发布)                               |
+| 1.1.0   | 包编译与开发 | dev.1: MSVC 包编译 + 确定性构建 + 产物安装；dev.2: 多平台共包分发 + `index.toml` 平台映射 + `ezmk project pack`；dev.3: Agent Skills（6 个 dev 侧 + 用户侧）+ `CLAUDE.md` 精简；dev.4: `project.stdlib`（libc++ 支持）+ `project.lang` 泛化 + 编译器拓展；dev.5: `ezmk-official-utils` + `.ezmk/links.json` 链接机制 + watch 修复 + `ezmk-cc` 规范化；dev.6: `ezmk project test` + Catch2/内置框架 | 1.0.0(正式版发布)                               |
 
 ## 依赖关系图
 

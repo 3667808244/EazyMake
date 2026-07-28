@@ -53,4 +53,10 @@ config::LinkSection merge_link_profile(
     const config::LinkSection& base,
     const config::ProfileLinkConfig& profile);
 
+// 1.1.0: Install build artifacts to the configured prefix.
+// Copies executables, libraries, and headers to their install destinations.
+void install_project(const config::EzConfig& cfg,
+                     const cli::ProjectInstallOptions& opts,
+                     const fs::path& proj_root);
+
 } // namespace ezmk::build

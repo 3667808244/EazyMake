@@ -36,7 +36,10 @@ std::string iso_time() {
 static std::string record_to_json(const CacheRecord& rec) {
     nlohmann::json j;
     j["version"] = rec.version;
+    j["compiler"] = rec.compiler;
+    j["compiler_version"] = rec.compiler_version;              // 1.1.0
     j["compile_options_signature"] = rec.compile_options_signature;
+    j["deterministic"] = rec.deterministic;                    // 1.1.0
 
     auto& files = j["files"] = nlohmann::json::object();
     for (auto& [key, fe] : rec.files) {
@@ -59,7 +62,10 @@ static CacheRecord json_to_record(std::string_view json) {
     auto j = nlohmann::json::parse(json);
     CacheRecord rec;
     rec.version = j.value("version", 1);
+    rec.compiler = j.value("compiler", "");
+    rec.compiler_version = j.value("compiler_version", "");    // 1.1.0
     rec.compile_options_signature = j.value("compile_options_signature", "");
+    rec.deterministic = j.value("deterministic", false);       // 1.1.0
 
     if (j.contains("files")) {
         for (auto& [fname, fj] : j["files"].items()) {
@@ -196,6 +202,10 @@ std::string compile_options_signature(const config::CompileSection& compile,
     for (auto& f : compile.msvc_flags) {
         combined += f;
         combined += ' ';
+    }
+    // 1.1.0: deterministic flag — toggling triggers full rebuild
+    if (compile.deterministic) {
+        combined += "deterministic=1 ";
     }
     return crypto::sha256(combined);
 }
@@ -406,11 +416,28 @@ SingleCompileResult compile_one_source(const fs::path& src,
                    {{"file", result.rel_src}});
     }
 
+    // 1.1.0: deterministic build — resolve SOURCE_DATE_EPOCH and inject flags
+    uint64_t sde = 0;
+    if (in.compile.deterministic && in.compile.source_date_epoch > 0) {
+        sde = in.compile.source_date_epoch;
+    } else if (in.compile.deterministic) {
+        // Fallback resolution: env → git → filesystem
+        const char* env_sde = std::getenv("SOURCE_DATE_EPOCH");
+        if (env_sde && env_sde[0]) {
+            sde = std::stoull(env_sde);
+        }
+    }
+    std::string sde_str = sde > 0 ? std::to_string(sde) : "";
+
     // Build compile command
     std::ostringstream cmd;
 
     if (is_msvc) {
         cmd << "cl.exe /c ";
+        // 1.1.0: deterministic build flags
+        if (in.compile.deterministic) {
+            cmd << "/Brepro ";
+        }
         auto translated = toolchain::translate_compile_flags(
             std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
         if (!translated.translated.empty()) {
@@ -441,6 +468,11 @@ SingleCompileResult compile_one_source(const fs::path& src,
         std::string compiler = in.lang.detected_compiler.empty()
             ? in.lang.compiler : in.lang.detected_compiler;
         cmd << compiler << " " << in.lang.std_flag << " -c ";
+        // 1.1.0: deterministic build flags
+        if (in.compile.deterministic) {
+            cmd << "-ffile-prefix-map=" << util::escape_shell_arg(in.proj_root.string()) << "=. ";
+            cmd << "-frandom-seed=" << util::escape_shell_arg(src.filename().string()) << " ";
+        }
         for (auto& f : in.compile.flags) cmd << util::escape_shell_arg(f) << " ";
         if (in.use_pic) cmd << "-fPIC ";
         auto def_inc = in.proj_root / "include";
@@ -461,7 +493,36 @@ SingleCompileResult compile_one_source(const fs::path& src,
         util::info(util::color_msg(util::color::dim, "    cmd: " + cmd.str()));
     }
 
+    // 1.1.0: set SOURCE_DATE_EPOCH for deterministic builds
+    std::string old_sde;
+    if (!sde_str.empty()) {
+        const char* cur = std::getenv("SOURCE_DATE_EPOCH");
+        if (cur) old_sde = cur;
+#ifdef EZMK_WIN
+        _putenv_s("SOURCE_DATE_EPOCH", sde_str.c_str());
+#else
+        setenv("SOURCE_DATE_EPOCH", sde_str.c_str(), 1);
+#endif
+    }
+
     auto res = util::run_command(cmd.str());
+
+    // Restore SOURCE_DATE_EPOCH
+    if (!sde_str.empty()) {
+        if (!old_sde.empty()) {
+#ifdef EZMK_WIN
+            _putenv_s("SOURCE_DATE_EPOCH", old_sde.c_str());
+#else
+            setenv("SOURCE_DATE_EPOCH", old_sde.c_str(), 1);
+#endif
+        } else {
+#ifdef EZMK_WIN
+            _putenv_s("SOURCE_DATE_EPOCH", "");
+#else
+            unsetenv("SOURCE_DATE_EPOCH");
+#endif
+        }
+    }
     if (res.exit_code != 0) {
         std::ostringstream err;
         err << ezmk::i18n::fmt(ezmk::i18n::I18nKey::compilation_failed,
