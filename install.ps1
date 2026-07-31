@@ -377,6 +377,33 @@ function Register-OfficialRepo {
     }
 }
 
+# ── Pre-install official utils package (1.1.0-dev.5) ─────────────────────────────
+
+function Preinstall-OfficialUtils {
+    $ezmkBin = Get-BinPath
+
+    if (-not (Test-Path $ezmkBin)) {
+        Write-Warn "ezmk.exe not found at $ezmkBin — skipping utils pre-install."
+        return
+    }
+
+    $pkgName = "ezmk-official-utils"
+    Write-Info "Pre-installing official utils package ($pkgName)..."
+
+    if (Test-DryRun) {
+        Write-Host "       [DRY RUN] Would run: $ezmkBin pkg install -g $pkgName -y" -ForegroundColor DarkGray
+        return
+    }
+
+    $result = & $ezmkBin pkg install -g $pkgName -y 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Info "Pre-installed official utils package: $pkgName (cc, link, gen-build-package)"
+    } else {
+        Write-Warn "Could not pre-install $pkgName (no network?)."
+        Write-Warn "Run 'ezmk pkg install -g $pkgName -y' manually later."
+    }
+}
+
 # ── Verification ───────────────────────────────────────────────────────────────
 
 function Confirm-Installation {
@@ -482,10 +509,13 @@ function Main {
         # 8. Official repo pre-registration
         Register-OfficialRepo
 
-        # 9. Verification
+        # 9. Pre-install official utils package (1.1.0-dev.5: cc + link + gen-build-package)
+        Preinstall-OfficialUtils
+
+        # 11. Verification
         Confirm-Installation
 
-        # 10. PATH reminder
+        # 12. PATH reminder
         Show-PathReminder
 
     } finally {

@@ -1,0 +1,8 @@
+[project]
+name = "ezmk-official-utils"
+type = "utils"
+version = "1.1.0"
+language = "C++17"
+
+[utils]
+tools = ["link", "cc", "gen-build-package"]

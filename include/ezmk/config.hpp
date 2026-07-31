@@ -143,6 +143,21 @@ EzConfig parse_config(const fs::path& toml_path);
 void write_default_config(const fs::path& toml_path, std::string_view project_name,
                           std::string_view project_type = "executable");
 
+// 1.1.0-dev.5: Load .ezmk/links.json and return the key→value map.
+// Returns empty map if the file does not exist.
+// Throws on parse error (invalid JSON).
+std::map<std::string, std::string> load_links_json(const fs::path& project_root);
+
+// 1.1.0-dev.5: Resolve a "@link:<name>" reference to a concrete path.
+// links: the parsed .ezmk/links.json map (name → target_path).
+// sub_path: the part after the link name in "@link:<name>/sub/path" (empty if none).
+// max_depth: remaining chain resolution depth (starts at 10, decrements per hop).
+// Throws on: link not found, cycle detected, or depth exceeded.
+fs::path resolve_link_path(std::string_view name,
+                           std::string_view sub_path,
+                           const std::map<std::string, std::string>& links,
+                           int max_depth = 10);
+
 // 1.1.0-dev.4: Normalize a language/stdlib string (upper-case, unify variants).
 // "c++17" / "CXX17" / "CPP17" → "CPP17"; "libstdc++" / "glibcxx" → "LIBSTDCXX".
 std::string normalize_lang(const std::string& input);

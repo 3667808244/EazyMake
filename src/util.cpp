@@ -1053,6 +1053,51 @@ std::string escape_shell_arg(std::string_view s) {
 }
 
 // ===================================================================
+// Link syntax (1.1.0-dev.5)
+// ===================================================================
+
+LinkRef parse_link_syntax(std::string_view raw) {
+    LinkRef result;
+    const std::string_view prefix = "@link:";
+
+    // Trim leading whitespace
+    auto start = raw.find_first_not_of(" \t");
+    if (start == std::string_view::npos) return result;
+    raw = raw.substr(start);
+
+    // Must start with "@link:"
+    if (raw.size() < prefix.size() || raw.substr(0, prefix.size()) != prefix) {
+        return result; // not a link reference
+    }
+
+    auto remaining = raw.substr(prefix.size());
+    if (remaining.empty()) return result; // "@link:" with no name
+
+    // Find the first '/' to split name from sub-path
+    auto slash_pos = remaining.find('/');
+    std::string_view name_part, sub_part;
+    if (slash_pos != std::string_view::npos) {
+        name_part = remaining.substr(0, slash_pos);
+        sub_part = remaining.substr(slash_pos + 1); // may be empty for trailing slash
+    } else {
+        name_part = remaining;
+        // sub_part stays empty
+    }
+
+    // Validate name: [A-Za-z0-9_-]+
+    if (name_part.empty()) return result;
+    for (char c : name_part) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
+            return result;
+        }
+    }
+
+    result.name = std::string(name_part);
+    result.sub_path = std::string(sub_part);
+    return result;
+}
+
+// ===================================================================
 // Utils / Lua plugin discovery
 // ===================================================================
 

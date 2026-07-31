@@ -265,6 +265,20 @@ TEST_CASE("FileWatcher: debounce coalesces rapid changes", "[file_watcher][0.2.3
 }
 
 // ===================================================================
+// Empty path defense (1.1.0-dev.5)
+// ===================================================================
+
+TEST_CASE("FileWatcher: add_directory with empty path does not crash", "[file_watcher][1.1.0]") {
+    std::atomic<bool> called{false};
+    FileWatcher watcher([&called](const fs::path&) { called = true; });
+
+    REQUIRE_NOTHROW(watcher.add_directory(""));
+    // run() should not crash with empty dirs
+    watcher.run();
+    REQUIRE(true);
+}
+
+// ===================================================================
 // Non-copyable / non-movable
 // ===================================================================
 

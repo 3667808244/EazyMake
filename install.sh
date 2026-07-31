@@ -97,12 +97,13 @@ mv -f "$TMP_DEST" "$DEST"
 info "Installed: $DEST"
 
 # ------------------------------------------------- built-in ezmk-cc ------
-# ezmk-cc is the built-in compile_commands.json generator (`ezmk utils cc`).
-# It ships as a Lua script alongside the binary so it works out of the box.
+# ezmk-cc (`ezmk utils cc`) is now part of the ezmk-official-utils package (§8).
+# The package is pre-installed below so users have cc + link + gen-build-package.
+# We keep the pkg/ezmk-cc/ copy as a buildless fallback for offline installs.
 if [ -d "$SRC_DIR/pkg/ezmk-cc" ]; then
     mkdir -p "$DEST_DIR/pkg/ezmk-cc"
     cp -R "$SRC_DIR/pkg/ezmk-cc/." "$DEST_DIR/pkg/ezmk-cc/"
-    info "Installed built-in tool: ezmk-cc"
+    info "Installed built-in fallback: ezmk-cc"
 fi
 
 # ------------------------------------------------- default repo -----------
@@ -125,6 +126,18 @@ if [ "${EZMK_NO_DEFAULT_REPO:-}" != "1" ]; then
     fi
 else
     info "EZMK_NO_DEFAULT_REPO=1 — skipping official repo registration"
+fi
+
+# ------------------------------------------- pre-install ezmk-official-utils --
+# 1.1.0-dev.5: Pre-install official utils package (cc + link + gen-build-package).
+# Uses -g (global scope) so all projects can use the tools.
+# Failure is non-fatal — network may be unavailable (user can install later).
+OFFICIAL_UTILS_PKG="ezmk-official-utils"
+if "$DEST" pkg install -g "$OFFICIAL_UTILS_PKG" -y 2>/dev/null; then
+    info "Pre-installed official utils package: $OFFICIAL_UTILS_PKG"
+else
+    warn "Could not pre-install $OFFICIAL_UTILS_PKG (no network?)."
+    warn "Run 'ezmk pkg install -g $OFFICIAL_UTILS_PKG -y' later to get cc, link, and gen-build-package."
 fi
 
 # ----------------------------------------------------- zsh completions ------

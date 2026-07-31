@@ -179,6 +179,16 @@ int compare_version(std::string_view a, std::string_view b);
 // This prevents command injection when constructing shell commands with paths/URLs.
 std::string escape_shell_arg(std::string_view s);
 
+// ---- Link syntax (1.1.0-dev.5) ----
+
+// Parse "@link:<name>/sub/path" into {link_name, sub_path}.
+// Returns {name, sub_path} on success; empty name means the string is not a link reference.
+struct LinkRef {
+    std::string name;       // link name (e.g. "shared_files")
+    std::string sub_path;   // sub-path after the link name (e.g. "src/util"), empty if none
+};
+LinkRef parse_link_syntax(std::string_view raw);
+
 // ---- Utils / Lua plugin discovery ----
 
 // Search for a utils Lua script by name across all installed packages.

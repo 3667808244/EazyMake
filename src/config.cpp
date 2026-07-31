@@ -261,6 +261,139 @@ LanguageInfo parse_language(std::string_view language) {
     return info;
 }
 
+// ===================================================================
+// 1.1.0-dev.5: .ezmk/links.json — link mechanism
+// ===================================================================
+
+std::map<std::string, std::string> load_links_json(const fs::path& project_root) {
+    std::map<std::string, std::string> links;
+    auto links_file = project_root / ".ezmk" / "links.json";
+    if (!util::file_exists(links_file)) {
+        return links; // empty — no links defined
+    }
+
+    std::string content = util::file_read(links_file);
+    if (content.empty()) return links;
+
+    // Simple JSON parse (hand-written for the minimal links.json format)
+    // We avoid pulling in a full JSON library for this small use case.
+    // Format: { "name": "path", ... }
+    // This parser handles strings, colons, commas, and nested braces.
+
+    // Workaround: use ezmk's JSON decode utility via a temp approach.
+    // Since we don't have a public JSON API in config.cpp, we parse manually.
+    auto trimmed = [](std::string_view s) -> std::string_view {
+        auto b = s.find_first_not_of(" \t\n\r");
+        auto e = s.find_last_not_of(" \t\n\r");
+        if (b == std::string_view::npos) return {};
+        return s.substr(b, e - b + 1);
+    };
+
+    // Simple JSON object parser: expects {"key":"value", ...}
+    std::string_view c(content);
+    c = trimmed(c);
+    if (c.empty() || c[0] != '{') {
+        throw std::runtime_error(".ezmk/links.json: expected JSON object starting with '{'");
+    }
+    c = c.substr(1); // skip '{'
+    c = trimmed(c);
+
+    while (!c.empty() && c[0] != '}') {
+        // Parse key (quoted string)
+        c = trimmed(c);
+        if (c.empty() || c[0] != '"') break;
+        c = c.substr(1); // skip opening '"'
+        std::string key;
+        while (!c.empty() && c[0] != '"') {
+            if (c[0] == '\\' && c.size() > 1) {
+                c = c.substr(1);
+                key += c[0];
+            } else {
+                key += c[0];
+            }
+            c = c.substr(1);
+        }
+        if (!c.empty()) c = c.substr(1); // skip closing '"'
+        key = std::string(trimmed(key));
+
+        // Parse ':'
+        c = trimmed(c);
+        if (c.empty() || c[0] != ':') {
+            throw std::runtime_error(".ezmk/links.json: expected ':' after key \"" + key + "\"");
+        }
+        c = c.substr(1); // skip ':'
+
+        // Parse value (quoted string)
+        c = trimmed(c);
+        if (c.empty() || c[0] != '"') {
+            throw std::runtime_error(".ezmk/links.json: expected string value for key \"" + key + "\"");
+        }
+        c = c.substr(1);
+        std::string value;
+        while (!c.empty() && c[0] != '"') {
+            if (c[0] == '\\' && c.size() > 1) {
+                c = c.substr(1);
+                value += c[0];
+            } else {
+                value += c[0];
+            }
+            c = c.substr(1);
+        }
+        if (!c.empty()) c = c.substr(1);
+        value = std::string(trimmed(value));
+
+        // Validate key: [A-Za-z0-9_-]+
+        if (key.empty()) {
+            throw std::runtime_error(".ezmk/links.json: empty link name");
+        }
+        for (char ch : key) {
+            if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_' && ch != '-') {
+                throw std::runtime_error(".ezmk/links.json: invalid link name '" + key + "'");
+            }
+        }
+
+        // Validate value: no absolute paths, no traversal attempts
+        if (!value.empty() && (value[0] == '/' || value[0] == '\\')) {
+            throw std::runtime_error(".ezmk/links.json: absolute paths not allowed for link '" + key + "'");
+        }
+
+        links[key] = value;
+
+        // Skip optional comma
+        c = trimmed(c);
+        if (!c.empty() && c[0] == ',') {
+            c = c.substr(1);
+            c = trimmed(c);
+        }
+    }
+
+    return links;
+}
+
+fs::path resolve_link_path(std::string_view name,
+                            std::string_view sub_path,
+                            const std::map<std::string, std::string>& links,
+                            int max_depth) {
+    if (max_depth <= 0) {
+        throw std::runtime_error(
+            "link resolution depth exceeded (>10) for '" + std::string(name) +
+            "': possible infinite chain or too many indirections");
+    }
+
+    auto it = links.find(std::string(name));
+    if (it == links.end()) {
+        throw std::runtime_error(
+            "link '" + std::string(name) + "' not found in .ezmk/links.json");
+    }
+
+    fs::path resolved = it->second;
+    if (!sub_path.empty()) {
+        resolved = resolved / std::string(sub_path);
+    }
+
+    return resolved;
+}
+
 EzConfig parse_config(const fs::path& toml_path) {
     EzConfig cfg;
 
@@ -556,6 +689,35 @@ EzConfig parse_config(const fs::path& toml_path) {
                 }
             }
             cfg.utils.permissions = std::move(up);
+        }
+    }
+
+    // 1.1.0-dev.5: Resolve @link: references in path arrays
+    {
+        auto project_root = toml_path.parent_path();
+        auto links = load_links_json(project_root);
+        if (!links.empty()) {
+            // Helper to resolve a single path entry
+            auto resolve = [&](std::string& entry) {
+                auto ref = util::parse_link_syntax(entry);
+                if (ref.name.empty()) return; // not a @link: reference
+
+                fs::path resolved = resolve_link_path(ref.name, ref.sub_path, links);
+                entry = resolved.string();
+            };
+
+            // Resolve @link: in src_dirs
+            for (auto& d : cfg.compile.src_dirs) {
+                resolve(d);
+            }
+            // Resolve @link: in include_dirs
+            for (auto& d : cfg.compile.include_dirs) {
+                resolve(d);
+            }
+            // Resolve @link: in link_dirs
+            for (auto& d : cfg.link.link_dirs) {
+                resolve(d);
+            }
         }
     }
 

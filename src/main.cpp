@@ -166,7 +166,8 @@ int main(int argc, char** argv) {
 
             // Collect directories to watch
             std::vector<std::string> watch_dirs;
-            watch_dirs.push_back("ezmk.toml"); // special: watch the config file itself
+            // Use absolute path to ezmk.toml so parent_path() resolves correctly
+            watch_dirs.push_back((proj_root / "ezmk.toml").string());
             for (auto& d : compile_cfg.src_dirs) {
                 std::filesystem::path dir = d;
                 if (dir.is_relative()) dir = proj_root / dir;

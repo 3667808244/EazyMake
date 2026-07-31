@@ -48,6 +48,10 @@ FileWatcher::~FileWatcher() {
 }
 
 void FileWatcher::add_directory(const fs::path& dir, bool recursive) {
+    if (dir.empty()) {
+        util::warn("FileWatcher: skipping empty directory path");
+        return;
+    }
     recursive_ = recursive;
     dirs_.push_back(fs::absolute(dir));
 }
