@@ -36,35 +36,35 @@
 
 **文件**：`src/file_watcher.cpp` + `src/project.cpp`（或 `src/build.cpp`）+ `test/test_file_watcher.cpp`
 
-- [ ] 在 watch 目录收集逻辑中添加空路径断言/日志，复现并定位空字符串来源
-- [ ] 定位根因：`src_dirs`/`include_dirs` 默认值 `["src"]` 解析路径时某代码路径拼接出错产生空字符串
-- [ ] 修复：确保所有传入 `fs::absolute()` 的路径非空；在路径拼接处添加 `fs::path` 有效性检查
-- [ ] 加固：`FileWatcher::add_directory()` 入口处防御性检查，空路径直接跳过 + warning
-- [ ] 测试：`test_file_watcher.cpp` 新增空路径传入不崩溃用例；创建默认项目 → `ezmk project watch` 手动验证
+- [x] 在 watch 目录收集逻辑中添加空路径断言/日志，复现并定位空字符串来源
+- [x] 定位根因：`src_dirs`/`include_dirs` 默认值 `["src"]` 解析路径时某代码路径拼接出错产生空字符串
+- [x] 修复：确保所有传入 `fs::absolute()` 的路径非空；在路径拼接处添加 `fs::path` 有效性检查
+- [x] 加固：`FileWatcher::add_directory()` 入口处防御性检查，空路径直接跳过 + warning
+- [x] 测试：`test_file_watcher.cpp` 新增空路径传入不崩溃用例；创建默认项目 → `ezmk project watch` 手动验证
 
 ### 阶段二：`@link:` 链接机制（P0，核心 C++ 功能）
 
 **文件**：`include/ezmk/config.hpp` + `src/config.cpp` + `src/util.cpp`
 
-- [ ] 在 `config.hpp` 中声明 `resolve_link_path(name, sub_path, links_map)` 函数：
+- [x] 在 `config.hpp` 中声明 `resolve_link_path(name, sub_path, links_map)` 函数：
   - 参数：链接名称、子路径（可为空）、`.ezmk/links.json` 解析结果
   - 返回：解析后的绝对/相对路径
-- [ ] 在 `config.cpp` 中实现 `resolve_link_path()`：
+- [x] 在 `config.cpp` 中实现 `resolve_link_path()`：
   - 查找 `.ezmk/links.json` 中对应条目
   - 条目不存在 → 报错 `"link '{name}' not found in .ezmk/links.json"`
   - `@link:<name>` 无子路径 → 直接替换为目标路径
   - `@link:<name>/sub/path` → 目标路径 + `/sub/path`
   - 链接链解析：允许 A→B→C 链式解析，深度限制 10 层，超过报错
   - 循环链接检测：A 引用 B，B 引用 A → 解析时报错
-- [ ] 在 `util.cpp` 中实现 `parse_link_syntax()` 解析 `@link:<name>/...` 格式
-- [ ] 修改 `config.cpp` 的 TOML 解析，在读取 `src_dirs`/`include_dirs`/`link_dirs` 后自动展开 `@link:` 引用
-- [ ] 应用场景覆盖：`[compile]` 的 `src_dirs`、`include_dirs` 和 `[link]` 的 `link_dirs`
+- [x] 在 `util.cpp` 中实现 `parse_link_syntax()` 解析 `@link:<name>/...` 格式
+- [x] 修改 `config.cpp` 的 TOML 解析，在读取 `src_dirs`/`include_dirs`/`link_dirs` 后自动展开 `@link:` 引用
+- [x] 应用场景覆盖：`[compile]` 的 `src_dirs`、`include_dirs` 和 `[link]` 的 `link_dirs`
 
 ### 阶段三：`ezmk-official-utils` 包基础结构（P0）
 
 **文件**：新建 `ezmk-official-utils/` 目录（在 `ezmk-repo` 仓库中）
 
-- [ ] 创建包目录结构：
+- [x] 创建包目录结构：
   ```
   ezmk-official-utils/
   ├── ezmk.toml
@@ -74,7 +74,7 @@
   │   └── gen-build-package.lua
   └── README.md
   ```
-- [ ] 编写 `ezmk.toml`：
+- [x] 编写 `ezmk.toml`：
   ```toml
   [project]
   name = "ezmk-official-utils"
@@ -85,45 +85,45 @@
   [utils]
   tools = ["link", "cc", "gen-build-package"]
   ```
-- [ ] 编写 `README.md` 说明三个工具的用途和使用方法
-- [ ] 注册到 `ezmk-repo` 的 `index.toml`，作为 `type = "utils"` 包
+- [x] 编写 `README.md` 说明三个工具的用途和使用方法
+- [x] 注册到 `ezmk-repo` 的 `index.toml`，作为 `type = "utils"` 包
 
 ### 阶段四：`link` 工具实现（P0）
 
 **文件**：`ezmk-official-utils/utils/link.lua`
 
-- [ ] 实现 CLI 命令：
+- [x] 实现 CLI 命令：
   - `ezmk utils link add <name> <path>` — 添加链接
   - `ezmk utils link remove <name>` — 删除链接
   - `ezmk utils link list` — 列出所有链接
   - `ezmk utils link show <name>` — 查看链接详情
-- [ ] 行为细节：
+- [x] 行为细节：
   - `add`：检查 name 合法性（字母/数字/下划线/连字符，不允许 `..` 和 `/`）；path 必须存在（文件或目录）；写入 `.ezmk/links.json`
   - `remove`：删除条目，`.ezmk/links.json` 变空则保留 `{}`
   - `list`：格式化打印所有链接（名称 → 路径，目标是否存在）
   - `show`：打印目标路径 + 目标是否存在 + 目录则列出内容摘要
-- [ ] Lua API 使用：`ezmk.file_read()`/`ezmk.file_write()` 读写 JSON，`ezmk.json_decode()`/`ezmk.json_encode()` 解析，`ezmk.file_exists()` 验证，`ezmk.project_root()` 获取根目录
+- [x] Lua API 使用：`ezmk.file_read()`/`ezmk.file_write()` 读写 JSON，`ezmk.json_decode()`/`ezmk.json_encode()` 解析，`ezmk.file_exists()` 验证，`ezmk.project_root()` 获取根目录
 
 ### 阶段五：`cc` 从内置迁移到 `ezmk-official-utils`（P0）
 
 **文件**：`ezmk-official-utils/utils/cc.lua` + `src/lua_api.cpp`
 
-- [ ] 将现有内置 cc 脚本内容迁移到 `ezmk-official-utils/utils/cc.lua`
-- [ ] 从 `src/lua_api.cpp` 的 `find_utils_script()` 中移除 `cc` 的硬编码加载逻辑
-- [ ] 确保 `ezmk utils cc` 通过标准 utils 查找链（project → user → global）发现 `cc.lua`
-- [ ] 验证：安装 `ezmk-official-utils` 后 `ezmk utils cc` 正常工作
+- [x] 将现有内置 cc 脚本内容迁移到 `ezmk-official-utils/utils/cc.lua`
+- [x] 从 `src/lua_api.cpp` 的 `find_utils_script()` 中移除 `cc` 的硬编码加载逻辑
+- [x] 确保 `ezmk utils cc` 通过标准 utils 查找链（project → user → global）发现 `cc.lua`
+- [x] 验证：安装 `ezmk-official-utils` 后 `ezmk utils cc` 正常工作
 
 ### 阶段六：`gen-build-package` 工具实现（P1）
 
 **文件**：`ezmk-official-utils/utils/gen-build-package.lua`
 
-- [ ] 实现 CLI：`ezmk utils gen-build-package [--output <dir>] [--name <name>]`
-- [ ] 功能：为当前项目生成自包含构建包（`.tar.gz`），包含：
+- [x] 实现 CLI：`ezmk utils gen-build-package [--output <dir>] [--name <name>]`
+- [x] 功能：为当前项目生成自包含构建包（`.tar.gz`），包含：
   - 所有源文件（`src_dirs` 下文件）
   - 头文件（`include_dirs` 下文件）
   - `ezmk.toml`
   - 生成的构建脚本（`build.sh` / `build.ps1`），使用 `ezmk project build` 编译
-- [ ] 输出结构：
+- [x] 输出结构：
   ```
   <name>-build-<version>.tar.gz
   ├── <name>/
@@ -132,34 +132,34 @@
   │   ├── include/...
   │   └── build.sh
   ```
-- [ ] Lua API 使用：`ezmk.project_*()` 获取项目信息，`ezmk.run_command()` 调 tar，`ezmk.file_*()` 复制文件
+- [x] Lua API 使用：`ezmk.project_*()` 获取项目信息，`ezmk.run_command()` 调 tar，`ezmk.file_*()` 复制文件
 
 ### 阶段七：安装脚本预装逻辑（P0）
 
 **文件**：`install.sh` + `install.ps1`
 
-- [ ] 在 `install.sh` 安装流程末尾添加：
+- [x] 在 `install.sh` 安装流程末尾添加：
   ```bash
   # 预装官方 utils 包
   ./build/ezmk repo add ezmk-repo <url> 2>/dev/null || true
   ./build/ezmk pkg install -g ezmk-official-utils -y 2>/dev/null || \
     warn "预装 ezmk-official-utils 失败（网络不可用），可稍后手动安装"
   ```
-- [ ] 在 `install.ps1` 中添加等效 PowerShell 逻辑
-- [ ] 使用 `-g`（全局作用域）安装，确保所有用户项目可用
-- [ ] 使用 `-y` 跳过确认
-- [ ] 预装失败不阻塞安装（网络问题时降级为 warning）
+- [x] 在 `install.ps1` 中添加等效 PowerShell 逻辑
+- [x] 使用 `-g`（全局作用域）安装，确保所有用户项目可用
+- [x] 使用 `-y` 跳过确认
+- [x] 预装失败不阻塞安装（网络问题时降级为 warning）
 
 ### 阶段八：编译与回归验证
 
-- [ ] `bash build.sh` 编译通过（MSYS2 / Windows）
-- [ ] 全量测试通过，零回归
-- [ ] 手动验证：创建默认项目 → `ezmk project watch` → 确认不再报错
-- [ ] 手动验证：`ezmk utils link add/list/remove/show` 完整流程
-- [ ] 手动验证：`ezmk utils cc` 正常工作（通过 utils 查找链发现）
-- [ ] 手动验证：`ezmk utils gen-build-package` 生成构建包 + 解包验证
-- [ ] 手动验证：`ezmk.toml` 中 `@link:` 语法解析正确
-- [ ] 检查 `install.sh` / `install.ps1` 预装逻辑语法正确
+- [x] `bash build.sh` 编译通过（MSYS2 / Windows）
+- [x] 全量测试通过，零回归
+- [x] 手动验证：创建默认项目 → `ezmk project watch` → 确认不再报错
+- [x] 手动验证：`ezmk utils link add/list/remove/show` 完整流程
+- [x] 手动验证：`ezmk utils cc` 正常工作（通过 utils 查找链发现）
+- [x] 手动验证：`ezmk utils gen-build-package` 生成构建包 + 解包验证
+- [x] 手动验证：`ezmk.toml` 中 `@link:` 语法解析正确
+- [x] 检查 `install.sh` / `install.ps1` 预装逻辑语法正确
 
 ---
 
