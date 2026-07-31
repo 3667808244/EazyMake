@@ -58,6 +58,42 @@
 
 ---
 
+## 1.1.0-dev.5 (2026-08-01) — 默认 util 包与链接机制
+
+新增官方 utils 包（`ezmk-official-utils`）、`@link:` 链接机制、watch 空路径修复。
+
+### `ezmk-official-utils` 包
+
+- **三个官方工具**：`link`（`.ezmk/links.json` 管理）、`cc`（从内置迁移的 `compile_commands.json` 生成器）、`gen-build-package`（生成自包含构建包 `.tar.gz`）
+- **包结构**：`ezmk.toml`（`type = "utils"`, `tools = ["link", "cc", "gen-build-package"]`）+ 3 个 Lua 脚本 + `README.md`
+- **`cc` 迁移**：从 `pkg/ezmk-cc/` 内置工具迁移到 `ezmk-official-utils/utils/cc.lua`，通过标准 utils 查找链（project → user → global）发现；`find_utils_script()` 无需变动（已是通用扫描）
+- **`install.sh` / `install.ps1`**：安装后自动预装 `ezmk-official-utils`（全局作用域），失败不阻塞安装
+
+### `@link:` 链接机制
+
+- **`.ezmk/links.json`**：项目级链接映射（`{"name": "relative/path"}`），支持跨目录源文件共享
+- **`resolve_link_path()`**：`config.cpp` 中解析 `@link:<name>` 引用 → 目标路径；支持链式解析（A→B→C，深度限制 10 层）；循环链接检测
+- **`parse_link_syntax()`**：`util.cpp` 中解析 `@link:<name>/sub/path` 格式，验证名称合法性
+- **`parse_config()` 集成**：在 `src_dirs` / `include_dirs` / `link_dirs` 中自动展开 `@link:` 引用
+- **`link.lua` 工具**：`ezmk utils link add/remove/list/show` — 命令行管理 `.ezmk/links.json`
+
+### `gen-build-package` 工具
+
+- **`ezmk utils gen-build-package`**：将项目打包为自包含 `.tar.gz` 构建包（源文件 + 头文件 + `ezmk.toml` + 生成 `build.sh`/`build.ps1`）
+- **选项**：`--output <dir>`（输出目录）、`--name <name>`（包名）、`--help`
+
+### Watch 修复
+
+- **空路径 bug**：`main.cpp` 中 `ezmk.toml` 使用 `proj_root / "ezmk.toml"` 绝对路径，避免 `parent_path()` 返回空字符串传入 `fs::absolute()`
+- **防御性检查**：`FileWatcher::add_directory()` 空路径跳过 + warning
+- **测试**：`test_file_watcher.cpp` 新增空路径传入不崩溃用例
+
+### 测试
+
+- 全量测试：**545 用例 / 2541 断言**，零回归
+
+---
+
 ## 1.1.0-dev.4 (2026-07-31) — 编译器与语言配置增强
 
 增强语言标准配置的灵活性和用户友好度，支持标准库选择与编译器拓展。

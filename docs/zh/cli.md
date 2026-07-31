@@ -131,7 +131,36 @@ ezmk repo update -u official
 |---|---|
 | `ezmk utils <name> [args...]` | 运行已安装 `type = "utils"` 包中的 Lua 工具 |
 
-`<name>` 之后的所有内容透传给工具。内置工具：`ezmk utils cc` 生成 `compile_commands.json`（使用 `-o <path>` 指定自定义位置）。插件 API 参见 [`utils.md`](utils.md)。
+`<name>` 之后的所有内容透传给工具。工具按 project → user → global 作用域查找。
+
+### 官方工具（`ezmk-official-utils` 包，1.1.0+）
+
+安装脚本自动预装 `ezmk-official-utils` 包（全局作用域），提供以下工具：
+
+| 命令 | 描述 |
+|---|---|
+| `ezmk utils cc [--output <path>]` | 生成 `compile_commands.json`（clangd 兼容） |
+| `ezmk utils link add <name> <path>` | 添加 `.ezmk/links.json` 链接 |
+| `ezmk utils link remove <name>` | 删除链接 |
+| `ezmk utils link list` | 列出所有链接 |
+| `ezmk utils link show <name>` | 查看链接详情 |
+| `ezmk utils gen-build-package [--output <dir>] [--name <name>]` | 生成自包含构建包 `.tar.gz` |
+
+手动安装：`ezmk pkg install -g ezmk-official-utils -y`
+
+### `.ezmk/links.json` 与 `@link:` 语法（1.1.0+）
+
+项目根目录下的 `.ezmk/links.json` 定义跨目录链接映射（名称 → 相对路径），用于多项目共享源文件。在 `ezmk.toml` 中通过 `@link:<name>` 语法引用：
+
+```toml
+[compile]
+src_dirs = ["src", "@link:shared/src"]
+include_dirs = ["include", "@link:shared/include"]
+```
+
+支持链式解析（A→B→C，深度限制 10 层）和循环检测。链接值仅支持相对路径（保证项目可移植性）。
+
+插件 API 参见 [`utils.md`](utils.md)。
 
 ---
 

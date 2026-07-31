@@ -136,9 +136,41 @@ The registration is user-scoped (`-u`) so it can be removed with `ezmk repo remo
 |---|---|
 | `ezmk utils <name> [args...]` | Run a Lua tool from an installed `type = "utils"` package |
 
-Everything after `<name>` is passed through to the tool. Built-in: `ezmk utils cc`
-generates `compile_commands.json` (`-o <path>` for a custom location). See
-[`utils.md`](utils.md) for the plugin API.
+Everything after `<name>` is passed through to the tool. Tools are discovered via
+the project → user → global scope chain.
+
+### Official tools (`ezmk-official-utils` package, 1.1.0+)
+
+The installer automatically pre-installs `ezmk-official-utils` (global scope), which
+provides the following tools:
+
+| Command | Description |
+|---|---|
+| `ezmk utils cc [--output <path>]` | Generate `compile_commands.json` (clangd-compatible) |
+| `ezmk utils link add <name> <path>` | Add a `.ezmk/links.json` link |
+| `ezmk utils link remove <name>` | Remove a link |
+| `ezmk utils link list` | List all links |
+| `ezmk utils link show <name>` | Show link details |
+| `ezmk utils gen-build-package [--output <dir>] [--name <name>]` | Generate a self-contained `.tar.gz` build package |
+
+Manual install: `ezmk pkg install -g ezmk-official-utils -y`
+
+### `.ezmk/links.json` and `@link:` syntax (1.1.0+)
+
+The `.ezmk/links.json` file in the project root defines cross-directory link mappings
+(name → relative path) for sharing source files across projects. Reference them in
+`ezmk.toml` via the `@link:<name>` syntax:
+
+```toml
+[compile]
+src_dirs = ["src", "@link:shared/src"]
+include_dirs = ["include", "@link:shared/include"]
+```
+
+Chain resolution (A→B→C, depth limit 10) and cycle detection are supported. Link
+values must be relative paths (no absolute paths) to keep projects portable.
+
+See [`utils.md`](utils.md) for the plugin API.
 
 ---
 
@@ -221,6 +253,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `PREFIX` | install | Install prefix; binary goes to `$PREFIX/bin` (default `$HOME/.local`) (`install.sh`) |
 | `EZMK_REF` | install | git tag/branch/commit to build (`install.sh`) |
 | `EZMK_NO_COMPLETIONS` | install | Set to `1` to skip zsh completion install (`install.sh`) |
+| `EZMK_NO_DEFAULT_REPO` | install | Set to `1` to skip official repo pre-registration (`install.sh`) |
 | `EZMK_TEST_BIN` | test | Path to the `ezmk` binary for integration tests (default `build/ezmk[.exe]`) |
 
 ---
