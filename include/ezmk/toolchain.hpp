@@ -47,6 +47,11 @@ FlagTranslation translate_compile_flags(const std::vector<std::string>& gcc_flag
 FlagTranslation translate_link_flags(const std::vector<std::string>& gcc_flags,
                                       CompilerFamily target);
 
+// 1.1.0-dev.4: Get stdlib-related compile flags based on stdlib choice + compiler family.
+// Returns flags like "-stdlib=libc++" (Clang/GCC) or empty (MSVC).
+std::vector<std::string> get_stdlib_flags(const std::string& stdlib,
+                                           CompilerFamily family);
+
 // ---- MSVC dependency parsing ----
 
 // Parse the output of cl.exe /showIncludes into a list of header paths.

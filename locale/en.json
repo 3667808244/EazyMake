@@ -166,6 +166,8 @@
     "config_err_invalid_type": "invalid project type '{type}'; expected one of: executable, static, shared, utils",
     "config_err_missing_ver": "[project] section missing required field 'version'. Add: version = \"0.1.0\"",
     "config_err_invalid_lang": "invalid language format: '{lang}'. Expected format: <Lang><Version>, e.g. C++17, C11",
+    "config_err_invalid_stdlib": "invalid stdlib value: '{stdlib}'. Supported: libstdc++, libc++ (or glibcxx/gnu → libstdc++, llvm → libc++)",
+    "config_warn_gnu_extensions": "using GNU extensions (non-ISO), set 'language = \"{suggestion}\"' for standard C/C++",
     "config_err_invalid_macro": "invalid macro name '{name}': must be a valid C identifier ([A-Za-z_][A-Za-z0-9_]*)",
     "config_err_empty_src_dirs": "[compile] src_dirs is empty — at least one source directory is required",
     "config_err_ezmk_macros_type": "[compile] ezmk_macros must be a boolean (true/false)",

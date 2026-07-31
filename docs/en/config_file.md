@@ -9,7 +9,8 @@
 | `name` | string | Yes | — | Project name |
 | `type` | string | No | `"executable"` | Project type: `"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | Yes | — | Project version; SemVer format recommended (e.g. `"0.1.0"`) |
-| `language` | string | No | `"C++17"` | Language standard, format is `<language><version>`, e.g. `"C++17"`, `"C11"` |
+| `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified |
+| `stdlib` | string | No | `"libstdc++"` | **1.1.0-dev.4+** Standard library: `"libstdc++"` (default) or `"libc++"`. Aliases: `"glibcxx"` / `"gnu"` → `libstdc++`; `"llvm"` → `libc++`. Case-insensitive |
 
 ### `type` Values
 
@@ -22,13 +23,29 @@
 
 ### `language` Format
 
-Format is `<language><version>`:
-- Language: `C` or `C++`
-- Version: `89` / `99` / `11` / `14` / `17` / `20` / `23`
+Format is `<language><version>`. The parser normalizes the value case-insensitively and accepts multiple variant spellings:
 
-Common values: `C++17` (default), `C++20`, `C11`, `C99`.
+| User input | Normalized | `-std=` flag | Compiler |
+|------------|-----------|-------------|----------|
+| `C++17` / `c++17` / `cpp17` / `cxx17` | `CPP17` | `-std=c++17` | `g++` |
+| `C11` / `c11` | `C11` | `-std=c11` | `gcc` |
+| `C++` (no version) | `CPP17` | `-std=c++17` | `g++` |
+| `C` (no version) | `C11` | `-std=c11` | `gcc` |
 
-Starts with `C++` → compile with `g++`; starts with `C` (not `C++`) → compile with `gcc`.
+- Language: `C++` / `CXX` / `CPP` (all map to C++), or `C`
+- Version: `89` / `98` / `99` / `03` / `11` / `14` / `17` / `20` / `23` / `26`
+- Default version: C++ → `17`, C → `11`
+
+#### GNU Extensions (1.1.0-dev.4+)
+
+Prefix `GNU` before the language to enable GNU compiler extensions:
+
+| User input | Normalized | `-std=` flag | Warning |
+|------------|-----------|-------------|---------|
+| `GNUCPP17` / `gnuc++17` | `GNUCPP17` | `-std=gnu++17` | non-ISO warning |
+| `GNU11` / `gnu11` | `GNU11` | `-std=gnu11` | non-ISO warning |
+
+> A warning will be emitted when GNU extensions are used, suggesting standard alternatives (e.g. `language = "CPP17"`).
 
 ---
 
@@ -68,7 +85,8 @@ A standalone subsection that defines preprocessor macros. More semantic than usi
 | `EZMK_PROJECT_NAME` | string | `"myapp"` | `[project].name` |
 | `EZMK_PROJECT_VERSION` | string | `"1.0.0"` | `[project].version` |
 | `EZMK_PROJECT_TYPE` | string | `"executable"` | `[project].type` |
-| `EZMK_LANG` | string | `"C++17"` | `[project].language` |
+| `EZMK_LANG` | string | `"CPP17"` | **1.1.0-dev.4+** Normalized `[project].language` (e.g. `c++17` → `CPP17`) |
+| `EZMK_STDLIB` | string | `"libstdcxx"` | **1.1.0-dev.4+** `[project].stdlib` with `++` replaced by `xx` (`libstdc++` → `libstdcxx`) |
 
 Setting `ezmk_macros = false` fully disables standard macro injection.
 

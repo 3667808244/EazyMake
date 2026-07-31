@@ -14,6 +14,7 @@ struct ProjectSection {
     std::string type = "executable"; // "executable" | "static" | "shared" | "utils"
     std::string version;             // required, e.g. "0.1.0"
     std::string language = "C++17";  // <Lang><Ver>, e.g. "C++17", "C11"
+    std::string stdlib = "libstdc++";// 1.1.0-dev.4: standard library ("libstdc++" | "libc++")
     bool header_only = false;        // 0.9.7+ header-only package (no compilation needed)
     bool precompiled = false;        // 0.9.7+ precompiled package (use lib/*.a, skip compilation)
 };
@@ -142,12 +143,18 @@ EzConfig parse_config(const fs::path& toml_path);
 void write_default_config(const fs::path& toml_path, std::string_view project_name,
                           std::string_view project_type = "executable");
 
+// 1.1.0-dev.4: Normalize a language/stdlib string (upper-case, unify variants).
+// "c++17" / "CXX17" / "CPP17" → "CPP17"; "libstdc++" / "glibcxx" → "LIBSTDCXX".
+std::string normalize_lang(const std::string& input);
+
 // Parse a language string like "C++17" into compiler name and -std= flag.
 // Returns {"g++", "-std=c++17"} for C++; {"gcc", "-std=c11"} for C.
 struct LanguageInfo {
     std::string compiler;            // default compiler from config ("g++" or "gcc")
-    std::string std_flag;            // e.g. "-std=c++17"
+    std::string std_flag;            // e.g. "-std=c++17" or "-std=gnu++17"
     std::string detected_compiler;   // runtime-detected compiler, empty if not yet probed
+    bool gnu_extensions = false;     // 1.1.0-dev.4: true if GNU prefix detected
+    std::string normalized_lang;     // 1.1.0-dev.4: e.g. "CPP17" (for EZMK_LANG macro)
 };
 LanguageInfo parse_language(std::string_view language);
 

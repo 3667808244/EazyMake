@@ -467,7 +467,13 @@ SingleCompileResult compile_one_source(const fs::path& src,
     } else {
         std::string compiler = in.lang.detected_compiler.empty()
             ? in.lang.compiler : in.lang.detected_compiler;
-        cmd << compiler << " " << in.lang.std_flag << " -c ";
+        cmd << compiler << " " << in.lang.std_flag;
+        // 1.1.0-dev.4: inject stdlib flags (e.g., -stdlib=libc++)
+        if (!in.stdlib.empty()) {
+            auto stdlib_flags = toolchain::get_stdlib_flags(in.stdlib, in.tc.family);
+            for (auto& sf : stdlib_flags) cmd << " " << sf;
+        }
+        cmd << " -c ";
         // 1.1.0: deterministic build flags
         if (in.compile.deterministic) {
             cmd << "-ffile-prefix-map=" << util::escape_shell_arg(in.proj_root.string()) << "=. ";

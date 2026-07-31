@@ -112,20 +112,170 @@ TEST_CASE("parse_language: invalid inputs", "[config]") {
         REQUIRE_THROWS_AS(parse_language("C++42"), std::runtime_error);
     }
 
-    SECTION("Missing version throws") {
-        REQUIRE_THROWS_AS(parse_language("C++"), std::runtime_error);
-    }
-
-    SECTION("Lowercase c++ throws") {
-        REQUIRE_THROWS_AS(parse_language("c++17"), std::runtime_error);
+    SECTION("Missing version defaults to C++17 / C11") {
+        // 1.1.0-dev.4: C++ without version defaults to C++17
+        auto info = parse_language("C++");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++17");
     }
 }
 
 // ===================================================================
-// parse_config() — full toml parsing
+// 1.1.0-dev.4: normalize_lang() tests
 // ===================================================================
 
-// Helper: write a temp toml file and return its path
+TEST_CASE("normalize_lang: basic normalization", "[config][1.1.0-dev.4]") {
+    using namespace ezmk::config;
+
+    SECTION("c++17 → CPP17") {
+        REQUIRE(normalize_lang("c++17") == "C++17");
+    }
+    SECTION("C++17 → C++17 (unchanged but uppercase)") {
+        REQUIRE(normalize_lang("C++17") == "C++17");
+    }
+    SECTION("cxx17 → CXX17") {
+        REQUIRE(normalize_lang("cxx17") == "CXX17");
+    }
+    SECTION("CXX17 → CXX17") {
+        REQUIRE(normalize_lang("CXX17") == "CXX17");
+    }
+    SECTION("cpp17 → CPP17") {
+        REQUIRE(normalize_lang("cpp17") == "CPP17");
+    }
+    SECTION("c11 → C11") {
+        REQUIRE(normalize_lang("c11") == "C11");
+    }
+    SECTION("c17 → C17") {
+        REQUIRE(normalize_lang("c17") == "C17");
+    }
+    SECTION("c++2b → C++2B") {
+        REQUIRE(normalize_lang("c++2b") == "C++2B");
+    }
+    SECTION("c++20 → C++20") {
+        REQUIRE(normalize_lang("c++20") == "C++20");
+    }
+    SECTION("gnucpp17 → GNUCPP17") {
+        REQUIRE(normalize_lang("gnucpp17") == "GNUCPP17");
+    }
+    SECTION("whitespace trim") {
+        REQUIRE(normalize_lang("  C++17  ") == "C++17");
+    }
+    SECTION("tabs and newlines trim") {
+        REQUIRE(normalize_lang("\tC11\r\n") == "C11");
+    }
+    SECTION("empty input returns empty") {
+        REQUIRE(normalize_lang("") == "");
+    }
+    SECTION("whitespace only returns empty") {
+        REQUIRE(normalize_lang("   \t  ") == "");
+    }
+    SECTION("stdlib: libstdc++ → LIBSTDC++") {
+        REQUIRE(normalize_lang("libstdc++") == "LIBSTDC++");
+    }
+    SECTION("stdlib: libc++ → LIBC++") {
+        REQUIRE(normalize_lang("libc++") == "LIBC++");
+    }
+    SECTION("stdlib: glibcxx → GLIBCXX") {
+        REQUIRE(normalize_lang("glibcxx") == "GLIBCXX");
+    }
+    SECTION("stdlib: llvm → LLVM") {
+        REQUIRE(normalize_lang("llvm") == "LLVM");
+    }
+}
+
+// ===================================================================
+// 1.1.0-dev.4: parse_language() extended tests
+// ===================================================================
+
+TEST_CASE("parse_language: case-insensitive variants", "[config][1.1.0-dev.4]") {
+    using namespace ezmk::config;
+
+    SECTION("c++17") {
+        auto info = parse_language("c++17");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++17");
+        REQUIRE(info.normalized_lang == "CPP17");
+        REQUIRE(info.gnu_extensions == false);
+    }
+    SECTION("CPP17") {
+        auto info = parse_language("CPP17");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++17");
+    }
+    SECTION("cxx17") {
+        auto info = parse_language("cxx17");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++17");
+    }
+    SECTION("c++20") {
+        auto info = parse_language("c++20");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++20");
+    }
+}
+
+TEST_CASE("parse_language: GNU extension prefix", "[config][1.1.0-dev.4]") {
+    using namespace ezmk::config;
+
+    SECTION("GNUCPP17 → -std=gnu++17") {
+        auto info = parse_language("GNUCPP17");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=gnu++17");
+        REQUIRE(info.gnu_extensions == true);
+    }
+    SECTION("GNU11 → -std=gnu11") {
+        auto info = parse_language("GNU11");
+        REQUIRE(info.compiler == "gcc");
+        REQUIRE(info.std_flag == "-std=gnu11");
+        REQUIRE(info.gnu_extensions == true);
+    }
+    SECTION("GNU17 → -std=gnu17") {
+        auto info = parse_language("GNU17");
+        REQUIRE(info.compiler == "gcc");
+        REQUIRE(info.std_flag == "-std=gnu17");
+        REQUIRE(info.gnu_extensions == true);
+    }
+    SECTION("gnucpp17 (lowercase) → -std=gnu++17") {
+        auto info = parse_language("gnucpp17");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=gnu++17");
+        REQUIRE(info.gnu_extensions == true);
+    }
+    SECTION("gnuc++20 → -std=gnu++20") {
+        auto info = parse_language("gnuc++20");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=gnu++20");
+        REQUIRE(info.gnu_extensions == true);
+    }
+    SECTION("CPP17 has gnu_extensions=false") {
+        auto info = parse_language("CPP17");
+        REQUIRE(info.gnu_extensions == false);
+        REQUIRE(info.std_flag == "-std=c++17");
+    }
+}
+
+TEST_CASE("parse_language: normalized_lang field", "[config][1.1.0-dev.4]") {
+    using namespace ezmk::config;
+
+    SECTION("CPP17 from c++17") {
+        auto info = parse_language("c++17");
+        REQUIRE(info.normalized_lang == "CPP17");
+    }
+    SECTION("CPP17 from CXX17") {
+        auto info = parse_language("CXX17");
+        REQUIRE(info.normalized_lang == "CPP17");
+    }
+    SECTION("GNUCPP17 from gnucpp17") {
+        auto info = parse_language("gnucpp17");
+        REQUIRE(info.normalized_lang == "GNUCPP17");
+    }
+    SECTION("C11 from c11") {
+        auto info = parse_language("c11");
+        REQUIRE(info.normalized_lang == "C11");
+    }
+}
+
+// 1.1.0-dev.4: stdlib parsing helper (uses same write_temp_toml as below)
 static fs::path write_temp_toml(const std::string& content) {
     auto tmp = fs::temp_directory_path() / ("ezmk_test_" + std::to_string(
         std::chrono::steady_clock::now().time_since_epoch().count()) + ".toml");
@@ -134,6 +284,116 @@ static fs::path write_temp_toml(const std::string& content) {
     f.close();
     return tmp;
 }
+
+// ===================================================================
+// 1.1.0-dev.4: stdlib parsing tests
+// ===================================================================
+
+TEST_CASE("parse_config: stdlib default and valid values", "[config][1.1.0-dev.4]") {
+    using namespace ezmk::config;
+
+    SECTION("stdlib defaults to libstdc++") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libstdc++");
+    }
+
+    SECTION("stdlib = 'libstdc++'") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "libstdc++"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libstdc++");
+    }
+
+    SECTION("stdlib = 'libc++'") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "libc++"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libc++");
+    }
+
+    SECTION("stdlib = 'glibcxx' → libstdc++") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "glibcxx"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libstdc++");
+    }
+
+    SECTION("stdlib = 'gnu' → libstdc++") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "gnu"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libstdc++");
+    }
+
+    SECTION("stdlib = 'llvm' → libc++") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "llvm"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libc++");
+    }
+
+    SECTION("stdlib case insensitive") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "LibStdC++"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.project.stdlib == "libstdc++");
+    }
+}
+
+TEST_CASE("parse_config: stdlib invalid throws", "[config][1.1.0-dev.4]") {
+    using namespace ezmk::config;
+
+    SECTION("stdlib = 'bogus' throws") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+stdlib = "bogus"
+)");
+        REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+        fs::remove(toml);
+    }
+}
+
+// ===================================================================
+// parse_config() — full toml parsing
+// ===================================================================
 
 TEST_CASE("parse_config: basic project section", "[config]") {
     using namespace ezmk::config;

@@ -123,25 +123,105 @@ static std::vector<DependsEntry> extract_depends_array(const toml::node* node) {
 
 } // anonymous namespace
 
+// 1.1.0-dev.4: Normalize a language/stdlib string (upper-case, trim).
+// Used as a shared helper — language-specific C++/CXX → CPP is done in parse_language().
+std::string normalize_lang(const std::string& input) {
+    std::string result;
+
+    // Step 1: to upper
+    for (char c : input) {
+        result += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+
+    // Step 2: trim whitespace
+    auto start = result.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";  // all whitespace → empty
+    auto end = result.find_last_not_of(" \t\r\n");
+    result = result.substr(start, end - start + 1);
+
+    return result;
+}
+
+// 1.1.0-dev.4: Normalize a stdlib value to canonical form.
+// Supports aliases: glibcxx/gnu → libstdc++, llvm → libc++.
+// Returns "libstdc++" or "libc++"; throws on unrecognized input.
+static std::string normalize_stdlib(const std::string& input) {
+    std::string s = normalize_lang(input);
+    if (s.empty()) {
+        throw std::runtime_error(
+            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_stdlib,
+                            {{"stdlib", input}}));
+    }
+    // Map aliases to canonical forms
+    if (s == "GLIBCXX" || s == "GNU") return "libstdc++";
+    if (s == "LIBSTDC++" || s == "LIBSTDCPP") return "libstdc++";
+    if (s == "LLVM") return "libc++";
+    if (s == "LIBC++" || s == "LIBCPP") return "libc++";
+    throw std::runtime_error(
+        ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_stdlib,
+                        {{"stdlib", input}}));
+}
+
 LanguageInfo parse_language(std::string_view language) {
-    // Format: <Lang><Version>
-    // e.g. "C++17" → C++, std=c++17
-    //       "C11"  → C,   std=c11
+    // 1.1.0-dev.4: Normalize first, then parse.
+    // Format after normalization: [GNU]CPP<Ver> or [GNU]C<Ver>
+    // e.g. "C++17" → "CPP17" → std=c++17
+    //      "GNUCPP17" → "GNUCPP17" → std=gnu++17
     LanguageInfo info;
 
-    bool is_cxx = false;
-    std::string_view ver_str;
-
-    if (language.size() >= 3 && language.substr(0, 3) == "C++") {
-        is_cxx = true;
-        ver_str = language.substr(3);
-    } else if (!language.empty() && language[0] == 'C') {
-        is_cxx = false;
-        ver_str = language.substr(1);
-    } else {
+    std::string normalized = normalize_lang(std::string(language));
+    if (normalized.empty()) {
         throw std::runtime_error(
             ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
                             {{"lang", std::string(language)}}));
+    }
+
+    // Unify C++/CXX → CPP for language identification
+    {
+        size_t pos = 0;
+        while ((pos = normalized.find("C++", pos)) != std::string::npos) {
+            normalized.replace(pos, 3, "CPP");
+            pos += 3;
+        }
+        pos = 0;
+        while ((pos = normalized.find("CXX", pos)) != std::string::npos) {
+            normalized.replace(pos, 3, "CPP");
+            pos += 3;
+        }
+    }
+
+    // Detect GNU prefix
+    bool gnu = false;
+    std::string_view remainder(normalized);
+    if (remainder.size() >= 3 && remainder.substr(0, 3) == "GNU") {
+        gnu = true;
+        remainder = remainder.substr(3);
+    }
+
+    // Parse CPP<Ver> or C<Ver> (or plain version for GNU C, e.g. GNU11)
+    bool is_cxx = false;
+    std::string_view ver_str;
+    if (remainder.size() >= 3 && remainder.substr(0, 3) == "CPP") {
+        is_cxx = true;
+        ver_str = remainder.substr(3);
+    } else if (!remainder.empty() && remainder[0] == 'C') {
+        is_cxx = false;
+        ver_str = remainder.substr(1);
+    } else if (gnu && !remainder.empty() && std::isdigit(static_cast<unsigned char>(remainder[0]))) {
+        // GNU + version only (e.g., GNU11, GNU17) → C language with GNU extensions
+        is_cxx = false;
+        ver_str = remainder;
+    } else {
+        // Not recognized — provide a helpful error
+        throw std::runtime_error(
+            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
+                            {{"lang", std::string(language)}}));
+    }
+
+    // Default version when missing
+    if (ver_str.empty()) {
+        // Default: C++17 or C11
+        ver_str = is_cxx ? "17" : "11";
     }
 
     // Map version string to -std= flag
@@ -160,10 +240,22 @@ LanguageInfo parse_language(std::string_view language) {
 
     if (is_cxx) {
         info.compiler = "g++";
-        info.std_flag = "-std=c++" + it->second;
+        info.std_flag = gnu ? ("-std=gnu++" + it->second) : ("-std=c++" + it->second);
     } else {
         info.compiler = "gcc";
-        info.std_flag = "-std=c" + it->second;
+        info.std_flag = gnu ? ("-std=gnu" + it->second) : ("-std=c" + it->second);
+    }
+
+    info.gnu_extensions = gnu;
+    info.normalized_lang = gnu ? ("GNU" + std::string(remainder)) : normalized;
+
+    // Warn about non-ISO extensions
+    if (gnu) {
+        std::string suggestion = is_cxx ? "CPP" : "C";
+        suggestion += std::string(ver_str);
+        util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_warn_gnu_extensions,
+                                   {{"lang", std::string(language)},
+                                    {"suggestion", suggestion}}));
     }
 
     return info;
@@ -206,6 +298,10 @@ EzConfig parse_config(const fs::path& toml_path) {
         }
         if (auto lang = (*proj)["language"].value<std::string>()) {
             cfg.project.language = *lang;
+        }
+        // 1.1.0-dev.4: stdlib (optional, default "libstdc++")
+        if (auto sl = (*proj)["stdlib"].value<std::string>()) {
+            cfg.project.stdlib = normalize_stdlib(*sl);
         }
         // 0.9.7+: header_only — skip compilation for header-only packages
         if (auto ho = (*proj)["header_only"].as_boolean()) {

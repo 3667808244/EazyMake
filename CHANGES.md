@@ -58,6 +58,68 @@
 
 ---
 
+## 1.1.0-dev.4 (2026-07-31) — 编译器与语言配置增强
+
+增强语言标准配置的灵活性和用户友好度，支持标准库选择与编译器拓展。
+
+### `project.stdlib` 支持
+
+- **`[project]` 新增 `stdlib` 字段**：可选 `libstdc++`（默认）或 `libc++`；支持别名 `glibcxx`/`gnu` → `libstdc++`、`llvm` → `libc++`
+- **`-stdlib=` 自动注入**：Clang + `libstdc++` → `-stdlib=libstdc++`；GCC/Clang + `libc++` → `-stdlib=libc++`；MSVC 不注入（仅使用 STL）；GCC + `libc++` 时输出 warning（支持有限）
+- **`EZMK_STDLIB` 预定义宏**：编译时自动注入（`"libstdcxx"` / `"libcxx"`），`++` 替换为 `xx` 以避免 `+` 被误解析；用户可据此条件编译
+
+### `project.language` 泛化
+
+- **大小写不敏感 + 变体统一**：`c++17` / `CXX17` / `CPP17` → 标准化为 `CPP17`；`C++`/`CXX` → `CPP` 自动识别
+- **`normalize_lang()` 泛化函数**：统一处理语言和标准库字符串（upper-case + trim），C++/CXX → CPP 在 `parse_language()` 中处理避免污染 stdlib 值
+- **版本默认**：仅 `C++`（无版本号）→ 默认 `C++17`；仅 `C` → 默认 `C11`
+- **`EZMK_LANG` 宏值更新**：使用标准化后的值（如 `CPP17`），而非原始输入
+
+### 编译器拓展支持
+
+- **GNU 前缀检测**：`GNUCPP17` → `-std=gnu++17`；`GNU11` → `-std=gnu11`；`gnuc++20`（小写）→ `-std=gnu++20`
+- **`LanguageInfo::gnu_extensions` 字段**：标识是否使用 GNU 拓展
+- **non-ISO 警告**：首次使用 GNU 拓展时输出 warning，提示标准的 `CPP17` 替代写法
+
+### 测试
+
+- 全量测试：**544 用例 / 2539 断言**，零回归
+- 新增 ~13 用例 / ~69 断言：`normalize_lang()` 18 用例、stdlib 解析 8 用例、`parse_language()` 扩展 10 用例、`get_stdlib_flags()` 7 用例
+
+### i18n
+
+- 新增 2 个 key（`config_err_invalid_stdlib`、`config_warn_gnu_extensions`），含中英双语翻译
+
+---
+
+## 1.1.0-dev.3 (2026-07-30) — Agent Skills 支持
+
+将项目 AI 编码助手指令从单文件 `CLAUDE.md` 拆分为符合 Agent Skills 开放标准的 10 个 skill 文件。
+
+### Dev 侧 Skills（6 个）
+
+- **Build Skill** (`.claude/skills/ezmk-build.md`)：编译命令（`build.sh` + 手动 g++ MSYS2/Linux）、关键 flag 解释、平台差异
+- **Test Skill** (`.claude/skills/ezmk-test.md`)：测试运行（Catch2 v3）、测试文件组织、新增测试指南、当前基线数据
+- **Codebase Skill** (`.claude/skills/ezmk-codebase.md`)：源码架构（16 个模块职责）、数据流（CLI→config→build→cache→toolchain）、关键设计模式、子系统详解
+- **i18n Skill** (`.claude/skills/ezmk-i18n.md`)：X-macro 机制（`i18n_keys.def` → 枚举 + 映射）、添加翻译完整步骤
+- **Planning Skill** (`.claude/skills/ezmk-planning.md`)：`plans/` 目录结构、plan 文档格式约定
+- **Repo Skill** (`.claude/skills/ezmk-repo.md`)：官方仓库结构、包制作流程、`index.toml` 格式
+
+### 用户侧 Skills（4 个）
+
+- 面向 EazyMake 使用者的 skill 文件，覆盖项目编译、测试、配置和包管理工作流
+
+### `CLAUDE.md` 精简
+
+- 从 ~160 行全量注入精简为 ~30 行入口索引（skill 表 + quick reference），agent 按需加载对应 skill
+- GitHub Copilot 桥接文件（`.github/copilot-instructions.md`）
+
+### 测试
+
+- 纯文档变更（skill 文件为 Markdown），不影响编译或测试；全量测试通过
+
+---
+
 ## 1.0.0 (2026-07-24) — 正式版发布
 
 首个正式版本。**不修改源代码**（版本号字符串除外），聚焦文档与元数据收尾工作。

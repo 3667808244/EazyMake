@@ -25,7 +25,10 @@ else
     cat > src/locale_data.cpp << 'CPPEOF'
 // Auto-generated stub — Python was not available at build time.
 // Only hardcoded English fallback strings will be available.
+#include <map>
+#include <string>
 namespace ezmk::i18n {
+extern const bool g_has_embedded_locales = false;
 extern const std::map<std::string, std::string> embedded_locales = {};
 }
 CPPEOF
@@ -58,7 +61,7 @@ VEREOF
 
 SRC="src/*.cpp src/vendor/*.c src/vendor/lua/*.c"
 # Exclude main.cpp for tests (it has its own main() function; catch2_impl.cpp provides main)
-TEST_SRC="src/build.cpp src/cache.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
+TEST_SRC="src/build.cpp src/cache.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lockfile.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
 INCLUDES="-I include/ -I include/vendor/ -I include/vendor/lua/"
 LUA_DEFINES="-DLUA_COMPAT_5_3"
 OUTPUT="build/ezmk"

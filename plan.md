@@ -1,144 +1,208 @@
-# EazyMake 1.1.0-dev.3 执行计划
+# EazyMake 1.1.0-dev.4 执行计划
 
-> 详细设计：[`plans/release/1.1.0-dev.3.md`](plans/release/1.1.0-dev.3.md)
+> 详细设计：[`plans/release/1.1.0-dev.4.md`](plans/release/1.1.0-dev.4.md)
 
 ---
 
 ## 1 背景
 
-AI 编程助手（Claude Code、GitHub Copilot、Cursor 等）最有效的集成方式是项目提供符合 **Agent Skills 开放标准** 的 skill 文件。EazyMake 目前仅有 `CLAUDE.md`（~160 行），混合了构建命令、架构说明、i18n 机制、包管理、配置系统等所有信息，存在以下问题：
+当前 EazyMake 的语言与编译器配置存在三个问题：
 
-1. **无法按需加载**：agent 修改测试文件时不需要知道包管理细节，但 `CLAUDE.md` 全量注入
-2. **不符合 Agent Skills 开放标准**：`CLAUDE.md` 仅对 Claude Code 有效，Copilot、Cursor 各有自己的格式
-3. **难以维护**：随项目增长越来越长，新开发者难以快速定位所需信息
-4. **无法触发式加载**：理想情况下 agent 在进入特定目录或操作特定文件时自动加载对应 skill
+1. **无法选择标准库**：使用 `clang++` 的 Linux 用户无法通过语义化配置选择 `libc++` vs `libstdc++`
+2. **语言识别过于严格**：`parse_language()` 仅接受 `C++17` / `C11` 格式，`c++17`、`cxx17`、`CPP17` 等常见变体均报错（见 `test_config.cpp:120` — `"c++17"` 预期抛异常）
+3. **编译器拓展使用不便**：需要 GNU extensions 时只能手动在 `compile.flags` 中改 `-std=` 标志，无法在 `project.lang` 中声明
 
-**解决方案**：将 `CLAUDE.md` 拆分为多个符合 Agent Skills 开放标准的 skill 文件，放在 `.claude/skills/` 目录下，每个 skill 聚焦一个领域，agent 按需加载。
+**解决方案**：新增 `project.stdlib` 配置项、泛化 `project.lang` 解析（大小写不敏感 + `C++`/`CXX`/`CPP` 统一）、支持 GNU 拓展前缀自动映射。
 
 ---
 
 ## 2 目标
 
-| #   | 目标                        | 优先级 | 说明                                                                                   |
-| --- | --------------------------- | ------ | -------------------------------------------------------------------------------------- |
-| 1   | **EazyMake Build Skill**    | P0     | 教 agent 如何编译 EazyMake：`bash build.sh`、手动 g++ 命令、MSYS2 vs Linux 差异        |
-| 2   | **EazyMake Test Skill**     | P0     | 教 agent 如何运行测试：Catch2 框架、测试编译命令、测试文件组织                         |
-| 3   | **EazyMake Codebase Skill** | P0     | 教 agent 理解项目架构：源码布局、关键模块职责、CLI/配置/缓存/Lua/包管理等子系统        |
-| 4   | **EazyMake i18n Skill**     | P1     | 教 agent 如何添加/修改翻译：X-macro `i18n_keys.def` 机制、`en.json`/`zh.json` 双语维护 |
-| 5   | **EazyMake Planning Skill** | P1     | 教 agent 如何参与版本规划：`plans/` 目录结构、plan 文档格式、`plan.md` 执行计划        |
-| 6   | **EazyMake Repo Skill**     | P2     | 教 agent 如何操作官方仓库：包制作流程、`index.toml` 格式、SHA-256 校验                 |
-| 7   | **CLAUDE.md 精简**          | P0     | 将当前 `CLAUDE.md` 精简为入口文件（~30 行），核心内容迁移到各 skill 中                 |
-
-此外还包括面向 **EazyMake 用户** 的 Agent Skills（用户侧 skills，§7），覆盖用户项目中的编译、测试、配置和包管理工作流。
+| # | 目标 | 优先级 | 说明 |
+|---|------|--------|------|
+| 1 | **`project.stdlib` 支持** | P0 | `ezmk.toml` 的 `[project]` 节新增 `stdlib` 字段，可选 `libstdc++`（默认）/ `libc++`；自动注入 `-stdlib=` 标志 + `EZMK_STDLIB` 宏 |
+| 2 | **`project.lang` 泛化** | P0 | 实现 `normalize_lang()`：大小写不敏感、`C++`/`CXX`/`CPP` → 统一为 `CPP`、trim 空白；`parse_language()` 重构以复用此函数 |
+| 3 | **编译器拓展支持** | P1 | `project.lang` 支持 `GNUCPP17` / `GNU11` 等前缀，自动映射到 `-std=gnu++17` / `-std=gnu11`；非 GNU 时给出 non-ISO 警告 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：Build Skill + Test Skill（P0，成本最低、最高频）
+### 阶段一：`normalize_lang()` 泛化函数（P0，基础依赖）
 
-- [x] 编写 `.claude/skills/ezmk-build.md`：
-  - 编译命令（`bash build.sh` + 手动 g++ MSYS2 + 手动 g++ Linux）
-  - 构建产物说明（`build/ezmk`、生成的头文件）
-  - 关键 flag 解释（`-DLUA_COMPAT_5_3`、`-lwinhttp`、`-static`）
-  - 平台差异
-  - 常见编译问题
-- [x] 编写 `.claude/skills/ezmk-test.md`：
-  - 测试命令（`bash build.sh test` + 手动 g++ 命令）
-  - Catch2 v3 框架简介（header-only：`include/vendor/catch2.hpp` + `src/vendor/catch2_impl.cpp`）
-  - 测试文件组织（`test/test_<module>.cpp`）
-  - 当前基线数据（538 用例 / ~2440 断言）
-  - 新增测试指南（文件名约定、`TEST_CASE` 宏、fixtures、`[integration]` tag）
+**文件**：`src/config.cpp` + `include/ezmk/config.hpp`
 
-### 阶段二：Codebase Skill（P0，agent 理解项目必备）
+- [ ] 在 `config.cpp` 匿名命名空间中实现 `normalize_lang()`：
+  ```cpp
+  std::string normalize_lang(const std::string& input) {
+      1. to_upper(input)                  // 大小写统一
+      2. replace "C++" / "CXX" → "CPP"   // 变体统一
+      3. trim whitespace
+      4. return result
+  }
+  ```
+- [ ] 处理边界：空字符串 → 报错 `"language not specified"`；仅 `C` / `CPP` 无版本号 → 默认 `C11` / `CPP17`
+- [ ] 在 `config.hpp` 中声明该函数（`namespace ezmk::config`）
+- [ ] 在 `parse_config()` 中读取 `project.stdlib` 字段（TOML `[project]` 节），存入 `Config::ProjectSection::stdlib`
+- [ ] `stdlib` 值也经 `normalize_lang()` 泛化（共用同一函数：`LIBSTDC++` → `LIBSTDCXX`，`LIBC++` → `LIBCXX`）
+- [ ] 不可识别的 `stdlib` 值 → 报错并列出可用值（`libstdc++` / `glibcxx` / `gnu` 和 `libc++` / `llvm`）
 
-- [x] 编写 `.claude/skills/ezmk-codebase.md`：
-  - 完整目录树（`src/`、`include/ezmk/`、`test/`、`docs/`、`plans/`、`locale/`、`scripts/`）
-  - 模块职责（每个模块 2-3 句话：`main.cpp`、`cli.cpp`、`build.cpp`、`cache.cpp`、`config.cpp`、`pkg.cpp`、`repo.cpp`、`toolchain.cpp`、`project.cpp`、`i18n.cpp`、`lua_api.cpp`、`file_watcher.cpp`、`crypto.cpp`、`util.cpp`、`version.cpp`）
-  - 数据流：CLI → config → build → cache → toolchain
-  - 关键设计模式：X-macro（i18n）、RAII、atomic write（temp → rename）
-  - 不修改的文件（`src/vendor/**` 是第三方代码）
-  - CLI flags not in README、配置系统、包管理、仓库管理等实现细节（从旧 `CLAUDE.md` 迁移）
+**关键决策**：`normalize_lang()` 同时处理 `lang` 和 `stdlib`。对于 `stdlib`，输入如 `glibcxx` → 标准化为 `LIBSTDCXX`；对于 `lang`，输入如 `c++17` → 标准化为 `CPP17`。同一个函数，不同使用方各取所需。
 
-### 阶段三：i18n Skill + Planning Skill（P1）
+### 阶段二：重构 `parse_language()`（P0）
 
-- [x] 编写 `.claude/skills/ezmk-i18n.md`：
-  - X-macro 机制：`include/ezmk/i18n_keys.def` → `I18nKey` 枚举 + `key_name()` 映射
-  - 添加一个 key 的完整步骤：`.def` → `locale/en.json` → `locale/zh.json` → 重建（`build.sh`）
-  - Debug 构建的 `audit_missing_keys()` 检查
-- [x] 编写 `.claude/skills/ezmk-planning.md`：
-  - `plans/` 目录结构：`dev/`（早期开发版本）、`release/`（发布版本及 dev 子版本）、`README.md`（索引 + 路线图）、`plan.md`（当前执行计划）
-  - Plan 文档格式约定（版本号标题 → 背景 → 目标 → 详细设计 → 执行步骤 → 兼容性矩阵 → 跨版本关注点）
-  - 如何新增/更新版本计划
+**文件**：`src/config.cpp` + `include/ezmk/config.hpp`
 
-### 阶段四：精简 `CLAUDE.md`
+- [ ] `LanguageInfo` 结构体扩展：
+  ```cpp
+  struct LanguageInfo {
+      std::string compiler;
+      std::string std_flag;              // e.g. "-std=c++17" or "-std=gnu++17"
+      std::string detected_compiler;
+      bool gnu_extensions = false;       // NEW: true if GNU prefix detected
+      std::string normalized_lang;       // NEW: e.g. "CPP17" (for EZMK_LANG macro)
+  };
+  ```
+- [ ] `parse_language()` 内部逻辑重写：
+  1. 调用 `normalize_lang(language)` 得到泛化结果
+  2. 检测 `GNU` 前缀：`GNUCPP17` → `is_cxx=true, version=17, gnu=true`；`GNU11` → `is_cxx=false, version=11, gnu=true`
+  3. 无 `GNU` 前缀：`CPP17` → `is_cxx=true, version=17, gnu=false`
+  4. 版本号映射表保持不变（89/98/99/03/11/14/17/20/23/26），未识别版本 → 报错
+  5. `std_flag` 生成：`gnu ? "-std=gnu++" + ver : "-std=c++" + ver`（C 语言同理）
+- [ ] 保持向后兼容：旧项目写 `C++17` → 正常解析，行为不变
 
-- [x] 将当前 `CLAUDE.md` 内容逐节迁移到对应 skill：
-  - Build & test commands → `ezmk-build` + `ezmk-test`
-  - Architecture → `ezmk-codebase`
-  - Internationalization → `ezmk-i18n`
-  - CLI flags not in README → `ezmk-codebase`
-  - Configuration / Package management / Repository management / etc. → `ezmk-codebase`
-  - Workflow rules → `ezmk-codebase`
-  - Safety requirements → `ezmk-codebase`
-- [x] 重写 `CLAUDE.md` 为精简入口（~30 行）：概述 + skill 索引表 + quick reference
-- [x] 确保所有来自旧 `CLAUDE.md` 的信息都能在新 skill 中找到（逐节对照检查）
+### 阶段三：`stdlib` 标志注入（P0）
 
-### 阶段五：可选交付
+**文件**：`src/toolchain.cpp` + `include/ezmk/toolchain.hpp`
 
-- [x] 编写 `.claude/skills/ezmk-repo.md`（P2）：
-  - 官方仓库结构（`index.toml` + `packages/`）
-  - 包制作流程（编译 → 打包 → SHA-256 → 更新索引）
-  - `index.toml` 的 `[[packages]]` 条目格式
-  - 预编译包 vs 源码包的区别
-- [x] 编写 `.github/copilot-instructions.md`（桥接文件）：
-  - 精简版指令，不重复 skill 内容，仅指向 `CLAUDE.md` + skill 目录
-  - 包含 build/test 命令 + 关键目录
-- [x] 用户侧 Agent Skills（§7）：面向 EazyMake 使用者的 skill 文件，覆盖：
-  - **EazyMake 项目编译**（P0）：教 agent 如何用 `ezmk project build` 编译用户项目
-  - **EazyMake 项目测试**（P0）：教 agent 如何用 `ezmk project test` 运行测试
-  - **EazyMake 项目配置**（P1）：教 agent 理解 `ezmk.toml` 结构和配置项含义
-  - **EazyMake 包管理**（P2）：教 agent 如何安装/更新第三方包
-- [ ] 可选：为 `.cursor/rules/` 生成对应的 rule 文件（延后至 dev.4+）
+- [ ] 新增 `get_compile_flags()` 函数（或直接在 `cache.cpp` 编译命令构建处处理）：
+  ```cpp
+  // 返回需要追加的 stdlib 相关编译标志
+  std::vector<std::string> get_stdlib_flags(const std::string& stdlib,
+                                             CompilerFamily family);
+  ```
+- [ ] 逻辑：
+  - `stdlib == "libc++"`：
+    - GCC → 添加 `-stdlib=libc++`（附带 warning：GCC libc++ 支持有限）
+    - Clang → 添加 `-stdlib=libc++`
+    - MSVC → 不添加（MSVC 仅使用 STL，无 `-stdlib` 标志）
+  - `stdlib == "libstdc++"`（默认）：
+    - Clang → 添加 `-stdlib=libstdc++`（显式指定，避免 Clang 在某些平台上默认选 libc++）
+    - GCC / MSVC → 不添加（已是默认）
+- [ ] **实际实现位置**：`cache.cpp` 的 `compile_one_source()` 函数（第 467–489 行是 GCC/Clang 编译命令构建处）。将 `stdlib` 信息通过 `CompileInput` 传入，在命令构建时追加标志。
 
-### 阶段六：校验
+**注意**：设计文档 §4.2 提到在 `toolchain.cpp` 中实现，但实际编译命令构建在 `cache.cpp`。建议在 `toolchain.cpp` 中实现纯函数（便于单测），在 `cache.cpp` 中调用。
 
-- [x] 检查所有 skill 文件结构一致（frontmatter → 标题 → 内容 → 示例）
-- [x] 逐 skill 验证触发条件（`trigger.glob`）是否正确覆盖了对应文件
-- [x] `bash build.sh` 编译通过（`build/ezmk.exe` 生成成功；skill 文件为纯文档，不影响代码）
-- [ ] 手动验证：Claude Code 打开项目 → 修改 `src/build.cpp` → 确认 Build Skill 自动加载
-- [ ] 手动验证：Claude Code 打开项目 → 修改 `locale/zh.json` → 确认 i18n Skill 自动加载
-- [x] 确认旧 `CLAUDE.md` 中的信息在新 skill 中无遗漏（逐节对照检查）
-- [x] 更新 `CLAUDE.md`（本次自身也是交付物，已精简为 skill 索引条目）
+### 阶段四：`EZMK_STDLIB` 宏注入（P0）
+
+**文件**：`src/build.cpp`
+
+- [ ] 在 `generate_ezmk_macros()` 函数中（第 68–89 行），添加 `EZMK_STDLIB` 宏：
+  ```cpp
+  // 与 EZMK_LANG 并列（第 85 行之后）
+  if (!cfg.project.stdlib.empty()) {
+      result.push_back("-DEZMK_STDLIB=\"" +
+          util::escape_shell_arg(cfg.project.stdlib) + "\"");
+  }
+  ```
+- [ ] 宏值规范：`libstdc++` → `"libstdcxx"`，`libc++` → `"libcxx"`（`++` → `xx`，避免 `+` 字符被误解析）
+- [ ] `CompileInput` 结构体（`cache.hpp`）需添加 `stdlib` 字段，由 `build.cpp` 在构建 `CompileInput` 时传入
+
+### 阶段五：编译器拓展警告（P1）
+
+**文件**：`src/config.cpp` 或 `src/build.cpp`
+
+- [ ] 在 `parse_language()` 检测到 `GNU` 前缀时，输出 warning：
+  ```
+  warn: using GNU extensions (non-ISO C++), use 'language = "CPP17"' for standard C++
+  ```
+- [ ] 警告可被 `--quiet` 抑制（复用现有 `util::warn()` 机制）
+- [ ] 无需修改 `toolchain.cpp` 的 flag 映射表（现有映射已包含 `-std=` 变体，`-std=gnu++17` 是 GCC/Clang 原生支持的标志，无需额外映射）
+
+### 阶段六：测试（P0）
+
+**文件**：`test/test_config.cpp` + `test/test_toolchain.cpp`（或新建 `test/test_build.cpp` 用例）
+
+- [ ] `normalize_lang()` 测试（15+ 用例）：
+  - 基本变体：`c++17` → `CPP17`、`C++17` → `CPP17`、`cxx17` → `CPP17`、`CXX17` → `CPP17`、`cpp17` → `CPP17`
+  - C 语言：`c11` → `C11`、`c17` → `C17`
+  - 未来标准：`C++2B` → `CPP2B`、`c++20` → `CPP20`
+  - 边界：空字符串 → 抛异常、`Rust` → 抛异常、仅 `C` → `C11`、仅 `CPP` → `CPP17`
+  - GNU 前缀：`GNUCPP17` → `GNUCPP17`（保留 GNU 前缀供 `parse_language` 检测）
+- [ ] `stdlib` 解析测试（5+ 用例）：
+  - 默认值（不设 `stdlib`）→ `libstdc++`
+  - `stdlib = "libstdc++"` → 解析成功
+  - `stdlib = "libc++"` → 解析成功
+  - `stdlib = "glibcxx"` / `"llvm"` → 映射到 `libstdc++` / `libc++`
+  - `stdlib = "invalid"` → 抛异常并列出可用值
+  - 大小写不敏感：`LibStdC++` → `libstdc++`
+- [ ] `parse_language()` 扩展测试（10+ 用例）：
+  - GNU 前缀：`GNUCPP17` → `std_flag="-std=gnu++17"`, `gnu_extensions=true`
+  - GNU C：`GNU11` → `std_flag="-std=gnu11"`
+  - 无 GNU 前缀：`CPP17` → `std_flag="-std=c++17"`, `gnu_extensions=false`
+  - 泛化输入：`c++17` → `std_flag="-std=c++17"`（通过 normalize 后正常解析）
+  - `cxx20` → `std_flag="-std=c++20"`
+- [ ] `-stdlib=` 注入测试（8+ 用例，在 `test_toolchain.cpp` 或 `test_build.cpp`）：
+  - `libstdc++` + GCC → 不注入
+  - `libstdc++` + Clang → 注入 `-stdlib=libstdc++`
+  - `libc++` + GCC → 注入 `-stdlib=libc++` + warning
+  - `libc++` + Clang → 注入 `-stdlib=libc++`
+  - `libc++` + MSVC → 不注入
+  - 默认（不设 stdlib）+ Clang → 注入 `-stdlib=libstdc++`
+  - 默认 + GCC → 不注入
+
+### 阶段七：编译与回归验证
+
+- [x] `bash build.sh` 编译通过（MSYS2 / Windows）
+- [x] 全量测试通过，544 用例 / 2539 断言（新增 13 用例 / ~69 断言），零回归
+- [x] 验证 `EZMK_STDLIB` 宏在条件编译中可用（手动编译简单测试文件）
 
 ---
 
 ## 4 关键设计决策
 
-| 决策                       | 说明                                                                                                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Skill 文件格式             | Claude Code 原生 `.claude/skills/*.md` 格式（Markdown + YAML frontmatter + `trigger.glob`），是 Agent Skills 开放标准的实现                                |
-| `CLAUDE.md` 角色转变       | 从"大而全的单文件"变为"入口索引"：agent 先加载 `CLAUDE.md`，再根据任务按需加载对应 skill                                                                    |
-| P0/P1/P2 优先级分级        | P0（Build/Test/Codebase）最高频、基础依赖，优先完成；P1（i18n/Planning）中等频率；P2（Repo）最低频，可选                                                    |
-| 不修改源代码               | 所有 skill 文件是纯文档，零代码风险；`bash build.sh` 编译 + 全量测试不受影响                                                                               |
-| 用户侧 skills 独立         | §7 的用户侧 skill 面向 EazyMake 使用者（用户项目），与 §2~§6 的 dev 侧 skill（EazyMake 自身）格式相同、受众不同                                             |
-| 与其他 agent 的兼容性      | skill 文件放在 `.claude/skills/`（Claude Code 原生），但 Markdown 正文是通用格式；可选生成 `.github/copilot-instructions.md` 和 `.cursor/rules/` 桥接文件 |
-| Repo skill 作为 P2 延后    | 仓库操作频率最低，可在各阶段完成后单独处理，不阻塞主要交付                                                                                                  |
+| 决策 | 说明 |
+|------|------|
+| `normalize_lang()` 双用途 | 同一函数处理 `lang` 和 `stdlib` 的泛化，减少重复逻辑；通过调用方区分语义 |
+| 不创建新的 `build_compile_flags()` | 设计文档建议在 `toolchain.cpp` 中新建此函数，但在当前代码结构中，编译命令在 `cache.cpp` 的 `compile_one_source()` 中组装；将 stdlib 标志逻辑放在 `toolchain.cpp` 作为纯函数，在 `cache.cpp` 中调用，避免大面积重构 |
+| `GNU` 前缀检测在 `parse_language()` | 而非 `toolchain.cpp` — `LanguageInfo` 直接携带 `gnu_extensions` 字段，下游无需重复判断 |
+| `EZMK_STDLIB` 宏值中 `++` → `xx` | 与设计文档一致，避免某些工具链中 `+` 被误解析 |
+| 默认 `libstdc++` | 不设 `stdlib` 时行为完全不变；Clang 平台显式注入 `-stdlib=libstdc++` 避免意外选择 libc++ |
+| Clang 默认也注入 `-stdlib=libstdc++` | 部分 Linux 发行版的 Clang 默认使用 libc++，显式注入确保一致性 |
 
 ---
 
 ## 5 兼容性矩阵
 
-| 变更                        | 影响                           | 处理                                                                               |
-| --------------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
-| `CLAUDE.md` 大幅精简        | agent 首次加载时获得的信息变少 | 通过 skill 按需加载补充；入口 `CLAUDE.md` 的索引表确保 agent 知道有哪些 skill 可用 |
-| 新增 `.claude/skills/` 目录 | 仅 Claude Code 原生支持        | 不影响其他工具；其他 agent 通过各自的指令文件（`.cursor/rules/` 等）引用相同内容   |
-| 不修改任何源代码            | 零风险                         | skill 文件是纯文档                                                                 |
+| 变更 | 影响 | 处理 |
+|------|------|------|
+| 新增 `project.stdlib` | 旧项目无此字段 | 默认 `libstdc++`，行为不变 |
+| `project.lang` 泛化 | 旧项目写 `C++17` / `cxx17` 等变体 | `normalize_lang()` 将大小写和变体统一；`C++17` → `CPP17`，标志不变 |
+| `LanguageInfo` 新增字段 | 下游代码读取 `LanguageInfo` | 新增字段有默认值（`gnu_extensions=false`, `normalized_lang=""`），不破坏现有使用 |
+| 编译器拓展自动检测 + 警告 | 旧项目写 `GNUCPP17`（此前不存在） | 新功能，无旧项目影响；首次使用给出 non-ISO 警告 |
+| `-stdlib=` 注入 | 旧项目未设 `stdlib` | GCC 不注入额外 flag；Clang 注入 `-stdlib=libstdc++`（此变更对 Clang 用户可能有影响，但属于正确行为 — 明确指定标准库避免歧义） |
+| `EZMK_STDLIB` 宏 | 旧项目代码中无 `#ifdef EZMK_STDLIB` | 纯增量，不破坏现有条件编译 |
 
 ---
 
-## 6 延后项（1.1.0-dev.4+）
+## 6 涉及文件清单
 
-- 用户侧 skills 的分发实现（`ezmk project new` 模板生成 / `ezmk utils skill-gen` 工具）— 设计文档已在 §7.3 中定义，具体实现延后
-- `.cursor/rules/` 同步生成（可作为独立小任务在任何阶段完成）
-- Skill 内容随项目架构演进的持续维护（与 1.1.0-dev.4 编译器/语言配置增强相关）
+| 文件 | 变更类型 | 说明 |
+|------|----------|------|
+| `include/ezmk/config.hpp` | 修改 | `ProjectSection` 加 `stdlib`；`LanguageInfo` 加 `gnu_extensions` + `normalized_lang`；声明 `normalize_lang()` |
+| `src/config.cpp` | 修改 | 实现 `normalize_lang()`；`parse_config()` 解析 `stdlib`；重构 `parse_language()` |
+| `include/ezmk/toolchain.hpp` | 修改 | 声明 `get_stdlib_flags()` |
+| `src/toolchain.cpp` | 修改 | 实现 `get_stdlib_flags()` |
+| `include/ezmk/cache.hpp` | 修改 | `CompileInput` 加 `stdlib` 字段 |
+| `src/cache.cpp` | 修改 | 编译命令构建处调用 `get_stdlib_flags()` 注入标志 |
+| `src/build.cpp` | 修改 | `generate_ezmk_macros()` 加 `EZMK_STDLIB`；传入 `stdlib` 到 `CompileInput` |
+| `test/test_config.cpp` | 修改 | 新增 `normalize_lang()` + `stdlib` 解析 + `parse_language()` 扩展测试 |
+| `test/test_toolchain.cpp` | 修改 | 新增 `get_stdlib_flags()` 测试 |
+
+---
+
+## 7 延后项（1.1.0-dev.5+）
+
+- 跨平台 CI 验证：在 Linux (Clang+libc++) / macOS (Apple Clang) / Windows (MSVC) 三个平台上验证 `stdlib` 功能 — 延后至 dev.5 冒烟测试阶段
+- `EZMK_STDLIB` 宏的用户文档更新（`docs/zh/config_file.md` + `docs/en/config_file.md`）— 延后至 dev.5 文档整理阶段
+- `.cursor/rules/` 同步生成（从 dev.3 延后项继承）

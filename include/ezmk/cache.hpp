@@ -45,6 +45,7 @@ struct CompileInput {
     fs::path proj_root;                      // project/package root (for relative cache keys)
     config::CompileSection compile;          // compile options
     config::LanguageInfo lang;               // compiler + std flag
+    std::string stdlib;                      // 1.1.0-dev.4: standard library (libstdc++ / libc++)
     std::vector<fs::path> extra_includes;    // extra -I dirs (dependency packages)
     fs::path cache_obj_dir;                  // where cached .o/.obj files are stored permanently
     bool disable_cache = false;              // --disable-cache

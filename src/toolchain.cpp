@@ -257,6 +257,33 @@ FlagTranslation translate_link_flags(const std::vector<std::string>& gcc_flags,
 }
 
 // ===================================================================
+// 1.1.0-dev.4: stdlib flags
+// ===================================================================
+
+std::vector<std::string> get_stdlib_flags(const std::string& stdlib,
+                                           CompilerFamily family) {
+    std::vector<std::string> flags;
+
+    // MSVC does not support -stdlib flag — uses STL exclusively
+    if (family == CompilerFamily::Msvc) {
+        return flags;
+    }
+
+    if (stdlib == "libc++") {
+        flags.push_back("-stdlib=libc++");
+        if (family == CompilerFamily::Gcc) {
+            util::warn("GCC with libc++ has limited support; clang is recommended for libc++");
+        }
+    } else if (stdlib == "libstdc++" && family == CompilerFamily::Clang) {
+        // On some platforms Clang defaults to libc++; explicitly request libstdc++
+        flags.push_back("-stdlib=libstdc++");
+    }
+    // else: libstdc++ + GCC — default, no flag needed
+
+    return flags;
+}
+
+// ===================================================================
 // MSVC environment loading
 // ===================================================================
 

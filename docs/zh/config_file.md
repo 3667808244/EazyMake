@@ -9,7 +9,8 @@
 | `name` | string | 是 | — | 项目名称 |
 | `type` | string | 否 | `"executable"` | 项目类型：`"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | 是 | — | 项目版本，建议 SemVer 格式（如 `"0.1.0"`） |
-| `language` | string | 否 | `"C++17"` | 语言标准，格式为 `<语言><版本>`，如 `"C++17"`、`"C11"` |
+| `language` | string | 否 | `"C++17"` | 语言标准，如 `"C++17"`、`"C11"`、`"GNUCPP17"`。大小写不敏感，`C++`/`CXX`/`CPP` 统一 |
+| `stdlib` | string | 否 | `"libstdc++"` | **1.1.0-dev.4+** 标准库：`"libstdc++"`（默认）或 `"libc++"`。别名：`"glibcxx"` / `"gnu"` → `libstdc++`；`"llvm"` → `libc++`。大小写不敏感 |
 
 ### `type` 取值说明
 
@@ -22,13 +23,29 @@
 
 ### `language` 格式
 
-格式为 `<语言><版本>`：
-- 语言：`C` 或 `C++`
-- 版本：`89` / `99` / `11` / `14` / `17` / `20` / `23`
+格式为 `<语言><版本>`。解析器大小写不敏感，并接受多种变体拼写：
 
-常见取值：`C++17`（默认）、`C++20`、`C11`、`C99`。
+| 用户输入 | 标准化后 | `-std=` 标志 | 编译器 |
+|----------|---------|-------------|--------|
+| `C++17` / `c++17` / `cpp17` / `cxx17` | `CPP17` | `-std=c++17` | `g++` |
+| `C11` / `c11` | `C11` | `-std=c11` | `gcc` |
+| `C++`（无版本号） | `CPP17` | `-std=c++17` | `g++` |
+| `C`（无版本号） | `C11` | `-std=c11` | `gcc` |
 
-以 `C++` 开头 → 使用 `g++` 编译；以 `C` 开头（非 `C++`）→ 使用 `gcc` 编译。
+- 语言：`C++` / `CXX` / `CPP`（均映射为 C++），或 `C`
+- 版本：`89` / `98` / `99` / `03` / `11` / `14` / `17` / `20` / `23` / `26`
+- 默认版本：C++ → `17`，C → `11`
+
+#### GNU 拓展（1.1.0-dev.4+）
+
+在语言前加 `GNU` 前缀以启用 GNU 编译器拓展：
+
+| 用户输入 | 标准化后 | `-std=` 标志 | 警告 |
+|----------|---------|-------------|------|
+| `GNUCPP17` / `gnuc++17` | `GNUCPP17` | `-std=gnu++17` | non-ISO 警告 |
+| `GNU11` / `gnu11` | `GNU11` | `-std=gnu11` | non-ISO 警告 |
+
+> 使用 GNU 拓展时会输出警告，建议使用标准写法（如 `language = "CPP17"`）。
 
 ---
 
@@ -68,7 +85,8 @@
 | `EZMK_PROJECT_NAME` | 字符串 | `"myapp"` | `[project].name` |
 | `EZMK_PROJECT_VERSION` | 字符串 | `"1.0.0"` | `[project].version` |
 | `EZMK_PROJECT_TYPE` | 字符串 | `"executable"` | `[project].type` |
-| `EZMK_LANG` | 字符串 | `"C++17"` | `[project].language` |
+| `EZMK_LANG` | 字符串 | `"CPP17"` | **1.1.0-dev.4+** 标准化后的 `[project].language`（如 `c++17` → `CPP17`） |
+| `EZMK_STDLIB` | 字符串 | `"libstdcxx"` | **1.1.0-dev.4+** `[project].stdlib`，`++` 替换为 `xx`（`libstdc++` → `libstdcxx`） |
 
 设置 `ezmk_macros = false` 可完全禁用标准宏注入。
 

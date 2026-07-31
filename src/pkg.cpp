@@ -402,6 +402,7 @@ fs::path compile_package(const fs::path& pkg_dir,
     cin.cache_obj_dir = build_dir;   // package: obj_dir == cache_obj_dir
     cin.disable_cache = false;       // packages always use cache
     cin.use_pic = false;             // packages are always static libs
+    cin.stdlib = cfg.project.stdlib;  // 1.1.0-dev.4
 
     auto comp_result = cache::compile_sources(cin, record);
 

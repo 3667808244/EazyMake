@@ -327,3 +327,53 @@ TEST_CASE("translate_compile_flags: optimization levels", "[toolchain][translate
         CHECK(r.translated[0] == "/O1");
     }
 }
+
+// ===================================================================
+// 1.1.0-dev.4: get_stdlib_flags()
+// ===================================================================
+
+TEST_CASE("get_stdlib_flags: libstdc++ with GCC returns empty", "[toolchain][1.1.0-dev.4]") {
+    auto flags = tc::get_stdlib_flags("libstdc++", tc::CompilerFamily::Gcc);
+    REQUIRE(flags.empty());
+}
+
+TEST_CASE("get_stdlib_flags: libstdc++ with Clang adds -stdlib=libstdc++", "[toolchain][1.1.0-dev.4]") {
+    auto flags = tc::get_stdlib_flags("libstdc++", tc::CompilerFamily::Clang);
+    REQUIRE(flags.size() == 1);
+    CHECK(flags[0] == "-stdlib=libstdc++");
+}
+
+TEST_CASE("get_stdlib_flags: libc++ with GCC adds -stdlib=libc++", "[toolchain][1.1.0-dev.4]") {
+    auto flags = tc::get_stdlib_flags("libc++", tc::CompilerFamily::Gcc);
+    REQUIRE(flags.size() == 1);
+    CHECK(flags[0] == "-stdlib=libc++");
+}
+
+TEST_CASE("get_stdlib_flags: libc++ with Clang adds -stdlib=libc++", "[toolchain][1.1.0-dev.4]") {
+    auto flags = tc::get_stdlib_flags("libc++", tc::CompilerFamily::Clang);
+    REQUIRE(flags.size() == 1);
+    CHECK(flags[0] == "-stdlib=libc++");
+}
+
+TEST_CASE("get_stdlib_flags: MSVC always returns empty", "[toolchain][1.1.0-dev.4]") {
+    auto flags1 = tc::get_stdlib_flags("libstdc++", tc::CompilerFamily::Msvc);
+    REQUIRE(flags1.empty());
+
+    auto flags2 = tc::get_stdlib_flags("libc++", tc::CompilerFamily::Msvc);
+    REQUIRE(flags2.empty());
+
+    auto flags3 = tc::get_stdlib_flags("", tc::CompilerFamily::Msvc);
+    REQUIRE(flags3.empty());
+}
+
+TEST_CASE("get_stdlib_flags: empty stdlib with GCC returns empty", "[toolchain][1.1.0-dev.4]") {
+    auto flags = tc::get_stdlib_flags("", tc::CompilerFamily::Gcc);
+    REQUIRE(flags.empty());
+}
+
+TEST_CASE("get_stdlib_flags: empty stdlib with Clang returns empty", "[toolchain][1.1.0-dev.4]") {
+    // Empty stdlib treated as libstdc++ but without explicit flag — Clang may need it
+    // But by design we only inject when stdlib is explicitly set
+    auto flags = tc::get_stdlib_flags("", tc::CompilerFamily::Clang);
+    REQUIRE(flags.empty());
+}

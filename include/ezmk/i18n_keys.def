@@ -132,6 +132,8 @@ EZMK_I18N_KEY(pkg_info_permissions)     // 0.2.5+
 EZMK_I18N_KEY(config_err_invalid_type)
 EZMK_I18N_KEY(config_err_missing_ver)
 EZMK_I18N_KEY(config_err_invalid_lang)
+EZMK_I18N_KEY(config_err_invalid_stdlib)
+EZMK_I18N_KEY(config_warn_gnu_extensions)
 EZMK_I18N_KEY(config_err_invalid_macro)
 EZMK_I18N_KEY(config_err_empty_src_dirs)
 EZMK_I18N_KEY(config_err_ezmk_macros_type)

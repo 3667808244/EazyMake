@@ -82,8 +82,22 @@ std::vector<std::string> generate_ezmk_macros(const config::EzConfig& cfg) {
             util::escape_shell_arg(cfg.project.type) + "\"");
     }
     if (!cfg.project.language.empty()) {
+        // 1.1.0-dev.4: Use normalized form for EZMK_LANG
+        auto lang_info = config::parse_language(cfg.project.language);
         result.push_back("-DEZMK_LANG=\"" +
-            util::escape_shell_arg(cfg.project.language) + "\"");
+            util::escape_shell_arg(lang_info.normalized_lang) + "\"");
+    }
+    // 1.1.0-dev.4: EZMK_STDLIB — replace ++ with xx in macro value
+    if (!cfg.project.stdlib.empty()) {
+        std::string stdlib_macro = cfg.project.stdlib;
+        // Replace "++" with "xx" to avoid + being misinterpreted
+        size_t pos = 0;
+        while ((pos = stdlib_macro.find("++", pos)) != std::string::npos) {
+            stdlib_macro.replace(pos, 2, "xx");
+            pos += 2;
+        }
+        result.push_back("-DEZMK_STDLIB=\"" +
+            util::escape_shell_arg(stdlib_macro) + "\"");
     }
     return result;
 }
@@ -416,6 +430,7 @@ struct BuildState {
     config::LinkSection link_cfg;
     config::LanguageInfo lang;
     toolchain::Toolchain tc;
+    std::string stdlib;  // 1.1.0-dev.4: standard library (libstdc++ / libc++)
     bool is_msvc = false;
     bool use_pic = false;
     std::vector<fs::path> pkg_archives;
@@ -460,6 +475,7 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
 
     // Language + toolchain detection
     st.lang = config::parse_language(cfg.project.language);
+    st.stdlib = cfg.project.stdlib;  // 1.1.0-dev.4
     st.tc = toolchain::detect_toolchain();
     st.is_msvc = (st.tc.family == toolchain::CompilerFamily::Msvc);
     if (!st.is_msvc) {
@@ -788,6 +804,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     cin.use_pic = st.use_pic;
     cin.verbose = opts.verbose;
     cin.tc = st.tc;
+    cin.stdlib = st.stdlib;  // 1.1.0-dev.4
 
     int num_jobs = opts.jobs;
     if (num_jobs <= 0) {
