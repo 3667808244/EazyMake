@@ -678,6 +678,46 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
         }
     }
 
+    // 1.1.0-dev.7: Hard dependency pre-check — catch missing deps before
+    // the compiler produces cryptic "file not found" / "cannot find -l" errors.
+    {
+        std::vector<std::string> missing_hard_deps;
+        for (auto& entry : cfg.depends.libs) {
+            if (installed_pkgs.find(entry.name) == installed_pkgs.end()) {
+                missing_hard_deps.push_back(entry.name);
+            }
+        }
+
+        if (!missing_hard_deps.empty()) {
+            // Check registered repos to see which ones are installable
+            std::vector<std::string> installable;
+            for (auto& name : missing_hard_deps) {
+                if (pkg::package_available(name)) {
+                    installable.push_back(name);
+                }
+            }
+
+            std::string msg = ezmk::i18n::get(ezmk::i18n::I18nKey::missing_dep_at_build);
+            for (size_t i = 0; i < missing_hard_deps.size(); ++i) {
+                if (i > 0) msg += ", ";
+                msg += "'" + missing_hard_deps[i] + "'";
+            }
+            msg += ".";
+
+            if (!installable.empty()) {
+                msg += " " + ezmk::i18n::get(ezmk::i18n::I18nKey::missing_dep_install_hint);
+                for (size_t i = 0; i < installable.size(); ++i) {
+                    if (i > 0) msg += " ";
+                    msg += installable[i];
+                }
+            } else {
+                msg += " " + ezmk::i18n::get(ezmk::i18n::I18nKey::missing_dep_no_repo);
+            }
+
+            util::fatal(msg);
+        }
+    }
+
     // 0.9.6+: Validate installed package versions against declared constraints
     for (auto& entry : cfg.depends.libs) {
         if (entry.constraint.op == config::VersionConstraint::None) continue;

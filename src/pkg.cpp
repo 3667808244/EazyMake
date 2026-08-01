@@ -264,6 +264,14 @@ static std::string pkg_name_from_dir(const fs::path& dir) {
 // Compile a package to .a static library
 // ===================================================================
 
+// 1.1.0-dev.7: Check if a package is available in any registered repo.
+// Searches across project → user → global scopes. Returns true if found.
+bool package_available(std::string_view pkg_name) {
+    auto result = repo::search_package(pkg_name, {
+        cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+    return !result.archive_path.empty();
+}
+
 // 1.1.0-dev.2: Select the best precompiled archive for the current platform.
 // Priority: exact platform match > bare lib<name>.a/.lib (backward compat) > error.
 fs::path select_precompiled_archive(const fs::path& lib_dir,
@@ -705,6 +713,11 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
         // Check and resolve dependencies
         {
+            // 1.1.0-dev.7: want interaction mode (reset per install call)
+            // 0=normal (prompt), 1=accept_all, 2=deny_all
+            int want_mode = 0;
+            bool want_header_printed = false;
+
             std::set<std::string> seen = { pkg_name };
             std::deque<std::string> to_check = { pkg_name };
             while (!to_check.empty()) {
@@ -741,13 +754,35 @@ void install(const std::string& pkg_file, cli::Scope scope,
                             }
                             all_pkgs.push_back(dep_path);
                         } else {
+                            // 1.1.0-dev.7: Auto-install hard dependency from registered repos
+                            auto search = repo::search_package(dep.name, {
+                                cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+                            if (!search.archive_path.empty() &&
+                                util::file_exists(search.archive_path)) {
+                                util::info(std::string("auto-installing dependency: ") + dep.name);
+                                try {
+                                    // Install to the same scope, skip lockfile for transitive deps
+                                    install(dep.name, scope, search.sha256,
+                                            assume_yes, false, true);
+                                    // After install, verify it now exists
+                                    if (util::file_exists(dep_path)) {
+                                        all_pkgs.push_back(dep_path);
+                                        continue;
+                                    }
+                                } catch (const std::exception& e) {
+                                    throw std::runtime_error(
+                                        std::string("failed to install dependency '") +
+                                        dep.name + "': " + e.what());
+                                }
+                            }
                             throw std::runtime_error(
                                 ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
                                                 {{"dep", dep.name}}));
                         }
                     }
                 }
-                // 0.2.2+: want dependencies are optional — include if installed, skip if missing
+                // 0.2.2+: want dependencies are optional — include if installed.
+                // 1.1.0-dev.7: interactive prompt for missing optional deps (Y/N/A/D).
                 for (auto& dep : cur_cfg.depends.want) {
                     if (seen.insert(dep.name).second) {
                         fs::path dep_path = dest_dir / dep.name;
@@ -772,8 +807,63 @@ void install(const std::string& pkg_file, cli::Scope scope,
                             }
                             to_check.push_back(dep.name);
                             all_pkgs.push_back(dep_path);
+                        } else {
+                            // 1.1.0-dev.7: Not installed — prompt user (interactive) or skip (-y)
+                            char choice = assume_yes ? 'd' : 0;
+
+                            // Check mode set by earlier A/D choices
+                            if (want_mode == 1) choice = 'a';
+                            else if (want_mode == 2) choice = 'd';
+
+                            // Prompt if in normal mode and interactive
+                            if (choice == 0) {
+                                // Print header on first prompt
+                                if (!want_header_printed) {
+                                    util::info(ezmk::i18n::get(ezmk::i18n::I18nKey::want_prompt_title));
+                                    want_header_printed = true;
+                                }
+                                util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::want_prompt_item,
+                                    {{"pkg", cur}, {"dep", dep.name}}));
+                                std::cerr << ezmk::i18n::get(ezmk::i18n::I18nKey::want_prompt_options);
+                                std::string line;
+                                if (std::getline(std::cin, line)) {
+                                    if (!line.empty()) choice = static_cast<char>(std::tolower(line[0]));
+                                }
+                                if (choice != 'y' && choice != 'n' &&
+                                    choice != 'a' && choice != 'd') {
+                                    choice = 'n'; // default: skip
+                                }
+                            }
+
+                            if (choice == 'a') want_mode = 1;      // accept all from now on
+                            else if (choice == 'd') want_mode = 2; // deny all from now on
+
+                            if (choice == 'y' || choice == 'a') {
+                                // Try to install from repos
+                                auto search = repo::search_package(dep.name, {
+                                    cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+                                if (!search.archive_path.empty() &&
+                                    util::file_exists(search.archive_path)) {
+                                    util::info(ezmk::i18n::fmt(
+                                        ezmk::i18n::I18nKey::want_auto_installing,
+                                        {{"dep", dep.name}}));
+                                    try {
+                                        install(dep.name, scope, search.sha256,
+                                                assume_yes, false, true);
+                                        if (util::file_exists(dep_path)) {
+                                            to_check.push_back(dep.name);
+                                            all_pkgs.push_back(dep_path);
+                                        }
+                                    } catch (const std::exception& e) {
+                                        util::warn(std::string("failed to install optional dependency '") +
+                                                   dep.name + "': " + e.what());
+                                    }
+                                } else {
+                                    util::warn(std::string("optional dependency not found in repos: ") + dep.name);
+                                }
+                            }
+                            // choice == 'n' or 'd': skip this want
                         }
-                        // If not installed: silently skip (optional dependency)
                     }
                 }
             }

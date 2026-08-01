@@ -72,6 +72,10 @@ bool satisfies_version_constraint(std::string_view version,
 fs::path detect_install_script(const fs::path& pkg_root,
                                 std::string_view basename);
 
+// 1.1.0-dev.7: Check if a package is available in any registered repo.
+// Returns true if at least one registered repo has the package in its index.
+bool package_available(std::string_view pkg_name);
+
 // 1.1.0-dev.2: Select the precompiled archive matching the current platform
 // from a lib/ directory. Priority: exact platform tag match (lib<name>.<tag>.a)
 // > bare fallback (lib<name>.a). Throws std::runtime_error if no match.

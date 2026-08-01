@@ -35,6 +35,15 @@ Utils tool packages (`type = "utils"`, see `utils.md` for details):
 
 ### `[project]` Section
 
+| Field | Type | Required | Default | Description |
+|------|------|------|--------|------|
+| `name` | string | **Yes** | — | Package name (lowercase, hyphens allowed, e.g. `"my-lib"`) |
+| `version` | string | **Yes** | — | Semantic version, e.g. `"1.2.3"` |
+| `type` | string | No | `"executable"` | Package type (see value table below) |
+| `language` | string | No | `"C++17"` | Format: `<lang><version>`, e.g. `"C11"`, `"C++17"`, `"C++20"` |
+| `header_only` | bool | No | `false` | **0.9.7+** Header-only library (no `src/`, skip compilation) |
+| `precompiled` | bool | No | `false` | **0.9.7+** Precompiled package (`lib/` provides pre-built `.a`, no `src/`). See [Package Authoring Guide](package_authoring.md#33-precompiled-package-precompiled--true-097) |
+
 The `type` field supports the following values:
 
 | Value | Description |

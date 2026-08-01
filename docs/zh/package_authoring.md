@@ -154,20 +154,39 @@ precompiled = true
 # 无需 src/ 目录 — 预编译产物直接放 lib/
 ```
 
+**多平台共包**（1.1.0-dev.2+）：同一个包可在 `lib/` 下放置多个平台的预编译产物，通过命名约定自动匹配当前平台：
+
 ```
 sdl2/
 ├── ezmk.toml
 ├── include/       # 头文件（跨平台共用）
 └── lib/           # 预编译静态库
-    └── libSDL2.a
+    ├── libSDL2.win-x64.a
+    ├── libSDL2.linux-x64.a
+    └── libSDL2.mac-arm64.a
 ```
+
+**命名约定**：`lib<name>.<os>-<arch>.<ext>`
+
+| OS | Arch | 标识 |
+|----|------|------|
+| Windows | x86_64 | `win-x64` |
+| Windows | x86 | `win-x86` |
+| Linux | x86_64 | `linux-x64` |
+| Linux | aarch64 | `linux-arm64` |
+| macOS | x86_64 | `mac-x64` |
+| macOS | aarch64 | `mac-arm64` |
+
+**选择优先级**：
+1. 精确平台匹配（如当前为 `win-x64` → 匹配 `lib<name>.win-x64.a`）
+2. Fallback 到无后缀文件 `lib<name>.a`（向后兼容单平台旧包）
+3. 无匹配 → 报错并列出可用平台
 
 **⚠️ 不推荐常规使用。** 预编译包只能在构建时对应的特定平台和架构上工作。优先使用源码包（`src/`），它们可在任何平台上编译。仅在以下情况使用 `precompiled`：
 
-- 库无法用简单的 `gcc`/`g++` 命令编译（需要 CMake、autotools 等）
-- 能枚举并为所有目标平台提供构建产物（后续多平台支持见 `plans/1.1.0-dev.2.md`）
-
-当前版本（0.9.7）的预编译包仅包含单一平台的二进制文件。其他平台的用户会遇到链接错误。多平台共包（`lib<name>.<os>-<arch>.a`）计划在 1.1.0 中实现。
+- 库无法用简单的 `gcc`/`g++` 命令编译（需要 CMake、autotools、OpenSSL 的 `Configure` 等复杂构建系统）
+- 库的编译耗时极长（如 gRPC、Qt），预编译可大幅提升用户体验
+- 能枚举并为所有目标平台提供构建产物
 
 ### 3.4 Utils 工具包（`type = "utils"`）
 

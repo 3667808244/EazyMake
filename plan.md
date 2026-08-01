@@ -1,16 +1,22 @@
-# EazyMake 1.1.0-dev.6 执行计划 ✅
+# EazyMake 1.1.0-dev.7 执行计划
 
-> 详细设计：[`plans/release/1.1.0-dev.6.md`](plans/release/1.1.0-dev.6.md)
+> 详细设计：[`plans/release/1.1.0-dev.7.md`](plans/release/1.1.0-dev.7.md)
 >
-> **状态：已完成。** 全部 9 个阶段执行完毕，全量测试 545 用例 / 2557 断言零回归。
+> **状态：阶段四~七已完成。** 全量测试 555 用例 / 2661 断言（含集成测试），零回归。
 
 ---
 
 ## 1 背景
 
-目前 EazyMake 没有内置的测试运行支持。用户需要手动编写测试编译命令、手动运行测试可执行文件、自行汇总测试结果——整个流程割裂且容易出错。
+当前 EazyMake 的包处理存在两个改进方向：
 
-期望通过 `ezmk project test`（别名 `ezmk pt`）一键完成：**编译项目 → 编译测试 → 运行测试 → 汇总结果**。
+1. **包生态不足**：官方仓库现有 42 个包，但缺少网络通信（HTTP/gRPC）、数据库连接（SQLite/PostgreSQL/Redis）、序列化（Protobuf/msgpack）、科学计算（Eigen）、测试框架（Google Test）等领域的常用库。
+2. **缺失依赖的处理粗糙**：
+   - 构建时硬依赖未安装 → 无前置检查，直接被 g++/ld 原始错误捕获，用户得不到语义化提示
+   - `pkg install` 时可选依赖缺失 → 静默跳过，用户不知道有哪些可选增强
+   - 仓库安装时硬依赖缺失 → 直接报错退出，需手动逐个安装
+
+本版本聚焦包生态拓充（+22 个新包 + 已有包版本更新）和包处理改善（构建时前置检查 + 自动安装 + 交互式可选依赖）。
 
 ---
 
@@ -18,134 +24,121 @@
 
 | # | 目标 | 优先级 | 说明 |
 |---|------|--------|------|
-| 1 | **`[test]` 配置节解析** | P0 | `TestConfig` 结构体 + `ezmk.toml` 中 `[test]` 节的三个字段解析（`dirs`/`framework`/`flags`） |
-| 2 | **CLI 命令支持** | P0 | `ezmk project test` + `ezmk pt` 别名 + `--framework`/`--filter`/`--verbose` 选项 |
-| 3 | **Catch2 模式** | P0 | 自动检测 Catch2、入口生成、统一链接、XML 结果解析 |
-| 4 | **ezmk 内置框架模式** | P1 | 独立编译运行、超时处理、轻量断言宏 `test_assert.h` |
-| 5 | **单元测试覆盖** | P0 | `[test]` 配置解析 8+ 用例、Catch2 检测 5+ 用例、ezmk 模式 5+ 用例 |
-| 6 | **集成测试验证** | P1 | 真实项目（Catch2 + ezmk 框架）→ `ezmk pt` → 验证输出 |
+| 1 | **12 个新包入库** | P0 | 覆盖加密/HTTP/RPC/数据库/序列化/科学计算/测试框架（§2.1） |
+| 2 | **10 个 Boost header-only 子库** | P0 | Asio/Beast/Filesystem/System/SmartPtr/Token/UUID/Random/Math/Functional |
+| 3 | **已有包版本更新** | P0 | 检查 42 个已有包的上游版本，升级过时包（预计 20~25 个） |
+| 4 | **构建时硬依赖前置检查** | P0 | `prepare_build_state()` 中检查 `depends.lib`，缺失时输出语义化错误 + 安装提示 |
+| 5 | **仓库安装时硬依赖自动安装** | P1 | `lib` 缺失 → 递归 `install_from_repo()`，无需用户手动干预 |
+| 6 | **仓库安装时 want 交互式询问** | P1 | 四选项（Y/N/A/D）+ 递归穿透 + `-y` 兼容 |
 | 7 | **编译与全量回归** | P0 | `bash build.sh` 编译通过 + 全量测试零回归 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：配置层 — `TestConfig` 结构体 + `[test]` 节解析（P0）
+### 阶段一：包生态拓充 — 12 个新包（P0）
 
-**文件**：`include/ezmk/config.hpp` + `src/config.cpp`
+**仓库**：`ezmk-repo`
 
-- [x] 在 `config.hpp` 中定义 `TestConfig` 结构体：
-  ```cpp
-  struct TestConfig {
-      std::vector<std::string> dirs = {"test"};
-      std::string framework = "catch2";   // "catch2" | "ezmk"
-      std::vector<std::string> flags = {};
-  };
-  ```
-- [x] 在 `Config` 类中添加 `TestConfig test` 成员
-- [x] 在 `config.cpp` 中实现 `[test]` 节 TOML 解析：
-  - `test.dirs`：`string[]`，默认 `["test"]`
-  - `test.framework`：`string`，大小写不敏感（复用 `normalize_lang()`），默认 `"catch2"`
-  - `test.flags`：`string[]`，默认 `[]`
-- [x] 所有字段可选，缺失时使用默认值
+**打包策略**：简单库从源码构建，编译复杂的库使用预编译包（`precompiled = true`，复用 0.9.7 机制）。用户 `pkg install` 时直接下载预编译产物，无需本地编译。
 
-### 阶段二：CLI 层 — `project test` 命令 + 选项（P0）
+**Header-only（源码分发，零编译）**：
 
-**文件**：`src/cli.cpp`
+- [ ] `tomlplusplus` — header-only，仅复制 include/
+- [ ] `eigen` — header-only，仅复制 Eigen/ 目录
+- [ ] `cpp-httplib` — header-only（基础模式），可选 openssl
+- [ ] `msgpack-c` — header-only 模式
 
-- [x] 添加 `project test` 子命令（含别名 `pt`）
-- [x] 添加 CLI 选项：
-  - `--framework` / `-f`：临时覆盖 `test.framework`（可选值：`catch2` / `ezmk`）
-  - `--filter`：过滤测试名称（Catch2 → `-c` 参数；ezmk → 文件名 glob 匹配）
-  - `--verbose` / `-V`：展示每个测试的详细输出（即使通过）
-- [x] 选项均为可选，未指定时使用 `ezmk.toml` 中的配置值
-- [x] 命令路由到 `run_tests()`
+**预编译包（`precompiled = true`，编译复杂，一劳永逸）**：
 
-### 阶段三：Catch2 模式 — 编译管线（P0）
+- [ ] `openssl` — 预编译 → `libssl.a` + `libcrypto.a`（`./Configure` + `make`，构建耗时长）
+- [ ] `libcurl` — 预编译 → `libcurl.a`（依赖 openssl + zlib，`./configure` + `make`）
+- [ ] `protobuf` — 预编译 → `libprotobuf.a` + `protoc` 工具（CMake，构建耗时中高）
+- [ ] `gRPC` — 预编译 → `libgrpc++.a` + `libgrpc.a`（依赖 protobuf + openssl；首版最小构建不含 abseil）
+- [ ] `googletest` — 预编译 → `libgtest.a` + `libgmock.a`（CMake，用户不应为测试框架付出编译成本）
 
-**文件**：`include/ezmk/build.hpp` + `src/build.cpp`
+**源码编译（轻量，无复杂依赖链）**：
 
-- [x] 实现 `run_tests()` — Catch2 分支：
-  - **收集测试源文件**：递归遍历 `test.dirs` 下所有 `.cpp`/`.cxx`/`.cc` 文件
-  - **检测 Catch2 路径**（按优先级）：
-    1. 项目作用域已安装的 catch2 包
-    2. 单头文件：`include/vendor/catch2.hpp` 存在
-    3. 用户/全局作用域已安装的 `catch2` 包
-    4. 报错：未找到 → 提示 `ezmk pkg install catch2` 或放入 `include/vendor/`
-  - **检测用户自定义 main**：扫描测试源文件，若已含 `#define CATCH_CONFIG_MAIN` 或定义了 `main()` → 使用用户入口；否则自动生成 `test_main.cpp`
-  - **生成入口文件**（如需要）：写入 `.ezmk/cache/test_main.cpp`，内容为 `#define CATCH_CONFIG_MAIN` + `#include <catch2/catch_all.hpp>`（v3 多header）
-  - **编译测试 .o**：`g++ -std=c++17 <项目编译标志> <test.flags> -I include/ -I <catch2路径> -c test/*.cpp`
-  - **链接 test_runner**：`g++ <项目.o(排除main.o)> <测试.o> <catch2库> -o build/test_runner`
+- [ ] `hiredis` — CMake 编译 → `libhiredis.a`（零外部依赖，编译快）
+- [ ] `sqlitecpp` — CMake 编译 → `libSQLiteCpp.a`（依赖 sqlite3，编译快）
+- [ ] `libpqxx` — CMake 编译 → `libpqxx.a`（依赖 libpq；首版 Linux/macOS，Windows 后续补充）
 
-### 阶段四：Catch2 模式 — 运行与结果解析（P0）
+### 阶段二：包生态拓充 — 10 个 Boost header-only 子库（P0）
 
-**文件**：`src/build.cpp`
+**仓库**：`ezmk-repo`，沿用 0.9.8 的 Boost 打包模式
 
-- [x] 实现 Catch2 分支运行与结果解析：
-  - 运行 `./build/test_runner`
-  - 成功（退出码 0）→ 解析控制台输出获取测试数量、通过/失败详情
-  - 失败（退出码 ≠ 0）→ 打印失败用例详细信息（节名、文件名、行号、断言表达式）
-- [x] 输出格式：
-  ```
-  [ezmk] Running tests (Catch2)...
-    framework: Catch2 v3.x.x
-    cases: 42 | passed: 40 | failed: 2
-    [FAIL] test_config.cpp:15 — "config should parse stdlib"
-      assertion: config.stdlib == "libcxx"
-      expected: libcxx  actual: libstdcxx
-    [FAIL] test_build.cpp:88 — "build should link correctly"
-      ...
-  [ezmk] 42 tests: 40 passed, 2 failed
-  ```
+- [ ] `boost-asio` — 异步 I/O 网络编程（header-only 模式）
+- [ ] `boost-beast` — HTTP/WebSocket 库（基于 Asio）
+- [ ] `boost-filesystem` — 跨平台文件系统操作（header-only 模式）
+- [ ] `boost-system` — 错误码基础设施（Asio/Beast/Filesystem 依赖）
+- [ ] `boost-smart-ptr` — 智能指针
+- [ ] `boost-tokenizer` — 字符串分词
+- [ ] `boost-uuid` — 通用唯一标识符
+- [ ] `boost-random` — 随机数生成
+- [ ] `boost-math` — 数学特殊函数（header-only 部分）
+- [ ] `boost-functional` — 函数对象适配器
 
-### 阶段五：ezmk 内置框架模式 — 编译与运行（P1）
+### 阶段三：包生态拓充 — 已有包版本更新（P0）
 
-**文件**：`src/build.cpp` + `include/ezmk/test_assert.h`（新建）
+**仓库**：`ezmk-repo`
 
-- [x] 实现 ezmk 分支编译与运行：
-  - 每个测试 `.cpp` 独立链接项目 `.o`（排除 `main.o`）→ `test_<name>.exe`
-  - 编译命令：`g++ -std=c++17 <项目编译标志> <test.flags> <项目.o(排除main.o)> test/test_xxx.cpp -o build/test_xxx.exe`
-- [x] 逐个运行测试可执行文件（子进程），捕获 stdout/stderr + 退出码
-- [x] 退出码 0 = PASS，非 0 = FAIL（超时处理延后至后续版本）
-- [x] 输出格式：
-  ```
-  [ezmk] Running tests (ezmk)...
-    [PASS] test_basic.cpp        (0.12s)
-    [PASS] test_config.cpp       (0.08s)
-    [FAIL] test_edge.cpp         (0.23s)
-      stderr: ASSERT FAIL: test_edge.cpp:42: result != expected
-  [ezmk] 4 tests: 3 passed, 1 failed (in 0.48s)
-  ```
+- [ ] Boost×10 统一升级至 1.88.0
+- [ ] `catch2` 3.6.0 → 检查 3.8.x API 变更
+- [ ] `fmt` 10.2.1 → 检查 11.x 破坏性变更
+- [ ] `spdlog` 1.14.1 → 1.15.x patch 升级
+- [ ] `cli11` 2.5.0 → 2.5.x patch 升级
+- [ ] `imgui`×17 1.91.9 → patch 升级
+- [ ] `zlib` 1.3.1 → patch 升级
+- [ ] `sqlite3` 3.46.0 → 3.49.x 年度升级
+- [ ] `nlohmann_json` 3.11.3 → patch 升级
+- [ ] `stb`×10 → 基于 commit hash 判定是否更新
+- [ ] 更新 `index.toml`：注册所有新包 + 更新已有包版本
+- [ ] 各包编写 `README.md` 说明用途和基本用法
 
-### 阶段六：轻量断言宏（P1）
+### 阶段四：构建时硬依赖前置检查（P0）
 
-**文件**：`include/ezmk/test_assert.h`（新建）
+**文件**：`src/build.cpp` + `include/ezmk/pkg.hpp` + `src/pkg.cpp`
 
-- [x] 实现最小化断言宏：`EZMK_ASSERT` / `EZMK_ASSERT_EQ` / `EZMK_ASSERT_NEQ`
-- [x] 用户可选用，也可用任何其他断言方式（`assert()`、手写逻辑等）
+- [x] `include/ezmk/pkg.hpp` 新增 `package_available(name)` 接口声明
+- [x] `src/pkg.cpp` 实现 `package_available()` — 遍历已注册仓库搜索包名
+- [x] `src/build.cpp` `prepare_build_state()`：在 `want.lib` 处理之后、版本验证之前，遍历 `cfg.depends.libs` 检查缺失
+- [x] 缺失时输出语义化错误：
+  - 列出所有缺失依赖名称
+  - 检查仓库中是否可安装（仅直接依赖）
+  - 可安装 → 提示 `ezmk pkg install <names>`
+  - 不可安装 → 提示添加仓库或手动安装
+- [x] `i18n_keys.def` 新增 `missing_dep_at_build` + `locale/en.json` + `locale/zh.json` 翻译
 
-### 阶段七：单元测试（P0）
+### 阶段五：仓库安装时硬依赖自动安装（P1）
 
-**文件**：`test/test_config.cpp` + `test/test_build.cpp`
+**文件**：`src/pkg.cpp`
 
-- [x] 现有测试全部通过（545 用例 / 2557 断言），覆盖配置解析 + 构建管线路径
-- [x] 新增专用 `[test]` 配置节 8+ 用例 — **延后**（现有回归测试已覆盖配置解析路径；手动验证 ezmk 框架模式端到端通过）
-- [x] Catch2 检测 5+ 用例 — **延后**（检测逻辑在代码中；手动验证路径：depends→vendor→user/global→error）
-- [x] ezmk 模式测试 5+ 用例 — **延后**（手动验证端到端通过：编译→链接→运行→结果汇总）
+- [x] `install_from_repo()` 依赖解析循环：`lib` 缺失且未在 seen set → 递归 `install_from_repo()`
+- [x] 自动安装失败时输出清晰错误链（显示哪个依赖的哪个子依赖失败）
+- [x] 复用现有 seen set 机制防止循环依赖无限递归
 
-### 阶段八：集成测试（P1）
+### 阶段六：仓库安装时 want 交互式询问（P1）
 
-- [x] ezmk 框架项目：运行 `ezmk pt` 验证 — 测试源文件自动发现、编译+链接+运行+结果汇总全流程通过
-- [x] Catch2 框架项目：编译链路通过（检测→生成入口→编译），链接依赖 Catch2 包库（需包库完整构建）
-- [x] 验证 `ezmk project test` 在项目未构建时自动触发项目编译
+**文件**：`src/pkg.cpp`
 
-### 阶段九：编译与全量回归验证（P0）
+- [x] 在 `lib` 依赖解析完成后，遍历当前包的 `want` 列表
+- [x] 实现四选项交互逻辑：
+  - `Y`：安装当前 want（不递归其子 want）
+  - `N`：跳过当前 want
+  - `A`：安装当前及之后所有 want（递归穿透子 want）
+  - `D`：拒绝当前及之后所有 want（递归穿透子 want）
+- [x] 非交互模式（`-y`）：跳过所有 want（等效 `D`），保持 CI 兼容
+- [x] 交互逻辑抽取为可注入的函数对象（或 `std::istream&` 参数），便于单元测试
+- [x] `i18n_keys.def` 新增 `want_prompt_title`/`want_prompt_options` + locale JSON 翻译
 
-- [x] 编译通过（MSYS2 / Windows g++ 16.1.0）
-- [x] 全量测试通过：**545 用例 / 2557 断言**，零回归
-- [x] 手动验证：新项目 `ezmk pt`（ezmk 模式）全流程 — PASS/FAIL 正确
-- [x] 手动验证：Catch2 检测链路（depends→vendor→user/global→error）
-- [x] 手动验证：`ezmk pt --verbose` 详细输出
+### 阶段七：编译与回归验证（P0）
+
+- [x] `bash build.sh` 编译通过（MSYS2 / Windows）
+- [x] 全量测试通过，零回归
+- [x] 新增测试：
+  - 硬依赖缺失报错 → 语义化消息验证
+  - auto-install 流程 → 递归安装 + 错误链验证
+  - want 交互式逻辑 → Y/N/A/D 四种路径 + `-y` 模式
 
 ---
 
@@ -153,14 +146,16 @@
 
 | 决策 | 说明 |
 |------|------|
-| `test.framework` 大小写不敏感 | 复用 `normalize_lang()` 泛化逻辑，`Catch2`/`catch2`/`CATCH2` 统一处理 |
-| Catch2 检测优先级：depends → vendor → system → error | 从最近到最远，符合用户预期（项目级优先于系统级） |
-| 自动生成 `test_main.cpp` 而非要求用户手写 | 降低使用门槛；用户有自定义 main 时自动跳过生成 |
-| 链接时排除项目 `main.o` | 避免 `main` 符号冲突；通过文件名匹配 `main.o`（不依赖项目结构） |
-| ezmk 模式：每文件独立可执行 | 零依赖、零 boilerplate；用户只需 `return 0` 表示通过 |
-| 30 秒超时（ezmk 模式） | 防止失控测试阻塞构建；硬编码常量，后续可配置化 |
-| Catch2 XML 输出解析 | `-s -r xml` 提供结构化结果，比解析控制台输出更可靠 |
-| 命令行 `--framework` 覆盖配置文件 | CLI 临时覆盖，不修改 `ezmk.toml`，方便 CI 中切换框架 |
+| **复杂包优先预编译** | openssl/libcurl/protobuf/gRPC/googletest 编译耗时且依赖链复杂 → 使用 `precompiled = true` 分发预编译产物（0.9.7 已有机制）；用户下载即用，无需本地编译 |
+| **轻量包保留源码编译** | hiredis/sqlitecpp/libpqxx 编译快或无复杂依赖链 → 源码分发保持灵活性（跨平台、可定制） |
+| 硬依赖检查位置：`prepare_build_state()` | 在编译开始前拦截，避免进入编译器后产生难以理解的原始错误 |
+| 仅提示直接依赖（不递归） | 传递依赖由 `pkg install` 自身处理；构建时只需确认顶层依赖存在 |
+| `lib` 自动安装只适用于仓库安装 | `.zip`/`.tar.gz` 文件和 URL 安装保持原有行为（用户自行管理依赖） |
+| want 交互式 A/D 递归穿透 | 避免在深层依赖中重复询问；用户体验上一次性决策 |
+| `-y` 模式跳过所有 want | 保持 CI/自动化场景兼容，等效原有静默跳过行为 |
+| `gRPC` 首版最小构建 | 先不依赖 abseil-cpp，降低预编译复杂度，后续迭代增强 |
+| `libpqxx` 首版仅 Linux/macOS | Windows 需 libpq 随 MSYS2 安装或独立预编译包，后续补充 |
+| 交互逻辑可注入化 | 将 `std::cin` 交互抽取为可注入的函数对象，便于单元测试用 `std::istringstream` 替代 |
 
 ---
 
@@ -168,11 +163,11 @@
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 新增 `[test]` 配置节 | 旧项目无此节 | 全部字段有默认值，`ezmk pt` 可正常运行 |
-| `project test` 命令 | 不影响现有命令 | 全新子命令，纯增量 |
-| 自动排除 `main.o` | 用户项目有自定义 `main` | 按约定：项目编译的 `main.o` 被排除，测试入口由框架提供 |
-| Catch2 自动检测 | 用户使用非标准 Catch2 路径 | 可用 `compile.flags` + `test.flags` 手动指定 include 路径 |
-| `test_assert.h` 为可选头文件 | 用户不使用 ezmk 内置框架 | 不影响；仅当 `framework = "ezmk"` 时推荐使用 |
+| 新增 12+10 个包 | 纯增量，无旧版本 | 不影响已有包 |
+| 构建时硬依赖检查 | 之前静默失败的项目现在会报错 | 改进——用户得到明确指引而非编译器原始错误 |
+| `lib` 自动安装 | `pkg install` 行为从报错变为自动安装 | 向后兼容——原本报错的场景现在自动解决 |
+| `want` 交互式询问 | 之前静默跳过，现在询问 | 非交互模式（`-y`）保持原有行为（跳过） |
+| `package_available()` 新 API | 内部接口，非公共 | 不影响第三方 |
 
 ---
 
@@ -180,42 +175,30 @@
 
 | 文件 | 变更类型 | 说明 |
 |------|----------|------|
-| `include/ezmk/config.hpp` | 修改 | `TestConfig` 结构体定义 |
-| `src/config.cpp` | 修改 | `[test]` 节 TOML 解析 |
-| `src/cli.cpp` | 修改 | `project test` + `pt` 别名 + 三个 CLI 选项 |
-| `include/ezmk/build.hpp` | 修改 | `compile_test_targets()` / `run_tests()` 声明 |
-| `src/build.cpp` | 修改 | 测试编译管线：Catch2 模式 + ezmk 模式 |
-| `include/ezmk/test_assert.h` | **新建** | 轻量断言宏（ezmk 内置框架） |
-| `test/test_config.cpp` | 修改 | 新增：`[test]` 配置解析测试 |
-| `test/test_build.cpp` | 修改 | 新增：测试编译管线测试 |
+| `src/build.cpp` | 修改 | 硬依赖前置检查 + 仓库搜索提示 |
+| `src/pkg.cpp` | 修改 | 硬依赖自动安装 + want 交互式询问 + `package_available()` 实现 |
+| `include/ezmk/pkg.hpp` | 修改 | 新增 `package_available()` 声明 |
+| `include/ezmk/i18n_keys.def` | 修改 | 新增 `missing_dep_at_build`/`want_prompt_title`/`want_prompt_options` 等 key |
+| `locale/en.json` | 修改 | i18n 英文翻译 |
+| `locale/zh.json` | 修改 | i18n 中文翻译 |
+| `test/test_build.cpp` | 修改 | 新增：硬依赖缺失报错测试 |
+| `test/test_pkg.cpp` | 修改 | 新增：want 交互式测试 |
 
 ---
 
-## 7 数据流
+## 7 风险与注意事项
 
-```
-ezmk project test
-    ↓
-cli.cpp: parse --framework / --filter / --verbose
-    ↓
-config.cpp: 读取 [test] 配置节 (dirs, framework, flags)
-    ↓
-build.cpp: compile_test_targets()
-    ├─ Catch2: 收集测试 .cpp → 编译 → 检测 main → 链接 test_runner
-    └─ ezmk:   收集测试 .cpp → 逐个编译 → 逐个链接
-    ↓
-util.cpp: run_command() 运行测试可执行文件
-    ↓
-build.cpp: parse_test_results() 汇总输出
-```
+- **预编译包的平台矩阵**：openssl/libcurl/protobuf/gRPC/googletest 需要为每个目标平台（Windows/MSYS2、Linux、macOS）分别编译预编译包。采用 0.9.7 的 `precompiled = true` + 平台映射机制，`index.toml` 中按 `[target.{triple}]` 声明不同平台的 sha256。
+- **`gRPC` 编译复杂度高**：即使作为预编译包，构建一次仍需处理 protobuf + openssl + abseil-cpp（可选）依赖链。首版发布不含 abseil 的最小构建模式，降低首次构建成本。
+- **`libpqxx` 的 Windows 依赖**：`libpq` 需随 MSYS2 安装或作为独立预编译包，首版仅 Linux/macOS
+- **交互式 prompt 测试**：将 prompt 逻辑抽取为可注入的函数对象（或 `std::istream&` 参数），便于测试时用 `std::istringstream` 替代
+- **自动安装的递归深度**：复用现有 seen set 机制防止循环依赖无限递归
 
 ---
 
-## 8 延后项（1.1.0-dev.7+）
+## 8 延后项（1.1.0-dev.8+）
 
+- `gRPC` abseil-cpp 完整构建模式
+- `libpqxx` Windows 平台支持
 - 测试覆盖率报告生成（gcov/lcov 集成）
-- 测试并行运行支持（`-j` 复用）
-- `test.timeout` 可配置化（目前 ezmk 模式 30 秒硬编码）
-- Catch2 v2 兼容支持（目前仅面向 v3）
-- `ezmk test` 顶层命令简写（目前仅 `ezmk project test` / `ezmk pt`）
-- `[test]` 配置文档更新（`docs/zh/config_file.md` + `docs/en/config_file.md`）
+- `test.timeout` 可配置化（1.1.0-dev.6 延后项）

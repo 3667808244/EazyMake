@@ -35,6 +35,15 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 
 ### `[project]` 节
 
+| 字段 | 类型 | 必需 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `name` | string | **是** | — | 包名（小写，可用连字符，如 `"my-lib"`） |
+| `version` | string | **是** | — | 语义化版本号，如 `"1.2.3"` |
+| `type` | string | 否 | `"executable"` | 包类型（见下方取值表） |
+| `language` | string | 否 | `"C++17"` | 格式：`<语言><版本>`，如 `"C11"`、`"C++17"`、`"C++20"` |
+| `header_only` | bool | 否 | `false` | **0.9.7+** Header-only 库（无需 `src/`，跳过编译） |
+| `precompiled` | bool | 否 | `false` | **0.9.7+** 预编译包（`lib/` 提供预编译 `.a`，无需 `src/`），详见 [包制作指南](package_authoring.md#33-预编译包precompiled--true097) |
+
 `type` 字段支持以下取值：
 
 | 值 | 说明 |

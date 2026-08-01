@@ -157,20 +157,39 @@ precompiled = true
 # No src/ directory — pre-built binaries in lib/ instead
 ```
 
+**Multi-platform co-packaging** (1.1.0-dev.2+): A single package can include precompiled binaries for multiple platforms in `lib/`, with automatic matching via naming convention:
+
 ```
 sdl2/
 ├── ezmk.toml
 ├── include/       # Headers (cross-platform)
 └── lib/           # Pre-built static libraries
-    └── libSDL2.a
+    ├── libSDL2.win-x64.a
+    ├── libSDL2.linux-x64.a
+    └── libSDL2.mac-arm64.a
 ```
+
+**Naming convention**: `lib<name>.<os>-<arch>.<ext>`
+
+| OS | Arch | Tag |
+|----|------|-----|
+| Windows | x86_64 | `win-x64` |
+| Windows | x86 | `win-x86` |
+| Linux | x86_64 | `linux-x64` |
+| Linux | aarch64 | `linux-arm64` |
+| macOS | x86_64 | `mac-x64` |
+| macOS | aarch64 | `mac-arm64` |
+
+**Selection priority**:
+1. Exact platform match (e.g. current is `win-x64` → picks `lib<name>.win-x64.a`)
+2. Fallback to bare `lib<name>.a` (backward compatible with single-platform legacy packages)
+3. No match → error listing available platforms
 
 **⚠️ Not recommended for general use.** Precompiled packages only work on the specific platform and architecture they were built for. Prefer source-based packages (`src/`) whenever possible, as they compile on any platform. Only use `precompiled` when:
 
-- The library cannot be compiled with a simple `gcc`/`g++` invocation (requires CMake, autotools, etc.)
-- You can enumerate and provide builds for all target platforms (see `plans/1.1.0-dev.2.md` for upcoming multi-platform support)
-
-Currently (0.9.7), a precompiled package contains binaries for a single platform. Users on other platforms will see a link error. Multi-platform co-packaging (`lib<name>.<os>-<arch>.a`) is planned for 1.1.0.
+- The library cannot be compiled with a simple `gcc`/`g++` invocation (requires CMake, autotools, OpenSSL's `Configure`, or other complex build systems)
+- The library takes extremely long to compile (e.g. gRPC, Qt) — precompilation dramatically improves user experience
+- You can enumerate and provide builds for all target platforms
 
 ### 3.4 Utils Package (`type = "utils"`)
 

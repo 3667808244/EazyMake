@@ -87,6 +87,13 @@ EZMK_I18N_KEY(pkg_header_only)            // 0.9.7+
 EZMK_I18N_KEY(installing_header_only)
 EZMK_I18N_KEY(installing_precompiled)
 EZMK_I18N_KEY(missing_dep)
+EZMK_I18N_KEY(missing_dep_at_build)       // 1.1.0-dev.7
+EZMK_I18N_KEY(missing_dep_install_hint)   // 1.1.0-dev.7
+EZMK_I18N_KEY(missing_dep_no_repo)        // 1.1.0-dev.7
+EZMK_I18N_KEY(want_prompt_title)          // 1.1.0-dev.7
+EZMK_I18N_KEY(want_prompt_item)           // 1.1.0-dev.7
+EZMK_I18N_KEY(want_prompt_options)        // 1.1.0-dev.7
+EZMK_I18N_KEY(want_auto_installing)       // 1.1.0-dev.7
 EZMK_I18N_KEY(not_found)
 EZMK_I18N_KEY(overwrite_confirm)
 EZMK_I18N_KEY(removed)
