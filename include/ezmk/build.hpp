@@ -67,4 +67,15 @@ void pack_project(const config::EzConfig& cfg,
                   const cli::ProjectPackOptions& opts,
                   const fs::path& proj_root);
 
+// 1.1.0-dev.6: Run project tests (ezmk project test).
+// Builds the project if needed, then compiles and runs tests according to
+// the [test] configuration section. Supports Catch2 and ezmk built-in frameworks.
+// test_framework_override: if non-empty, overrides cfg.test.framework (from --framework).
+// test_filter: if non-empty, filters test names (Catch2: -c param; ezmk: filename glob).
+// verbose: if true, shows detailed output for each test (even passing ones).
+void run_tests(const config::EzConfig& cfg,
+               const std::string& test_framework_override,
+               const std::string& test_filter,
+               bool verbose);
+
 } // namespace ezmk::build

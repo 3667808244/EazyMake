@@ -145,6 +145,11 @@
     "watch_config_changed": "ezmk.toml 已变更 — 重新解析配置并全量重编译",
     "watch_detected_change": "检测到变更: {path}",
     "watch_stopping": "正在停止文件监听...",
+
+    "test_summary": "{total} 个测试: {passed} 通过, {failed} 失败",
+    "test_failed": "部分测试失败",
+    "test_catch2_not_found": "未找到 Catch2。安装方式:\n  ezmk pkg install catch2\n或将 catch2.hpp 放入 include/vendor/catch2.hpp",
+
     "pkg_info_name": "包名",
     "pkg_info_version": "  版本",
     "pkg_info_type": "  类型",
@@ -223,6 +228,7 @@
     "help_project_clean": "清理缓存和临时文件",
     "help_project_install": "安装构建产物到指定前缀",
 "help_project_watch": "监听源文件变更并自动重建",
+    "help_project_test": "构建并运行项目测试",
     "help_pkg_install": "安装包 (默认作用域: 项目)",
     "help_pkg_remove": "移除包 (默认: -pug)",
     "help_pkg_search": "搜索包 (默认: -pug)",

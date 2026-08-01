@@ -668,6 +668,18 @@ EzConfig parse_config(const fs::path& toml_path) {
         cfg.install.prefix = (util::get_home_dir() / cfg.install.prefix.substr(2)).string();
     }
 
+    // 1.1.0-dev.6: [test] — test configuration
+    if (auto test = root["test"].as_table()) {
+        cfg.test.dirs = extract_string_array(test->get("dirs"));
+        if (auto fw = (*test)["framework"].value<std::string>()) {
+            // Normalize framework name (case-insensitive, reuse normalize_lang)
+            cfg.test.framework = normalize_lang(*fw);
+        }
+        cfg.test.flags = extract_string_array(test->get("flags"));
+    }
+    // Apply defaults for test section
+    if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
+
     // [utils] (only relevant for type = "utils")
     if (auto utils = root["utils"].as_table()) {
         cfg.utils.tools = extract_string_array(utils->get("tools"));

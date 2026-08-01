@@ -24,6 +24,7 @@ enum class Command {
     RepoInfo,        // 0.2.5+
     Utils,
     ProjectWatch,    // 0.2.3+
+    ProjectTest,     // 1.1.0-dev.6
     PkgList,         // 0.2.3+
     PkgUpdate,       // 0.2.3+
     Version,
@@ -117,6 +118,11 @@ struct CliArgs {
 
     // 0.2.3+: Watch mode flags
     bool watch_no_build_on_start = false;   // --no-build-on-start
+
+    // 1.1.0-dev.6: Test options
+    std::string test_framework;     // --framework override (empty = use config)
+    std::string test_filter;        // --filter pattern
+    bool test_verbose = false;      // --verbose
 
     // 0.9.8+: Shorthand expansion hint (e.g. "ri → repo info").
     // Non-empty only when a shorthand alias was expanded AND --verbose was passed.

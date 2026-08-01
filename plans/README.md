@@ -6,7 +6,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[1.1.0-dev.6](release/1.1.0-dev.6.md)** — 测试系统
+（无）
 
 ## 待执行
 
@@ -22,6 +22,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 - **[1.1.0-dev.2](release/1.1.0-dev.2.md)** — 多平台共包支持、index.toml 平台映射与 ezmk project pack ✅
 - **[1.1.0-dev.3](release/1.1.0-dev.3.md)** — Agent Skills 支持 — 10 个 skill 文件 + CLAUDE.md 精简 + Copilot 桥接 ✅
 - **[1.1.0-dev.4](release/1.1.0-dev.4.md)** — 编译器与语言配置增强（stdlib / lang 泛化 / GNU 拓展） ✅
+- **[1.1.0-dev.6](release/1.1.0-dev.6.md)** — 测试系统 ✅
 - **[1.1.0-dev.5](release/1.1.0-dev.5.md)** — 更多默认 util（含链接机制、watch 修复） ✅
 
 - `0.1.1` ~ `0.1.5`(文件已移除,可以查看对应提交的`plan.md`文件)

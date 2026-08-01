@@ -225,6 +225,25 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.1.0-dev.6: project test
+        if (action == "test")
+        {
+            args.cmd = Command::ProjectTest;
+            std::vector<OptionSpec> spec = {
+                {'f', "framework", true},
+                {'\0', "filter", true},
+                {'V', "verbose", false},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project test");
+            if (auto v = p.value("framework"))
+                args.test_framework = *v;
+            if (auto v = p.value("filter"))
+                args.test_filter = *v;
+            if (p.has("verbose"))
+                args.test_verbose = true;
+            return args;
+        }
+
         util::fatal(ezmk::i18n::I18nKey::cli_unknown_subcommand,
                     {{"group", "project"}, {"sub", std::string(action)}});
     }
@@ -627,6 +646,7 @@ namespace ezmk::cli
                 {"pr", {"project", "run"}},   {"pc", {"project", "clean"}},
                 {"pi", {"project", "install"}}, {"pp", {"project", "pack"}},
                 {"pw", {"project", "watch"}},
+                {"pt", {"project", "test"}},       // 1.1.0-dev.6
                 {"ki", {"pkg", "install"}},
                 {"kr", {"pkg", "remove"}},    {"ks", {"pkg", "search"}},
                 {"kn", {"pkg", "info"}},      {"kl", {"pkg", "list"}},
@@ -757,6 +777,7 @@ namespace ezmk::cli
         row("ezmk project clean  (pc)", I18nKey::help_project_clean);
         row("ezmk project install (pi) [flags]", I18nKey::help_project_install);   // 1.1.0
         row("ezmk project watch  (pw)  [flags]", I18nKey::help_project_watch);
+        row("ezmk project test   (pt)  [flags]", I18nKey::help_project_test);
         std::cout << "\n";
 
         std::cout << get(I18nKey::cli_usage_pkg) << "\n";

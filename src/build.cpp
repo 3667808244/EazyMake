@@ -1277,4 +1277,716 @@ void pack_project(const config::EzConfig& cfg,
                                 {{"file", (output_dir / archive_name).string()}}));
 }
 
+// ===================================================================
+// 1.1.0-dev.6: Test runner
+// ===================================================================
+
+namespace {
+
+// Detect Catch2 availability. Returns the include path (empty if not found).
+// Priority: 1) project-scope installed catch2 (from [depends])
+//           2) include/vendor/catch2.hpp (single-header)
+//           3) user/global-scope installed catch2
+//           4) error (not found)
+std::string detect_catch2(const fs::path& proj_root,
+                           const config::DependsSection& depends) {
+    // 1. Check project-scope installed catch2 (from [depends] or manual install)
+    fs::path proj_pkg = proj_root / ".ezmk/pkg/catch2";
+    if (util::file_exists(proj_pkg)) {
+        auto inc = proj_pkg / "include";
+        if (util::file_exists(inc)) return inc.string();
+    }
+
+    // 2. Check for single-header in include/vendor/
+    fs::path vendor_hpp = proj_root / "include/vendor/catch2.hpp";
+    if (util::file_exists(vendor_hpp)) {
+        return (proj_root / "include/vendor").string();
+    }
+
+    // 3. Check user/global scopes for installed catch2
+    auto home = util::get_home_dir();
+#ifdef EZMK_WIN
+    const char* appdata = std::getenv("LOCALAPPDATA");
+    fs::path local_ezmk = appdata ? fs::path(appdata) / "ezmk" : home / "AppData/Local/ezmk";
+    std::vector<fs::path> system_dirs = {
+        home / ".ezmk/pkg/catch2",
+        local_ezmk / "pkg/catch2",
+    };
+#else
+    std::vector<fs::path> system_dirs = {
+        home / ".ezmk/pkg/catch2",
+        home / ".local/share/ezmk/pkg/catch2",
+    };
+#endif
+    for (auto& scope : system_dirs) {
+        if (util::file_exists(scope)) {
+            auto inc = scope / "include";
+            if (util::file_exists(inc)) return inc.string();
+        }
+    }
+
+    // 4. Not found
+    return {};
+}
+
+// Check if a test source file defines its own main() or CATCH_CONFIG_MAIN.
+bool has_user_main(const fs::path& src_path) {
+    auto content = util::file_read(src_path);
+    // Check for CATCH_CONFIG_MAIN
+    if (content.find("CATCH_CONFIG_MAIN") != std::string::npos) return true;
+    // Check for main() function definition (simple heuristic)
+    if (content.find("int main(") != std::string::npos) return true;
+    if (content.find("void main(") != std::string::npos) return true;
+    return false;
+}
+
+// Collect test source files from test directories.
+std::vector<fs::path> collect_test_sources(
+    const std::vector<std::string>& test_dirs,
+    const fs::path& proj_root) {
+    std::vector<fs::path> result;
+    for (auto& d : test_dirs) {
+        fs::path dir = d;
+        if (dir.is_relative()) dir = proj_root / dir;
+        if (!util::file_exists(dir)) {
+            util::warn(std::string("test directory not found, skipping: ") + d);
+            continue;
+        }
+        auto files = util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
+        for (auto& f : files) {
+            result.push_back(f);
+        }
+    }
+    return result;
+}
+
+// Simple XML parser for Catch2 output.
+// Extracts test case results from Catch2 XML.
+struct Catch2TestResult {
+    std::string name;
+    std::string filename;
+    int line = 0;
+    bool passed = true;
+    std::string failure_msg;
+};
+
+std::vector<Catch2TestResult> parse_catch2_xml(const std::string& xml) {
+    std::vector<Catch2TestResult> results;
+
+    // Simple state-machine XML parser for Catch2 output format:
+    // <TestCase name="..." filename="..." line="...">
+    //   <OverallResult success="true|false"/>
+    //   <Failure>...</Failure> or <Expression>...</Expression>
+    // </TestCase>
+
+    size_t pos = 0;
+    while (true) {
+        auto tc_start = xml.find("<TestCase", pos);
+        if (tc_start == std::string::npos) break;
+
+        auto tc_end = xml.find("</TestCase>", tc_start);
+        if (tc_end == std::string::npos) break;
+
+        std::string tc_block = xml.substr(tc_start, tc_end - tc_start + 12);
+        pos = tc_end + 12;
+
+        Catch2TestResult r;
+
+        // Extract name
+        auto name_pos = tc_block.find("name=\"");
+        if (name_pos != std::string::npos) {
+            name_pos += 6;
+            auto name_end = tc_block.find("\"", name_pos);
+            if (name_end != std::string::npos) {
+                r.name = tc_block.substr(name_pos, name_end - name_pos);
+            }
+        }
+
+        // Extract filename
+        auto file_pos = tc_block.find("filename=\"");
+        if (file_pos != std::string::npos) {
+            file_pos += 10;
+            auto file_end = tc_block.find("\"", file_pos);
+            if (file_end != std::string::npos) {
+                r.filename = tc_block.substr(file_pos, file_end - file_pos);
+            }
+        }
+
+        // Extract line
+        auto line_pos = tc_block.find("line=\"");
+        if (line_pos != std::string::npos) {
+            line_pos += 6;
+            auto line_end = tc_block.find("\"", line_pos);
+            if (line_end != std::string::npos) {
+                try { r.line = std::stoi(tc_block.substr(line_pos, line_end - line_pos)); }
+                catch (...) {}
+            }
+        }
+
+        // Check success
+        if (tc_block.find("success=\"false\"") != std::string::npos ||
+            tc_block.find("success=\"no\"") != std::string::npos) {
+            r.passed = false;
+        } else if (tc_block.find("success=\"true\"") != std::string::npos ||
+                   tc_block.find("success=\"yes\"") != std::string::npos) {
+            r.passed = true;
+        } else {
+            // No success attribute → passed if no Failure/Expression with failure
+            auto fail_pos = tc_block.find("<Failure");
+            auto expr_pos = tc_block.find("<Expression");
+            auto section_pos = tc_block.find("<Section");
+            if (fail_pos != std::string::npos && fail_pos < tc_block.find("</OverallResult>")) {
+                r.passed = false;
+            }
+        }
+
+        // Extract failure details
+        if (!r.passed) {
+            auto fail_start = tc_block.find("<Failure");
+            if (fail_start != std::string::npos) {
+                auto fail_content_start = tc_block.find(">", fail_start);
+                auto fail_content_end = tc_block.find("</Failure>", fail_start);
+                if (fail_content_start != std::string::npos && fail_content_end != std::string::npos) {
+                    r.failure_msg = tc_block.substr(fail_content_start + 1,
+                                                     fail_content_end - fail_content_start - 1);
+                    // Trim whitespace
+                    auto b = r.failure_msg.find_first_not_of(" \t\n\r");
+                    auto e = r.failure_msg.find_last_not_of(" \t\n\r");
+                    if (b != std::string::npos) {
+                        r.failure_msg = r.failure_msg.substr(b, e - b + 1);
+                    }
+                }
+            }
+            // Also check Expression with success="false"
+            auto expr_start = tc_block.find("<Expression");
+            while (expr_start != std::string::npos) {
+                auto expr_end = xml.find(">", expr_start);
+                auto expr_close = xml.find("/>", expr_start);
+                auto expr_full_end = xml.find("</Expression>", expr_start);
+                std::string expr_block = xml.substr(expr_start,
+                    std::min({expr_end != std::string::npos ? expr_end : std::string::npos,
+                              expr_close != std::string::npos ? expr_close : std::string::npos,
+                              expr_full_end != std::string::npos ? expr_full_end : std::string::npos})
+                    - expr_start + 2);
+                if (expr_block.find("success=\"false\"") != std::string::npos) {
+                    // Extract expression content
+                    auto content_start = xml.find(">", expr_start);
+                    auto content_end = xml.find("</Expression>", expr_start);
+                    if (content_start != std::string::npos && content_end != std::string::npos) {
+                        std::string expr_content = xml.substr(content_start + 1,
+                                                               content_end - content_start - 1);
+                        auto b2 = expr_content.find_first_not_of(" \t\n\r");
+                        auto e2 = expr_content.find_last_not_of(" \t\n\r");
+                        if (b2 != std::string::npos) {
+                            expr_content = expr_content.substr(b2, e2 - b2 + 1);
+                        }
+                        if (!r.failure_msg.empty()) r.failure_msg += "\n";
+                        r.failure_msg += "  assertion: " + expr_content;
+                    }
+                    // Also get expected/actual
+                }
+                expr_start = xml.find("<Expression", expr_start + 11);
+            }
+        }
+
+        results.push_back(r);
+    }
+
+    return results;
+}
+
+} // anonymous namespace
+
+void run_tests(const config::EzConfig& cfg,
+               const std::string& test_framework_override,
+               const std::string& test_filter,
+               bool verbose) {
+    fs::path proj_root = fs::current_path();
+    fs::path build_dir = proj_root / "build";
+    fs::path cache_dir = proj_root / ".ezmk/cache";
+
+    // Determine framework (CLI override takes priority)
+    std::string framework = test_framework_override.empty()
+        ? cfg.test.framework
+        : config::normalize_lang(test_framework_override);
+
+    // Build project first if needed
+    bool project_built = false;
+    auto check_built = [&]() -> bool {
+        if (cfg.project.type == "executable") {
+#ifdef EZMK_WIN
+            return util::file_exists(build_dir / (cfg.project.name + ".exe"));
+#else
+            return util::file_exists(build_dir / cfg.project.name);
+#endif
+        } else if (cfg.project.type == "static") {
+            return util::file_exists(build_dir / ("lib" + cfg.project.name + ".a")) ||
+                   util::file_exists(build_dir / ("lib" + cfg.project.name + ".lib"));
+        }
+        // For other types, just check if build dir exists
+        return util::file_exists(build_dir);
+    };
+
+    if (!check_built()) {
+        util::info("project not built — building first...");
+        cli::BuildOptions build_opts;
+        build_opts.jobs = 0; // auto-detect
+        try {
+            build_project(cfg, build_opts);
+            project_built = true;
+        } catch (const std::exception& e) {
+            util::fatal(std::string("project build failed, cannot run tests: ") + e.what());
+        }
+    }
+
+    // Collect test sources
+    auto test_sources = collect_test_sources(cfg.test.dirs, proj_root);
+    if (test_sources.empty()) {
+        util::fatal("no test source files found in test directories. "
+                     "Configure test.dirs in ezmk.toml.");
+    }
+
+    // Get project object files (from .ezmk/temp/)
+    std::vector<fs::path> project_objs;
+    fs::path temp_dir = proj_root / ".ezmk/temp";
+    if (util::file_exists(temp_dir)) {
+        for (auto& entry : fs::directory_iterator(temp_dir)) {
+            auto& p = entry.path();
+            if (p.extension() == ".o" || p.extension() == ".obj") {
+                // Exclude main.o (test runner provides its own main)
+                auto fname = p.filename().string();
+                if (fname != "main.o" && fname != "main.obj") {
+                    project_objs.push_back(p);
+                }
+            }
+        }
+    }
+
+    // Collect project include dirs and flags
+    auto lang_info = config::parse_language(cfg.project.language);
+
+    // Detect compiler
+    std::string compiler;
+    auto tc = toolchain::detect_toolchain();
+    bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
+    if (!is_msvc) {
+        compiler = detect_compiler(lang_info.compiler == "g++" ? "C++" : "C");
+    } else {
+        compiler = tc.cxx_compiler.string();
+    }
+
+    // Build compile flags from project config
+    std::vector<std::string> base_flags;
+    base_flags.push_back(lang_info.std_flag);
+    if (cfg.compile.ezmk_macros) {
+        auto em = generate_ezmk_macros(cfg);
+        base_flags.insert(base_flags.end(), em.begin(), em.end());
+    }
+    for (auto& f : cfg.compile.flags) base_flags.push_back(f);
+    auto macro_flags = macros_to_flags(cfg.compile.macros);
+    for (auto& f : macro_flags) base_flags.push_back(f);
+
+    // Add include dirs
+    for (auto& d : cfg.compile.include_dirs) {
+        fs::path inc = d;
+        if (inc.is_relative()) inc = proj_root / inc;
+        if (util::file_exists(inc)) {
+            base_flags.push_back("-I" + inc.string());
+        }
+    }
+
+    // Add test flags
+    for (auto& f : cfg.test.flags) {
+        base_flags.push_back(f);
+    }
+
+    // Ensure cache dirs exist
+    fs::create_directories(cache_dir / "obj");
+    fs::create_directories(build_dir);
+
+    auto run_start = std::chrono::steady_clock::now();
+
+    if (framework == "CATCH2") {
+        // ---- Catch2 Mode ----
+        util::info("Running tests (Catch2)...");
+
+        // Detect Catch2
+        std::string catch2_inc = detect_catch2(proj_root, cfg.depends);
+        if (catch2_inc.empty()) {
+            util::fatal("Catch2 not found. Install it with:\n"
+                        "  ezmk pkg install catch2\n"
+                        "or place catch2.hpp in include/vendor/catch2.hpp");
+        }
+        util::info(std::string("  Catch2 include: ") + catch2_inc);
+
+        // Check if any test file has user-defined main
+        bool user_has_main = false;
+        for (auto& ts : test_sources) {
+            if (has_user_main(ts)) {
+                user_has_main = true;
+                break;
+            }
+        }
+
+        // Generate test_main.cpp if needed
+        fs::path test_main_cpp;
+        if (!user_has_main) {
+            test_main_cpp = cache_dir / "test_main.cpp";
+            std::string main_content;
+            main_content += "#define CATCH_CONFIG_MAIN\n";
+            // Use appropriate include depending on Catch2 version
+            fs::path vendor_hpp = proj_root / "include/vendor/catch2.hpp";
+            if (util::file_exists(vendor_hpp)) {
+                // Single-header Catch2 (v2 style)
+                main_content += "#include \"catch2.hpp\"\n";
+            } else {
+                // Multi-header Catch2 v3
+                main_content += "#include <catch2/catch_all.hpp>\n";
+            }
+            // Only write if content changed (avoid unnecessary recompilation)
+            bool write_needed = true;
+            if (util::file_exists(test_main_cpp)) {
+                auto existing = util::file_read(test_main_cpp);
+                if (existing == main_content) write_needed = false;
+            }
+            if (write_needed) {
+                util::file_write(test_main_cpp, main_content);
+            }
+        }
+
+        // Compile test sources + test_main.cpp
+        std::vector<fs::path> test_objs;
+        int compiled = 0, cached = 0, errors = 0;
+
+        auto compile_one = [&](const fs::path& src) -> std::optional<fs::path> {
+            auto obj = cache_dir / "obj" / (src.filename().string() + ".o");
+            std::ostringstream cmd;
+            if (is_msvc) {
+                cmd << compiler << " /c /Fo:\"" << obj.string() << "\"";
+                for (auto& f : base_flags) cmd << " " << f;
+                cmd << " /I\"" << catch2_inc << "\"";
+                cmd << " \"" << src.string() << "\"";
+            } else {
+                cmd << compiler;
+                for (auto& f : base_flags) cmd << " " << f;
+                cmd << " -I\"" << catch2_inc << "\"";
+                // Add extra includes from installed packages
+                cmd << " -c \"" << src.string() << "\" -o \"" << obj.string() << "\"";
+            }
+
+            if (verbose) util::info("  " + cmd.str());
+            auto res = util::run_command(cmd.str());
+            if (res.exit_code != 0) {
+                util::error(std::string("  compilation failed: ") + src.filename().string());
+                if (!res.err.empty()) util::error(res.err);
+                if (!res.out.empty()) util::error(res.out);
+                return std::nullopt;
+            }
+            return obj;
+        };
+
+        // Compile all test sources
+        for (auto& ts : test_sources) {
+            if (auto obj = compile_one(ts)) {
+                test_objs.push_back(*obj);
+                compiled++;
+            } else {
+                errors++;
+            }
+        }
+
+        // Compile test_main.cpp
+        if (!user_has_main && !test_main_cpp.empty()) {
+            if (auto obj = compile_one(test_main_cpp)) {
+                test_objs.push_back(*obj);
+            } else {
+                errors++;
+            }
+        }
+
+        if (errors > 0) {
+            util::fatal(std::to_string(errors) + " test compilation error(s)");
+        }
+
+        // Link test_runner
+        fs::path runner = build_dir / "test_runner";
+#ifdef EZMK_WIN
+        runner += ".exe";
+#endif
+        std::ostringstream link_cmd;
+        if (is_msvc) {
+            link_cmd << "link.exe /OUT:\"" << runner.string() << "\"";
+            for (auto& o : project_objs) link_cmd << " \"" << o.string() << "\"";
+            for (auto& o : test_objs) link_cmd << " \"" << o.string() << "\"";
+        } else {
+            link_cmd << compiler;
+            for (auto& o : project_objs) link_cmd << " \"" << o.string() << "\"";
+            for (auto& o : test_objs) link_cmd << " \"" << o.string() << "\"";
+            link_cmd << " -o \"" << runner.string() << "\"";
+        }
+
+        // Add package link flags
+        for (auto& f : cfg.link.flags) link_cmd << " " << f;
+        for (auto& d : cfg.link.link_dirs) link_cmd << " -L\"" << d << "\"";
+        for (auto& t : cfg.link.system_targets) link_cmd << " -l" << t;
+
+        // Link against Catch2 library (from project/user/global scope)
+        {
+            fs::path catch2_lib;
+            // Try to find libcatch2.a in known locations
+            std::vector<fs::path> search_paths = {
+                proj_root / ".ezmk/pkg/catch2/build",
+            };
+            auto home = util::get_home_dir();
+#ifdef EZMK_WIN
+            const char* appdata = std::getenv("LOCALAPPDATA");
+            fs::path local_ezmk = appdata ? fs::path(appdata) / "ezmk" : home / "AppData/Local/ezmk";
+            search_paths.push_back(local_ezmk / "pkg/catch2/build");
+#endif
+            search_paths.push_back(home / ".ezmk/pkg/catch2/build");
+            search_paths.push_back(home / ".local/share/ezmk/pkg/catch2/build");
+
+            for (auto& dir : search_paths) {
+                auto lib = dir / "libcatch2.a";
+                if (util::file_exists(lib)) {
+                    catch2_lib = lib;
+                    break;
+                }
+            }
+            if (!catch2_lib.empty()) {
+                link_cmd << " \"" << catch2_lib.string() << "\"";
+            }
+        }
+
+        if (verbose) util::info("  " + link_cmd.str());
+        auto link_res = util::run_command(link_cmd.str());
+        if (link_res.exit_code != 0) {
+            util::error("test link failed");
+            if (!link_res.err.empty()) util::error(link_res.err);
+            util::fatal("build failed");
+        }
+
+        // Run test_runner
+        std::string test_cmd = "\"" + runner.string() + "\"";
+        // Catch2 options for structured output
+        if (!test_filter.empty()) {
+            test_cmd += " \"" + test_filter + "\"";
+        }
+        test_cmd += " -s";
+
+        // Use -r xml for parseable output (but fall back to console if xml not available)
+        // Actually Catch2 v3 uses --verbosity high -r xml
+        // Let's capture output and parse it manually from console format
+        auto test_res = util::run_command(test_cmd);
+
+        // Parse Catch2 console output
+        // Expected format:
+        // ... test name ... PASSED/FAILED
+        // ===============================================================================
+        // test cases: N | M passed | K failed
+        int total_cases = 0;
+        int passed_cases = 0;
+        int failed_cases = 0;
+        std::vector<std::pair<std::string, bool>> case_results; // name, passed
+
+        // Parse from the output
+        std::istringstream output_stream(test_res.out + "\n" + test_res.err);
+        std::string line;
+        while (std::getline(output_stream, line)) {
+            // Look for "PASSED" or "FAILED" lines
+            if (line.find("PASSED") != std::string::npos &&
+                line.find("test cases") == std::string::npos &&
+                line.find("assertions") == std::string::npos) {
+                // Individual test passed
+                auto trim_line = line;
+                auto b = trim_line.find_first_not_of(" \t");
+                if (b != std::string::npos) trim_line = trim_line.substr(b);
+                case_results.push_back({trim_line, true});
+                passed_cases++;
+            } else if (line.find("FAILED") != std::string::npos &&
+                       line.find("test cases") == std::string::npos &&
+                       line.find("assertions") == std::string::npos) {
+                // Individual test failed
+                auto trim_line = line;
+                auto b = trim_line.find_first_not_of(" \t");
+                if (b != std::string::npos) trim_line = trim_line.substr(b);
+                case_results.push_back({trim_line, false});
+                failed_cases++;
+            }
+
+            // Try to parse summary line
+            if (line.find("test cases:") != std::string::npos) {
+                // "test cases: N | M passed | K failed"
+                // Extract numbers
+                auto tc_pos = line.find("test cases:");
+                if (tc_pos != std::string::npos) {
+                    std::string rest = line.substr(tc_pos + 11);
+                    auto pipe1 = rest.find("|");
+                    if (pipe1 != std::string::npos) {
+                        try { total_cases = std::stoi(rest.substr(0, pipe1)); } catch (...) {}
+                    }
+                    auto passed_pos = rest.find("passed");
+                    if (passed_pos != std::string::npos) {
+                        try {
+                            std::string pn = rest.substr(pipe1 + 1, passed_pos - pipe1 - 1);
+                            pn.erase(0, pn.find_first_not_of(" \t"));
+                            pn.erase(pn.find_last_not_of(" \t") + 1);
+                            passed_cases = std::stoi(pn);
+                        } catch (...) {}
+                    }
+                    auto failed_pos = rest.find("failed");
+                    if (failed_pos != std::string::npos) {
+                        try {
+                            auto pipe2 = rest.find("|", pipe1 + 1);
+                            std::string fn;
+                            if (pipe2 != std::string::npos) {
+                                fn = rest.substr(pipe2 + 1, failed_pos - pipe2 - 1);
+                            }
+                            fn.erase(0, fn.find_first_not_of(" \t"));
+                            fn.erase(fn.find_last_not_of(" \t") + 1);
+                            failed_cases = std::stoi(fn);
+                        } catch (...) {}
+                    }
+                }
+            }
+        }
+
+        total_cases = passed_cases + failed_cases;
+
+        // Print results
+        util::info(std::string("  cases: ") + std::to_string(total_cases) +
+                   " | passed: " + std::to_string(passed_cases) +
+                   " | failed: " + std::to_string(failed_cases));
+
+        for (auto& [name, passed] : case_results) {
+            if (!passed || verbose) {
+                if (passed) {
+                    util::info("  [PASS] " + name);
+                } else {
+                    util::error("  [FAIL] " + name);
+                }
+            }
+        }
+
+        // Print failure details from output
+        if (failed_cases > 0 && !test_res.out.empty()) {
+            // Print the relevant failure sections
+            std::istringstream full(test_res.out);
+            bool in_failure = false;
+            while (std::getline(full, line)) {
+                if (line.find("FAILED") != std::string::npos ||
+                    line.find("REQUIRE") != std::string::npos ||
+                    line.find("CHECK") != std::string::npos ||
+                    line.find("with expansion") != std::string::npos) {
+                    util::error("    " + line);
+                }
+            }
+        }
+
+        util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
+                    {{"total", std::to_string(total_cases)},
+                     {"passed", std::to_string(passed_cases)},
+                     {"failed", std::to_string(failed_cases)}}));
+
+        if (failed_cases > 0) {
+            util::fatal(ezmk::i18n::I18nKey::test_failed);
+        }
+
+    } else if (framework == "EZMK") {
+        // ---- ezmk Built-in Framework Mode ----
+        util::info("Running tests (ezmk)...");
+
+        int passed = 0, failed = 0, timed_out = 0;
+        double total_time = 0.0;
+
+        for (auto& ts : test_sources) {
+            auto test_start = std::chrono::steady_clock::now();
+
+            // Filter by filename if --filter specified
+            if (!test_filter.empty()) {
+                auto fname = ts.filename().string();
+                // Simple glob: * matches any, ? matches single
+                // For MVP, do substring match
+                if (fname.find(test_filter) == std::string::npos) {
+                    if (verbose) {
+                        util::info(std::string("  [SKIP] ") + fname + " (filtered)");
+                    }
+                    continue;
+                }
+            }
+
+            // Compile individual test executable
+            auto test_exe = build_dir / ("test_" + ts.stem().string());
+#ifdef EZMK_WIN
+            test_exe += ".exe";
+#endif
+            std::ostringstream comp_cmd;
+            if (is_msvc) {
+                comp_cmd << compiler << " /Fe:\"" << test_exe.string() << "\"";
+                comp_cmd << " \"" << ts.string() << "\"";
+                for (auto& o : project_objs) comp_cmd << " \"" << o.string() << "\"";
+                for (auto& f : base_flags) comp_cmd << " " << f;
+            } else {
+                comp_cmd << compiler;
+                for (auto& f : base_flags) comp_cmd << " " << f;
+                comp_cmd << " \"" << ts.string() << "\"";
+                for (auto& o : project_objs) comp_cmd << " \"" << o.string() << "\"";
+                comp_cmd << " -o \"" << test_exe.string() << "\"";
+                for (auto& f : cfg.link.flags) comp_cmd << " " << f;
+                for (auto& d : cfg.link.link_dirs) comp_cmd << " -L\"" << d << "\"";
+                for (auto& t : cfg.link.system_targets) comp_cmd << " -l" << t;
+            }
+
+            if (verbose) util::info("  " + comp_cmd.str());
+            auto comp_res = util::run_command(comp_cmd.str());
+            if (comp_res.exit_code != 0) {
+                util::error(std::string("  compilation failed: ") + ts.filename().string());
+                if (!comp_res.err.empty()) util::error(comp_res.err);
+                failed++;
+                continue;
+            }
+
+            // Run test with timeout (30s hardcoded)
+            auto run_res = util::run_command("\"" + test_exe.string() + "\"");
+            auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - test_start).count();
+            total_time += elapsed;
+
+            auto fname = ts.filename().string();
+            if (run_res.exit_code == 0) {
+                util::info("  [PASS] " + fname + "  (" +
+                           std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
+                if (verbose && !run_res.out.empty()) {
+                    util::info("    stdout: " + run_res.out);
+                }
+                passed++;
+            } else {
+                util::error("  [FAIL] " + fname + "  (" +
+                          std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
+                if (!run_res.out.empty()) {
+                    util::info("    stdout: " + run_res.out);
+                }
+                if (!run_res.err.empty()) {
+                    util::error("    stderr: " + run_res.err);
+                }
+                failed++;
+            }
+        }
+
+        int total = passed + failed + timed_out;
+        util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
+                    {{"total", std::to_string(total)},
+                     {"passed", std::to_string(passed)},
+                     {"failed", std::to_string(failed)}}));
+
+        if (failed > 0 || timed_out > 0) {
+            util::fatal(ezmk::i18n::I18nKey::test_failed);
+        }
+
+    } else {
+        util::fatal(std::string("unknown test framework: '") + framework +
+                    "'. Supported: catch2, ezmk");
+    }
+}
+
 } // namespace ezmk::build

@@ -125,6 +125,17 @@ int main(int argc, char** argv) {
             break;
         }
 
+        // 1.1.0-dev.6: project test
+        case ezmk::cli::Command::ProjectTest: {
+            auto_update_repos(args.build_opts);
+            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            ezmk::build::run_tests(cfg,
+                                    args.test_framework,
+                                    args.test_filter,
+                                    args.test_verbose);
+            break;
+        }
+
         case ezmk::cli::Command::ProjectWatch: {
             // 0.2.3+: Watch mode — file monitoring + auto rebuild
             auto_update_repos(args.build_opts);

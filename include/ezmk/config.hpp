@@ -101,6 +101,13 @@ struct InstallSection {
     std::string sharedir;     // data subdir (default: "share")
 };
 
+// 1.1.0-dev.6: Test configuration section ([test] in ezmk.toml)
+struct TestConfig {
+    std::vector<std::string> dirs = {"test"};       // test source directories
+    std::string framework = "catch2";                // "catch2" | "ezmk"
+    std::vector<std::string> flags = {};             // extra test compile flags
+};
+
 struct EzConfig {
     ProjectSection project;
     CompileSection compile;
@@ -109,6 +116,7 @@ struct EzConfig {
     UtilsSection utils;
     HooksSection hooks;                                          // 0.2.3+
     InstallSection install;                                      // 1.1.0 [install]
+    TestConfig test;                                             // 1.1.0-dev.6 [test]
     std::map<std::string, ProfileConfig> compile_profiles;       // 0.2.3+ [compile.profile.*]
     std::map<std::string, ProfileLinkConfig> link_profiles;      // 0.2.3+ [link.profile.*]
 };

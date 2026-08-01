@@ -58,6 +58,58 @@
 
 ---
 
+## 1.1.0-dev.6 (2026-08-01) — 测试系统
+
+新增 `ezmk project test`（`pt`）命令，支持 Catch2 和 ezmk 内置框架两种测试模式。
+
+### `[test]` 配置节
+
+- **`test.dirs`**：测试源文件目录（`string[]`，默认 `["test"]`）
+- **`test.framework`**：测试框架（`"catch2"` | `"ezmk"`，大小写不敏感，默认 `"catch2"`）
+- **`test.flags`**：额外测试编译标志（`string[]`，默认 `[]`）
+- 所有字段可选，旧项目无此节可正常运行（全部有默认值）
+
+### CLI
+
+- **`ezmk project test`**：一键编译 → 构建测试 → 运行 → 汇总
+- **`ezmk pt`**：简写别名
+- **`--framework` / `-f`**：临时覆盖测试框架（不修改 `ezmk.toml`）
+- **`--filter`**：过滤测试名称（Catch2 传入测试名；ezmk 做文件名 glob）
+- **`--verbose` / `-V`**：展示每个测试的详细输出
+
+### Catch2 模式
+
+- **自动检测**（优先级）：项目作用域已安装 → `include/vendor/catch2.hpp`（单头） → 用户/全局作用域已安装 → 报错提示安装
+- **入口生成**：自动检测用户自定义 `main`；无则生成 `.ezmk/cache/test_main.cpp`（`CATCH_CONFIG_MAIN` + `catch_all.hpp`）
+- **链接**：自动查找并链接 `libcatch2.a`（支持 project/user/global 作用域）
+
+### ezmk 内置框架模式
+
+- **零依赖**：每个 `.cpp` 独立编译为可执行文件，`return 0` = PASS，非 0 = FAIL
+- **轻量断言宏**：`include/ezmk/test_assert.h` — `EZMK_ASSERT` / `EZMK_ASSERT_EQ` / `EZMK_ASSERT_NEQ`
+- **独立运行**：每个测试以子进程运行，捕获 stdout/stderr + 退出码
+
+### 测试
+
+- 全量测试：**545 用例 / 2557 断言**，零回归
+
+### 涉及文件
+
+| 文件 | 变更 |
+|------|------|
+| `include/ezmk/config.hpp` | 修改：`TestConfig` + `EzConfig::test` |
+| `src/config.cpp` | 修改：`[test]` 节解析 |
+| `include/ezmk/cli.hpp` | 修改：`Command::ProjectTest` + test 选项 |
+| `src/cli.cpp` | 修改：`project test` 命令 + `pt` 别名 + 选项解析 |
+| `include/ezmk/build.hpp` | 修改：`run_tests()` 声明 |
+| `src/build.cpp` | 修改：`run_tests()` 实现（~500 行） |
+| `src/main.cpp` | 修改：`Command::ProjectTest` 分发 |
+| `include/ezmk/test_assert.h` | **新建**：轻量断言宏 |
+| `include/ezmk/i18n_keys.def` | 修改：新增 4 个 i18n key |
+| `locale/en.json`、`locale/zh.json` | 修改：中英文翻译 |
+
+---
+
 ## 1.1.0-dev.5 (2026-08-01) — 默认 util 包与链接机制
 
 新增官方 utils 包（`ezmk-official-utils`）、`@link:` 链接机制、watch 空路径修复。

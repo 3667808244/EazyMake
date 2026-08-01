@@ -145,6 +145,11 @@
     "watch_config_changed": "ezmk.toml changed — re-parsing config and rebuilding from scratch",
     "watch_detected_change": "detected change: {path}",
     "watch_stopping": "Stopping file watcher...",
+
+    "test_summary": "{total} tests: {passed} passed, {failed} failed",
+    "test_failed": "Some tests failed",
+    "test_catch2_not_found": "Catch2 not found. Install it with:\n  ezmk pkg install catch2\nor place catch2.hpp in include/vendor/catch2.hpp",
+
     "pkg_info_name": "Package",
     "pkg_info_version": "  Version",
     "pkg_info_type": "  Type",
@@ -223,6 +228,7 @@
     "help_project_clean": "Clean cache and temp files",
     "help_project_install": "Install build artifacts to prefix",
 "help_project_watch": "Watch sources and rebuild on change",
+    "help_project_test": "Build and run project tests",
     "help_pkg_install": "Install a package (default scope: project)",
     "help_pkg_remove": "Remove a package (default: -pug)",
     "help_pkg_search": "Search for a package (default: -pug)",
