@@ -229,6 +229,7 @@
     "help_project_install": "Install build artifacts to prefix",
 "help_project_watch": "Watch sources and rebuild on change",
     "help_project_test": "Build and run project tests",
+    "help_project_pack": "Create distributable package (.tar.gz)",
     "help_pkg_install": "Install a package (default scope: project)",
     "help_pkg_remove": "Remove a package (default: -pug)",
     "help_pkg_search": "Search for a package (default: -pug)",
@@ -256,6 +257,14 @@
     "help_scope_global": "Global scope",
     "help_scope_combined": "Flags can be combined, e.g. -pug",
     "help_global_options": "Global options:",
+
+    "help_section_daily": "Daily build:",
+    "help_section_init": "Project init:",
+    "help_section_advanced": "Packages & repos (advanced):",
+    "help_section_other": "Other:",
+    "help_section_options": "Common options:",
+    "help_full_form": "Full form",
+
     "help_option_syntax_title": "Option syntax:",
     "help_option_syntax_long": "Long options accept --flag=value or --flag value.",
     "help_option_syntax_short": "Short options can be grouped (-pug) and take attached values (-j4).",

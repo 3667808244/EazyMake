@@ -266,6 +266,13 @@ EZMK_I18N_KEY(help_project_clean)
 EZMK_I18N_KEY(help_project_install)      // 1.1.0
 EZMK_I18N_KEY(help_project_watch)
 EZMK_I18N_KEY(help_project_test)           // 1.1.0-dev.6
+EZMK_I18N_KEY(help_project_pack)           // 1.1.0-pre.1
+EZMK_I18N_KEY(help_section_daily)          // 1.1.0-pre.1
+EZMK_I18N_KEY(help_section_init)           // 1.1.0-pre.1
+EZMK_I18N_KEY(help_section_advanced)       // 1.1.0-pre.1
+EZMK_I18N_KEY(help_section_other)          // 1.1.0-pre.1
+EZMK_I18N_KEY(help_section_options)        // 1.1.0-pre.1
+EZMK_I18N_KEY(help_full_form)              // 1.1.0-pre.1
 EZMK_I18N_KEY(help_pkg_install)
 EZMK_I18N_KEY(help_pkg_remove)
 EZMK_I18N_KEY(help_pkg_search)

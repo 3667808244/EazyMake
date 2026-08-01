@@ -642,6 +642,15 @@ namespace ezmk::cli
         static const std::map<std::string_view,
                                std::pair<const char *, const char *>>
             kAliases = {
+                // 1.1.0-pre.1: top-level aliases (natural language commands)
+                {"build",  {"project", "build"}},
+                {"run",    {"project", "run"}},
+                {"clean",  {"project", "clean"}},
+                {"watch",  {"project", "watch"}},
+                {"install",{"project", "install"}},
+                {"test",   {"project", "test"}},
+                {"pack",   {"project", "pack"}},
+                // 0.2.6+: two-letter shorthands
                 {"pn", {"project", "new"}},   {"pb", {"project", "build"}},
                 {"pr", {"project", "run"}},   {"pc", {"project", "clean"}},
                 {"pi", {"project", "install"}}, {"pp", {"project", "pack"}},
@@ -758,71 +767,80 @@ namespace ezmk::cli
     {
         using namespace ezmk::i18n;
 
-        // Render one command row: a literal usage string (never translated —
-        // it is a verbatim command) left-padded to a fixed column, followed by
-        // the localized description. The parenthesized shorthand (0.2.6+) is
-        // baked into the usage string so it lines up with the command.
+        // Render one command row: a literal usage string left-padded to a fixed
+        // column, followed by the localized description.
         auto row = [](const std::string &usage, I18nKey desc) {
             std::cout << "  " << std::left << std::setw(52) << usage
                       << get(desc) << "\n";
+        };
+        // Render an indented continuation line (e.g. full command form).
+        auto sub = [](const std::string &text) {
+            std::cout << "       " << text << "\n";
         };
 
         std::cout << get(I18nKey::cli_usage_header) << "\n\n"
                   << get(I18nKey::cli_usage_usage) << ":\n\n";
 
-        std::cout << get(I18nKey::cli_usage_project) << "\n";
-        row("ezmk project new    (pn)  <name>", I18nKey::help_project_new);
-        row("ezmk project build  (pb)  [flags]", I18nKey::help_project_build);
-        row("ezmk project run    (pr)  [flags] [-- args]", I18nKey::help_project_run);
-        row("ezmk project clean  (pc)", I18nKey::help_project_clean);
-        row("ezmk project install (pi) [flags]", I18nKey::help_project_install);   // 1.1.0
-        row("ezmk project watch  (pw)  [flags]", I18nKey::help_project_watch);
-        row("ezmk project test   (pt)  [flags]", I18nKey::help_project_test);
+        // ── §1: Daily build commands ──────────────────────────────
+        std::cout << get(I18nKey::help_section_daily) << "\n";
+        row("ezmk build    [flags]", I18nKey::help_project_build);
+        sub(get(I18nKey::help_full_form) + ": ezmk project build");
+        row("ezmk run      [flags] [-- args]", I18nKey::help_project_run);
+        sub(get(I18nKey::help_full_form) + ": ezmk project run");
+        row("ezmk clean", I18nKey::help_project_clean);
+        sub(get(I18nKey::help_full_form) + ": ezmk project clean");
+        row("ezmk watch    [flags]", I18nKey::help_project_watch);
+        sub(get(I18nKey::help_full_form) + ": ezmk project watch");
+        row("ezmk install  [flags]", I18nKey::help_project_install);
+        sub(get(I18nKey::help_full_form) + ": ezmk project install");
+        row("ezmk test     [flags]", I18nKey::help_project_test);
+        sub(get(I18nKey::help_full_form) + ": ezmk project test");
         std::cout << "\n";
 
-        std::cout << get(I18nKey::cli_usage_pkg) << "\n";
-        row("ezmk pkg install  (ki)  [flags] <pkg>", I18nKey::help_pkg_install);
-        row("ezmk pkg remove   (kr)  [-p|-u|-g] <pkg>", I18nKey::help_pkg_remove);
-        row("ezmk pkg search   (ks)  [-p|-u|-g] <pkg>", I18nKey::help_pkg_search);
-        row("ezmk pkg info     (kn)  [-p|-u|-g] <pkg>", I18nKey::help_pkg_info);
-        row("ezmk pkg list     (kl)  [-p|-u|-g]", I18nKey::help_pkg_list);
-        row("ezmk pkg update   (ku)  [-p|-u|-g] [--all] [<pkg>]", I18nKey::help_pkg_update);
+        // ── §2: Project init ─────────────────────────────────────
+        std::cout << get(I18nKey::help_section_init) << "\n";
+        row("ezmk project new  <name> [--type <t>]", I18nKey::help_project_new);
+        row("ezmk project pack [--output <dir>]", I18nKey::help_project_pack);
         std::cout << "\n";
 
-        std::cout << get(I18nKey::cli_usage_repo) << "\n";
-        row("ezmk repo add     (ra)  [flags] <url_or_path>", I18nKey::help_repo_add);
-        row("ezmk repo remove  (rr)  [-p|-u|-g] <name>", I18nKey::help_repo_remove);
-        row("ezmk repo update  (ru)  [-p|-u|-g] [<name>]", I18nKey::help_repo_update);
-        row("ezmk repo list    (rl)  [-p|-u|-g]", I18nKey::help_repo_list);
-        row("ezmk repo info    (ri)  [-p|-u|-g] <name>", I18nKey::help_repo_info);
+        // ── §3: Package & repo management (advanced) ──────────────
+        std::cout << get(I18nKey::help_section_advanced) << "\n";
+        row("ezmk pkg install  [flags] <pkg>", I18nKey::help_pkg_install);
+        row("ezmk pkg remove   [-p|-u|-g] <pkg>", I18nKey::help_pkg_remove);
+        row("ezmk pkg search   [-p|-u|-g] <pkg>", I18nKey::help_pkg_search);
+        row("ezmk pkg info     [-p|-u|-g] <pkg>", I18nKey::help_pkg_info);
+        row("ezmk pkg list     [-p|-u|-g]", I18nKey::help_pkg_list);
+        row("ezmk pkg update   [-p|-u|-g] [--all] [<pkg>]", I18nKey::help_pkg_update);
+        std::cout << "\n";
+        row("ezmk repo add     [flags] <url_or_path>", I18nKey::help_repo_add);
+        row("ezmk repo remove  [-p|-u|-g] <name>", I18nKey::help_repo_remove);
+        row("ezmk repo update  [-p|-u|-g] [<name>]", I18nKey::help_repo_update);
+        row("ezmk repo list    [-p|-u|-g]", I18nKey::help_repo_list);
+        row("ezmk repo info    [-p|-u|-g] <name>", I18nKey::help_repo_info);
         std::cout << "\n";
 
-        std::cout << get(I18nKey::cli_usage_utils) << "\n";
-        row("ezmk utils        (u)   <name> [-- args]", I18nKey::help_utils);
-        row("ezmk help         (h)", I18nKey::help_help);
-        row("ezmk version      (v)", I18nKey::help_version);
+        // ── §4: Other ────────────────────────────────────────────
+        std::cout << get(I18nKey::help_section_other) << "\n";
+        row("ezmk utils   <name> [-- args]", I18nKey::help_utils);
+        row("ezmk help", I18nKey::help_help);
+        row("ezmk version", I18nKey::help_version);
         std::cout << "\n";
 
+        // ── §5: Common options ────────────────────────────────────
+        std::cout << get(I18nKey::help_section_options) << "\n";
         std::cout << get(I18nKey::cli_usage_scopes) << "\n";
         row("-p", I18nKey::help_scope_project);
         row("-u", I18nKey::help_scope_user);
         row("-g", I18nKey::help_scope_global);
         std::cout << "  " << get(I18nKey::help_scope_combined) << "\n\n";
 
-        std::cout << get(I18nKey::cli_usage_build_flags) << "\n";
         row("--disable-cache", I18nKey::help_flag_disable_cache);
         row("--verbose, -v", I18nKey::help_flag_verbose);
         row("-j, --jobs <N>", I18nKey::help_flag_jobs);
         row("--profile <name>", I18nKey::help_flag_profile);
         row("--auto-update", I18nKey::help_flag_auto_update);
-        std::cout << "\n";
-
-        std::cout << get(I18nKey::cli_usage_install_flags) << "\n";
         row("--sha256 <hash>", I18nKey::help_flag_sha256);
         row("-y, --yes", I18nKey::help_flag_yes);
-        std::cout << "\n";
-
-        std::cout << get(I18nKey::help_global_options) << "\n";
         row("--color=<mode>", I18nKey::help_flag_color);
         std::cout << "\n";
 

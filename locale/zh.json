@@ -229,6 +229,7 @@
     "help_project_install": "安装构建产物到指定前缀",
 "help_project_watch": "监听源文件变更并自动重建",
     "help_project_test": "构建并运行项目测试",
+    "help_project_pack": "创建可分发的构建包 (.tar.gz)",
     "help_pkg_install": "安装包 (默认作用域: 项目)",
     "help_pkg_remove": "移除包 (默认: -pug)",
     "help_pkg_search": "搜索包 (默认: -pug)",
@@ -256,6 +257,14 @@
     "help_scope_global": "全局作用域",
     "help_scope_combined": "标志可组合使用，如 -pug",
     "help_global_options": "全局选项:",
+
+    "help_section_daily": "日常构建命令:",
+    "help_section_init": "项目初始化:",
+    "help_section_advanced": "包管理与仓库（高级功能）:",
+    "help_section_other": "其他:",
+    "help_section_options": "常用选项:",
+    "help_full_form": "完整命令",
+
     "help_option_syntax_title": "选项语法:",
     "help_option_syntax_long": "长选项接受 --flag=value 或 --flag value。",
     "help_option_syntax_short": "短选项可组合 (-pug) 并可紧贴取值 (-j4)。",
