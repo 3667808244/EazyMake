@@ -45,7 +45,10 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk project build [build-opts]` | 增量构建 |
 | `ezmk project run [build-opts] [-- <program args>]` | 构建并运行 |
 | `ezmk project clean` | 清除缓存和临时文件 |
+| `ezmk project install [install-opts]` | 安装构建产物到指定前缀（1.1.0+） |
+| `ezmk project pack [--output <dir>]` | 打包静态库项目为 `.tar.gz`（1.1.0+） |
 | `ezmk project watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建 |
+| `ezmk project test [test-opts]` | 构建并运行项目测试（1.1.0+） |
 
 **`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
 
@@ -67,6 +70,25 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `--disable-gitignore` | 跳过 `.gitignore` 生成 |
 
 **`watch` 专属标志：** `--no-build-on-start` — 跳过初始构建，等待文件首次变更。
+
+**`install` 专属标志：**
+
+| 标志 | 用途 |
+|---|---|
+| `--prefix <path>` | 覆盖 `[install].prefix` |
+| `--dry-run` | 仅显示将要安装的内容，不实际复制 |
+| `--no-headers` | 跳过头文件安装 |
+| `--no-data` | 跳过数据文件安装 |
+
+**`pack` 专属标志：** `--output <dir>` — 输出目录（默认 `.`）。仅适用于 `type = "static"` 的项目。
+
+**`test` 专属标志：**
+
+| 标志 | 用途 |
+|---|---|
+| `--framework` / `-f <catch2\|ezmk>` | 临时覆盖 `test.framework` |
+| `--filter <pattern>` | 过滤测试名称（Catch2: 测试名；ezmk: 文件名 glob） |
+| `--verbose` / `-V` | 展示每个测试的详细输出（即使通过） |
 
 `ezmk project run` 将 `--` 之后的所有内容传递给构建后的程序。
 
@@ -195,8 +217,11 @@ include_dirs = ["include", "@link:shared/include"]
 | `pb` | `project build` | `kr` | `pkg remove` | `rr` | `repo remove` |
 | `pr` | `project run` | `ks` | `pkg search` | `rl` | `repo list` |
 | `pc` | `project clean` | `kn` | `pkg info` | `ru` | `repo update` |
-| `pw` | `project watch` | `kl` | `pkg list` | `ri` | `repo info` |
-| `u` | `utils` | `ku` | `pkg update` | `h` / `v` | `help` / `version` |
+| `pi` | `project install` | `kl` | `pkg list` | `ri` | `repo info` |
+| `pw` | `project watch` | `ku` | `pkg update` | | |
+| `pp` | `project pack` | | | | |
+| `pt` | `project test` | | | | |
+| `u` | `utils` | | | `h` / `v` | `help` / `version` |
 
 ---
 

@@ -48,7 +48,10 @@ Downloads the prebuilt `ezmk.exe` from GitHub Releases, verifies SHA-256, instal
 | `ezmk project build [build-opts]` | Incremental build |
 | `ezmk project run [build-opts] [-- <program args>]` | Build and execute |
 | `ezmk project clean` | Remove cache and temp files |
+| `ezmk project install [install-opts]` | Install build artifacts to prefix (1.1.0+) |
+| `ezmk project pack [--output <dir>]` | Pack static library project as `.tar.gz` (1.1.0+) |
 | `ezmk project watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild |
+| `ezmk project test [test-opts]` | Build and run project tests (1.1.0+) |
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
 
@@ -70,6 +73,25 @@ Downloads the prebuilt `ezmk.exe` from GitHub Releases, verifies SHA-256, instal
 | `--disable-gitignore` | Skip `.gitignore` generation |
 
 **`watch`-only flag:** `--no-build-on-start` — skip the initial build; wait for the first change.
+
+**`install`-only flags:**
+
+| Flag | Purpose |
+|---|---|
+| `--prefix <path>` | Override `[install].prefix` |
+| `--dry-run` | Show what would be installed without copying |
+| `--no-headers` | Skip header installation |
+| `--no-data` | Skip data file installation |
+
+**`pack`-only flag:** `--output <dir>` — output directory (default `.`). Only valid for `type = "static"` projects.
+
+**`test`-only flags:**
+
+| Flag | Purpose |
+|---|---|
+| `--framework` / `-f <catch2\|ezmk>` | Temporarily override `test.framework` |
+| `--filter <pattern>` | Filter test names (Catch2: test name; ezmk: filename glob) |
+| `--verbose` / `-V` | Show detailed output for every test (even passing ones) |
 
 `ezmk project run` passes everything after `--` to the built program.
 
@@ -207,8 +229,11 @@ unknown subcommand. Shorthands are typing sugar and are **not** part of zsh comp
 | `pb` | `project build` | `kr` | `pkg remove` | `rr` | `repo remove` |
 | `pr` | `project run` | `ks` | `pkg search` | `rl` | `repo list` |
 | `pc` | `project clean` | `kn` | `pkg info` | `ru` | `repo update` |
-| `pw` | `project watch` | `kl` | `pkg list` | `ri` | `repo info` |
-| `u` | `utils` | `ku` | `pkg update` | `h` / `v` | `help` / `version` |
+| `pi` | `project install` | `kl` | `pkg list` | `ri` | `repo info` |
+| `pw` | `project watch` | `ku` | `pkg update` | | |
+| `pp` | `project pack` | | | | |
+| `pt` | `project test` | | | | |
+| `u` | `utils` | | | `h` / `v` | `help` / `version` |
 
 ---
 
