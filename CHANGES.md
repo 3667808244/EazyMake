@@ -1,5 +1,17 @@
 # Changelog
 
+## API Stability
+
+As of v1.1.0, the following public APIs are **permanently stable**:
+
+**Commands:** `build`, `run`, `clean`, `watch`, `install`, `test`, `pack` (top-level) and their `project <action>` equivalents; `pkg install/remove/search/info/list/update`; `repo add/remove/update/list/info`.
+
+**Configuration:** `[project]`, `[compile]`, `[link]`, `[depends]`, `[test]`, `[install]` core fields in `ezmk.toml`.
+
+Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
+
+---
+
 ## 1.1.0 (2026-07-28) — MSVC 包编译、确定性构建与产物安装
 
 首个次版本升级。补齐 MSVC 工具链在包管理中的完整支持，引入确定性构建与 lockfile 机制，新增 `project install` 命令。
