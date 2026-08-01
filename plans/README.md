@@ -6,11 +6,11 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[1.1.0-dev.7](release/1.1.0-dev.7.md)** — 包生态拓充与包处理改善
+- **[1.1.0-pre.2](release/1.1.0-pre.2.md)** — 文档检查
 
 ## 待执行
 
-（无）
+- **[1.1.0](release/)** — 1.1.0 正式版发布（合并所有 dev.x + pre.x）
 
 ## 未来规划
 
@@ -24,6 +24,8 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 - **[1.1.0-dev.4](release/1.1.0-dev.4.md)** — 编译器与语言配置增强（stdlib / lang 泛化 / GNU 拓展） ✅
 - **[1.1.0-dev.6](release/1.1.0-dev.6.md)** — 测试系统 ✅
 - **[1.1.0-dev.5](release/1.1.0-dev.5.md)** — 更多默认 util（含链接机制、watch 修复） ✅
+- **[1.1.0-dev.7](release/1.1.0-dev.7.md)** — 包生态拓充与包处理改善 ✅
+- **[1.1.0-pre.1](release/1.1.0-pre.1.md)** — 改善用户触达 ✅
 
 - `0.1.1` ~ `0.1.5`(文件已移除,可以查看对应提交的`plan.md`文件)
 - **[0.1.6](dev/0.1.6.md)** - 测试(Catch2 单元测试 + 集成测试)
@@ -79,7 +81,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 | 0.9.9   | 技术栈统一   | 安装钩子 Lua 化(`.lua` 优先,`run_install_hook_script()`,sandbox 对齐),向后兼容 shell 脚本                                                                               | 0.2.3(构建钩子 Lua 基础设施)                    |
 | 0.9.10  | 代码质量重构 | 消除 `run_install_hook_script`/`run_hook_script` ~70 行重复,压缩 `run_install_script` 参数(9→6),Lua 栈断言加固,`detect_install_script` 可测试化                          | 0.9.9(安装钩子 Lua 化完成)                      |
 | 1.0.0   | 正式版发布   | plans 目录整理（dev/release 拆分）、`docs/zh/cli.md` 全中文翻译、11 项文档审计、核心文档重写、Git tag 补全（3 个缺失 tag）                                           | 0.9.10(代码质量重构完成)                         |
-| 1.1.0   | 包编译与开发 | dev.1: MSVC 包编译 + 确定性构建 + 产物安装；dev.2: 多平台共包分发 + `index.toml` 平台映射 + `ezmk project pack`；dev.3: Agent Skills（6 个 dev 侧 + 用户侧）+ `CLAUDE.md` 精简；dev.4: `project.stdlib`（libc++ 支持）+ `project.lang` 泛化（大小写不敏感/C++变体统一）+ GNU 拓展前缀 + `EZMK_STDLIB` 宏；dev.5: `ezmk-official-utils` + `.ezmk/links.json` 链接机制 + watch 修复 + `ezmk-cc` 规范化；dev.6: `ezmk project test` + Catch2/内置框架；dev.7: 包生态拓充（22 个新包 + 版本更新）+ 构建时前置检查 + 自动安装 + want 交互式询问 | 1.0.0(正式版发布)                               |
+| 1.1.0   | 包编译与开发体验 | dev.1~dev.7 + pre.1（顶层命令别名 / `--help` 重组 / README 精简 / API 冻结承诺）+ pre.2（文档检查） | 1.0.0(正式版发布)                               |
 
 ## 依赖关系图
 
@@ -108,6 +110,8 @@ graph TD
     v099["0.9.9 安装钩子 Lua 化"]
     v0910["0.9.10 代码质量重构"]
     v100["1.0.0 正式版发布"]
+    v110pre1["1.1.0-pre.1 改善用户触达"]
+    v110pre2["1.1.0-pre.2 文档检查"]
     v110["1.1.0 包编译与开发体验"]
 
     v018 --> v021
@@ -131,14 +135,17 @@ graph TD
     v098 --> v099
     v099 --> v0910
     v0910 --> v100
-    v100 --> v110
+    v100 --> v110pre1
+    v110pre1 --> v110pre2
+    v110pre2 --> v110
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724;
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
-    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910,v100 done;
-    class v110 active;
+    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910,v100,v110pre1 done;
+    class v110pre2 active;
+    class v110 todo;
 ```
 
 > 说明:绿色=已完成,黄色=当前执行,灰色=待执行;虚线为可选依赖。

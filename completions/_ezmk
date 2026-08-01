@@ -1,6 +1,6 @@
 #compdef ezmk
 
-# EazyMake zsh completion — 0.2.5+
+# EazyMake zsh completion — 1.1.0-pre.1+
 # Install:
 #   System-wide:  cp completions/_ezmk /usr/share/zsh/site-functions/
 #   User-local:   mkdir -p ~/.zsh/completions && cp completions/_ezmk ~/.zsh/completions/
@@ -57,7 +57,16 @@ _ezmk_utils_tools() {
 _ezmk_commands() {
     local -a commands
     commands=(
-        'project:Project management (new, build, run, watch, clean)'
+        # 1.1.0-pre.1: top-level aliases (daily build commands)
+        'build:Incremental build (alias: project build)'
+        'run:Build and execute (alias: project run)'
+        'clean:Remove cache and temp files (alias: project clean)'
+        'watch:Watch mode — auto rebuild on changes (alias: project watch)'
+        'install:Install build artifacts (alias: project install)'
+        'test:Build and run project tests (alias: project test)'
+        'pack:Create distributable package (alias: project pack)'
+        # group commands
+        'project:Project management (new, build, run, watch, clean, install, pack, test)'
         'pkg:Package management (install, remove, search, info, list, update)'
         'repo:Repository management (add, remove, update, list, info)'
         'utils:Run Lua-based utility tools'
@@ -79,6 +88,9 @@ _ezmk_project() {
         'run:Build and execute'
         'watch:Watch mode — auto rebuild on changes'
         'clean:Remove cache and temp files'
+        'install:Install build artifacts to prefix'
+        'pack:Create distributable package'
+        'test:Build and run project tests'
     )
     _describe -t subcommands 'project subcommand' subcmds
 }
@@ -130,6 +142,35 @@ _ezmk_project_clean() {
     # No arguments
 }
 
+# 1.1.0+: project install
+_ezmk_project_install() {
+    _arguments \
+        '(--verbose)-v[Verbose output]' \
+        '--verbose[Verbose output]' \
+        '--prefix[Install prefix directory]:directory:_files -/' \
+        '--dry-run[Show what would be installed without doing it]' \
+        '--no-headers[Skip header installation]' \
+        '--no-data[Skip data file installation]'
+}
+
+# 1.1.0-dev.2: project pack
+_ezmk_project_pack() {
+    _arguments \
+        '(--verbose)-v[Verbose output]' \
+        '--verbose[Verbose output]' \
+        '--output[Output directory]:directory:_files -/'
+}
+
+# 1.1.0-dev.6: project test
+_ezmk_project_test() {
+    _arguments \
+        '(-f)--framework[Test framework]:framework:(catch2 ezmk)' \
+        '-f[Test framework (short)]:framework:(catch2 ezmk)' \
+        '--filter[Pattern to filter test cases]:filter:' \
+        '(-V)--verbose[Verbose test output]' \
+        '-V[Verbose test output (short)]'
+}
+
 # ===================================================================
 # pkg subcommands
 # ===================================================================
@@ -155,6 +196,8 @@ _ezmk_pkg_install() {
         '--sha256[Verify against SHA-256]:hash:' \
         '(-y)--yes[Skip interactive prompts]' \
         '(-y)-y[Skip interactive prompts (short)]' \
+        '--locked[Use locked versions from ezmk.lock]' \
+        '--no-lock[Do not write ezmk.lock]' \
         '1:package file, URL, or name:_files'
 }
 
@@ -282,18 +325,43 @@ _ezmk() {
     local subcmd
 
     case "$cmd" in
+        # 1.1.0-pre.1: top-level aliases — dispatch directly to project completions
+        build)
+            _ezmk_project_build
+            ;;
+        run)
+            _ezmk_project_run
+            ;;
+        clean)
+            _ezmk_project_clean
+            ;;
+        watch)
+            _ezmk_project_watch
+            ;;
+        install)
+            _ezmk_project_install
+            ;;
+        test)
+            _ezmk_project_test
+            ;;
+        pack)
+            _ezmk_project_pack
+            ;;
         project)
             if (( CURRENT == 3 )); then
                 _ezmk_project
             else
                 subcmd=${words[3]}
                 case "$subcmd" in
-                    new)   _ezmk_project_new ;;
-                    build) _ezmk_project_build ;;
-                    run)   _ezmk_project_run ;;
-                    watch) _ezmk_project_watch ;;
-                    clean) _ezmk_project_clean ;;
-                    *)     _ezmk_project ;;
+                    new)     _ezmk_project_new ;;
+                    build)   _ezmk_project_build ;;
+                    run)     _ezmk_project_run ;;
+                    watch)   _ezmk_project_watch ;;
+                    clean)   _ezmk_project_clean ;;
+                    install) _ezmk_project_install ;;
+                    pack)    _ezmk_project_pack ;;
+                    test)    _ezmk_project_test ;;
+                    *)       _ezmk_project ;;
                 esac
             fi
             ;;

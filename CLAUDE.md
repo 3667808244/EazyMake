@@ -19,6 +19,7 @@ This project provides the following skills for AI coding agents. Load the releva
 
 - Build: `bash build.sh`
 - Test: `bash build.sh test`
-- Run project tests: `ezmk project test` or `ezmk pt` (1.1.0-dev.6+)
+- Build project: `ezmk build` (full: `ezmk project build`)
+- Run project tests: `ezmk test` (full: `ezmk project test`)
 - Source code: `src/` (core) + `include/ezmk/` (public headers) + `test/` (Catch2 tests)
 - Third-party code in `src/vendor/` and `include/vendor/` — do not modify.

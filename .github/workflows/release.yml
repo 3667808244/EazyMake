@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Determine version from tag ──────────────────────────────────────
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Extract version from tag
+        id: ver
+        run: |
+          # Strip leading 'v' if present (v1.1.0 → 1.1.0)
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # ── Windows x64 (MSYS2 + g++) ─────────────────────────────────────
+  windows-x64:
+    needs: version
+    runs-on: windows-latest
+    env:
+      EZMK_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-python
+            git
+          update: true
+
+      - name: Build
+        shell: msys2 {0}
+        run: bash build.sh
+
+      - name: Package (zip)
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.version }}"
+          $name = "ezmk-windows-x64"
+          New-Item -ItemType Directory -Force dist/$name | Out-Null
+          Copy-Item build/ezmk.exe dist/$name/
+          Copy-Item completions/_ezmk dist/$name/
+          Compress-Archive -Path dist/$name/* -DestinationPath "dist/ezmk-windows-x64.zip"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ezmk-windows-x64.zip
+
+  # ── Linux x64 ──────────────────────────────────────────────────────
+  linux-x64:
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      EZMK_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ python3
+
+      - name: Build
+        run: bash build.sh
+
+      - name: Package (tar.gz)
+        run: |
+          version="${{ needs.version.outputs.version }}"
+          name="ezmk-linux-x64"
+          mkdir -p "dist/${name}"
+          cp build/ezmk "dist/${name}/"
+          cp completions/_ezmk "dist/${name}/"
+          tar -czf "dist/ezmk-linux-x64.tar.gz" -C dist "${name}"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ezmk-linux-x64.tar.gz
+
+  # ── macOS x64 (Intel) ──────────────────────────────────────────────
+  macos-x64:
+    needs: version
+    runs-on: macos-13
+    env:
+      EZMK_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          # macOS 13 has g++ as an alias for clang++
+          bash build.sh
+
+      - name: Package (tar.gz)
+        run: |
+          version="${{ needs.version.outputs.version }}"
+          name="ezmk-macos-x64"
+          mkdir -p "dist/${name}"
+          cp build/ezmk "dist/${name}/"
+          cp completions/_ezmk "dist/${name}/"
+          tar -czf "dist/ezmk-macos-x64.tar.gz" -C dist "${name}"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ezmk-macos-x64.tar.gz
+
+  # ── macOS arm64 (Apple Silicon) ────────────────────────────────────
+  macos-arm64:
+    needs: version
+    runs-on: macos-latest
+    env:
+      EZMK_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          # macOS ARM64 with clang++ (Homebrew g++ also available)
+          bash build.sh
+
+      - name: Package (tar.gz)
+        run: |
+          version="${{ needs.version.outputs.version }}"
+          name="ezmk-macos-arm64"
+          mkdir -p "dist/${name}"
+          cp build/ezmk "dist/${name}/"
+          cp completions/_ezmk "dist/${name}/"
+          tar -czf "dist/ezmk-macos-arm64.tar.gz" -C dist "${name}"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ezmk-macos-arm64.tar.gz
