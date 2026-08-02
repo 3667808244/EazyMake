@@ -23,3 +23,4 @@
 - `$` 表示你输入的命令；不带 `$` 的行是输出。
 - 每个命令都有简写别名（例如 `ezmk pb` = `ezmk project build`）—— 参见
   [`docs/cli.md`](../../docs/zh/cli.md#command-shorthands-026)。
+- 大多数 `project` 操作也提供**顶层别名**（`ezmk build`、`ezmk run`、`ezmk clean`、`ezmk watch`、`ezmk install`、`ezmk test`、`ezmk pack`）——本教程使用这些短形式；完整 `ezmk project <action>` 形式与之等价。

@@ -13,13 +13,13 @@ $ cat > src/greet.cpp <<'EOF'
 #include <iostream>
 void greet(){ std::cout << "hi\n"; }
 EOF
-$ ezmk project build --verbose
+$ ezmk build --verbose
 ```
 
 Build once. Then build again without changing anything:
 
 ```bash
-$ ezmk project build --verbose
+$ ezmk build --verbose
 [ezmk] Building hello (executable, C++17)...
 [ezmk]   [cached] src/main.cpp  (source hash matches, 1 headers unchanged)
 [ezmk]   [cached] src/greet.cpp  (source hash matches, 1 headers unchanged)
@@ -31,7 +31,7 @@ Both files are cached — nothing recompiles. Now touch just one file:
 
 ```bash
 $ echo '// tweak' >> src/greet.cpp
-$ ezmk project build --verbose
+$ ezmk build --verbose
 [ezmk]   [cached] src/main.cpp  (source hash matches, 1 headers unchanged)
 [ezmk]   1 cached, 1 compiled
 [ezmk] Build successful: build/hello
@@ -54,8 +54,8 @@ corrupts the cache.
 ## Forcing a rebuild
 
 ```bash
-$ ezmk project build --disable-cache   # recompile everything (cache still updated after)
-$ ezmk project clean                   # delete .ezmk/cache and temp files
+$ ezmk build --disable-cache   # recompile everything (cache still updated after)
+$ ezmk clean                   # delete .ezmk/cache and temp files
 ```
 
 Changing compile flags (e.g. editing `[compile].flags`) invalidates the cache

@@ -85,7 +85,7 @@ This page collects common problems and their solutions across installation, buil
 **Cause**: Common causes include mismatched compile/link flags, stale object files, or runtime dependency issues.
 
 **Solution**:
-1. Clean and rebuild: `ezmk project clean && ezmk project build`
+1. Clean and rebuild: `ezmk clean && ezmk build`
 2. Run with `--disable-cache` to force full recompilation
 3. Check that `[compile]` → `flags` and `[link]` → `flags` are consistent (e.g., don't mix debug and release flags)
 4. On Windows, check that required DLLs are in PATH
@@ -97,8 +97,8 @@ This page collects common problems and their solutions across installation, buil
 **Cause**: The build cache (`.ezmk/cache/`) may contain stale or corrupted entries.
 
 **Solution**:
-1. Delete the cache directory: `rm -rf .ezmk/cache/` (or `ezmk project clean`)
-2. Rebuild: `ezmk project build`
+1. Delete the cache directory: `rm -rf .ezmk/cache/` (or `ezmk clean`)
+2. Rebuild: `ezmk build`
 3. If the problem persists, build with `--disable-cache --verbose` and inspect the compile commands
 
 ---
@@ -255,8 +255,8 @@ Do not use standalone names like `"C"` or `"C++"` — include the version number
 
 **Solution**:
 ```bash
-ezmk project build --profile debug
-ezmk project run --profile release
+ezmk build --profile debug
+ezmk run --profile release
 ```
 
 ---

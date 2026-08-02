@@ -13,13 +13,13 @@ $ cat > src/greet.cpp <<'EOF'
 #include <iostream>
 void greet(){ std::cout << "hi\n"; }
 EOF
-$ ezmk project build --verbose
+$ ezmk build --verbose
 ```
 
 构建一次，然后在没有任何改动的情况下再构建一次：
 
 ```bash
-$ ezmk project build --verbose
+$ ezmk build --verbose
 [ezmk] Building hello (executable, C++17)...
 [ezmk]   [cached] src/main.cpp  (source hash matches, 1 headers unchanged)
 [ezmk]   [cached] src/greet.cpp  (source hash matches, 1 headers unchanged)
@@ -31,7 +31,7 @@ $ ezmk project build --verbose
 
 ```bash
 $ echo '// tweak' >> src/greet.cpp
-$ ezmk project build --verbose
+$ ezmk build --verbose
 [ezmk]   [cached] src/main.cpp  (source hash matches, 1 headers unchanged)
 [ezmk]   1 cached, 1 compiled
 [ezmk] Build successful: build/hello
@@ -53,8 +53,8 @@ $ ezmk project build --verbose
 ## 强制重新构建
 
 ```bash
-$ ezmk project build --disable-cache   # 全部重新编译（之后缓存仍会更新）
-$ ezmk project clean                   # 删除 .ezmk/cache 及临时文件
+$ ezmk build --disable-cache   # 全部重新编译（之后缓存仍会更新）
+$ ezmk clean                   # 删除 .ezmk/cache 及临时文件
 ```
 
 修改编译标志（例如编辑 `[compile].flags`）会自动使缓存失效——因为标志是

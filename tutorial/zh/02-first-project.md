@@ -36,12 +36,14 @@ int main(int argc, char **argv){
 ## 构建
 
 ```bash
-$ ezmk project build
+$ ezmk build
 [ezmk] Building hello (executable, C++17)...
 [ezmk]   0 cached, 1 compiled
 [ezmk]   Linking hello...
 [ezmk] Build successful: build/hello
 ```
+
+> `ezmk build` 等价于 `ezmk project build`——按你的喜好选择。
 
 `ezmk` 编译 `src/` 下的所有源文件，将它们链接，然后将可执行文件输出到
 `build/`。（在 Windows/MSYS2 上，二进制文件是 `hello.exe`。）
@@ -49,7 +51,7 @@ $ ezmk project build
 ## 运行
 
 ```bash
-$ ezmk project run
+$ ezmk run
 [ezmk] Building hello (executable, C++17)...
 [ezmk]   1 cached, 0 compiled
 [ezmk]   Linking hello...
@@ -61,7 +63,7 @@ Hello world!
 `run` 会先构建（如果需要的话），然后执行。在 `--` 之后可以传递参数给*你的*程序：
 
 ```bash
-$ ezmk project run -- --name world
+$ ezmk run -- --name world
 ```
 
 `--` 之后的所有内容都会直接传给你的程序，而不是传给 `ezmk`。
@@ -76,5 +78,7 @@ $ ezmk pb           # project build
 $ ezmk pr           # project run
 $ ezmk pc           # project clean
 ```
+
+大多数 `project` 操作也提供**顶层别名**（`ezmk build`、`ezmk run`、`ezmk clean`、…）——标志相同，输入更短。完整列表参见 [CLI 参考](../../docs/zh/cli.md#顶层别名110)。
 
 下一步：[理解 `ezmk.toml` →](03-config.md)

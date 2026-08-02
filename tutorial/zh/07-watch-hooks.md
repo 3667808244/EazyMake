@@ -2,10 +2,10 @@
 
 ## 监视模式
 
-`ezmk project watch` 会在你编辑源文件、头文件或 `ezmk.toml` 时自动重新构建：
+`ezmk watch` 会在你编辑源文件、头文件或 `ezmk.toml` 时自动重新构建：
 
 ```bash
-$ ezmk project watch
+$ ezmk watch
 === Build successful: build/hello ===
 watching for changes... (Ctrl-C to stop)
 ```
@@ -18,8 +18,8 @@ watching for changes... (Ctrl-C to stop)
 有用的标志（与 `build` 的构建选项相同）：
 
 ```bash
-$ ezmk project watch --profile debug -j4
-$ ezmk project watch --no-build-on-start   # 等待首次变更再构建，而不是立即构建
+$ ezmk watch --profile debug -j4
+$ ezmk watch --no-build-on-start   # 等待首次变更再构建，而不是立即构建
 ```
 
 ## 构建钩子

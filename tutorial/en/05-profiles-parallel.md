@@ -5,9 +5,9 @@
 By default `ezmk` compiles sources in parallel using all available cores:
 
 ```bash
-$ ezmk project build          # -j 0 (auto) is the default
-$ ezmk project build -j4      # exactly 4 jobs
-$ ezmk project build -j1      # serial (useful for readable error output)
+$ ezmk build          # -j 0 (auto) is the default
+$ ezmk build -j4      # exactly 4 jobs
+$ ezmk build -j1      # serial (useful for readable error output)
 ```
 
 `-j 0` auto-detects via the hardware thread count.
@@ -34,8 +34,8 @@ flags = ["-s"]           # strip symbols
 Apply one:
 
 ```bash
-$ ezmk project build --profile debug
-$ ezmk project run   --profile release
+$ ezmk build --profile debug
+$ ezmk run   --profile release
 ```
 
 Rules:

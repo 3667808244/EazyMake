@@ -2,11 +2,11 @@
 
 ## Watch mode
 
-`ezmk project watch` rebuilds automatically whenever you edit a source, header, or
+`ezmk watch` rebuilds automatically whenever you edit a source, header, or
 `ezmk.toml`:
 
 ```bash
-$ ezmk project watch
+$ ezmk watch
 === Build successful: build/hello ===
 watching for changes... (Ctrl-C to stop)
 ```
@@ -19,8 +19,8 @@ watching for changes... (Ctrl-C to stop)
 Useful flags (same build options as `build`):
 
 ```bash
-$ ezmk project watch --profile debug -j4
-$ ezmk project watch --no-build-on-start   # wait for the first change instead of building now
+$ ezmk watch --profile debug -j4
+$ ezmk watch --no-build-on-start   # wait for the first change instead of building now
 ```
 
 ## Build hooks

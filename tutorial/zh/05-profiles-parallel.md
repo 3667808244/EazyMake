@@ -5,9 +5,9 @@
 默认情况下 `ezmk` 会使用所有可用核心并行编译源文件：
 
 ```bash
-$ ezmk project build          # -j 0（自动）为默认值
-$ ezmk project build -j4      # 恰好 4 个并行任务
-$ ezmk project build -j1      # 串行编译（便于阅读错误输出）
+$ ezmk build          # -j 0（自动）为默认值
+$ ezmk build -j4      # 恰好 4 个并行任务
+$ ezmk build -j1      # 串行编译（便于阅读错误输出）
 ```
 
 `-j 0` 通过硬件线程数自动检测。
@@ -34,8 +34,8 @@ flags = ["-s"]           # 去除符号
 应用某个构建配置：
 
 ```bash
-$ ezmk project build --profile debug
-$ ezmk project run   --profile release
+$ ezmk build --profile debug
+$ ezmk run   --profile release
 ```
 
 规则：

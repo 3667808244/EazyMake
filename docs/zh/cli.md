@@ -37,18 +37,36 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 ---
 
+## 顶层别名（1.1.0+）
+
+为方便使用，最常用的 `project` 子命令也可作为顶层命令使用：
+
+| 别名 | 完整形式 |
+|------|----------|
+| `ezmk build` | `ezmk project build` |
+| `ezmk run` | `ezmk project run` |
+| `ezmk clean` | `ezmk project clean` |
+| `ezmk watch` | `ezmk project watch` |
+| `ezmk install` | `ezmk project install` |
+| `ezmk test` | `ezmk project test` |
+| `ezmk pack` | `ezmk project pack` |
+
+两种形式完全等价——所有标志和参数行为一致。日常使用推荐短形式；完整 `project <action>` 形式保留用于脚本和习惯。
+
+---
+
 ## `project` — 构建你的代码
 
 | 命令 | 描述 |
 |---|---|
 | `ezmk project new <name> [--type <t>]` | 创建新项目 |
-| `ezmk project build [build-opts]` | 增量构建 |
-| `ezmk project run [build-opts] [-- <program args>]` | 构建并运行 |
-| `ezmk project clean` | 清除缓存和临时文件 |
-| `ezmk project install [install-opts]` | 安装构建产物到指定前缀（1.1.0+） |
-| `ezmk project pack [--output <dir>]` | 打包静态库项目为 `.tar.gz`（1.1.0+） |
-| `ezmk project watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建 |
-| `ezmk project test [test-opts]` | 构建并运行项目测试（1.1.0+） |
+| `ezmk build [build-opts]` | 增量构建（完整形式：`ezmk project build`） |
+| `ezmk run [build-opts] [-- <program args>]` | 构建并运行（完整形式：`ezmk project run`） |
+| `ezmk clean` | 清除缓存和临时文件（完整形式：`ezmk project clean`） |
+| `ezmk install [install-opts]` | 安装构建产物到指定前缀，1.1.0+（完整形式：`ezmk project install`） |
+| `ezmk pack [--output <dir>]` | 打包静态库项目为 `.tar.gz`，1.1.0+（完整形式：`ezmk project pack`） |
+| `ezmk watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建（完整形式：`ezmk project watch`） |
+| `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
 
 **`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
 
@@ -90,7 +108,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `--filter <pattern>` | 过滤测试名称（Catch2: 测试名；ezmk: 文件名 glob） |
 | `--verbose` / `-V` | 展示每个测试的详细输出（即使通过） |
 
-`ezmk project run` 将 `--` 之后的所有内容传递给构建后的程序。
+`ezmk run`（及其完整形式 `ezmk project run`）将 `--` 之后的所有内容传递给构建后的程序。
 
 ---
 

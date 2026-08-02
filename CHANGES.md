@@ -12,6 +12,101 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.1.0-pre.2 (2026-08-03) — 文档检查
+
+对 1.1.0-dev.7 与 1.1.0-pre.1 之后的全量文档审计，确保文档与代码一致，并补齐 pre.1 遗留项。
+
+### CLI 文档更新
+
+- **顶层别名章节**：`docs/en/cli.md` / `docs/zh/cli.md` 新增 "Top-level aliases" / "顶层别名" 章节，命令表格改为别名优先（完整形式标注在描述中）
+- **README 补 `ezmk pack`**：`README.md` / `README_ZH.md` 命令速览补充顶层别名
+- **Tutorial 别名化**：`tutorial/en` ×6 + `tutorial/zh` ×6 + `faq.md`（en/zh）代码示例改为顶层别名优先（首次出现处标注完整形式）
+- **`docs/en/technical.md`**：zsh 补全路径修正 + 测试数据更新
+
+### `config_file.md` 补全
+
+- **`[install]` 配置节**：`prefix` / `bindir` / `libdir` / `includedir` / `sharedir`（en + zh）
+- **`[test]` 配置节**：`dirs` / `framework` / `flags`（en + zh）
+
+### pre.1 遗留项补齐
+
+- **`docs/zh/technical.md`**（新建）：`docs/en/technical.md` 中文翻译
+- **`res/ezmk.zsh`**（新建）：zsh 补全脚本迁移至 `res/`（原 `completions/_ezmk`），`install.sh` / `release.yml` / `technical.md` 路径同步
+
+### 版本号
+
+- **`build.sh` 默认版本 `1.0.0` → `1.1.0`**：修正 fallback 版本号（未设置 `EZMK_VERSION` 时）
+
+### CHANGES.md 补全
+
+- 补充 `1.1.0-dev.7`（包生态拓充与包处理改善）与 `1.1.0-pre.1`（改善用户触达）条目
+
+### 测试
+
+- 全量测试通过，零回归（单元 545 用例 / 2613 断言 · 含集成 555 用例 / 2661 断言）
+
+---
+
+## 1.1.0-pre.1 (2026-08-02) — 改善用户触达
+
+改善新用户首次接触 EazyMake 的体验：顶层命令别名、`--help` 输出重组、README 精简、API 稳定性承诺。
+
+### 顶层命令别名
+
+- **7 个顶层别名**：`build` / `run` / `clean` / `watch` / `install` / `test` / `pack`，对应 `project <action>` 完整形式
+- 别名与完整形式完全等价，所有标志与参数行为一致；日常使用推荐短形式
+
+### `--help` 输出重组
+
+- 输出按日常 / 初始化 / 高级分组（`help_section_daily` / `help_section_init` / `help_section_advanced`）
+- 顶层别名为主行，完整形式标注（`help_full_form`）；新增 6 个 i18n key（中英双语）
+
+### README 精简重写
+
+- `README.md` / `README_ZH.md` 重写为面向普通用户（快速开始 / 命令速览 / 文档索引）
+- 技术栈与依赖表迁移至 `docs/en/technical.md`
+
+### API 稳定性承诺
+
+- **v1.1.0 起公共 API 永久稳定**：命令与 `ezmk.toml` 核心配置节（`[project]` / `[compile]` / `[link]` / `[depends]` / `[test]` / `[install]`）不再破坏性变更
+- 破坏性变更仅在 `2.0.0` 引入，并提前至少一个次版本发出弃用警告（CHANGES.md `## API Stability`）
+
+### zsh 补全
+
+- `completions/_ezmk` 增加顶层别名补全与 `project install` / `pack` / `test` 子命令
+
+### 测试
+
+- 全量测试：**545 用例 / 2613 断言**，零回归
+
+---
+
+## 1.1.0-dev.7 (2026-08-01) — 包生态拓充与包处理改善
+
+扩充官方仓库包生态（12 个新包 + 10 个 Boost header-only 子库），并改善包处理：构建时硬依赖前置检查、仓库安装时自动安装缺失依赖、可选依赖交互式询问。
+
+### 包生态拓充
+
+- **12 个新包**：`openssl`、`libcurl`、`protobuf`、`gRPC`、`hiredis`、`sqlitecpp`、`libpqxx`、`msgpack-c`、`tomlplusplus`、`cpp-httplib`、`eigen`、`googletest`（网络通信 / 数据库 / 序列化 / 科学计算 / 测试框架）
+- **10 个 Boost header-only 子库**：`boost-asio`、`boost-beast`、`boost-filesystem`、`boost-system`、`boost-smart-ptr`、`boost-tokenizer`、`boost-uuid`、`boost-random`、`boost-math`、`boost-functional`
+- **已有包版本更新**：0.9.7/0.9.8 的 42 个存量包逐一核对上游新版本并升级（Boost×10 → 1.88.0 等）
+
+### 构建时硬依赖前置检查
+
+- **`package_available()`**：新增 `pkg::` 接口，遍历已注册仓库搜索包名
+- **`prepare_build_state()`**：构建前遍历 `[depends].lib`，缺失时输出语义化错误 + 仓库可安装提示（`missing_dep_at_build`），替代原始编译器报错
+
+### 仓库安装时自动安装缺失库
+
+- **硬依赖自动安装**：`pkg install` 从仓库安装时，`[depends].lib` 缺失 → 自动递归安装（含传递依赖），替代原先的 `fatal`
+- **可选依赖交互式询问**：`[depends].want` 缺失 → 询问 `[Y]es/[N]o/[A]ll/[D]eny-all`；`A`/`D` 递归穿透子包；非交互模式（`-y`）保持跳过
+
+### 测试
+
+- 全量测试通过，零回归
+
+---
+
 ## 1.1.0 (2026-07-28) — MSVC 包编译、确定性构建与产物安装
 
 首个次版本升级。补齐 MSVC 工具链在包管理中的完整支持，引入确定性构建与 lockfile 机制，新增 `project install` 命令。

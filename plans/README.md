@@ -6,7 +6,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[1.1.0-pre.2](release/1.1.0-pre.2.md)** — 文档检查
+- **[1.1.0-pre.3](release/)** — CI / 包管理器分发（待规划）
 
 ## 待执行
 
@@ -26,6 +26,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 - **[1.1.0-dev.5](release/1.1.0-dev.5.md)** — 更多默认 util（含链接机制、watch 修复） ✅
 - **[1.1.0-dev.7](release/1.1.0-dev.7.md)** — 包生态拓充与包处理改善 ✅
 - **[1.1.0-pre.1](release/1.1.0-pre.1.md)** — 改善用户触达 ✅
+- **[1.1.0-pre.2](release/1.1.0-pre.2.md)** — 文档检查 ✅
 
 - `0.1.1` ~ `0.1.5`(文件已移除,可以查看对应提交的`plan.md`文件)
 - **[0.1.6](dev/0.1.6.md)** - 测试(Catch2 单元测试 + 集成测试)
@@ -143,8 +144,7 @@ graph TD
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
-    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910,v100,v110pre1 done;
-    class v110pre2 active;
+    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910,v100,v110pre1,v110pre2 done;
     class v110 todo;
 ```
 

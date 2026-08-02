@@ -26,3 +26,7 @@ option surface, see the [`docs/en/`](../../docs/en/) reference (especially [`doc
 - `$` marks a command you type; lines without it are output.
 - Every command has a short alias (e.g. `ezmk pb` = `ezmk project build`) — see
   [`docs/en/cli.md`](../../docs/en/cli.md#command-shorthands-026).
+- Most `project` actions also have **top-level aliases** (`ezmk build`, `ezmk run`,
+  `ezmk clean`, `ezmk watch`, `ezmk install`, `ezmk test`, `ezmk pack`) — the
+  tutorials use these short forms; the full `ezmk project <action>` forms are
+  equivalent.

@@ -40,18 +40,39 @@ Downloads the prebuilt `ezmk.exe` from GitHub Releases, verifies SHA-256, instal
 
 ---
 
+## Top-level aliases (1.1.0+)
+
+For convenience, the most-used `project` subcommands are also available as
+top-level commands:
+
+| Alias | Full form |
+|-------|-----------|
+| `ezmk build` | `ezmk project build` |
+| `ezmk run` | `ezmk project run` |
+| `ezmk clean` | `ezmk project clean` |
+| `ezmk watch` | `ezmk project watch` |
+| `ezmk install` | `ezmk project install` |
+| `ezmk test` | `ezmk project test` |
+| `ezmk pack` | `ezmk project pack` |
+
+Both forms are equivalent — all flags and arguments work the same way. The short
+forms are recommended for daily use; the full `project <action>` forms are kept for
+scripting and muscle memory.
+
+---
+
 ## `project` — build your code
 
 | Command | Description |
 |---|---|
 | `ezmk project new <name> [--type <t>]` | Scaffold a new project |
-| `ezmk project build [build-opts]` | Incremental build |
-| `ezmk project run [build-opts] [-- <program args>]` | Build and execute |
-| `ezmk project clean` | Remove cache and temp files |
-| `ezmk project install [install-opts]` | Install build artifacts to prefix (1.1.0+) |
-| `ezmk project pack [--output <dir>]` | Pack static library project as `.tar.gz` (1.1.0+) |
-| `ezmk project watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild |
-| `ezmk project test [test-opts]` | Build and run project tests (1.1.0+) |
+| `ezmk build [build-opts]` | Incremental build (full: `ezmk project build`) |
+| `ezmk run [build-opts] [-- <program args>]` | Build and execute (full: `ezmk project run`) |
+| `ezmk clean` | Remove cache and temp files (full: `ezmk project clean`) |
+| `ezmk install [install-opts]` | Install build artifacts to prefix, 1.1.0+ (full: `ezmk project install`) |
+| `ezmk pack [--output <dir>]` | Pack static library project as `.tar.gz`, 1.1.0+ (full: `ezmk project pack`) |
+| `ezmk watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild (full: `ezmk project watch`) |
+| `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
 
@@ -93,7 +114,7 @@ Downloads the prebuilt `ezmk.exe` from GitHub Releases, verifies SHA-256, instal
 | `--filter <pattern>` | Filter test names (Catch2: test name; ezmk: filename glob) |
 | `--verbose` / `-V` | Show detailed output for every test (even passing ones) |
 
-`ezmk project run` passes everything after `--` to the built program.
+`ezmk run` (and its full form `ezmk project run`) passes everything after `--` to the built program.
 
 ---
 

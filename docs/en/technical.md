@@ -113,15 +113,16 @@ my_project/
 
 ## Shell Completion (zsh)
 
-EazyMake ships a static zsh completion script at `completions/_ezmk`:
+EazyMake ships a static zsh completion script at `res/ezmk.zsh`. Install it as
+`_ezmk` in a directory on your `fpath`:
 
 ```bash
 # Install system-wide
-cp completions/_ezmk /usr/share/zsh/site-functions/
+cp res/ezmk.zsh /usr/share/zsh/site-functions/_ezmk
 
 # Or install for current user
 mkdir -p ~/.zsh/completions
-cp completions/_ezmk ~/.zsh/completions/
+cp res/ezmk.zsh ~/.zsh/completions/_ezmk
 # Then add to ~/.zshrc: fpath=(~/.zsh/completions $fpath)
 ```
 

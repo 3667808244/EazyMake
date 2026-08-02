@@ -85,7 +85,7 @@
 **原因**: 常见原因包括编译/链接标志不匹配、过期的目标文件或运行时依赖问题。
 
 **解决**:
-1. 清理并重建：`ezmk project clean && ezmk project build`
+1. 清理并重建：`ezmk clean && ezmk build`
 2. 使用 `--disable-cache` 强制全量重编译
 3. 检查 `[compile]` → `flags` 和 `[link]` → `flags` 是否一致（例如不要混用 debug 和 release 标志）
 4. Windows 上检查所需的 DLL 是否在 PATH 中
@@ -97,8 +97,8 @@
 **原因**: 构建缓存（`.ezmk/cache/`）中可能包含过期或损坏的条目。
 
 **解决**:
-1. 删除缓存目录：`rm -rf .ezmk/cache/`（或 `ezmk project clean`）
-2. 重新构建：`ezmk project build`
+1. 删除缓存目录：`rm -rf .ezmk/cache/`（或 `ezmk clean`）
+2. 重新构建：`ezmk build`
 3. 如果问题持续，使用 `--disable-cache --verbose` 检查实际的编译命令
 
 ---
@@ -255,8 +255,8 @@ src_dirs = ["src", "lib", "vendor"]
 
 **解决**:
 ```bash
-ezmk project build --profile debug
-ezmk project run --profile release
+ezmk build --profile debug
+ezmk run --profile release
 ```
 
 ---

@@ -92,10 +92,10 @@ ezmk clean                      # 清除缓存
 ezmk watch [flags]              # 监视文件自动重建
 ezmk install [flags]            # 安装构建产物到指定前缀
 ezmk test [flags]               # 运行项目测试
+ezmk pack [flags]               # 创建可分发的 .tar.gz（完整形式：ezmk project pack）
 
 # 项目
 ezmk project new <name>         # 创建新项目
-ezmk project pack               # 创建可分发的 .tar.gz
 
 # 包管理
 ezmk pkg install <pkg>          # 安装包

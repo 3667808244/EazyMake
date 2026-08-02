@@ -51,7 +51,7 @@ Now build — `ezmk` resolves the dependency chain, compiles each package to a s
 library, and links it in:
 
 ```bash
-$ ezmk project build
+$ ezmk build
 ```
 
 Use it in code:

@@ -232,6 +232,62 @@ See `utils.md` (Lua API reference) and CLAUDE.md (build hook implementation deta
 
 ---
 
+## `install` Section (1.1.0+)
+
+Controls where `ezmk install` copies build artifacts. Per-invocation override: `--prefix <path>`.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `prefix` | string | No | `~/.local` (Unix) · `%LOCALAPPDATA%\ezmk` (Windows) | Install root directory; supports `~` expansion |
+| `bindir` | string | No | `"bin"` | Subdirectory for executables (relative to `prefix`) |
+| `libdir` | string | No | `"lib"` | Subdirectory for static/shared libraries |
+| `includedir` | string | No | `"include"` | Subdirectory for headers |
+| `sharedir` | string | No | `"share"` | Subdirectory for data files |
+
+Install layout:
+- `executable` → `<bindir>/`
+- `static` → `<libdir>/`
+- `shared` → `<bindir>/` (DLL) + `<libdir>/` (import library)
+- Headers → `<includedir>/<name>/`
+
+Example:
+
+```toml
+[install]
+prefix = "~/.local"
+bindir = "bin"
+libdir = "lib"
+includedir = "include"
+sharedir = "share"
+```
+
+Corresponding CLI command: `ezmk install` (alias of `ezmk project install`).
+
+---
+
+## `test` Section (1.1.0+)
+
+Configuration for `ezmk test` (build and run project tests).
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `dirs` | string[] | No | `["test"]` | Test source file directories |
+| `framework` | string | No | `"catch2"` | Test framework: `"catch2"` or `"ezmk"` (case-insensitive) |
+| `flags` | string[] | No | `[]` | Extra test compile flags |
+
+Example:
+
+```toml
+[test]
+dirs = ["test"]
+framework = "catch2"
+flags = []
+```
+
+Corresponding CLI command: `ezmk test` (alias of `ezmk project test`).
+
+---
+
 ## `utils` Section [version >= 0.2.0]
 
 Only valid when `[project].type = "utils"`.

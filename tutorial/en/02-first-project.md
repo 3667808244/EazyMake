@@ -36,12 +36,14 @@ int main(int argc, char **argv){
 ## Build
 
 ```bash
-$ ezmk project build
+$ ezmk build
 [ezmk] Building hello (executable, C++17)...
 [ezmk]   0 cached, 1 compiled
 [ezmk]   Linking hello...
 [ezmk] Build successful: build/hello
 ```
+
+> `ezmk build` is equivalent to `ezmk project build` — use whichever you prefer.
 
 `ezmk` compiles every source under `src/`, links them, and writes the executable to
 `build/`. (On Windows/MSYS2 the binary is `hello.exe`.)
@@ -49,7 +51,7 @@ $ ezmk project build
 ## Run
 
 ```bash
-$ ezmk project run
+$ ezmk run
 [ezmk] Building hello (executable, C++17)...
 [ezmk]   1 cached, 0 compiled
 [ezmk]   Linking hello...
@@ -61,7 +63,7 @@ Hello world!
 `run` builds first (if needed), then executes. Pass arguments to *your* program after `--`:
 
 ```bash
-$ ezmk project run -- --name world
+$ ezmk run -- --name world
 ```
 
 Anything after `--` goes straight to your binary, not to `ezmk`.
@@ -76,5 +78,9 @@ $ ezmk pb           # project build
 $ ezmk pr           # project run
 $ ezmk pc           # project clean
 ```
+
+Most `project` actions are also available as top-level commands (`ezmk build`,
+`ezmk run`, `ezmk clean`, …) — same flags, shorter typing. See the
+[CLI reference](../../docs/en/cli.md#top-level-aliases-110) for the full list.
 
 Next: [Understanding `ezmk.toml` →](03-config.md)

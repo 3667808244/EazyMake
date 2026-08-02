@@ -232,6 +232,62 @@ on_failure = "scripts/fail.lua"
 
 ---
 
+## `install` 节（1.1.0+）
+
+控制 `ezmk install` 将构建产物复制到何处。单次调用可用 `--prefix <path>` 覆盖。
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `prefix` | string | 否 | `~/.local`（Unix）· `%LOCALAPPDATA%\ezmk`（Windows） | 安装根目录；支持 `~` 展开 |
+| `bindir` | string | 否 | `"bin"` | 可执行文件子目录（相对于 `prefix`） |
+| `libdir` | string | 否 | `"lib"` | 静态/动态库子目录 |
+| `includedir` | string | 否 | `"include"` | 头文件子目录 |
+| `sharedir` | string | 否 | `"share"` | 数据文件子目录 |
+
+安装布局：
+- `executable` → `<bindir>/`
+- `static` → `<libdir>/`
+- `shared` → `<bindir>/`（DLL）+ `<libdir>/`（导入库）
+- 头文件 → `<includedir>/<name>/`
+
+示例：
+
+```toml
+[install]
+prefix = "~/.local"
+bindir = "bin"
+libdir = "lib"
+includedir = "include"
+sharedir = "share"
+```
+
+对应 CLI 命令：`ezmk install`（`ezmk project install` 的别名）。
+
+---
+
+## `test` 节（1.1.0+）
+
+`ezmk test`（构建并运行项目测试）的配置。
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `dirs` | string[] | 否 | `["test"]` | 测试源文件目录 |
+| `framework` | string | 否 | `"catch2"` | 测试框架：`"catch2"` 或 `"ezmk"`（大小写不敏感） |
+| `flags` | string[] | 否 | `[]` | 额外的测试编译标志 |
+
+示例：
+
+```toml
+[test]
+dirs = ["test"]
+framework = "catch2"
+flags = []
+```
+
+对应 CLI 命令：`ezmk test`（`ezmk project test` 的别名）。
+
+---
+
 ## `utils` 节 [version >= 0.2.0]
 
 仅当 `[project].type = "utils"` 时有效。

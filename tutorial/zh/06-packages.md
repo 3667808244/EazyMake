@@ -48,7 +48,7 @@ want = ["spdlog"]   # 可选依赖（仅当已安装时才使用）
 现在构建——`ezmk` 会解析依赖链，将每个包编译为静态库并链接进来：
 
 ```bash
-$ ezmk project build
+$ ezmk build
 ```
 
 在代码中使用：
