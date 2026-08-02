@@ -1,9 +1,9 @@
 #compdef ezmk
 
-# EazyMake zsh completion — 1.1.0-pre.1+
+# EazyMake zsh completion — 1.1.0-pre.2+
 # Install:
-#   System-wide:  cp completions/_ezmk /usr/share/zsh/site-functions/
-#   User-local:   mkdir -p ~/.zsh/completions && cp completions/_ezmk ~/.zsh/completions/
+#   System-wide:  cp res/ezmk.zsh /usr/share/zsh/site-functions/_ezmk
+#   User-local:   mkdir -p ~/.zsh/completions && cp res/ezmk.zsh ~/.zsh/completions/_ezmk
 #                 Then add to ~/.zshrc: fpath=(~/.zsh/completions $fpath)
 #   Restart shell or run: autoload -Uz compinit && compinit
 

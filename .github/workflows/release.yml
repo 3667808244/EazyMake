@@ -52,7 +52,7 @@ jobs:
           $name = "ezmk-windows-x64"
           New-Item -ItemType Directory -Force dist/$name | Out-Null
           Copy-Item build/ezmk.exe dist/$name/
-          Copy-Item completions/_ezmk dist/$name/
+          Copy-Item res/ezmk.zsh dist/$name/_ezmk
           Compress-Archive -Path dist/$name/* -DestinationPath "dist/ezmk-windows-x64.zip"
 
       - name: Upload Release Asset
@@ -83,7 +83,7 @@ jobs:
           name="ezmk-linux-x64"
           mkdir -p "dist/${name}"
           cp build/ezmk "dist/${name}/"
-          cp completions/_ezmk "dist/${name}/"
+          cp res/ezmk.zsh "dist/${name}/_ezmk"
           tar -czf "dist/ezmk-linux-x64.tar.gz" -C dist "${name}"
 
       - name: Upload Release Asset
@@ -111,7 +111,7 @@ jobs:
           name="ezmk-macos-x64"
           mkdir -p "dist/${name}"
           cp build/ezmk "dist/${name}/"
-          cp completions/_ezmk "dist/${name}/"
+          cp res/ezmk.zsh "dist/${name}/_ezmk"
           tar -czf "dist/ezmk-macos-x64.tar.gz" -C dist "${name}"
 
       - name: Upload Release Asset
@@ -139,7 +139,7 @@ jobs:
           name="ezmk-macos-arm64"
           mkdir -p "dist/${name}"
           cp build/ezmk "dist/${name}/"
-          cp completions/_ezmk "dist/${name}/"
+          cp res/ezmk.zsh "dist/${name}/_ezmk"
           tar -czf "dist/ezmk-macos-arm64.tar.gz" -C dist "${name}"
 
       - name: Upload Release Asset

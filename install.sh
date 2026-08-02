@@ -142,7 +142,7 @@ fi
 
 # ----------------------------------------------------- zsh completions ------
 if [ "${EZMK_NO_COMPLETIONS:-}" != "1" ] && need zsh; then
-    COMP_SRC="$SRC_DIR/completions/_ezmk"
+    COMP_SRC="$SRC_DIR/res/ezmk.zsh"
     if [ -f "$COMP_SRC" ]; then
         COMP_DIR="$HOME/.zsh/completions"
         mkdir -p "$COMP_DIR"
