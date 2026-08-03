@@ -132,8 +132,12 @@ struct ProcResult {
     int exit_code;
     std::string out;
     std::string err;
+    bool timed_out = false; // true if the child was killed by the timeout
 };
-ProcResult run_command(const std::string& cmd);
+// Run a command, returning exit code plus captured stdout/stderr.
+// timeout_sec > 0 kills the child if it runs longer than that many seconds
+// (sets ProcResult::timed_out = true); 0 means no timeout (default).
+ProcResult run_command(const std::string& cmd, int timeout_sec = 0);
 
 // ---- Git helpers ----
 // Check if git is available in PATH.

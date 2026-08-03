@@ -1562,9 +1562,19 @@ void run_tests(const config::EzConfig& cfg,
         } else if (cfg.project.type == "static") {
             return util::file_exists(build_dir / ("lib" + cfg.project.name + ".a")) ||
                    util::file_exists(build_dir / ("lib" + cfg.project.name + ".lib"));
+        } else if (cfg.project.type == "shared") {
+            // Check the actual shared-library artifact, not the import library —
+            // a dangling .lib with a deleted .dll must still trigger a rebuild.
+#ifdef EZMK_WIN
+            return util::file_exists(build_dir / (cfg.project.name + ".dll")) ||   // MSVC
+                   util::file_exists(build_dir / ("lib" + cfg.project.name + ".dll")); // MinGW
+#else
+            return util::file_exists(build_dir / ("lib" + cfg.project.name + ".so"));
+#endif
         }
-        // For other types, just check if build dir exists
-        return util::file_exists(build_dir);
+        // utils (Lua-tool package): there is no compiled artifact to check and
+        // building produces nothing meaningful — skip the build-first step.
+        return true;
     };
 
     if (!check_built()) {
@@ -1806,113 +1816,99 @@ void run_tests(const config::EzConfig& cfg,
             util::fatal("build failed");
         }
 
-        // Run test_runner
+        // Run test_runner. No `-s`: with it, every passing CHECK prints its own
+        // "PASSED" line, which text parsing trivially confuses with a test case.
+        // We rely on Catch2's exit code (non-zero on any failure) plus the
+        // case-level summary line instead.
         std::string test_cmd = "\"" + runner.string() + "\"";
-        // Catch2 options for structured output
         if (!test_filter.empty()) {
             test_cmd += " \"" + test_filter + "\"";
         }
-        test_cmd += " -s";
-
-        // Use -r xml for parseable output (but fall back to console if xml not available)
-        // Actually Catch2 v3 uses --verbosity high -r xml
-        // Let's capture output and parse it manually from console format
         auto test_res = util::run_command(test_cmd);
 
-        // Parse Catch2 console output
-        // Expected format:
-        // ... test name ... PASSED/FAILED
-        // ===============================================================================
-        // test cases: N | M passed | K failed
+        // Parse the case-level summary from Catch2 console output. Two shapes:
+        //   - failures present: "test cases: M | X passed | Y failed"
+        //       (zero-count segments are omitted, e.g. "1 | 1 failed")
+        //   - all passed:       "All tests passed (A assertions in M test cases)"
+        // If neither parses (reporter format changed), fall back to the exit
+        // code for the gate — the counts just become less precise.
         int total_cases = 0;
         int passed_cases = 0;
         int failed_cases = 0;
-        std::vector<std::pair<std::string, bool>> case_results; // name, passed
+        bool summary_found = false;
 
-        // Parse from the output
-        std::istringstream output_stream(test_res.out + "\n" + test_res.err);
+        auto to_int = [](const std::string& s) -> int {
+            auto start = s.find_first_of("0123456789");
+            if (start == std::string::npos) return -1;
+            auto end = s.find_first_not_of("0123456789", start);
+            try { return std::stoi(s.substr(start, end - start)); }
+            catch (...) { return -1; }
+        };
+
+        std::string combined_out = test_res.out + "\n" + test_res.err;
+        std::istringstream output_stream(combined_out);
         std::string line;
         while (std::getline(output_stream, line)) {
-            // Look for "PASSED" or "FAILED" lines
-            if (line.find("PASSED") != std::string::npos &&
-                line.find("test cases") == std::string::npos &&
-                line.find("assertions") == std::string::npos) {
-                // Individual test passed
-                auto trim_line = line;
-                auto b = trim_line.find_first_not_of(" \t");
-                if (b != std::string::npos) trim_line = trim_line.substr(b);
-                case_results.push_back({trim_line, true});
-                passed_cases++;
-            } else if (line.find("FAILED") != std::string::npos &&
-                       line.find("test cases") == std::string::npos &&
-                       line.find("assertions") == std::string::npos) {
-                // Individual test failed
-                auto trim_line = line;
-                auto b = trim_line.find_first_not_of(" \t");
-                if (b != std::string::npos) trim_line = trim_line.substr(b);
-                case_results.push_back({trim_line, false});
-                failed_cases++;
+            // "test cases: M | X passed | Y failed" — authoritative case counts.
+            auto tc_pos = line.find("test cases:");
+            if (tc_pos != std::string::npos) {
+                std::string rest = line.substr(tc_pos + 11);
+                std::vector<std::string> segs;
+                std::string seg;
+                std::istringstream seg_stream(rest);
+                while (std::getline(seg_stream, seg, '|')) segs.push_back(seg);
+                int m = segs.empty() ? -1 : to_int(segs[0]);
+                if (m >= 0) {
+                    total_cases = m;
+                    passed_cases = 0;
+                    failed_cases = 0;
+                    for (size_t i = 1; i < segs.size(); ++i) {
+                        if (segs[i].find("passed") != std::string::npos) {
+                            int x = to_int(segs[i]);
+                            if (x >= 0) passed_cases = x;
+                        } else if (segs[i].find("failed") != std::string::npos) {
+                            int y = to_int(segs[i]);
+                            if (y >= 0) failed_cases = y;
+                        }
+                    }
+                    summary_found = true;
+                }
+                break;
             }
+        }
 
-            // Try to parse summary line
-            if (line.find("test cases:") != std::string::npos) {
-                // "test cases: N | M passed | K failed"
-                // Extract numbers
-                auto tc_pos = line.find("test cases:");
-                if (tc_pos != std::string::npos) {
-                    std::string rest = line.substr(tc_pos + 11);
-                    auto pipe1 = rest.find("|");
-                    if (pipe1 != std::string::npos) {
-                        try { total_cases = std::stoi(rest.substr(0, pipe1)); } catch (...) {}
-                    }
-                    auto passed_pos = rest.find("passed");
-                    if (passed_pos != std::string::npos) {
-                        try {
-                            std::string pn = rest.substr(pipe1 + 1, passed_pos - pipe1 - 1);
-                            pn.erase(0, pn.find_first_not_of(" \t"));
-                            pn.erase(pn.find_last_not_of(" \t") + 1);
-                            passed_cases = std::stoi(pn);
-                        } catch (...) {}
-                    }
-                    auto failed_pos = rest.find("failed");
-                    if (failed_pos != std::string::npos) {
-                        try {
-                            auto pipe2 = rest.find("|", pipe1 + 1);
-                            std::string fn;
-                            if (pipe2 != std::string::npos) {
-                                fn = rest.substr(pipe2 + 1, failed_pos - pipe2 - 1);
-                            }
-                            fn.erase(0, fn.find_first_not_of(" \t"));
-                            fn.erase(fn.find_last_not_of(" \t") + 1);
-                            failed_cases = std::stoi(fn);
-                        } catch (...) {}
+        if (!summary_found) {
+            // "All tests passed (A assertions in M test cases)"
+            auto at_pos = combined_out.find("All tests passed");
+            if (at_pos != std::string::npos) {
+                auto in_pos = combined_out.find(" in ", at_pos);
+                if (in_pos != std::string::npos) {
+                    int m = to_int(combined_out.substr(in_pos + 4));
+                    if (m >= 0) {
+                        total_cases = m;
+                        passed_cases = m;
+                        failed_cases = 0;
+                        summary_found = true;
                     }
                 }
             }
         }
 
-        total_cases = passed_cases + failed_cases;
+        if (!summary_found) {
+            // Format changed — only the exit code is reliable.
+            failed_cases = test_res.exit_code != 0 ? 1 : 0;
+            passed_cases = 0;
+            total_cases = passed_cases + failed_cases;
+        }
 
         // Print results
         util::info(std::string("  cases: ") + std::to_string(total_cases) +
                    " | passed: " + std::to_string(passed_cases) +
                    " | failed: " + std::to_string(failed_cases));
 
-        for (auto& [name, passed] : case_results) {
-            if (!passed || verbose) {
-                if (passed) {
-                    util::info("  [PASS] " + name);
-                } else {
-                    util::error("  [FAIL] " + name);
-                }
-            }
-        }
-
         // Print failure details from output
-        if (failed_cases > 0 && !test_res.out.empty()) {
-            // Print the relevant failure sections
+        if ((failed_cases > 0 || test_res.exit_code != 0) && !test_res.out.empty()) {
             std::istringstream full(test_res.out);
-            bool in_failure = false;
             while (std::getline(full, line)) {
                 if (line.find("FAILED") != std::string::npos ||
                     line.find("REQUIRE") != std::string::npos ||
@@ -1928,7 +1924,7 @@ void run_tests(const config::EzConfig& cfg,
                      {"passed", std::to_string(passed_cases)},
                      {"failed", std::to_string(failed_cases)}}));
 
-        if (failed_cases > 0) {
+        if (failed_cases > 0 || test_res.exit_code != 0) {
             util::fatal(ezmk::i18n::I18nKey::test_failed);
         }
 
@@ -1986,14 +1982,18 @@ void run_tests(const config::EzConfig& cfg,
                 continue;
             }
 
-            // Run test with timeout (30s hardcoded)
-            auto run_res = util::run_command("\"" + test_exe.string() + "\"");
+            // Run test with a 30s timeout — a hung test must not block the
+            // whole suite indefinitely.
+            auto run_res = util::run_command("\"" + test_exe.string() + "\"", 30);
             auto elapsed = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - test_start).count();
             total_time += elapsed;
 
             auto fname = ts.filename().string();
-            if (run_res.exit_code == 0) {
+            if (run_res.timed_out) {
+                util::error("  [TIMEOUT] " + fname + "  (exceeded 30s)");
+                timed_out++;
+            } else if (run_res.exit_code == 0) {
                 util::info("  [PASS] " + fname + "  (" +
                            std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
                 if (verbose && !run_res.out.empty()) {
@@ -2014,10 +2014,12 @@ void run_tests(const config::EzConfig& cfg,
         }
 
         int total = passed + failed + timed_out;
+        // Fold timeouts into the failed bucket for the summary so the numbers
+        // add up (each [TIMEOUT] line already flags the individual case).
         util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
                     {{"total", std::to_string(total)},
                      {"passed", std::to_string(passed)},
-                     {"failed", std::to_string(failed)}}));
+                     {"failed", std::to_string(failed + timed_out)}}));
 
         if (failed > 0 || timed_out > 0) {
             util::fatal(ezmk::i18n::I18nKey::test_failed);

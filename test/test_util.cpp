@@ -279,6 +279,30 @@ TEST_CASE("run_command: basic execution", "[util]") {
     }
 }
 
+TEST_CASE("run_command: timeout", "[util]") {
+    SECTION("command completing before timeout is unaffected") {
+#ifdef EZMK_WIN
+        auto result = run_command("cmd /c echo ok", 5);
+#else
+        auto result = run_command("echo ok", 5);
+#endif
+        REQUIRE_FALSE(result.timed_out);
+        REQUIRE(result.exit_code == 0);
+    }
+
+    SECTION("command exceeding timeout is killed") {
+#ifdef EZMK_WIN
+        // Run ping directly (no cmd /c wrapper) so it is the direct child we
+        // terminate — -n 10 blocks ~9 seconds, well past the 1s timeout.
+        auto result = run_command("ping -n 10 127.0.0.1", 1);
+#else
+        auto result = run_command("sleep 10", 1);
+#endif
+        REQUIRE(result.timed_out);
+        REQUIRE(result.exit_code != 0);
+    }
+}
+
 // ===================================================================
 // git_available()
 // ===================================================================

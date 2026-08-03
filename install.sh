@@ -147,10 +147,13 @@ if [ "${EZMK_NO_COMPLETIONS:-}" != "1" ] && need zsh; then
         COMP_DIR="$HOME/.zsh/completions"
         mkdir -p "$COMP_DIR"
         cp "$COMP_SRC" "$COMP_DIR/_ezmk"
-        ZSHRC="$HOME/.zshrc"
+        # Honor ZDOTDIR: zsh sources $ZDOTDIR/.zshrc (defaults to $HOME/.zshrc).
+        ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
         touch "$ZSHRC"
-        # Idempotent: only append the fpath/compinit lines if not already present.
-        if ! grep -q 'zsh/completions' "$ZSHRC" 2>/dev/null; then
+        # Idempotent: only append the fpath/compinit lines if OUR marker is absent.
+        # Check the marker, NOT a bare "zsh/completions" substring — a comment or
+        # unrelated line containing that string must not suppress the setup.
+        if ! grep -qF '# Added by EazyMake installer' "$ZSHRC"; then
             {
                 echo ''
                 echo '# Added by EazyMake installer'

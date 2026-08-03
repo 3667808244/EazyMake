@@ -206,13 +206,18 @@ TEST_CASE("integration: incremental build cache hit", "[integration]") {
 }
 
 // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 3: Watch mode 鈥?file change triggers rebuild
-// NOTE: This test is inherently timing-sensitive. It uses WARN instead of
-// REQUIRE so flakes don't block CI.
+// NOTE: This test polls the watch log (ezmk logs to unbuffered stderr) until
+// the rebuild is detected, with generous timeouts, so it is robust to machine
+// speed instead of relying on fixed sleeps.
 // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 TEST_CASE("integration: watch mode detects file changes", "[integration]") {
     if (!ezmk_available()) {
         SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
     }
+
+    // Force English output so the log-based detection below is independent of
+    // the machine's locale (the ezmk messages themselves are localized).
+    EnvGuard lang_guard("EZMK_LANG", "en");
 
     TempDir tmp;
     std::string proj_name = "watch_test";
@@ -233,11 +238,13 @@ TEST_CASE("integration: watch mode detects file changes", "[integration]") {
     std::string ezmk_bin = find_ezmk_binary().string();
 
 #ifdef EZMK_WIN
-    // Windows: use start /B to run in background
+    // Windows: use start /B to run in background. `start` inherits the parent
+    // CWD unless /D is given — without it watch can't find ezmk.toml.
     std::string watch_cmd =
-        "cmd /c start /B \"\" " + escape_shell_arg(ezmk_bin) +
-        " project watch --no-build-on-start > " +
-        escape_shell_arg(log_file.string()) + " 2>&1";
+        "cmd /c start \"\" /D \"" + proj_dir.string() + "\" /B " +
+        escape_shell_arg(ezmk_bin) +
+        " project watch --no-build-on-start > \"" +
+        escape_shell_arg(log_file.string()) + "\" 2>&1";
 #else
     // POSIX: run in background with &
     std::string watch_cmd =
@@ -249,8 +256,28 @@ TEST_CASE("integration: watch mode detects file changes", "[integration]") {
 
     run_command(watch_cmd);
 
-    // Give watch time to start monitoring
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    // Poll the log file until it contains `needle` or `timeout` elapses.
+    // ezmk logs to stderr (unbuffered), so messages appear promptly even when
+    // redirected to a file — polling is reliable.
+    auto wait_for_log = [&](const fs::path& file, const std::string& needle,
+                            std::chrono::seconds timeout) -> bool {
+        auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (fs::exists(file)) {
+                std::string content = file_read(file);
+                if (content.find(needle) != std::string::npos) return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        return false;
+    };
+
+    // Wait for watch to actually start monitoring before touching the source.
+    // A fixed sleep here is flaky on slow machines: touching before the watcher
+    // is ready means the change is missed entirely.
+    bool watch_ready = wait_for_log(log_file, "Watching for changes",
+                                    std::chrono::seconds(10));
+    INFO("watch started: " << (watch_ready ? "yes" : "no"));
 
     // Touch the main source file to trigger rebuild
     {
@@ -260,8 +287,26 @@ TEST_CASE("integration: watch mode detects file changes", "[integration]") {
         f.close();
     }
 
-    // Wait for watch to detect and rebuild
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    // Poll for a rebuild indicator instead of a fixed sleep, so the test is
+    // robust to machine speed. Break as soon as the rebuild is detected.
+    auto is_rebuild_log = [](const std::string& content) -> bool {
+        return content.find("changed") != std::string::npos ||
+               content.find("detected") != std::string::npos ||
+               content.find("rebuild") != std::string::npos ||
+               content.find("compil") != std::string::npos ||
+               content.find("build succeeded") != std::string::npos ||
+               content.find("Build succeeded") != std::string::npos;
+    };
+
+    bool detected_change = false;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::string content =
+            fs::exists(log_file) ? file_read(log_file) : std::string();
+        detected_change = is_rebuild_log(content);
+        if (detected_change) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
 
     // Kill any running ezmk watch processes
 #ifdef EZMK_WIN
@@ -270,26 +315,11 @@ TEST_CASE("integration: watch mode detects file changes", "[integration]") {
     run_command("pkill -f \"ezmk project watch\" 2>/dev/null || true");
 #endif
 
-    // Check the log file for rebuild indicators
-    std::string log_content;
-    if (fs::exists(log_file)) {
-        log_content = file_read(log_file);
-    }
+    std::string log_content =
+        fs::exists(log_file) ? file_read(log_file) : std::string();
+    INFO("watch log:\n" << log_content);
 
-    INFO("watch log: " << log_content);
-
-    bool detected_change =
-        log_content.find("changed") != std::string::npos ||
-        log_content.find("detected") != std::string::npos ||
-        log_content.find("rebuild") != std::string::npos ||
-        log_content.find("compil") != std::string::npos ||
-        log_content.find("build succeeded") != std::string::npos ||
-        log_content.find("Build succeeded") != std::string::npos;
-
-    WARN(detected_change);
-    if (!detected_change) {
-        WARN("Watch mode test: no rebuild detected (timing-sensitive, may be false negative)");
-    }
+    CHECK(detected_change);
 }
 
 // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 4: compile_commands.json generation (ezmk utils cc)

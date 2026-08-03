@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -11,6 +12,7 @@
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 
 #ifdef EZMK_WIN
   #ifndef WIN32_LEAN_AND_MEAN
@@ -19,10 +21,12 @@
   #include <windows.h>
   #include <winhttp.h>
 #elif defined(EZMK_MACOS)
+  #include <csignal>
   #include <mach-o/dyld.h>
   #include <unistd.h>
   #include <sys/wait.h>
 #else
+  #include <csignal>
   #include <unistd.h>
   #include <sys/wait.h>
 #endif
@@ -812,7 +816,7 @@ void download(std::string_view url_sv, const fs::path& dest) {
 // Process
 // ===================================================================
 
-ProcResult run_command(const std::string& cmd) {
+ProcResult run_command(const std::string& cmd, int timeout_sec) {
     ProcResult result{};
 #ifdef EZMK_WIN
     HANDLE hReadOut, hWriteOut, hReadErr, hWriteErr;
@@ -838,16 +842,43 @@ ProcResult run_command(const std::string& cmd) {
         CloseHandle(hWriteOut);
         CloseHandle(hWriteErr);
 
-        char buf[4096];
-        DWORD n;
-        while (ReadFile(hReadOut, buf, sizeof(buf) - 1, &n, nullptr) && n > 0) {
-            result.out.append(buf, n);
-        }
-        while (ReadFile(hReadErr, buf, sizeof(buf) - 1, &n, nullptr) && n > 0) {
-            result.err.append(buf, n);
-        }
+        // Drain whatever is currently available without blocking (non-blocking
+        // reads via PeekNamedPipe). A normal child that exits flushes its own
+        // handles; a child that spawns grandchildren may hold the pipe open
+        // longer than we wait — but we must never block here, or a hung child
+        // would defeat the timeout.
+        auto drain_pipe = [](HANDLE hPipe, std::string& sink) {
+            for (;;) {
+                DWORD avail = 0;
+                if (!PeekNamedPipe(hPipe, nullptr, 0, nullptr, &avail, nullptr)) break;
+                if (avail == 0) break;
+                char buf[4096];
+                DWORD n = avail > sizeof(buf) - 1 ? sizeof(buf) - 1 : avail;
+                if (!ReadFile(hPipe, buf, n, &n, nullptr) || n == 0) break;
+                sink.append(buf, n);
+            }
+        };
 
-        WaitForSingleObject(pi.hProcess, INFINITE);
+        auto deadline = std::chrono::steady_clock::now();
+        if (timeout_sec > 0) deadline += std::chrono::seconds(timeout_sec);
+        for (;;) {
+            drain_pipe(hReadOut, result.out);
+            drain_pipe(hReadErr, result.err);
+
+            DWORD wr = WaitForSingleObject(pi.hProcess, 25);
+            if (wr == WAIT_OBJECT_0) break;           // child exited
+            if (wr != WAIT_TIMEOUT) break;            // wait failed
+            if (timeout_sec > 0 && std::chrono::steady_clock::now() >= deadline) {
+                TerminateProcess(pi.hProcess, 1);
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                result.timed_out = true;
+                break;
+            }
+        }
+        // Final drain: the child has exited, capture whatever remains buffered.
+        drain_pipe(hReadOut, result.out);
+        drain_pipe(hReadErr, result.err);
+
         DWORD exitCode = 0;
         GetExitCodeProcess(pi.hProcess, &exitCode);
         result.exit_code = static_cast<int>(exitCode);
@@ -885,9 +916,56 @@ ProcResult run_command(const std::string& cmd) {
     // otherwise land in the stdout capture because the later `1>out` overrides
     // the user's `>&2`). The group makes the outer redirections authoritative.
     std::string cmd2 = "{ " + cmd + " ; } 1>" + out_tmpl + " 2>" + err_tmpl;
-    int rc = std::system(cmd2.c_str());
-    if (WIFEXITED(rc)) result.exit_code = WEXITSTATUS(rc);
-    else result.exit_code = rc;
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child: bind stdout/stderr to the temp files, then exec the shell.
+        dup2(out_fd, STDOUT_FILENO);
+        dup2(err_fd, STDERR_FILENO);
+        close(out_fd);
+        close(err_fd);
+        execl("/bin/sh", "sh", "-c", cmd2.c_str(), (char*)nullptr);
+        _exit(127); // exec failed
+    } else if (pid > 0) {
+        close(out_fd);
+        close(err_fd);
+
+        int status = 0;
+        if (timeout_sec > 0) {
+            // Poll waitpid (WNOHANG) against a deadline; SIGKILL on timeout.
+            auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::seconds(timeout_sec);
+            bool timed_out = false;
+            for (;;) {
+                pid_t r = waitpid(pid, &status, WNOHANG);
+                if (r == pid) break;               // reaped normally
+                if (r < 0) break;                  // waitpid error
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    kill(pid, SIGKILL);
+                    waitpid(pid, &status, 0);      // reap the zombie
+                    result.exit_code = 1;
+                    result.timed_out = true;
+                    timed_out = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            if (!timed_out && WIFEXITED(status)) {
+                result.exit_code = WEXITSTATUS(status);
+            } else if (!timed_out) {
+                result.exit_code = status;
+            }
+        } else {
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status)) result.exit_code = WEXITSTATUS(status);
+            else result.exit_code = status;
+        }
+    } else {
+        // fork failed
+        result.exit_code = 1;
+        close(out_fd);
+        close(err_fd);
+    }
 
     // Read stdout
     {
