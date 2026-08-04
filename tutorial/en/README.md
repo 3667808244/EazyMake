@@ -16,6 +16,8 @@ option surface, see the [`docs/en/`](../../docs/en/) reference (especially [`doc
 6. [Using packages](06-packages.md)
 7. [Watch mode & hooks](07-watch-hooks.md)
 8. [Utils tools (clangd integration)](08-utils.md)
+9. [Testing your project](09-test.md)
+10. [Top-level aliases (quick reference)](10-top-level-aliases.md)
 
 ## Conventions
 

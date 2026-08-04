@@ -14,6 +14,8 @@
 6. [使用包](06-packages.md)
 7. [监视模式与钩子](07-watch-hooks.md)
 8. [Utils 工具（clangd 集成）](08-utils.md)
+9. [测试你的项目](09-test.md)
+10. [顶层别名（快速参考）](10-top-level-aliases.md)
 
 ## 约定
 
