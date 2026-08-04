@@ -37,6 +37,18 @@ jobs:
       - name: Build + run all tests
         run: bash build.sh test-all 2>&1 | tee test-report.log
 
+      - name: Emit test report on failure
+        if: failure()
+        run: |
+          if [ -f test-report.log ]; then
+            echo "::error::=== test-report.log (last 30 lines) ==="
+            tail -n 30 test-report.log | cut -c1-250 | while IFS= read -r line; do
+              [ -n "$line" ] && printf '::error::%s\n' "$line"
+            done
+          else
+            echo "::error::(test-report.log not found)"
+          fi
+
       - name: Upload test report on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -64,6 +76,19 @@ jobs:
       - name: Build + run unit tests
         shell: msys2 {0}
         run: bash build.sh test 2>&1 | tee test-report.log
+
+      - name: Emit test report on failure
+        if: failure()
+        shell: msys2 {0}
+        run: |
+          if [ -f test-report.log ]; then
+            echo "::error::=== test-report.log (last 30 lines) ==="
+            tail -n 30 test-report.log | cut -c1-250 | while IFS= read -r line; do
+              [ -n "$line" ] && printf '::error::%s\n' "$line"
+            done
+          else
+            echo "::error::(test-report.log not found)"
+          fi
 
       - name: Upload test report on failure
         if: failure()
