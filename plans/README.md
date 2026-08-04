@@ -6,15 +6,11 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 
 ## 当前执行
 
-- **[1.1.0-pre.3](release/1.1.0-pre.3.md)** — 缺陷收集与未实现项补全
-
-## 待执行
-
-- **[1.1.0](release/)** — 1.1.0 正式版发布（合并所有 dev.x + pre.x）
+- **[1.1.0](release/1.1.0.md)** — 正式版发布（合并 dev.1~dev.7 + pre.1~pre.3；含发布流水线 3.3.x 收口）
 
 ## 未来规划
 
-- **[1.1.0](release/)** — 包编译与开发体验（dev.1 ~ dev.7 合并）
+- 后续版本（2.0.0 及以后）——破坏性变更窗口
 
 ## 已完成
 
@@ -27,6 +23,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 - **[1.1.0-dev.7](release/1.1.0-dev.7.md)** — 包生态拓充与包处理改善 ✅
 - **[1.1.0-pre.1](release/1.1.0-pre.1.md)** — 改善用户触达 ✅
 - **[1.1.0-pre.2](release/1.1.0-pre.2.md)** — 文档检查 ✅
+- **[1.1.0-pre.3](release/1.1.0-pre.3.md)** — 缺陷收集与未实现项补全 ✅
 
 - `0.1.1` ~ `0.1.5`(文件已移除,可以查看对应提交的`plan.md`文件)
 - **[0.1.6](dev/0.1.6.md)** - 测试(Catch2 单元测试 + 集成测试)
@@ -82,7 +79,7 @@ EazyMake 版本规划与路线图。每个版本对应一个 Markdown 文件,详
 | 0.9.9   | 技术栈统一   | 安装钩子 Lua 化(`.lua` 优先,`run_install_hook_script()`,sandbox 对齐),向后兼容 shell 脚本                                                                               | 0.2.3(构建钩子 Lua 基础设施)                    |
 | 0.9.10  | 代码质量重构 | 消除 `run_install_hook_script`/`run_hook_script` ~70 行重复,压缩 `run_install_script` 参数(9→6),Lua 栈断言加固,`detect_install_script` 可测试化                          | 0.9.9(安装钩子 Lua 化完成)                      |
 | 1.0.0   | 正式版发布   | plans 目录整理（dev/release 拆分）、`docs/zh/cli.md` 全中文翻译、11 项文档审计、核心文档重写、Git tag 补全（3 个缺失 tag）                                           | 0.9.10(代码质量重构完成)                         |
-| 1.1.0   | 包编译与开发体验 | dev.1~dev.7 + pre.1（顶层命令别名 / `--help` 重组 / README 精简 / API 冻结承诺）+ pre.2（文档检查） | 1.0.0(正式版发布)                               |
+| 1.1.0   | 包编译与开发体验 | dev.1~dev.7 + pre.1（顶层命令别名 / `--help` 重组 / README 精简 / API 冻结承诺）+ pre.2（文档检查）+ pre.3（缺陷收集与未实现项补全：测试系统缺陷修复 / CI 工作流 / 文档修正） | 1.0.0(正式版发布)                               |
 
 ## 依赖关系图
 
@@ -113,7 +110,8 @@ graph TD
     v100["1.0.0 正式版发布"]
     v110pre1["1.1.0-pre.1 改善用户触达"]
     v110pre2["1.1.0-pre.2 文档检查"]
-    v110["1.1.0 包编译与开发体验"]
+    v110pre3["1.1.0-pre.3 缺陷收集与未实现项补全"]
+    v110["1.1.0 正式版发布"]
 
     v018 --> v021
     v017 --> v020
@@ -138,14 +136,15 @@ graph TD
     v0910 --> v100
     v100 --> v110pre1
     v110pre1 --> v110pre2
-    v110pre2 --> v110
+    v110pre2 --> v110pre3
+    v110pre3 --> v110
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724;
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
-    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910,v100,v110pre1,v110pre2 done;
-    class v110 todo;
+    class v016,v017,v018,v020,v021,v022,v023,v024,v025,v026,v090,v091,v092,v093,v094,v095,v0951,v096,v097,v098,v099,v0910,v100,v110pre1,v110pre2,v110pre3 done;
+    class v110 active;
 ```
 
 > 说明:绿色=已完成,黄色=当前执行,灰色=待执行;虚线为可选依赖。

@@ -12,6 +12,40 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.1.0-pre.3 (2026-08-04) — 缺陷收集与未实现项补全
+
+聚合 pre.2 之后的全量已知缺陷与未实现项：测试系统缺陷修复、CI 测试工作流、工具/文档缺陷修正，以及发布流水线文档项。
+
+### 测试系统缺陷修复
+
+- **`run_command()` 超时支持**：新增可选 timeout 参数（POSIX `fork`/`waitpid` 轮询 + `SIGKILL`；Windows `WaitForSingleObject` 超时 + `TerminateProcess` + 非阻塞管道排空）；调用方不传即无超时，向后兼容
+- **`ezmk test` 30s 超时生效**：ezmk 内置框架每个测试 30s 硬超时，超时记为 FAIL 并归入 `timed_out` 计数（原 `timed_out` 恒为 0，一个挂起的测试会无限阻塞整个套件）
+- **Catch2 解析加固**：放弃逐行 `PASSED`/`FAILED` 文本猜测，改为退出码 + 汇总行解析（`test cases:` / `All tests passed` 两种格式，失败回退退出码）；`--filter` 透传行为不变
+- **`check_built` 修正**：`shared` 类型检查真实 `.dll`/`.so` 产物（删除 DLL 后 `ezmk test` 正确触发重建）；`utils` 类型明确跳过 build-first
+- **watch 集成测试去 flaky**：日志轮询替代固定 sleep、修复 Windows `start /B` 不继承 CWD 的 bug、`EZMK_LANG=en` 去 locale 依赖、断言 WARN→CHECK
+
+### CI 与构建脚本
+
+- **新增 `.github/workflows/ci.yml`**：push/PR 触发——Ubuntu 跑 `test-all`（单元 + 集成）、Windows (MSYS2) 跑 `test`（单元）、zsh-completions job 回归 `install.sh` 的 zsh 补全激活逻辑
+- **`build.sh` 测试退出码透传**：`test`/`test-all`/`integration` 不再吞掉测试套件失败（原 `|| true` 恒退出 0），CI 因此可作为回归 gate
+
+### 工具/文档缺陷修正
+
+- **`package_authoring.md`（en/zh）**：删除对不存在的 `ezmk utils sha256` 的引用（文档已有 `sha256sum` / `Get-FileHash` 替代）
+- **`scripts/check_i18n.py`（新增）**：i18n 三向一致性校验（`i18n_keys.def` ↔ `locale/en.json` ↔ `locale/zh.json`），273 key 三方一致
+- **过时测试基线修正**：`ezmk-test` skill（538/2440 → 546/2617、集成 7 → 8）、`copilot-instructions`（~538/2440 → 546/2617）、`technical.md`（en/zh 545 → 546）
+
+### 发布流水线文档
+
+- **`plans/release/1.1.0.md`（新增）**：1.1.0 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3，含发布门槛预检、打 tag 触发 `release.yml`、Homebrew/winget 分发步骤）
+- **Tutorial 09-test.md / 10-top-level-aliases.md（en/zh，新增）**：`ezmk test` 专题教程 + 顶层别名快速参考
+
+### 测试
+
+- 全量测试通过，零回归（单元 546 用例 / 2617 断言 · 含集成 556 用例 / 2666 断言）
+
+---
+
 ## 1.1.0-pre.2 (2026-08-03) — 文档检查
 
 对 1.1.0-dev.7 与 1.1.0-pre.1 之后的全量文档审计，确保文档与代码一致，并补齐 pre.1 遗留项。

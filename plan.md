@@ -2,11 +2,11 @@
 
 > 详细设计：[`plans/release/1.1.0-pre.3.md`](plans/release/1.1.0-pre.3.md)
 >
-> **状态：执行中 · 阶段一（测试系统缺陷修复）已完成。** 聚合 pre.2（文档检查）之后的全量已知缺陷与未实现项：测试系统缺陷（超时未实现 / Catch2 解析脆弱 / build-first 粗糙 / watch flaky）、CI 测试工作流缺失、工具/文档缺陷，以及 pre.1 / pre.2 延后的发布流水线项。
+> **状态：✅ 已完成（1.1.0-pre.3 收口）。** 聚合 pre.2（文档检查）之后的全量已知缺陷与未实现项：测试系统缺陷（超时未实现 / Catch2 解析脆弱 / build-first 粗糙 / watch flaky）、CI 测试工作流缺失、工具/文档缺陷，以及 pre.1 / pre.2 延后的发布流水线项。
 >
 > 阶段一完成：`run_command()` 超时、Catch2 解析加固、`check_built` 修正、watch 集成测试去 flaky；`bash build.sh test` 546/2617 + `test-all` 556/2666 全量零回归。
 >
-> 启动时已就绪：**3.2.3 `install.sh` zsh 补全激活 bug 已修复**（精确 marker 匹配 + ZDOTDIR 尊重），真实 zsh 回归待验；其余 3.2.x 待执行，3.3.x 延后项可与 pre.3 并行或并入 1.1.0 收尾。
+> 阶段二~四完成：CI 工作流（`.github/workflows/ci.yml`，含 Ubuntu/MSYS2 测试 + zsh 补全回归 job）、`build.sh` 测试退出码 gate、`check_i18n.py` 三向校验、过时基线修正、Tutorial 09/10、`plans/release/1.1.0.md` 最终发布计划。**3.3.1~3.3.3（release.yml 首次激活 / Homebrew / winget）依赖真实 Release 产物的 URL 与哈希，明确收口至 1.1.0 正式版发布时执行**（见 `plans/release/1.1.0.md` 阶段二/三）。
 
 ---
 
@@ -28,21 +28,21 @@
 
 | # | 目标 | 类别 | 优先级 | 状态 |
 |---|------|------|--------|------|
-| 1 | ezmk 内置测试框架超时未实现 → 修复 | 缺陷 | P0 | ⬜ 待执行 |
-| 2 | 新增 CI 测试工作流（push/PR 跑 `bash build.sh test`） | 缺陷 | P0 | ⬜ 待执行 |
-| 3 | Catch2 输出解析加固（或改用结构化 reporter） | 缺陷 | P1 | ⬜ 待执行 |
-| 4 | `run_tests()` build-first 检查对 shared/utils 类型修正 | 缺陷 | P1 | ⬜ 待执行 |
-| 5 | watch 集成测试 flaky 处理（提高稳定性或标注） | 缺陷 | P1 | ⬜ 待执行 |
-| 6 | `package_authoring.md` 修正不存在的 `ezmk utils sha256` 引用 | 缺陷 | P1 | ⬜ 待执行 |
-| 7 | zsh 补全在 zsh 环境实际加载验证 | 缺陷 | P1 | 🔄 install.sh 激活 bug 已修复 · 真实 zsh 回归待验 |
-| 8 | i18n 三方一致性校验脚本化 | 缺陷 | P1 | ⬜ 待执行 |
-| 9 | 过时文档数据修正（ezmk-test skill / technical.md） | 缺陷 | P2 | ⬜ 待执行 |
-| 10 | `release.yml` CI 激活（触发测试 + 首次真实 Release） | 未实现 | P2 | ⬜ 待执行 |
-| 11 | Homebrew formula（`homebrew-eazymake/ezmk.rb`） | 未实现 | P2 | ⬜ 待执行 |
-| 12 | winget manifest（`manifests/e/ezmk/1.1.0.yaml`） | 未实现 | P2 | ⬜ 待执行 |
-| 13 | `plans/release/1.1.0.md` 最终发布计划 | 未实现 | P2 | ⬜ 待执行 |
-| 14 | Tutorial 09-test.md + 10-top-level-aliases.md | 未实现 | P2 | ⬜ 待执行 |
-| 15 | **发布门槛生效**：实现未完成或兼容性破坏不得发布 | 门槛 | P0 | ⬜ 待执行 |
+| 1 | ezmk 内置测试框架超时未实现 → 修复 | 缺陷 | P0 | ✅ 已实现 |
+| 2 | 新增 CI 测试工作流（push/PR 跑 `bash build.sh test`） | 缺陷 | P0 | ✅ 已实现 |
+| 3 | Catch2 输出解析加固（或改用结构化 reporter） | 缺陷 | P1 | ✅ 已实现 |
+| 4 | `run_tests()` build-first 检查对 shared/utils 类型修正 | 缺陷 | P1 | ✅ 已实现 |
+| 5 | watch 集成测试 flaky 处理（提高稳定性或标注） | 缺陷 | P1 | ✅ 已实现 |
+| 6 | `package_authoring.md` 修正不存在的 `ezmk utils sha256` 引用 | 缺陷 | P1 | ✅ 已实现（删除引用） |
+| 7 | zsh 补全在 zsh 环境实际加载验证 | 缺陷 | P1 | ✅ CI zsh-completions job 回归（install.sh 激活逻辑） |
+| 8 | i18n 三方一致性校验脚本化 | 缺陷 | P1 | ✅ `scripts/check_i18n.py` |
+| 9 | 过时文档数据修正（ezmk-test skill / technical.md） | 缺陷 | P2 | ✅ 已实现 |
+| 10 | `release.yml` CI 激活（触发测试 + 首次真实 Release） | 未实现 | P2 | 🔄 收口至 1.1.0（需真实 Release） |
+| 11 | Homebrew formula（`homebrew-eazymake/ezmk.rb`） | 未实现 | P2 | 🔄 收口至 1.1.0（需 Release 产物哈希） |
+| 12 | winget manifest（`manifests/e/ezmk/1.1.0.yaml`） | 未实现 | P2 | 🔄 收口至 1.1.0（需 Release .exe） |
+| 13 | `plans/release/1.1.0.md` 最终发布计划 | 未实现 | P2 | ✅ 已实现 |
+| 14 | Tutorial 09-test.md + 10-top-level-aliases.md | 未实现 | P2 | ✅ 已实现 |
+| 15 | **发布门槛生效**：实现未完成或兼容性破坏不得发布 | 门槛 | P0 | ✅ 已生效（1.1.0 发布前核对） |
 
 ---
 
@@ -58,41 +58,44 @@
 - [x] **3.1.4 watch flaky（P1）**：固定 sleep 改为日志轮询（启动就绪 + 重建检测，30s 超时窗口）；修复 Windows `start /B` 不继承项目 CWD 的 bug（改用 `start "" /D <dir> /B`）；`EZMK_LANG=en` 强制英文输出使日志解析与 locale 无关；断言 WARN → CHECK + INFO；连跑 3 次稳定
 - [x] 编译通过 + `bash build.sh test`（546/2617）+ `test-all`（556/2666）全量零回归
 
-### 阶段二：CI 测试工作流（P0）
+### 阶段二：CI 测试工作流（P0）✅
 
 **文件**：`.github/workflows/ci.yml`（新建）
 
-- [ ] 新增 `.github/workflows/ci.yml`：push/PR 触发，Ubuntu + MSYS2 环境跑 `bash build.sh test`（单元），可选 `test-all` 含集成
-- [ ] workflow 中显式安装 g++ / python / msys2（避免缺 python 走空 locale 分支）
-- [ ] 失败时输出测试报告（上传 artifact 或注释 PR）
-- [ ] 本地校验 workflow 语法（`actionlint` 或至少 YAML 解析）
+- [x] 新增 `.github/workflows/ci.yml`：push/PR 触发，Ubuntu + MSYS2 环境跑 `bash build.sh test`（单元），可选 `test-all` 含集成
+- [x] workflow 中显式安装 g++ / python / msys2（避免缺 python 走空 locale 分支）
+- [x] 失败时输出测试报告（上传 artifact 或注释 PR）
+- [x] 本地校验 workflow 语法（js-yaml 解析 + 结构断言）
 
-### 阶段三：工具/文档缺陷（P1）
+> **使能改动**：`build.sh` 的 test/test-all/integration 现在透传测试套件退出码（原 `|| true` 恒吞失败），CI 才能作为回归 gate。
 
-**文件**：`docs/en/package_authoring.md` + `docs/zh/package_authoring.md` + `scripts/check_i18n.py`（新建）+ `.claude/skills/ezmk-test.md` + `install.sh`（已改）
+### 阶段三：工具/文档缺陷（P1）✅
 
-- [ ] **3.2.2**：决定 `ezmk utils sha256` 实现或删文档引用（`docs/en/package_authoring.md:297` + `docs/zh/package_authoring.md` §6.3）；若实现则落在 `ezmk-official-utils` 包（`ezmk-repo` 仓库），需与主仓库发布节奏同步
-- [x] **3.2.3 修复**：`install.sh` 幂等性检查改为精确 marker 匹配（`grep -qF '# Added by EazyMake installer'`）+ `ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"`（尊重 ZDOTDIR）——**本次执行前已应用**
-- [ ] **3.2.3 回归**：在 Linux/macOS（或 MSYS2 zsh）跑一遍 `install.sh`（或复现安装步骤）后新开 zsh，验证顶层别名与子命令补全生效
-- [ ] **3.2.4**：`scripts/check_i18n.py` 三向一致性脚本（读 `i18n_keys.def` + `locale/en.json` + `locale/zh.json`，比对 key 集合），纳入 CI
-- [ ] **3.2.5**：更新 `ezmk-test` skill 测试基线 ~538/2440 → **545/2613**、集成 7 → 8 个场景；检查是否有其他引用过时测试基线的文档
+**文件**：`docs/en/package_authoring.md` + `docs/zh/package_authoring.md` + `scripts/check_i18n.py`（新建）+ `.claude/skills/ezmk-test.md` + `.github/copilot-instructions.md` + `docs/{en,zh}/technical.md` + `install.sh`（已改）
 
-### 阶段四：发布流水线（P2，可与 pre.3 并行或在 1.1.0 收尾）
+- [x] **3.2.2**：决定 **删除** `ezmk utils sha256` 文档引用（en §6.3 + zh §6.3）——该工具属外部 `ezmk-official-utils` 包（`ezmk-repo` 仓库）未发布，删除引用是 plan 允许的替代方案；文档已有 `sha256sum` / `Get-FileHash` 正确替代
+- [x] **3.2.3 修复**：`install.sh` 幂等性检查改为精确 marker 匹配（`grep -qF '# Added by EazyMake installer'`）+ `ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"`（尊重 ZDOTDIR）
+- [x] **3.2.3 回归**：CI 新增 `zsh-completions` job，在真实 zsh（Ubuntu）复现 install.sh 的 zsh 补全块——验证 marker 幂等（重复安装不重复追加）+ `_ezmk` 被 compinit 注册可加载
+- [x] **3.2.4**：`scripts/check_i18n.py` 三向一致性脚本（读 `i18n_keys.def` + `locale/en.json` + `locale/zh.json`，跳过 `.def` 注释行），当前 273 key 三方一致
+- [x] **3.2.5**：更新过时测试基线——`ezmk-test` skill（538/2440 → **546/2617**、集成 7 → 8）、`copilot-instructions`（~538/2440 → 546/2617）、`technical.md`（en/zh 545 → 546 + test-all 556/2666）
+
+### 阶段四：发布流水线（P2，可与 pre.3 并行或在 1.1.0 收尾）🔄
 
 **文件**：`.github/workflows/release.yml` + `homebrew-eazymake/ezmk.rb`（外部仓库）+ `manifests/e/ezmk/1.1.0.yaml` + `plans/release/1.1.0.md`（新建）+ `tutorial/{en,zh}/09-test.md` / `10-top-level-aliases.md`（新建）
 
-- [ ] **3.3.1**：触发一次真实 Release 验证 `release.yml`（4 平台构建/打包步骤 + `res/ezmk.zsh` 拷贝路径）
-- [ ] **3.3.2**：Homebrew formula `homebrew-eazymake/ezmk.rb`（依赖 GitHub Release 产物 URL/哈希）
-- [ ] **3.3.3**：winget manifest `manifests/e/ezmk/1.1.0.yaml`（依赖 Release 存在的 `.exe` 安装包）
-- [ ] **3.3.4**：`plans/release/1.1.0.md` 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3）
-- [ ] **3.3.5**：Tutorial `09-test.md`（`ezmk test` 专题教程：`[test]` 配置 + 两种框架）
-- [ ] **3.3.6**：Tutorial `10-top-level-aliases.md`（顶层别名快速参考）
+- [x] **3.3.1（部分）**：`release.yml` 结构已核对（4 平台构建/打包 + `res/ezmk.zsh` 拷贝路径存在）；首次真实激活需在 1.1.0 发布时打 tag 触发
+- [ ] **3.3.1 剩余**：触发真实 Release 验证（→ 1.1.0）
+- [ ] **3.3.2**：Homebrew formula `homebrew-eazymake/ezmk.rb`（依赖 Release 产物 URL/哈希，→ 1.1.0）
+- [ ] **3.3.3**：winget manifest `manifests/e/ezmk/1.1.0.yaml`（依赖 Release `.exe`，→ 1.1.0）
+- [x] **3.3.4**：`plans/release/1.1.0.md` 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3）
+- [x] **3.3.5**：Tutorial `09-test.md`（`ezmk test` 专题教程：`[test]` 配置 + 两种框架）
+- [x] **3.3.6**：Tutorial `10-top-level-aliases.md`（顶层别名快速参考）
 
 ### 阶段五：回归与收尾
 
-- [ ] `bash build.sh test`（单元）+ `test-all`（含集成）全量零回归
-- [ ] **发布门槛核对**：① 实现清单全部完成或明确收口；② 公共 API 无破坏性变更（复核 `CHANGES.md`）；③ 全量测试零回归——三项同时满足才可进入 1.1.0 正式发布
-- [ ] 更新 `plan.md`（本计划状态）+ `plans/README.md`（pre.3 进展 / 移至已完成）
+- [x] `bash build.sh test`（单元 546/2617）+ `test-all`（含集成 556/2666）全量零回归
+- [x] **发布门槛核对**：① 实现清单全部完成或明确收口（3.3.1~3.3.3 明确延后至 1.1.0，见 `plans/release/1.1.0.md`）；② 公共 API 无破坏性变更（`CHANGES.md` API 稳定承诺，顶层别名/`[test]`/`[install]` 均为纯增量）；③ 全量测试零回归
+- [x] 更新 `plan.md`（本计划状态）+ `plans/README.md`（pre.3 进展 / 移至已完成）
 
 ---
 
@@ -126,13 +129,13 @@
 
 ## 6 延后项（1.1.0 正式版收尾）
 
-- `.github/workflows/release.yml` 激活 + 首次真实 Release 验证
-- Homebrew formula（`homebrew-eazymake/ezmk.rb`）
-- winget manifest（`manifests/e/ezmk/1.1.0.yaml`）
-- `plans/release/1.1.0.md` 最终发布计划
-- Tutorial 新增章节：`09-test.md`、`10-top-level-aliases.md`
+以下 3.3.x 项**依赖真实 GitHub Release 产物的 URL 与哈希**，无法在发布前伪造完成，已明确收口至 1.1.0 正式版发布时执行（步骤见 `plans/release/1.1.0.md` 阶段二/三）：
 
-> 以上 3.3.x 项若 pre.3 时间紧可整体并入 1.1.0；缺陷修复（3.1.x）+ CI + 文档修正（3.2.x）建议在 pre.3 内完成。
+- `.github/workflows/release.yml` 激活 + 首次真实 Release 验证（打 `v1.1.0` tag 触发 4 平台构建/打包）
+- Homebrew formula（`homebrew-eazymake/ezmk.rb`）——用 Release 的 `ezmk-linux-x64.tar.gz` URL + sha256
+- winget manifest（`manifests/e/ezmk/1.1.0.yaml`）——用 Release 的 Windows `.exe` URL + sha256
+
+> 缺陷修复（3.1.x）+ CI（3.2.1）+ 文档修正（3.2.x）+ 发布计划/Tutorial（3.3.4~3.3.6）已在 pre.3 内完成。
 
 ---
 
@@ -143,16 +146,18 @@
 | `src/util.cpp` / `src/util.hpp` | 修改 | `run_command()` 增加 timeout 参数（POSIX + Windows 双路径） |
 | `src/build.cpp` | 修改 | `run_tests()` 超时传递 + `timed_out` 计数、Catch2 解析加固、`check_built` 修正 |
 | `test/test_integration.cpp` | 修改 | watch 集成测试稳定性处理 |
-| `.github/workflows/ci.yml` | **新建** | push/PR 测试工作流 |
-| `scripts/check_i18n.py` | **新建** | i18n 三向一致性校验脚本 |
-| `docs/en/package_authoring.md` | 修改 | §6.3 修正 `ezmk utils sha256` 引用 |
+| `.github/workflows/ci.yml` | **新建** | push/PR 测试工作流（Ubuntu test-all / MSYS2 test / zsh-completions 回归） |
+| `build.sh` | 修改 | test/test-all/integration 透传测试套件退出码（CI gate 使能） |
+| `scripts/check_i18n.py` | **新建** | i18n 三向一致性校验脚本（`.def` ↔ en.json ↔ zh.json，跳过注释行） |
+| `docs/en/package_authoring.md` | 修改 | §6.3 删除不存在的 `ezmk utils sha256` 引用 |
 | `docs/zh/package_authoring.md` | 修改 | 中文同步 |
-| `.claude/skills/ezmk-test.md` | 修改 | 测试基线更新 545/2613 + 集成 8 场景 |
+| `.claude/skills/ezmk-test.md` | 修改 | 测试基线更新 546/2617 + 集成 8 场景 |
+| `.github/copilot-instructions.md` | 修改 | 测试基线 ~538/2440 → 546/2617 |
+| `docs/{en,zh}/technical.md` | 修改 | 测试基线 545 → 546 + test-all 556/2666 |
 | `install.sh` | 修改 | zsh 补全 marker 精确匹配 + ZDOTDIR（**已应用**） |
-| `plans/release/1.1.0-pre.3.md` | 修改 | 执行过程中 checkbox 更新 |
 | `plans/release/1.1.0.md` | **新建** | 1.1.0 最终发布计划（阶段四） |
-| `tutorial/{en,zh}/09-test.md` + `10-top-level-aliases.md` | **新建** | 教程新增章节（阶段四） |
-| `plan.md` | 重写 | pre.3 执行计划（本次） |
+| `tutorial/{en,zh}/09-test.md` + `10-top-level-aliases.md` | **新建** | 教程新增章节（阶段四，README 同步） |
+| `plan.md` | 重写 | pre.3 执行计划（本次，已收口） |
 
 ---
 
@@ -162,6 +167,6 @@
 1.0.0 (正式版) ──→ 1.1.0-dev.1~7 (包编译与开发体验) ✅
                  → 1.1.0-pre.1 (改善用户触达) ✅
                  → 1.1.0-pre.2 (文档检查) ✅
-                 → 1.1.0-pre.3 (缺陷收集与未实现项补全) 🔄 执行中
-                 → 1.1.0 (正式版发布)
+                 → 1.1.0-pre.3 (缺陷收集与未实现项补全) ✅
+                 → 1.1.0 (正式版发布) → 计划见 plans/release/1.1.0.md
 ```
