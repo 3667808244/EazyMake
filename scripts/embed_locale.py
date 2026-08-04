@@ -28,6 +28,14 @@ def embed_json_string(s: str) -> str:
     return f'R"LCJSONEND({s})LCJSONEND"'
 
 def main():
+    # Force UTF-8 on stdout: the embedded locale data contains non-ASCII text
+    # (e.g. Chinese), and on environments without a UTF-8 locale — such as
+    # Windows CI runners whose redirected stdout defaults to cp1252 — the
+    # default encoding cannot represent it and print() raises
+    # UnicodeEncodeError (pre.3 fix).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     if len(sys.argv) < 2:
         print("Usage: python embed_locale.py <locale_dir>", file=sys.stderr)
         sys.exit(1)
