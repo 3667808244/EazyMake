@@ -71,9 +71,9 @@ test/
 
 ## Current baseline
 
-- **~538 test cases** / **~2440 assertions**
+- **546 test cases** / **2617 assertions** (unit)
 - Covers: CLI, config, build, cache, pkg, repo, toolchain, i18n, Lua API, util, version, crypto, file watcher, project, argparse
-- Integration tests: 7 end-to-end scenarios tagged `[integration]`
+- Integration tests: 8 end-to-end scenarios tagged `[integration]` (`test-all` = 556 cases / 2666 assertions)
 
 ## Writing new tests
 

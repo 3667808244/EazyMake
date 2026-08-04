@@ -289,9 +289,6 @@ sha256sum mypkg-1.0.0.tar.gz
 
 # Windows PowerShell：
 Get-FileHash -Algorithm SHA256 mypkg-1.0.0.tar.gz
-
-# 或：
-ezmk utils sha256 mypkg-1.0.0.tar.gz  # 若可用
 ```
 
 ### 6.4 多版本
