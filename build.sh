@@ -196,15 +196,19 @@ if $BUILD_TEST; then
         export EZMK_TEST_BIN
 
         echo ""
+        # Propagate the test-suite exit code so `build.sh test*` can gate CI:
+        # a failing test must fail the script (pre.3, 3.2.1 CI workflow).
+        TEST_RC=0
         if [ -n "$TEST_FILTER" ]; then
             echo "=== Running tests (filter: $TEST_FILTER) ==="
-            ./"$TEST_OUTPUT" --verbosity high "$TEST_FILTER" || true
+            ./"$TEST_OUTPUT" --verbosity high "$TEST_FILTER" || TEST_RC=$?
         else
             echo "=== Running all tests ==="
-            ./"$TEST_OUTPUT" --verbosity high || true
+            ./"$TEST_OUTPUT" --verbosity high || TEST_RC=$?
         fi
         echo ""
-        echo "=== Tests complete ==="
+        echo "=== Tests complete (exit code: $TEST_RC) ==="
+        exit "$TEST_RC"
     fi
 else
     if $VERBOSE; then

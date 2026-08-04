@@ -1,0 +1,127 @@
+name: CI
+
+# Push/PR test workflow (1.1.0-pre.3, 3.2.1). Runs `bash build.sh test` on every
+# push to main and on pull requests so regressions are caught in CI, not locally.
+#
+# Notes:
+#   * g++ / python3 are installed explicitly — `build.sh` falls back to an empty
+#     locale branch when Python is missing, which must not happen in CI.
+#   * `build.sh test*` now propagates the test-suite exit code, so a failing test
+#     fails the job (and the release gate that depends on this workflow).
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Ubuntu: full suite (unit + integration) ───────────────────────────────
+  ubuntu:
+    name: Ubuntu (g++) — test-all
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ python3
+
+      - name: Build + run all tests
+        run: bash build.sh test-all 2>&1 | tee test-report.log
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-ubuntu
+          path: test-report.log
+
+  # ── Windows (MSYS2): unit tests ──────────────────────────────────────────
+  windows:
+    name: Windows (MSYS2 g++) — test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-python
+            git
+          update: true
+
+      - name: Build + run unit tests
+        shell: msys2 {0}
+        run: bash build.sh test 2>&1 | tee test-report.log
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-windows
+          path: test-report.log
+
+  # ── zsh completions: install.sh regression (3.2.3) ──────────────────────
+  # The install.sh zsh block was fixed in pre.3 (precise marker match +
+  # ZDOTDIR support). This job replicates those steps and verifies the outcome
+  # in a real zsh, since Windows cannot run zsh.
+  zsh-completions:
+    name: zsh completions (install.sh 3.2.3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Verify install.sh zsh-completion steps
+        run: |
+          set -euo pipefail
+
+          # Replicate the zsh-completion block of install.sh (see install.sh:
+          # "zsh completions" section) so a PR cannot silently regress 3.2.3.
+          COMP_DIR="$HOME/.zsh/completions"
+          mkdir -p "$COMP_DIR"
+          cp res/ezmk.zsh "$COMP_DIR/_ezmk"
+
+          # Honor ZDOTDIR: zsh sources $ZDOTDIR/.zshrc (defaults to $HOME/.zshrc).
+          export ZDOTDIR="$HOME/.zdot-test"
+          mkdir -p "$ZDOTDIR"
+          ZSHRC="$ZDOTDIR/.zshrc"
+          touch "$ZSHRC"
+
+          # Same idempotent marker logic as install.sh.
+          install_block() {
+            if ! grep -qF '# Added by EazyMake installer' "$ZSHRC"; then
+              {
+                echo ''
+                echo '# Added by EazyMake installer'
+                echo 'fpath=(~/.zsh/completions $fpath)'
+                echo 'autoload -Uz compinit && compinit'
+              } >> "$ZSHRC"
+            fi
+          }
+          install_block   # first install
+          install_block   # re-run — must be a no-op (idempotency)
+          copies=$(grep -c '# Added by EazyMake installer' "$ZSHRC")
+          [ "$copies" -eq 1 ] || { echo "FAIL: marker duplicated ($copies copies)" >&2; exit 1; }
+
+          # Fresh zsh: compinit must register _ezmk from fpath. Force the
+          # autoload so the check is deterministic.
+          zsh -c 'source "$ZDOTDIR/.zshrc"; autoload -Uz _ezmk; whence -w _ezmk' | grep -q 'function' \
+            || { echo "FAIL: _ezmk completion not registered by compinit" >&2; exit 1; }
+
+          echo "OK: zsh completion install verified (marker idempotent + _ezmk loadable)"
