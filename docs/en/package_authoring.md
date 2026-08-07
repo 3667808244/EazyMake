@@ -34,6 +34,11 @@ A **utils** package (`type = "utils"`) provides Lua-based tools:
 └── src/              # Optional
 ```
 
+> **Why this layout?** A package is just a standard EazyMake project with a
+> fixed convention (`ezmk.toml` + `include/`, optional `src/`/`script/`), so
+> `ezmk pkg install` can compile and install every package identically — no
+> per-package special cases.
+
 ---
 
 ## 2. `ezmk.toml` Reference
@@ -49,6 +54,10 @@ A **utils** package (`type = "utils"`) provides Lua-based tools:
 | `header_only` | bool | No | `false` | **0.9.7+** Set to `true` to skip compilation (no `src/` required) |
 | `precompiled` | bool | No | `false` | **0.9.7+** Set to `true` to use pre-built `lib/*.a` (no `src/` required). See §3.2 below. |
 
+> **Why lowercase with hyphens?** Package names map directly to file names and
+> link names (`-l<name>`), so the lowercase-hyphen convention keeps them portable
+> across case-sensitive filesystems and free of ambiguous characters.
+
 ### 2.2 `[depends]`
 
 ```toml
@@ -56,6 +65,11 @@ A **utils** package (`type = "utils"`) provides Lua-based tools:
 lib = ["zlib@^1.3", "imgui@~1.91"]   # Hard dependencies (missing → error)
 want = ["sdl2"]                        # Optional dependencies (0.2.2+)
 ```
+
+> **Why optional dependencies?** A `want` dependency is used when available and
+> silently dropped otherwise (the code is expected to fall back to a pure-standard
+> implementation), so one package can serve users with and without the optional
+> library.
 
 **Version constraint syntax (0.9.6+):**
 
@@ -143,9 +157,20 @@ Header-only packages:
 - Skip the compilation and archiving steps during install
 - Are validated the same as other packages (must have `include/` and `ezmk.toml`)
 
+> **Why do header-only packages exist?** Many widely used libraries (CLI11, stb,
+> most of Boost) are implemented entirely in headers — compiling them would
+> produce a trivially empty archive. Shipping headers only, and skipping the
+> compile step at install, makes them cheaper to build and install.
+
 ### 3.3 Precompiled Package (`precompiled = true`, 0.9.7+)
 
 For libraries that are difficult to build from source (e.g. require CMake, platform-specific configuration, or large build systems). The package ships pre-built `.a`/`.lib` files in `lib/` instead of source code in `src/`.
+
+> **Why an opt-in field?** `precompiled = true` trades portability for install
+> speed: a source package compiles anywhere, while a prebuilt binary only runs on
+> the exact platform and architecture it was built for. Making it opt-in keeps the
+> default (source-based) path portable and reserves precompiled builds for
+> libraries that genuinely need them.
 
 ```toml
 [project]
@@ -184,6 +209,13 @@ sdl2/
 1. Exact platform match (e.g. current is `win-x64` → picks `lib<name>.win-x64.a`)
 2. Fallback to bare `lib<name>.a` (backward compatible with single-platform legacy packages)
 3. No match → error listing available platforms
+
+> **Why this naming convention?** Tagging each binary with `<os>-<arch>` lets a
+> single archive ship Windows/Linux/macOS builds at once, and the installer picks
+> the file matching the current platform. The tag is deliberately a simplified
+> `os-arch` — it omits the toolchain because a prebuilt archive is not bound to a
+> specific compiler family — and the bare `lib<name>.a` fallback keeps older
+> single-platform packages working.
 
 **⚠️ Not recommended for general use.** Precompiled packages only work on the specific platform and architecture they were built for. Prefer source-based packages (`src/`) whenever possible, as they compile on any platform. Only use `precompiled` when:
 
@@ -226,6 +258,10 @@ Place platform-specific scripts in `script/` to run before/after installation:
 - Scripts are opened in the user's editor for review before execution
 - Users can skip script execution (install continues)
 - Script failure can be overridden (user chooses to continue)
+
+> **Why review-before-run?** Install scripts execute arbitrary code on the user's
+> machine, so they are shown for inspection first and can be skipped or overridden —
+> the same "show before trust" stance as the rest of the security model.
 
 ---
 
@@ -283,6 +319,11 @@ version = "1.0.0"
 file = "packages/mypkg-1.0.0.tar.gz"
 sha256 = "a1b2c3d4e5f6..."  # 64-char hex, strongly recommended
 ```
+
+> **Why is `sha256` strongly recommended?** The hash lets `ezmk pkg install`
+> verify the archive is exactly what the index promises before anything is
+> extracted — the official repository's CI recomputes it, so a tampered or stale
+> archive fails validation.
 
 ### 6.3 Computing SHA-256
 
@@ -443,4 +484,4 @@ int main() {
 - **[pkg.md](pkg.md)** — Package management (install, update, remove)
 - **[repo.md](repo.md)** — Repository management and `index.toml` format
 - **[config_file.md](config_file.md)** — Full `ezmk.toml` specification
-- **[`@safety.md`](@safety.md)** — Security model (SHA-256, sandbox)
+- **[`safety.md`](safety.md)** — Security model (SHA-256, sandbox)

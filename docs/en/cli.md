@@ -3,7 +3,7 @@
 Authoritative reference for the `ezmk` command line and environment variables.
 This document is the single source of truth; the README command tables are a
 quick-start subset. For behavior details see the per-topic docs
-(`pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `@cache.md`, `@safety.md`).
+(`pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `cache.md`, `safety.md`).
 
 ## Synopsis
 
@@ -59,6 +59,10 @@ Both forms are equivalent — all flags and arguments work the same way. The sho
 forms are recommended for daily use; the full `project <action>` forms are kept for
 scripting and muscle memory.
 
+> **Why two forms?** The aliases were introduced (1.1.0-pre.1) to lower the barrier
+> for newcomers — `ezmk build` beats `ezmk project build` for daily use. The full
+> form is kept so scripts and habits stay unambiguous and unbroken.
+
 ---
 
 ## `project` — build your code
@@ -85,6 +89,11 @@ scripting and muscle memory.
 | `-j <N>` / `--jobs <N>` | Parallel compile jobs; `0` = auto (`hardware_concurrency`), the default |
 | `--profile <name>` | Apply a build profile from `[compile.profile.<name>]` / `[link.profile.<name>]` |
 | `--auto-update` | Run `ezmk repo update --pug` before building (default off) |
+
+> **Why `-j 0` is the default?** Auto-parallelism (`hardware_concurrency`) gives a
+> good speedup with zero configuration. Note also that `--disable-cache` still
+> *updates* the cache afterward — it forces one clean recompile, not a permanently
+> cold cache, so the next build is fast again.
 
 **`new`-only flags:**
 
@@ -157,6 +166,10 @@ Local directories are supported via `type = "local"`. See [`repo.md`](repo.md).
 repo (user scope, `--name official`) so `ezmk pkg install` works by name out of the box.
 Set `EZMK_NO_DEFAULT_REPO=1` to skip this during install.
 
+> **Why pre-register a default repo?** So `ezmk pkg install <name>` works right
+> after install, before the user has set up any repository. The opt-out
+> (`EZMK_NO_DEFAULT_REPO=1`) keeps offline/self-hosted installs clean.
+
 | URL | Target |
 |-----|--------|
 | `https://github.com/3667808244/ezmk-repo.git` | GitHub (global) |
@@ -213,6 +226,11 @@ include_dirs = ["include", "@link:shared/include"]
 Chain resolution (A→B→C, depth limit 10) and cycle detection are supported. Link
 values must be relative paths (no absolute paths) to keep projects portable.
 
+> **Why relative paths only?** Links may point outside the project root; absolute
+> paths would embed machine-specific locations and break portability when the
+> project is shared or moved. The depth limit and cycle detection guard against
+> misconfigured link chains.
+
 See [`utils.md`](utils.md) for the plugin API.
 
 ---
@@ -237,12 +255,22 @@ See [`utils.md`](utils.md) for the plugin API.
 `pkg install` and `repo add` accept **only one** scope flag. Other commands accept
 combined flags like `-pug` (equivalent to `-p -u -g`).
 
+> **Why only one scope for `install`/`add`?** These write to a concrete location
+> (project / user / global) — the target must be unambiguous. Query commands
+> (`list` / `info` / `search`) are read-only, so they can aggregate across scopes
+> with combined flags like `-pug`.
+
 ---
 
 ## Command shorthands (0.2.6+)
 
 Aliases apply only at the command position (`argv[1]`); `ezmk project pn` is still an
 unknown subcommand. Shorthands are typing sugar and are **not** part of zsh completion.
+
+> **Why `argv[1]`-only and not in completion?** Shorthands are typing sugar for
+> interactive use; restricting them to the command position keeps the subcommand
+> namespace unambiguous. Completion shows the canonical names so the list stays
+> discoverable and does not double in size.
 
 | Alias | Expands to | Alias | Expands to | Alias | Expands to |
 |---|---|---|---|---|---|
@@ -285,6 +313,10 @@ Values are case-insensitive. Both `--color=always` and `--color always` are acce
 An explicit `always` / `never` overrides `NO_COLOR`; only `auto` honors it (matching
 git/ls). Tokens after `--` are left untouched for pass-through.
 
+> **Why does only `auto` honor `NO_COLOR`?** An explicit `--color=always|never` is a
+> stronger user intent than the ambient environment variable, so it wins (matching
+> git/ls). `auto` is where the environment variable takes effect.
+
 ---
 
 ## Environment variables
@@ -310,5 +342,5 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 - [`pkg.md`](pkg.md) — package format and management
 - [`repo.md`](repo.md) — repository system
 - [`utils.md`](utils.md) — Lua plugin API
-- [`@cache.md`](@cache.md) — build cache algorithm
-- [`@safety.md`](@safety.md) — security model (confirmations, sha256, sandbox)
+- [`cache.md`](cache.md) — build cache algorithm
+- [`safety.md`](safety.md) — security model (confirmations, sha256, sandbox)

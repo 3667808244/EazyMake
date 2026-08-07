@@ -49,6 +49,11 @@ For each source file:
     update record.json
 ```
 
+> **Why hash content, not timestamps?** Content hashing is chosen so that a cache
+> hit truly means the file bytes are unchanged — operations like `touch` or a git
+> checkout can change an mtime without changing content, which would make an
+> mtime-based cache miss or go stale.
+
 ## Cache Record Structure (`record.json`)
 
 ```json
@@ -72,11 +77,20 @@ For each source file:
 }
 ```
 
+> **Why a `version` field in the record?** The format evolves between ezmk
+> releases; the version lets a different ezmk tell a newer on-disk format apart
+> from its own and rebuild the cache instead of misreading it.
+
 ### Field Descriptions
 - `version`: Used for cache format evolution.
 - `compile_options_signature`: SHA-256 fingerprint of global compilation options, covering `[compile] flags`, `msvc_flags`, `include_dirs`, `std_flag`, `extra_includes`, etc. Any change invalidates the cache for all source files. Can be combined with per-entry `compile_opts` for finer granularity.
 - `object_file` relative path.
 - System header files (e.g., `/usr/include/iostream`) hashes must also be recorded, since system header upgrades may change compilation results.
+
+> **Why record the `compiler`?** Cache entries are scoped per toolchain so objects
+> built by one compiler (e.g. `g++`) are never reused by another (e.g. MSVC) — the
+> `.o`/`.obj` formats are incompatible, and reusing them would be a silent
+> miscompile.
 
 ## Cache Consistency Maintenance
 
@@ -87,6 +101,10 @@ The dependent header hash comparison mechanism naturally guarantees: modifying a
 - Global flag changes → clear all cache entries (simple implementation) or compare `compile_opts` per entry (complex).
 - Recommended: store a global flag fingerprint in `record.json`, compare with the current fingerprint before building; if they differ, discard the entire cache and perform a full recompilation.
 
+> **Why a coarse global fingerprint instead of per-entry checks?** Flag changes
+> are rare, so a full rebuild when the fingerprint changes is cheap — and it is far
+> simpler and less error-prone than reconciling every entry individually.
+
 ### File Move/Rename
 - If a source file path changes, the old cache entry is retained but will never be hit (because the build scan produces a new entry). Users can manually clean up via `ezmk clean`.
 - Header file path changes: old paths in the record become invalid, and compilation will error due to missing headers. Users must ensure paths are correct.
@@ -96,6 +114,10 @@ The dependent header hash comparison mechanism naturally guarantees: modifying a
 `ezmk build --disable-cache`:
 - Ignores `record.json`, recompiles all source files.
 - After compilation completes, **overwrites** and updates the cache (so the cache can benefit the next time it is enabled). Alternatively, the cache could be left untouched, but updating is more sensible.
+
+> **Why still update the cache afterwards?** `--disable-cache` is an escape hatch
+> for one clean rebuild, not a permanent cold mode — updating the cache anyway means
+> the very next build is fast again.
 
 ## Cache Debugging (`--verbose`)
 
@@ -117,6 +139,10 @@ Example output:
 If a build process fails midway, cache consistency must not be corrupted. Approach:
 - When compiling a new object file, write to a temporary file first (e.g., `.tmp.o`), then atomically replace the old file after successful compilation.
 - When updating `record.json`, write to a temporary file first, then `rename`.
+
+> **Why the temp-file + rename dance?** `rename` is atomic, so readers never see a
+> half-written `.o` or `record.json`. Without it, an interrupted build could leave
+> a truncated record that later builds mistake for a valid one.
 
 ## Cache Workflow
 

@@ -1,6 +1,6 @@
 # 命令行参考
 
-`ezmk` 命令行和环境变量的权威参考文档。本文档是唯一真相来源；README 中的命令表格是快速上手的子集。行为细节请参阅各专题文档（`pkg.md`、`repo.md`、`utils.md`、`config_file.md`、`@cache.md`、`@safety.md`）。
+`ezmk` 命令行和环境变量的权威参考文档。本文档是唯一真相来源；README 中的命令表格是快速上手的子集。行为细节请参阅各专题文档（`pkg.md`、`repo.md`、`utils.md`、`config_file.md`、`cache.md`、`safety.md`）。
 
 ## 概要
 
@@ -53,6 +53,8 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 两种形式完全等价——所有标志和参数行为一致。日常使用推荐短形式；完整 `project <action>` 形式保留用于脚本和习惯。
 
+> **为什么保留两种形式？** 顶层别名在 1.1.0-pre.1 引入，目的是降低新用户的使用门槛——日常 `ezmk build` 比 `ezmk project build` 好记得多。完整形式保留是为了脚本与既有习惯不被破坏、语义无歧义。
+
 ---
 
 ## `project` — 构建你的代码
@@ -79,6 +81,8 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `-j <N>` / `--jobs <N>` | 并行编译任务数；`0` = 自动（`hardware_concurrency`），默认值 |
 | `--profile <name>` | 应用 `[compile.profile.<name>]` / `[link.profile.<name>]` 中的构建配置 |
 | `--auto-update` | 构建前运行 `ezmk repo update --pug`（默认关闭） |
+
+> **为什么 `-j 0` 是默认值？** 自动并行（`hardware_concurrency`）无需任何配置就能获得不错的加速。注意 `--disable-cache` 之后仍会**更新**缓存——它只强制一次干净重编译，而不是让缓存永久失效，所以下一次构建依然很快。
 
 **`new` 专属标志：**
 
@@ -149,6 +153,8 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 **官方默认仓库：** `install.sh` 会自动预注册官方仓库（用户作用域，`--name official`），使 `ezmk pkg install` 可直接按包名安装。设置 `EZMK_NO_DEFAULT_REPO=1` 可在安装时跳过此步骤。
 
+> **为什么预注册官方仓库？** 这样用户安装完 `ezmk` 后无需先配置任何仓库，就能直接 `ezmk pkg install <name>` 按名安装。`EZMK_NO_DEFAULT_REPO=1` 供离线或自建仓库的场景跳过。
+
 | URL | 目标 |
 |-----|------|
 | `https://github.com/3667808244/ezmk-repo.git` | GitHub（全球） |
@@ -200,6 +206,8 @@ include_dirs = ["include", "@link:shared/include"]
 
 支持链式解析（A→B→C，深度限制 10 层）和循环检测。链接值仅支持相对路径（保证项目可移植性）。
 
+> **为什么只支持相对路径？** 链接可能指向项目根目录之外，绝对路径会把机器特定的位置写进配置，项目被共享或迁移时就不可移植。深度限制与循环检测用于拦截配置错误的链接链。
+
 插件 API 参见 [`utils.md`](utils.md)。
 
 ---
@@ -223,11 +231,15 @@ include_dirs = ["include", "@link:shared/include"]
 
 `pkg install` 和 `repo add` 只接受**一个**作用域标志。其他命令接受组合标志，如 `-pug`（等价于 `-p -u -g`）。
 
+> **为什么 `install`/`add` 只接受一个作用域？** 它们会把包/仓库写入某个具体位置（project / user / global），目标必须唯一明确。而 `list` / `info` / `search` 是只读查询，可以跨作用域聚合，所以允许 `-pug` 组合。
+
 ---
 
 ## 命令简写（0.2.6+）
 
 简写仅在命令位置（`argv[1]`）生效；`ezmk project pn` 仍为未知子命令。简写仅为输入便利，**不属于** zsh 补全。
+
+> **为什么只作用于命令位置且不属于补全？** 简写只是交互输入时的便利；限定在 `argv[1]` 可避免与子命令命名空间冲突。补全列表展示规范完整命令，保持可发现性，也不至于翻倍膨胀。
 
 | 简写 | 展开为 | 简写 | 展开为 | 简写 | 展开为 |
 |---|---|---|---|---|---|
@@ -267,6 +279,8 @@ include_dirs = ["include", "@link:shared/include"]
 
 选项值不区分大小写。`--color=always` 和 `--color always` 均接受。显式指定 `always` / `never` 会覆盖 `NO_COLOR`；仅 `auto` 遵守 `NO_COLOR`（行为与 git/ls 对齐）。`--` 之后的 token 保持原样以用于透传。
 
+> **为什么只有 `auto` 遵守 `NO_COLOR`？** 显式指定 `--color=always|never` 比环境变量的意图更强，应优先（与 git/ls 行为一致）；`auto` 才是让环境变量生效的模式。
+
 ---
 
 ## 环境变量
@@ -292,5 +306,5 @@ include_dirs = ["include", "@link:shared/include"]
 - [`pkg.md`](pkg.md) — 包格式与管理
 - [`repo.md`](repo.md) — 仓库系统
 - [`utils.md`](utils.md) — Lua 插件 API
-- [`@cache.md`](@cache.md) — 构建缓存算法
-- [`@safety.md`](@safety.md) — 安全模型（确认机制、sha256、sandbox）
+- [`cache.md`](cache.md) — 构建缓存算法
+- [`safety.md`](safety.md) — 安全模型（确认机制、sha256、sandbox）

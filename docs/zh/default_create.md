@@ -14,6 +14,8 @@ int main(int argc, char **argv){
 }
 ```
 
+> **为什么是这个模板？** 脚手架生成的是一个最小的可运行程序，让新项目开箱即用（`ezmk project new` → `ezmk build` 即可运行），从脚手架到用户第一次改代码之间无需任何配置。
+
 ---
 
 ## `<project_dir>/ezmk.toml`
@@ -37,6 +39,8 @@ system_target = []
 lib = []
 ```
 
+> **为什么是这些默认值？** 生成的配置与脚手架布局一一对应——`type = "executable"` 对应 `src/main.cpp` 入口，C++17 是现代的基线标准，`-Wall -Wextra -O2` 让新项目既能尽早看到警告又保持构建速度。
+
 ---
 
 ## `<project_dir>/.gitignore`
@@ -53,16 +57,22 @@ build/
 *.tmp.obj
 ```
 
+> **为什么是这份 `.gitignore`？** 条目覆盖了 EazyMake 生成的所有内容——`build/` 产物、`.ezmk/` 缓存/临时/包状态、目标文件——保证首次提交保持干净。它与 `git init` 一起生成，项目不在版本控制下时可通过 `--disable-gitignore` 跳过。
+
 ---
 
 ## `<project_dir>/README.md`
 不添加内容只创建空文件。
+
+> **为什么是空文件？** 脚手架为项目自己的文档预留位置，但不臆测其内容——由用户填写，也无需删除任何样板文本。
 
 ---
 
 ## Git 初始化（0.1.5+）
 
 创建项目后自动执行 `git init`（如果系统中 git 可用）。可通过 `--disable-git-init` 跳过。
+
+> **为什么默认执行 git init？** 大多数项目都使用版本控制，脚手架默认初始化仓库（与生成的 `.gitignore` 配套）以便开箱即用——若系统未安装 git 则安静跳过。`--disable-git-init` 供自行管理版本控制或想要一个纯净目录的用户关闭。
 
 ---
 
@@ -90,3 +100,5 @@ build/
   .gitignore
   README.md
 ```
+
+> **为什么是这种布局？** `src/` 和 `include/` 是 ezmk 默认扫描的约定输入目录，`build/` 集中存放所有产物，`.ezmk/` 则把 EazyMake 的内部状态（已安装包、临时文件、缓存）放在一处——因此 `build/` 和 `.ezmk/` 可随时安全地重建、清理或删除。

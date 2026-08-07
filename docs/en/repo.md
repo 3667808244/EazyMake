@@ -2,6 +2,10 @@
 
 An EazyMake repository is a **git repository**. Users register repositories via `ezmk repo add <git_url>`, the tool automatically runs `git clone` to a local cache, after which `pkg install` can install by package name (rather than URL).
 
+> **Why clone into a local cache?** So `pkg install` name-search reads a copy on
+> disk — after one clone the repo is usable offline, and later `repo update` is just
+> a `git pull` that fetches only the changed diffs.
+
 ---
 
 ## Repository Structure
@@ -78,7 +82,15 @@ sha256 = "hsiqno182bl2..."
 | `file`    | string | Yes      | Path to the package archive relative to the repo root |
 | `sha256`  | string | No       | SHA-256 checksum of the archive (recommended)       |
 
+> **Why is `sha256` optional but recommended?** A checksum lets `pkg install` verify
+> the archive arrived intact, so public repos should provide it. Keeping it optional
+> avoids blocking simple internal repos that trust their own files.
+
 Multiple versions of the same package are represented by repeating `[[packages]]` entries with the same `name` but different `version`. `pkg install` installs the latest version by default.
+
+> **Why keep every version in the index?** So `pkg install` picks the latest by
+> default while `pkg update` can advance an install — and a project that needs an
+> older version still finds it.
 
 ---
 
@@ -137,6 +149,10 @@ Destination directories for `git clone`:
 | Project | `<project_dir>/.ezmk/repo/.cache/<repo_name>/`  |
 
 For `type = "local"` repositories, there is no `.cache/` directory — the local path pointed to by `url` is used directly.
+
+> **Why do local repos skip the cache?** The directory is already on this machine,
+> so cloning is redundant — ezmk reads its `index.toml` in place, and edits take
+> effect immediately (handy for offline mirrors or developing a repo).
 
 ---
 
@@ -295,17 +311,25 @@ When the argument to `pkg install` is neither a local file path nor a URL contai
 6. Retrieve the archive file from the repository's `packages/` directory (local cache for git repos; re-install if missing)
 7. If no repository contains the package → error
 
+> **Why pick the highest version across repos?** The version is compared across all
+> registered repos, not just the first match, so `pkg install <name>` gives you the
+> newest available release no matter which repo hosts it.
+
 ### Caveats
 
 - Ensure `ezmk repo update` has been run before the first `pkg install foo`, otherwise an outdated `index.toml` may be used
 - It is recommended to automatically run `ezmk repo update --pug` before `ezmk project build` (optional, may be added in a future version)
 - If a package in a repository has a `sha256`, it must be verified during installation
 
+> **Why run `repo update` before the first install?** Name-search reads the cached
+> `index.toml` — a snapshot from the last clone or update. `repo update` (a `git
+> pull`) refreshes it, otherwise the index may be stale.
+
 ---
 
 ## Security
 
-Repository-related security policies (no confirmation required for global registration, secondary confirmation for global install, `sha256` verification, `git clone`/`pull` failure handling) have been consolidated in [`@safety.md`](@safety.md).
+Repository-related security policies (no confirmation required for global registration, secondary confirmation for global install, `sha256` verification, `git clone`/`pull` failure handling) have been consolidated in [`safety.md`](safety.md).
 
 ---
 

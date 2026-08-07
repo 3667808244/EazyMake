@@ -186,6 +186,10 @@ src_dirs = ["src", "lib", "vendor"]
 2. 改用项目作用域安装：`ezmk pkg install -p <名称>`（安装到 `.ezmk/pkg/`）
 3. Linux/macOS 上如果必须全局安装，使用 `sudo`
 
+> **为什么全局安装需要额外的二次确认？** 全局作用域写入 ezmk 安装目录树，
+> 影响机器上的所有用户。ezmk 为此增加二次确认（与覆盖已有包时相同），
+> 避免系统级变更在一次按键中悄然发生。
+
 ---
 
 ### Q: 包安装成功但构建时找不到头文件
@@ -351,6 +355,10 @@ ezmk repo add /mnt/usb/ezmk-repo --type local
 3. 放到 PATH 中的某个目录
 4. 对于包，使用上述离线包方案之一
 
+> **为什么支持完全离线使用？** 并非所有环境都能访问 GitHub——CI 沙箱、
+> 受限制的企业网络和隔离机器。本地仓库（`--type local`）和文件安装
+> （`--type file`）让 ezmk 在这些环境中也可用。
+
 ---
 
 ## Lua / 工具
@@ -374,6 +382,10 @@ ezmk repo add /mnt/usb/ezmk-repo --type local
 1. 检查包的 `ezmk.toml` 中的 `[utils.permissions]` 设置
 2. 将被拒绝的路径/命令添加到相应的允许列表（`read`、`write` 或 `run`）
 3. 如果包没有 `[utils.permissions]` 段，它运行在旧版（无限制）模式下 — 拒绝来自 ezmk 的硬沙箱限制（如禁止在项目根目录外写入）
+
+> **为什么 utils 脚本会命中沙箱限制？** utils 包是第三方 Lua 代码，ezmk 在
+> 受限沙箱中运行它：`os`/`io` 被移除，写入限制在项目根目录内——行为异常的
+> 脚本无法读写项目之外的文件。
 
 ---
 

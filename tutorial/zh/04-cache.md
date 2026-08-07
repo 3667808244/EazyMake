@@ -60,6 +60,6 @@ $ ezmk clean                   # 删除 .ezmk/cache 及临时文件
 修改编译标志（例如编辑 `[compile].flags`）会自动使缓存失效——因为标志是
 指纹的一部分。
 
-完整的算法说明请参阅 [`docs/@cache.md`](../../docs/zh/@cache.md)。
+完整的算法说明请参阅 [`docs/cache.md`](../../docs/zh/cache.md)。
 
 下一章：[构建配置与并行编译 →](05-profiles-parallel.md)

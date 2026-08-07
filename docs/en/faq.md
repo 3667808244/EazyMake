@@ -186,6 +186,10 @@ src_dirs = ["src", "lib", "vendor"]
 2. Use project-scope install: `ezmk pkg install -p <name>` (installs to `.ezmk/pkg/`)
 3. On Linux/macOS, run with `sudo` for global install if you must
 
+> **Why is a global install gated by an extra confirmation?** The global scope
+> affects every user on the machine, so ezmk asks again (a secondary
+> confirmation) before touching it — never on a single keystroke.
+
 ---
 
 ### Q: Package installs successfully but headers are not found during build
@@ -351,6 +355,10 @@ ezmk repo add /mnt/usb/ezmk-repo --type local
 3. Place it in a directory in your PATH
 4. For packages, use one of the offline package methods above
 
+> **Why support fully offline usage?** Not every environment can reach GitHub —
+> CI sandboxes, restricted corporate networks, and air-gapped machines. Local
+> repos (`--type local`) and file installs (`--type file`) keep ezmk usable there.
+
 ---
 
 ## Lua / Utils
@@ -374,6 +382,10 @@ ezmk repo add /mnt/usb/ezmk-repo --type local
 1. Check the package's `ezmk.toml` for `[utils.permissions]` settings
 2. Add the denied path/command to the appropriate allowlist (`read`, `write`, or `run`)
 3. If the package has no `[utils.permissions]` section, it operates in legacy (unrestricted) mode — the denial is from ezmk's hard sandbox limits (e.g., writing outside project root)
+
+> **Why do utils scripts hit sandbox limits?** A utils package is third-party Lua
+> code, so ezmk runs it in a restricted sandbox: `os`/`io` are removed and writes
+> stay inside the project root — a misbehaving tool can't touch files outside it.
 
 ---
 

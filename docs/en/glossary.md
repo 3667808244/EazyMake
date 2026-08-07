@@ -29,6 +29,10 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | registry | The `list.toml` file tracking registered repositories per scope. |
 | upstream | The original third-party project that a package wraps (e.g. fmt, spdlog). |
 
+> **Why does a missing optional dependency only warn?** Optional deps back
+> features your code can live without — the build continues and defines
+> `EZMK_LIB_MISS_*` so code can adapt around the missing library instead of failing.
+
 ## Configuration Terms
 
 | Term | Definition |
@@ -50,6 +54,10 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | entry script | The `utils/<name>.lua` file that implements a tool's `run(args)` and optional `help()` functions. |
 | built-in tool | A tool compiled directly into the ezmk binary (currently only `ezmk-cc`). |
 
+> **Why do utils run in a sandbox?** A utils package is third-party code that
+> could otherwise read or write anywhere on disk. The sandbox removes `os`/`io`
+> and confines writes to the project root (0.2.5+ adds a finer allow/deny layer).
+
 ## Security Terms
 
 | Term | Definition |
@@ -58,6 +66,10 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | atomic write | Write to a temporary file first, then `rename` to the target path to prevent corruption on failure. |
 | secondary confirmation | An extra interactive prompt required for sensitive operations (global install, file overwrite). |
 | validation | Checking that data meets expected constraints (e.g. `index.toml` parseable, `sha256` matches, files exist). |
+
+> **Why an extra prompt for sensitive operations?** Global installs and file
+> overwrites change machine- or project-wide state and are hard to undo, so ezmk
+> asks for confirmation again instead of acting on a single keystroke.
 
 ## Build & Compilation Terms
 

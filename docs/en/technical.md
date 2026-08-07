@@ -18,6 +18,11 @@ All dependencies below, except for the compiler and MSYS2, are embedded and do n
 | Python                                 | ≥ 3.6            | **Build only**      | Locale data embedding (`scripts/embed_locale.py`) |
 | MSYS2 (Windows)                        | —                | **Build & runtime** | Provides g++ and bash environment                 |
 
+> **Why embed every dependency?** So `ezmk` is one self-contained binary that runs
+> with nothing more than a compiler. Third-party code is vendored in-tree
+> (`src/vendor/` + `include/vendor/`) and kept untouched, so builds are reproducible
+> offline, version-pinned, and easy to upgrade.
+
 ## Building EazyMake
 
 ```bash
@@ -39,6 +44,11 @@ g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk
 ```
+
+> **Why a bash script for building?** All first-class build environments — Linux,
+> macOS, and MSYS2 — ship a POSIX shell, so a `build.sh` that orchestrates locale
+> embedding, version-header generation, and compilation needs no extra build
+> system and behaves identically everywhere.
 
 ### Running tests
 
@@ -65,6 +75,10 @@ bash build.sh test -v
 
 EazyMake auto-detects your compiler at build time (priority: `$CXX` / `$CC` → platform defaults). The same `ezmk.toml` works across compilers.
 
+> **Why auto-detect instead of asking?** Detecting the toolchain means a project
+> builds on whatever compiler the platform already has — one `ezmk.toml` stays
+> portable across Linux, macOS, and Windows instead of being rewritten per setup.
+
 | Compiler | Platform | Detection |
 |---|---|---|
 | **GCC** (g++/gcc) | Linux, macOS, MSYS2 | Default on all platforms |
@@ -88,11 +102,19 @@ msvc_flags = ["/SUBSYSTEM:CONSOLE"]
 
 EazyMake translates common GCC flags to MSVC equivalents automatically (e.g. `-Wall` → `/W4`, `-O2` → `/O2`, `-g` → `/Zi`). Use `msvc_flags` for flags that need explicit MSVC naming or have no translation rule.
 
+> **Why translate common flags?** So the same `ezmk.toml` expresses intent once, in
+> familiar GCC-style flags, instead of being duplicated per compiler. Translation
+> can't cover every flag, so `msvc_flags` remains as the explicit escape hatch.
+
 > **Note:** MSVC support is for building *user projects*, not EazyMake itself. To build `ezmk` from source, use GCC via MSYS2 or Linux/macOS.
 
 ### Cross-compiler builds
 
 The same project builds with GCC and MSVC without changes — cache records are isolated by compiler, so switching compilers does not cause cache conflicts.
+
+> **Why isolate the cache per compiler?** Objects compiled by different toolchains
+> are binary-incompatible; keying the cache by compiler prevents a stale GCC object
+> from being silently reused in an MSVC build (and vice versa).
 
 ## Project Structure
 

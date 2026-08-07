@@ -37,7 +37,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ### 发布流水线文档
 
-- **`plans/release/1.1.0.md`（新增）**：1.1.0 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3，含发布门槛预检、打 tag 触发 `release.yml`、Homebrew/winget 分发步骤）
+- **`plans/1.1.0/1.1.0.md`（新增）**：1.1.0 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3，含发布门槛预检、打 tag 触发 `release.yml`、Homebrew/winget 分发步骤）
 - **Tutorial 09-test.md / 10-top-level-aliases.md（en/zh，新增）**：`ezmk test` 专题教程 + 顶层别名快速参考
 
 ### 测试
@@ -411,7 +411,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 ### 文档
 
 - 更新安装钩子章节（`docs/en/pkg.md` + `docs/zh/pkg.md`）：Lua 钩子规范、`ctx` 表定义、示例代码、检测优先级
-- 更新安全模型文档（`docs/en/@safety.md` + `docs/zh/@safety.md`）：新增安装钩子安全说明与汇总表
+- 更新安全模型文档（`docs/en/safety.md` + `docs/zh/safety.md`）：新增安装钩子安全说明与汇总表
 
 ---
 
@@ -575,7 +575,7 @@ Windows 原生安装体验、端到端集成测试、三平台冒烟测试准备
 
 ### 变更
 - **目录重组**：`docs/` → `docs/en/` + `docs/zh/`，`tutorial/` → `tutorial/en/` + `tutorial/zh/`
-- **英文翻译补齐**：`cli.md`, `pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `@cache.md`, `@safety.md` 全部提供英文版
+- **英文翻译补齐**：`cli.md`, `pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `cache.md`, `safety.md` 全部提供英文版
 - **术语表** (`glossary.md`)：中英双语对照，随新功能扩展更新
 - **CI 文件对应检查**：确保 `docs/en/` ↔ `docs/zh/` 一一对应
 
@@ -600,7 +600,7 @@ Windows 原生安装体验、端到端集成测试、三平台冒烟测试准备
 
 ### 新增
 - **一键安装脚本** (`install.sh`)：`curl -fsSL <url> | bash` 一键安装，支持 Linux/macOS/MSYS2，幂等可重入，失败即清理
-- **文档整理**：`docs/cli.md` 完整 CLI 参考，`docs/@safety.md` 安全性集中化文档
+- **文档整理**：`docs/cli.md` 完整 CLI 参考，`docs/safety.md` 安全性集中化文档
 - **README 双语互链**：`README.md` (EN) ↔ `README_ZH.md` (ZH)
 - **上手教程** (`tutorial/`)：从零创建项目 → 添加依赖 → 构建运行的分步教程
 

@@ -2,6 +2,10 @@
 
 `ezmk utils <name> [args...]` provides an extensible plugin-style tool entry point. Tools are written as **Lua scripts**, distributed and installed as **packages**, with no specific tools hardcoded into the C++ codebase.
 
+> **Why package-based tools?** Because tools ship as ordinary packages, adding a
+> new tool never requires recompiling or re-releasing `ezmk` — anyone can
+> distribute a tool, and it is discovered at runtime via the scope chain.
+
 ---
 
 ## Design motivation
@@ -138,6 +142,11 @@ ezmk.file_write(path, content)  -- → bool, err
 - Relative paths are resolved against the project root
 - `file_write` denies writes to absolute paths outside the project root
 
+> **Why confine writes to the project root?** A tool should only touch the
+> project it is operating on; without this limit a script could overwrite files
+> anywhere on the host, so keeping writes inside the project root makes tools
+> safe to run by default.
+
 ### Process execution
 
 ```lua
@@ -202,6 +211,11 @@ end
 - When the version is incremented, the old API surface is preserved for at least 2 minor versions with deprecation warnings in Lua (`ezmk.warn(...)`).
 - Deprecated APIs are clearly marked in this document with `@deprecated since v<N>` tags.
 
+> **Why an explicit API version?** So scripts can tell which `ezmk` features are
+> available and keep working across upgrades — `ezmk.api_version` only advances
+> on breaking changes, so a check like `>= 2` is a reliable signal that old
+> scripts still run on older ezmk versions.
+
 ---
 
 ## Installation and removal
@@ -229,13 +243,17 @@ ezmk pkg remove -u ezmk-cc
 
 ## Security
 
-> For a global security model overview, see [`@safety.md`](@safety.md); this section provides detailed specifications for the Lua sandbox and permissions.
+> For a global security model overview, see [`safety.md`](safety.md); this section provides detailed specifications for the Lua sandbox and permissions.
 
 Lua scripts run in a restricted environment:
 
 - `os.execute` and `io.popen` are removed — external commands must be executed via `ezmk.run()`
 - `ezmk.file_write()` denies writes to absolute paths outside the project root
 - `require` for loading C extensions is not exposed (only pure Lua modules are allowed)
+
+> **Why strip `os.execute`/`io.popen` at compile time?** Removing them from the
+> Lua binary means scripts cannot reach them at all — every external command must
+> go through `ezmk.run()`, which ezmk can audit and later gate with permissions.
 
 ---
 
@@ -269,15 +287,29 @@ Each access category is judged by a fixed priority (consistent across all three 
 - **Write**: First passes through the hard restriction of "no writing outside the project root" (non-bypassable), then enters deny/allow/ask.
 - **Execute**: Only matches against the first token of the command (the executable filename). Exact match (`g++` does not match `g++-13`), `*`-suffix prefix wildcard (`git*` matches `git`, `git.exe`), full path match.
 
+> **Why deny before allow?** A too-broad allowlist is a realistic mistake, so
+> deny must always win — even when the same target is also allowlisted. Anything
+> not listed falls through to an interactive ask instead of being silently
+> allowed.
+
 ### Ask and non-interactive fallback
 
 When the access target "matches neither the allowlist nor the denylist", the user is prompted interactively with options `y`/`n`, or `a` (always allow for this session) / `d` (always deny for this session). Decisions are cached per session by "category + target".
 
 **Non-interactive environment** (no TTY, or CI scenarios): unable to prompt → uniformly **denied** (fail-safe), and the denied target is printed so the user can add it to the allowlist and retry. In CI, all required access should be explicitly written into the allowlist.
 
+> **Why fail closed in CI?** With no one at the keyboard to approve an unknown
+> access, the safe default is to deny and print what was blocked — automation
+> should declare its needs in the allowlist up front rather than silently getting
+> broad access.
+
 ### Backward compatibility
 
 Old packages that omit the entire `[utils.permissions]` section retain unrestricted behavior, but a deprecation warning is printed once on the first call to a controlled API. Once the section is declared, all three permission categories enter the deny/allow/ask model; an omitted field = empty list = access of that category defaults to ask.
+
+> **Why do legacy packages stay unrestricted?** So existing utils packages keep
+> working without an immediate update; the one-time warning nudges maintainers to
+> declare permissions at their own pace.
 
 Return values of controlled APIs when denied:
 

@@ -12,6 +12,10 @@
 | `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified |
 | `stdlib` | string | No | `"libstdc++"` | **1.1.0-dev.4+** Standard library: `"libstdc++"` (default) or `"libc++"`. Aliases: `"glibcxx"` / `"gnu"` → `libstdc++`; `"llvm"` → `libc++`. Case-insensitive |
 
+> **Why is `type` a string instead of an enum?** So adding a project type later
+> (e.g. `"header-only"`) only introduces a new string value — existing `ezmk.toml`
+> files keep parsing unchanged. Strings also read naturally in a declarative config.
+
 ### `type` Values
 
 | Value | Output | Requires main.cpp? |
@@ -36,6 +40,11 @@ Format is `<language><version>`. The parser normalizes the value case-insensitiv
 - Version: `89` / `98` / `99` / `03` / `11` / `14` / `17` / `20` / `23` / `26`
 - Default version: C++ → `17`, C → `11`
 
+> **Why accept so many spellings?** Users type `c++17` / `cpp17` / `cxx17`
+> interchangeably. Normalizing to one canonical value (e.g. `CPP17`) makes the value
+> comparable internally and lets it be baked into the `EZMK_LANG` macro with a
+> stable form.
+
 #### GNU Extensions (1.1.0-dev.4+)
 
 Prefix `GNU` before the language to enable GNU compiler extensions:
@@ -46,6 +55,10 @@ Prefix `GNU` before the language to enable GNU compiler extensions:
 | `GNU11` / `gnu11` | `GNU11` | `-std=gnu11` | non-ISO warning |
 
 > A warning will be emitted when GNU extensions are used, suggesting standard alternatives (e.g. `language = "CPP17"`).
+
+> **Why warn on GNU extensions?** GNU extensions are non-portable — code that relies
+> on them may not compile under a strict or different compiler. The warning nudges
+> users toward the standard spelling rather than forbidding the feature.
 
 ---
 
@@ -61,6 +74,10 @@ Prefix `GNU` before the language to enable GNU compiler extensions:
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
 
+> **Why a separate, untranslated `msvc_flags`?** The GCC→MSVC auto-translation can't
+> cover every difference (e.g. `/Zi`, `/Od` have no GCC equivalent). `msvc_flags` is
+> passed verbatim so MSVC users get precise control without fighting the translator.
+
 ### `[compile.macros]` Subsection (0.2.2+)
 
 A standalone subsection that defines preprocessor macros. More semantic than using `-D` in `flags`, and auto-translated to `/D` under MSVC.
@@ -75,6 +92,11 @@ A standalone subsection that defines preprocessor macros. More semantic than usi
 
 - Key must be a valid C identifier (`[A-Za-z_][A-Za-z0-9_]*`); error on invalid
 - Macro resolution order: `ezmk_macros` (standard macros) → `-D` in `flags` → `[compile.macros]` → want.lib missing macros. Later definitions override earlier ones with the same name
+
+> **Why this resolution order?** Later definitions win, so the most specific source
+> overrides the most general: your `[compile.macros]` overrides `-D` in `flags`,
+> which overrides the standard `EZMK_*` macros. This gives a predictable precedence
+> chain.
 
 ### Standard Predefined Macros (when `ezmk_macros = true`)
 
@@ -110,6 +132,10 @@ Setting `ezmk_macros = false` fully disables standard macro injection.
 | `lib` | string[] | No | `[]` | List of hard dependency library names. Missing → build fails |
 | `want` | string[] | No | `[]` | **0.2.2+** List of optional dependency library names. Missing → warn + define `EZMK_LIB_MISS_<NAME>` macro, does not block the build |
 
+> **Why warn instead of failing?** `want` expresses an optional dependency. Instead
+> of blocking the build, a missing lib defines `EZMK_LIB_MISS_<NAME>` so the code
+> can `#ifdef` around the optional feature and degrade gracefully.
+
 ### Version Constraints (0.9.6+)
 
 Each dependency entry can optionally include a version constraint using one of the following operators:
@@ -127,6 +153,11 @@ Each dependency entry can optionally include a version constraint using one of t
 - **Backward compatible**: entries without operators (`"fmt"`) behave exactly as in previous versions (take latest).
 - **No lockfile**: version resolution is performed at install time; a lockfile (`ezmk.lock`) is deferred to a future version.
 - **Constraint unsatisfied**: if no available version satisfies the constraint, installation fails with an error listing all available versions.
+
+> **Why backward compatible and no lockfile?** Bare entries (`"fmt"`) keep their old
+> "latest wins" meaning so existing configs don't change behavior. A lockfile is
+> deliberately deferred — resolution happens at install time to keep the model
+> simple until reproducible pinning is actually needed.
 
 **Example:**
 ```toml
@@ -184,6 +215,10 @@ msvc_flags = ["/O2", "/DNDEBUG"]
 
 Profiles do **not** auto-apply — the user must explicitly pass `--profile <name>`.
 
+> **Why not auto-apply profiles?** A config file can't know which profile you want;
+> auto-applying would make builds depend on hidden state. Requiring `--profile`
+> keeps each invocation explicit and deterministic.
+
 ---
 
 ## `link.profile.<name>` Section (0.2.3+)
@@ -212,6 +247,10 @@ flags = ["-flto"]
 ## `hooks` Section (0.2.3+)
 
 Build lifecycle hooks — execute Lua scripts at key points of compilation/linking. Hook scripts receive a `ctx` table (`ctx.output`, `ctx.project_root`, `ctx.profile`) and run in a sandboxed Lua environment. Script not found → warn + skip (non-fatal). Only effective for user projects; not executed during package compilation.
+
+> **Why sandboxed and non-fatal?** Hooks run arbitrary code inside your build, so the
+> sandbox (and package-side exclusion) limits the damage a third-party hook can do.
+> A missing script is a configuration slip, not a build failure — warn and continue.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -249,6 +288,10 @@ Install layout:
 - `static` → `<libdir>/`
 - `shared` → `<bindir>/` (DLL) + `<libdir>/` (import library)
 - Headers → `<includedir>/<name>/`
+
+> **Why DLL to `bindir` but import lib to `libdir`?** On Windows the DLL must be
+> reachable at load time, i.e. on the PATH (`bin`), while the import library is a
+> link-time artifact that belongs in `lib` alongside other libraries.
 
 Example:
 

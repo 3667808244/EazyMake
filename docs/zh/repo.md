@@ -2,6 +2,8 @@
 
 EazyMake 的仓库是一个 **git 仓库**。用户通过 `ezmk repo add <git_url>` 注册仓库，工具自动 `git clone` 到本地缓存，之后 `pkg install` 可按包名（而非 URL）安装。
 
+> **为什么 clone 到本地缓存？** 这样 `pkg install` 按名搜索时读取的是磁盘上的本地副本——克隆一次后离线也可用，后续 `repo update` 只是 `git pull`，只拉取变更的差异。
+
 ---
 
 ## 仓库结构
@@ -78,7 +80,11 @@ sha256 = "hsiqno182bl2..."
 | `file`    | string | 是   | 包归档相对于仓库根目录的路径      |
 | `sha256`  | string | 否   | 归档的 SHA-256 校验值（建议提供） |
 
+> **为什么 `sha256` 可选但建议提供？** 校验值让 `pkg install` 验证归档完整性，因此公共仓库应提供。保留可选，是为了不卡住信任自身文件的简单内部仓库。
+
 同一包的多个版本通过重复 `[[packages]]`、`name` 相同而 `version` 不同来表示。`pkg install` 默认安装最新版本。
+
+> **为什么在索引中保留每个版本？** 这样 `pkg install` 默认取最新版、`pkg update` 可平滑升级——需要旧版本的项目也仍能找到。
 
 ---
 
@@ -137,6 +143,8 @@ last_update = "2026-06-19T10:00:00Z"
 | 项目   | `<project_dir>/.ezmk/repo/.cache/<repo_name>/` |
 
 对于 `type = "local"` 的仓库，没有 `.cache/` 目录——直接使用 `url` 指向的本地路径。
+
+> **为什么本地仓库不设缓存？** 目录已在本机存在，clone 是多余的——ezmk 直接就地读取其 `index.toml`，改动即时生效（对离线镜像或正在开发的仓库很方便）。
 
 ---
 
@@ -295,17 +303,21 @@ ezmk pkg install -p foo
 6. 从仓库的 `packages/` 目录获取归档文件（git 仓库读本地缓存，需安装）
 7. 若所有仓库都未找到 → 报错
 
+> **为什么跨仓库取最高版本？** 版本比较覆盖所有已注册仓库而非仅第一个匹配，这样 `pkg install <name>` 无论最新版在哪个仓库都能拿到。
+
 ### 注意事项
 
 - 首次 `pkg install foo` 前确保已执行 `ezmk repo update`，否则可能使用旧的 `index.toml`
 - 推荐在 `ezmk project build` 前自动执行 `ezmk repo update --pug`（可选，可在后续版本加入）
 - 仓库中的包如果有 `sha256`，安装时必须校验
 
+> **为什么首次安装前要先 `repo update`？** 按名搜索读取的是缓存中的 `index.toml`——即上次 clone 或 update 时的快照。`repo update`（`git pull`）会刷新它，否则索引可能过期。
+
 ---
 
 ## 安全
 
-仓库相关的安全条款(全局注册无需确认、全局安装二次确认、`sha256` 校验、`git clone`/`pull` 失败处理)已集中到 [`@safety.md`](@safety.md)。
+仓库相关的安全条款(全局注册无需确认、全局安装二次确认、`sha256` 校验、`git clone`/`pull` 失败处理)已集中到 [`safety.md`](safety.md)。
 
 ---
 

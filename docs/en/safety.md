@@ -1,7 +1,7 @@
 # Security
 
 This document centralizes EazyMake's security model. It is the **single authority**; related sections in other documents (`repo.md`, `pkg.md`,
-`utils.md`, `@cache.md`) keep only a one-liner and link back here, avoiding drift from maintenance in multiple places.
+`utils.md`, `cache.md`) keep only a one-liner and link back here, avoiding drift from maintenance in multiple places.
 
 ---
 
@@ -15,6 +15,15 @@ This document centralizes EazyMake's security model. It is the **single authorit
 
 See [`pkg.md`](pkg.md) for details.
 
+> **Why a second confirmation?** Global and overwrite installs write to shared,
+> system-wide locations (`<ezmk_install_dir>/pkg/`) or replace existing files, so
+> the extra prompt guards against accidental or unwanted changes. `-y` is for
+> scripts, but it never disables the integrity checks.
+
+> **Why SHA-256 verification?** Archives arrive over the network from repos or
+> URLs, so verifying the digest catches corrupted or tampered downloads before
+> anything is written to disk.
+
 ## Repository Management (`repo.cpp`)
 
 - `git clone` failure → clear the incomplete local cache directory and report an error.
@@ -24,12 +33,20 @@ See [`pkg.md`](pkg.md) for details.
 
 See [`repo.md`](repo.md) for details.
 
+> **Why warn-and-continue on `git pull` failure?** A transient network problem
+> shouldn't block your build — a stale cache is a better outcome than no build.
+> This also lets `--auto-update` refresh repos without failing the build.
+
 ## Build Cache (`cache.cpp`)
 
 - Before writing `record.json` and `.o`, write to `.tmp` temporary files first; on success, `rename` to overwrite (atomic write).
 - A build failure midway does not corrupt the consistency of existing cache.
 
-See [`@cache.md`](@cache.md) for details.
+See [`cache.md`](cache.md) for details.
+
+> **Why `.tmp` + `rename`?** A crash or failure mid-write would otherwise leave a
+> half-written `record.json`/`.o` that the cache would treat as valid, causing
+> spurious rebuilds or corruption. The atomic write keeps the cache consistent.
 
 ## Lua Sandbox (`lua_api.cpp` / `linit.c`, 0.2.0+)
 
@@ -38,6 +55,15 @@ See [`@cache.md`](@cache.md) for details.
 - Does not expose `require` for loading C extensions (pure Lua modules only).
 - Each invocation receives an independent sandbox environment table; global variables do not leak between scripts.
 - **Install hooks (0.9.9+)**: Install lifecycle hooks (`preinstall`/`postinstall`) share the same sandbox infrastructure as build hooks and utils. Lua install hooks do NOT open the editor for review — the sandbox boundary (removed `os`/`io`, `file_write` limits, `ezmk.run()` permission checks) already bounds what the script can do. Only a user confirmation prompt (`[y/N]`) is required before execution.
+
+> **Why remove `os`/`io` at compile time?** Stripping them from the Lua binary
+> means scripts cannot reach them at all — the only path to external commands is
+> `ezmk.run()`, which ezmk can audit and gate with permissions.
+
+> **Why no editor review for Lua install hooks?** Shell hooks can run arbitrary
+> commands, so reviewing the script is the only safeguard. A Lua hook is already
+> confined by the sandbox (no `os`/`io`, `file_write` limits, `ezmk.run()`
+> checks), so the `[y/N]` confirmation is sufficient.
 
 ## Utils Permission Management (`[utils.permissions]`, 0.2.5+)
 
@@ -52,6 +78,15 @@ The evaluation order is fixed as **deny > allow > ask**:
 **Backward compatibility**: old packages that omit the entire section retain unrestricted behavior, but a deprecation warning is printed once on the first call to a controlled API.
 
 See [`utils.md` Permission Management](utils.md#permission-management-version--025) for complete fields and semantics.
+
+> **Why deny > allow > ask?** Deny must always win, even when a too-broad
+> allowlist also matches — it is the last line of defense. Unlisted access falls
+> through to an interactive ask, and fails closed (denied) in non-interactive
+> runs rather than being silently allowed.
+
+> **Why do legacy packages stay unrestricted?** So existing utils packages keep
+> working without an immediate migration; the one-time warning nudges maintainers
+> to declare permissions at their own pace.
 
 ---
 

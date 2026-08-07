@@ -18,6 +18,10 @@
 | Python                                  | ≥ 3.6            | **仅构建**           | locale 数据嵌入（`scripts/embed_locale.py`）                |
 | MSYS2（Windows）                        | —                | **构建与运行时**     | 提供 g++ 与 bash 环境                                       |
 
+> **为什么把所有依赖都内嵌？** 这样 `ezmk` 就是一个自包含的二进制，运行时只需一个编译器。
+> 第三方代码以源码形式放在 `src/vendor/` 与 `include/vendor/` 并保持原样不动，构建可离线复现、
+> 版本锁定，升级也更干净。
+
 ## 构建 EazyMake
 
 ```bash
@@ -39,6 +43,9 @@ g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk
 ```
+
+> **为什么用 bash 脚本来构建？** 所有一等构建环境——Linux、macOS、MSYS2——都自带 POSIX shell，
+> 因此一个 `build.sh` 就能编排 locale 数据嵌入、版本头生成与编译，无需额外构建系统，处处行为一致。
 
 ### 运行测试
 
@@ -65,6 +72,9 @@ bash build.sh test -v
 
 EazyMake 在构建时自动检测编译器（优先级：`$CXX` / `$CC` → 平台默认）。同一份 `ezmk.toml` 可在不同编译器下使用。
 
+> **为什么要自动检测而不是让用户指定？** 自动探测工具链意味着项目用平台已有的编译器即可构建，
+> 一份 `ezmk.toml` 在 Linux、macOS、Windows 之间保持可移植，无需为每种环境重写配置。
+
 | 编译器 | 平台 | 检测方式 |
 |--------|------|----------|
 | **GCC**（g++/gcc） | Linux、macOS、MSYS2 | 各平台默认 |
@@ -88,11 +98,17 @@ msvc_flags = ["/SUBSYSTEM:CONSOLE"]
 
 EazyMake 会自动将常见 GCC 标志翻译为 MSVC 等价形式（如 `-Wall` → `/W4`、`-O2` → `/O2`、`-g` → `/Zi`）。对于需要显式 MSVC 写法或无翻译规则的标志，使用 `msvc_flags`。
 
+> **为什么要自动翻译常见标志？** 这样同一份 `ezmk.toml` 只需用熟悉的 GCC 风格标志表达一次意图，
+> 不必为每个编译器重复维护。翻译无法覆盖所有标志，因此保留 `msvc_flags` 作为显式逃生口。
+
 > **注意：** MSVC 支持用于构建*用户项目*，而非 EazyMake 自身。要从源码构建 `ezmk`，请通过 MSYS2 的 GCC 或 Linux/macOS。
 
 ### 跨编译器构建
 
 同一项目无需修改即可在 GCC 和 MSVC 下构建——缓存记录按编译器隔离，切换编译器不会导致缓存冲突。
+
+> **为什么缓存要按编译器隔离？** 不同工具链编译出的目标文件二进制不兼容；缓存按编译器做键，
+> 可以防止过时的 GCC 目标文件在 MSVC 构建中被静默复用（反之亦然）。
 
 ## 项目结构
 

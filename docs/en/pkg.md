@@ -53,12 +53,20 @@ The `type` field supports the following values:
 | `"shared"` | Shared library |
 | `"utils"` | Tool package (provides `ezmk utils` subcommands, Lua-based) |
 
+> **Why header-only and precompiled packages?** Both skip a local compile:
+> `header_only = true` ships headers only, so a pure-header library installs
+> instantly; `precompiled = true` ships a ready-built `.a` for heavy libraries.
+
 ### `[depends]` Section
 
 | Field | Type | Description |
 |------|------|------|
 | `lib` | string[] | Hard dependency library name list. Missing → install fails |
 | `want` | string[] | **0.2.2+** Optional dependency library name list. If present during install, treated as a normal dependency; if missing, skipped. Missing at build time → warn + define `EZMK_LIB_MISS_<NAME>` macro |
+
+> **Why both `lib` and `want`?** A hard dependency (`lib`) must be installed or the
+> build fails. An optional one (`want`) degrades gracefully — if missing, ezmk warns
+> and defines `EZMK_LIB_MISS_<NAME>` so your code can fall back instead of failing.
 
 ---
 
@@ -108,6 +116,10 @@ A `script/` directory may be placed at the package root, containing install life
 **Detection priority (0.9.9+)**:
 1. `.lua` — cross-platform, highest priority (if present, used directly)
 2. Platform-specific fallback: `.ps1` → `.bat` (Windows) or `.sh` (Linux/macOS)
+
+> **Why prefer `.lua` hooks?** One Lua script runs on every platform and is
+> sandbox-safe, replacing the separate `.sh` / `.ps1` / `.bat` fallbacks. The shell
+> variants stay for legacy packages that have not migrated.
 
 **Execution flow**:
 1. Extract package to temporary directory
@@ -183,6 +195,11 @@ Note: `ezmk pkg install` does not support multiple scopes.
 
 An official default repository is pre-registered during installation so packages can be installed by name (`ezmk pkg install fmt -u`). Packages can also be installed from the following sources:
 
+> **Why accept a file, URL, or name?** One `install` command covers every way a
+> package can be obtained — a local archive, a remote download, or a bare package
+> name looked up in the registered repositories. Name-based install is the daily
+> path once a repo is registered; the file/URL forms handle everything else.
+
 ### Local Files
 
 ```bash
@@ -204,6 +221,11 @@ URL format notes:
 - URL auto-detection: if the argument contains `://`, or contains both `.` and `/` and is not a locally existing file, it is treated as a URL
 - Downloaded to `.ezmk/temp/`, extracted and installed; temp files deleted after install
 
+> **Why auto-detect URLs?** The heuristic (contains `://`, or has both `.` and `/`
+> and is not a local file) lets `pkg install` tell a URL apart from a file path, so
+> the protocol can be omitted — `example.com/path/pkg.zip` defaults to `https://` —
+> without a real local archive ever being mistaken for a URL.
+
 ### Repository Search (0.1.3+)
 
 If repositories have been registered via `ezmk repo add`, packages can be installed by name without providing a full URL or file path:
@@ -219,6 +241,10 @@ Search order:
 2. Search by name in local cache of registered repos (project → user → global)
 3. Still not found → error
 
+> **Why search every registered repo?** So a bare package name resolves no matter
+> which repo (or scope) hosts it — you never need to remember which repository
+> provides a package, and a mirror works transparently as a fallback.
+
 See `repo.md` for details.
 
 ---
@@ -226,6 +252,10 @@ See `repo.md` for details.
 ## Offline / Air-gapped Usage [0.9.4+]
 
 When working without internet access, you have three options for installing packages:
+
+> **Why dedicated offline options?** Bundled packages moved into the official repo
+> (0.9.3), so installs now normally need the network. These options restore offline
+> use — a local mirror, a manual archive, or a pre-staged image.
 
 ### Option 1: Local repository mirror
 
