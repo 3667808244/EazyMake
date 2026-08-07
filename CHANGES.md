@@ -12,6 +12,34 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.1.0 (2026-08-07) — 正式版发布
+
+合并 `1.1.0-dev.1` ~ `dev.7` 与 `1.1.0-pre.1` ~ `pre.3` 的正式版：包编译与开发体验（dev）+ 用户触达改善（pre.1）+ 文档检查（pre.2）+ 缺陷收集与 CI（pre.3）。**公共 API 自此永久稳定**（见文首 API Stability）。
+
+### 里程碑
+
+从 1.0.0 到 1.1.0 的关键交付：
+
+- **包编译与产物安装**：`precompiled` 包、`[install]` 配置节、`ezmk project install`
+- **多平台共包与分发**：`os_arch_toolchain` triple、`index.toml` 平台映射、`ezmk project pack`
+- **测试系统**：`ezmk test`（Catch2 + ezmk 内置框架）、`[test]` 配置节、30s 超时
+- **包生态**：硬依赖前置检查 + 自动安装、`want` 可选依赖交互询问
+- **开发体验**：顶层别名、`--help` 重组、Agent Skills、`stdlib`/`lang` 泛化、GNU 扩展、`ezmk-official-utils`
+- **质量与 CI**：`.github/workflows/ci.yml`（push/PR）、测试系统缺陷修复、zsh 补全修正、`check_i18n.py` 三向校验
+- **发布与分发**：`v1.1.0` GitHub Release（`release.yml` 首次真实运行：linux-x64 / windows-x64 / macos-arm64 + 独立 `ezmk.exe`）、Homebrew formula（`homebrew-eazymake`）、README 安装脚本回归（修复 release.yml 缺独立 exe 依赖）
+
+### 发布后跟进项
+
+- `macos-x64` 产物：Intel `macos-13` runner 在 GitHub free tier 长期无分配，job 仍在队列（runner 可用时自动上传至同一 Release）
+- winget manifest：Release 产出便携二进制而非 winget 安装器，且 `winget-pkgs` PR 需 fork 大仓——作为发布后跟进项
+- `brew install` / `install.sh` Linux 真机烟测
+
+### 测试
+
+全量测试零回归：单元 546 用例 / 2617 断言 · 含集成 556 用例 / 2666 断言。
+
+---
+
 ## 1.1.0-pre.3 (2026-08-04) — 缺陷收集与未实现项补全
 
 聚合 pre.2 之后的全量已知缺陷与未实现项：测试系统缺陷修复、CI 测试工作流、工具/文档缺陷修正，以及发布流水线文档项。

@@ -2,7 +2,7 @@
 
 > 详细设计：[`plans/1.1.0/1.1.0.md`](plans/1.1.0/1.1.0.md)
 >
-> **状态：🔄 发布准备中。** 这是 1.1.0 正式版发布执行计划，聚合 dev.1~dev.7 + pre.1~pre.3 的全部交付，并收口 pre.3 延后的 3.3.x 发布流水线项（release.yml 首次真实激活 / Homebrew / winget）。前置条件为 `1.1.0-pre.3` 全部缺陷修复与 CI 工作流已完成（✅，见 `CHANGES.md`）。
+> **状态：✅ 已完成（1.1.0 正式版已发布）。** 这是 1.1.0 正式版发布执行计划，聚合 dev.1~dev.7 + pre.1~pre.3 的全部交付，并收口 pre.3 延后的 3.3.x 发布流水线项。前置条件为 `1.1.0-pre.3` 全部缺陷修复与 CI 工作流已完成（✅，见 `CHANGES.md`）。
 >
 > **⛔ 发布门槛**：实现完整 + API 兼容 + 全量测试零回归，三项同时满足才可发布。详细 Gate 定义见 [1.1.0-pre.3](plans/1.1.0/1.1.0-pre.3.md#-发布门槛release-gate)。
 
@@ -26,14 +26,14 @@
 
 | # | 目标 | 类别 | 优先级 | 状态 |
 |---|------|------|--------|------|
-| 1 | 冻结与回归：`bash build.sh test-all` 全量零回归（556/2666）+ CI 绿色 | 门槛 | P0 | 待执行 |
-| 2 | 打 `v1.1.0` tag 触发 `release.yml` 首次真实 Release | 发布 | P0 | 待执行 |
-| 3 | 4 平台产物核验（windows/linux/macos x64+arm64，含 `_ezmk` 拷贝 + `./ezmk version`） | 发布 | P0 | 待执行 |
-| 4 | Homebrew formula `homebrew-eazymake/ezmk.rb`（Release 产物 URL + sha256） | 分发 | P1 | 待执行 |
-| 5 | winget manifest `manifests/e/ezmk/1.1.0.yaml`（Release `.exe` URL + sha256） | 分发 | P1 | 待执行 |
-| 6 | `install.sh`（Linux，含 zsh 补全）/ `install.ps1`（Windows 预编译）回归 | 回归 | P1 | 待执行 |
-| 7 | `CHANGES.md` 新增 `1.1.0` 条目（汇总 dev/pre 交付，标注里程碑） | 文档 | P1 | 待执行 |
-| 8 | `plans/README.md` / `plan.md` 状态收口（1.1.0 → 已完成） | 文档 | P2 | 待执行 |
+| 1 | 冻结与回归：`bash build.sh test-all` 全量零回归（556/2666）+ CI 绿色 | 门槛 | P0 | ✅ 已完成 |
+| 2 | 打 `v1.1.0` tag 触发 `release.yml` 首次真实 Release | 发布 | P0 | ✅ 已完成 |
+| 3 | 4 平台产物核验（windows/linux/macos x64+arm64，含 `_ezmk` 拷贝 + `./ezmk version`） | 发布 | P0 | ✅ 3/4（macos-x64 跟进） |
+| 4 | Homebrew formula `homebrew-eazymake/ezmk.rb`（Release 产物 URL + sha256） | 分发 | P1 | ✅ 已完成（brew 烟测延后真机） |
+| 5 | winget manifest `manifests/e/ezmk/1.1.0.yaml`（Release `.exe` URL + sha256） | 分发 | P1 | 🔄 延后跟进（见 §6） |
+| 6 | `install.sh`（Linux，含 zsh 补全）/ `install.ps1`（Windows 预编译）回归 | 回归 | P1 | 🔄 部分（资产已修，真机/下载受网络限） |
+| 7 | `CHANGES.md` 新增 `1.1.0` 条目（汇总 dev/pre 交付，标注里程碑） | 文档 | P1 | ✅ 已完成 |
+| 8 | `plans/README.md` / `plan.md` 状态收口（1.1.0 → 已完成） | 文档 | P2 | ✅ 已完成 |
 | 9 | 版本号就绪：`version.hpp` / `build.sh` 默认版本为 `1.1.0` | 预置 | P0 | ✅ 已就绪 |
 | 10 | `plans/1.1.0/1.1.0.md` 发布计划 + Tutorial 09/10 | 预置 | P2 | ✅ 已交付（pre.3） |
 
@@ -79,15 +79,15 @@
 
 > **阶段三发现并修复的发布流水线缺陷**：`install.ps1`（dev.5 编写）从 Release 下载独立 `ezmk.exe`，但 `release.yml`（pre.1/pre.2 建立、首次真实运行）只打包 zip——首真实 Release 暴露此 gap。已修复：① 手动上传 `ezmk.exe` + `ezmk.exe.sha256` 至 v1.1.0；② `release.yml` windows-x64 job 增加独立 exe + checksum 打包上传（未来 Release 自动携带）。`install.sh` 走源码构建，无此问题。
 
-### 阶段四：收尾
+### 阶段四：收尾 ✅
 
 **文件**：`CHANGES.md` + `plans/README.md` + `plan.md`
 
-- [ ] `CHANGES.md` 新增 `1.1.0` 条目（汇总 dev.1~dev.7 + pre.1~pre.3 全部交付，标注里程碑）
-- [ ] `plans/README.md` 更新：1.1.0 从「当前执行」移至「已完成」，路线图推进至 2.0.0
-- [ ] 更新 `plan.md`（本计划 → 收口状态）
-- [ ] **发布门槛最终核对**（§2.1 三项）：实现完整 / API 兼容 / 全量测试零回归
-- [ ] 若任何一项不满足：**回退 tag 并修复，禁止带病发布**
+- [x] `CHANGES.md` 新增 `1.1.0` 条目（汇总 dev.1~dev.7 + pre.1~pre.3 全部交付，标注里程碑 + 发布后跟进项）
+- [x] `plans/README.md` 更新：1.1.0 从「当前执行」移至「已完成」，路线图推进至 2.0.0
+- [x] 更新 `plan.md`（本计划 → 收口状态）
+- [x] **发布门槛最终核对**（§2.1 三项）：① 实现完整（dev.1~pre.3 全交付 + 3.3.x 收口或明确延后）；② API 兼容（`CHANGES.md` 稳定性承诺，无破坏性变更）；③ 全量测试零回归（`bash build.sh test-all` 556/2666 + CI run #31171539927 全绿）——**三项均满足，予以发布**
+- [x] 回退条件核对：无任何门槛项不满足，未触发回退（macos-x64 runner 缺货为基础设施跟进项，非实现/兼容/回归缺陷）
 
 ---
 
@@ -119,9 +119,11 @@
 
 ---
 
-## 6 延后项
+## 6 延后项（发布后跟进）
 
-- **winget 审批合并**：提交 `microsoft/winget-pkgs` 后由官方维护者审批，周期不可控——不阻塞 1.1.0 发布，作为发布后跟进项
+- **macos-x64 产物**：Intel `macos-13` runner 在 GitHub free tier 长期无分配，job 仍在队列（runner 可用时自动构建并上传 `ezmk-macos-x64.tar.gz` 至 v1.1.0 Release；若被取消则 `gh run rerun` 重触发），届时补核验
+- **winget manifest**：Release 产出便携 `ezmk.exe`/zip 而非 winget 安装器（需独立安装器或 zip/portable 类型改造），且 `microsoft/winget-pkgs` PR 需 fork 大仓受网络限制——作为发布后跟进项，提交后由官方审批（周期不可控，不阻塞）
+- **真机烟测**：`brew install`（Linux/macOS）、`install.sh` Linux 真机（含 zsh 补全，CI zsh-completions job 已覆盖激活逻辑）、install.ps1 端到端下载（本机 github.com 网络阻断，正常网络下 Release 资产已就绪）
 - **2.0.0 破坏性变更窗口**：`CHANGES.md` API 稳定性承诺——破坏性变更仅在 `2.0.0` 引入，且至少在 1 个 minor 版本前给出 deprecation warning；1.1.0 无任何破坏性变更
 
 ---
