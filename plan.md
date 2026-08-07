@@ -1,12 +1,12 @@
 # EazyMake 1.1.0-pre.3 执行计划
 
-> 详细设计：[`plans/release/1.1.0-pre.3.md`](plans/release/1.1.0-pre.3.md)
+> 详细设计：[`plans/1.1.0/1.1.0-pre.3.md`](plans/1.1.0/1.1.0-pre.3.md)
 >
 > **状态：✅ 已完成（1.1.0-pre.3 收口）。** 聚合 pre.2（文档检查）之后的全量已知缺陷与未实现项：测试系统缺陷（超时未实现 / Catch2 解析脆弱 / build-first 粗糙 / watch flaky）、CI 测试工作流缺失、工具/文档缺陷，以及 pre.1 / pre.2 延后的发布流水线项。
 >
 > 阶段一完成：`run_command()` 超时、Catch2 解析加固、`check_built` 修正、watch 集成测试去 flaky；`bash build.sh test` 546/2617 + `test-all` 556/2666 全量零回归。
 >
-> 阶段二~四完成：CI 工作流（`.github/workflows/ci.yml`，含 Ubuntu/MSYS2 测试 + zsh 补全回归 job）、`build.sh` 测试退出码 gate、`check_i18n.py` 三向校验、过时基线修正、Tutorial 09/10、`plans/release/1.1.0.md` 最终发布计划。**3.3.1~3.3.3（release.yml 首次激活 / Homebrew / winget）依赖真实 Release 产物的 URL 与哈希，明确收口至 1.1.0 正式版发布时执行**（见 `plans/release/1.1.0.md` 阶段二/三）。
+> 阶段二~四完成：CI 工作流（`.github/workflows/ci.yml`，含 Ubuntu/MSYS2 测试 + zsh 补全回归 job）、`build.sh` 测试退出码 gate、`check_i18n.py` 三向校验、过时基线修正、Tutorial 09/10、`plans/1.1.0/1.1.0.md` 最终发布计划。**3.3.1~3.3.3（release.yml 首次激活 / Homebrew / winget）依赖真实 Release 产物的 URL 与哈希，明确收口至 1.1.0 正式版发布时执行**（见 `plans/1.1.0/1.1.0.md` 阶段二/三）。
 
 ---
 
@@ -17,7 +17,7 @@
 1. **测试系统存在实现缺陷**：`run_tests()`（`src/build.cpp`）的超时逻辑未实现（`timed_out` 恒为 0）、Catch2 输出依赖脆弱的文本解析、`shared`/`utils` 类型的 build-first 检查粗糙；watch 集成测试存在 timing-sensitive 误报可能
 2. **缺少 CI 测试工作流**：`.github/workflows/` 仅有 `release.yml`（Release 触发，从未实际跑过），没有任何在 push/PR 上运行 `bash build.sh test` 的工作流——回归全靠本地
 3. **若干文档引用了不存在的工具/过时数据**：`package_authoring.md` §6.3 引用 `ezmk utils sha256`（未发布）；`ezmk-test` skill 记录的测试基线已过时（~538/2440，实际 545/2613）
-4. **pre.1 / pre.2 延后项仍未做**：CI 激活、Homebrew formula、winget manifest、`plans/release/1.1.0.md`、Tutorial 09/10 章节
+4. **pre.1 / pre.2 延后项仍未做**：CI 激活、Homebrew formula、winget manifest、`plans/1.1.0/1.1.0.md`、Tutorial 09/10 章节
 5. **zsh 补全从未在真实 zsh 环境验证**（Windows 无法验证）；i18n 三方一致性无自动化脚本
 
 本版本将这些缺陷与未实现项汇总为可执行的清单，并以「⛔ 发布门槛」约束 1.1.0 正式版的发布条件。
@@ -40,7 +40,7 @@
 | 10 | `release.yml` CI 激活（触发测试 + 首次真实 Release） | 未实现 | P2 | 🔄 收口至 1.1.0（需真实 Release） |
 | 11 | Homebrew formula（`homebrew-eazymake/ezmk.rb`） | 未实现 | P2 | 🔄 收口至 1.1.0（需 Release 产物哈希） |
 | 12 | winget manifest（`manifests/e/ezmk/1.1.0.yaml`） | 未实现 | P2 | 🔄 收口至 1.1.0（需 Release .exe） |
-| 13 | `plans/release/1.1.0.md` 最终发布计划 | 未实现 | P2 | ✅ 已实现 |
+| 13 | `plans/1.1.0/1.1.0.md` 最终发布计划 | 未实现 | P2 | ✅ 已实现 |
 | 14 | Tutorial 09-test.md + 10-top-level-aliases.md | 未实现 | P2 | ✅ 已实现 |
 | 15 | **发布门槛生效**：实现未完成或兼容性破坏不得发布 | 门槛 | P0 | ✅ 已生效（1.1.0 发布前核对） |
 
@@ -81,20 +81,20 @@
 
 ### 阶段四：发布流水线（P2，可与 pre.3 并行或在 1.1.0 收尾）🔄
 
-**文件**：`.github/workflows/release.yml` + `homebrew-eazymake/ezmk.rb`（外部仓库）+ `manifests/e/ezmk/1.1.0.yaml` + `plans/release/1.1.0.md`（新建）+ `tutorial/{en,zh}/09-test.md` / `10-top-level-aliases.md`（新建）
+**文件**：`.github/workflows/release.yml` + `homebrew-eazymake/ezmk.rb`（外部仓库）+ `manifests/e/ezmk/1.1.0.yaml` + `plans/1.1.0/1.1.0.md`（新建）+ `tutorial/{en,zh}/09-test.md` / `10-top-level-aliases.md`（新建）
 
 - [x] **3.3.1（部分）**：`release.yml` 结构已核对（4 平台构建/打包 + `res/ezmk.zsh` 拷贝路径存在）；首次真实激活需在 1.1.0 发布时打 tag 触发
 - [ ] **3.3.1 剩余**：触发真实 Release 验证（→ 1.1.0）
 - [ ] **3.3.2**：Homebrew formula `homebrew-eazymake/ezmk.rb`（依赖 Release 产物 URL/哈希，→ 1.1.0）
 - [ ] **3.3.3**：winget manifest `manifests/e/ezmk/1.1.0.yaml`（依赖 Release `.exe`，→ 1.1.0）
-- [x] **3.3.4**：`plans/release/1.1.0.md` 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3）
+- [x] **3.3.4**：`plans/1.1.0/1.1.0.md` 最终发布计划（合并 dev.1~dev.7 + pre.1~pre.3）
 - [x] **3.3.5**：Tutorial `09-test.md`（`ezmk test` 专题教程：`[test]` 配置 + 两种框架）
 - [x] **3.3.6**：Tutorial `10-top-level-aliases.md`（顶层别名快速参考）
 
 ### 阶段五：回归与收尾
 
 - [x] `bash build.sh test`（单元 546/2617）+ `test-all`（含集成 556/2666）全量零回归
-- [x] **发布门槛核对**：① 实现清单全部完成或明确收口（3.3.1~3.3.3 明确延后至 1.1.0，见 `plans/release/1.1.0.md`）；② 公共 API 无破坏性变更（`CHANGES.md` API 稳定承诺，顶层别名/`[test]`/`[install]` 均为纯增量）；③ 全量测试零回归
+- [x] **发布门槛核对**：① 实现清单全部完成或明确收口（3.3.1~3.3.3 明确延后至 1.1.0，见 `plans/1.1.0/1.1.0.md`）；② 公共 API 无破坏性变更（`CHANGES.md` API 稳定承诺，顶层别名/`[test]`/`[install]` 均为纯增量）；③ 全量测试零回归
 - [x] 更新 `plan.md`（本计划状态）+ `plans/README.md`（pre.3 进展 / 移至已完成）
 
 ---
@@ -129,7 +129,7 @@
 
 ## 6 延后项（1.1.0 正式版收尾）
 
-以下 3.3.x 项**依赖真实 GitHub Release 产物的 URL 与哈希**，无法在发布前伪造完成，已明确收口至 1.1.0 正式版发布时执行（步骤见 `plans/release/1.1.0.md` 阶段二/三）：
+以下 3.3.x 项**依赖真实 GitHub Release 产物的 URL 与哈希**，无法在发布前伪造完成，已明确收口至 1.1.0 正式版发布时执行（步骤见 `plans/1.1.0/1.1.0.md` 阶段二/三）：
 
 - `.github/workflows/release.yml` 激活 + 首次真实 Release 验证（打 `v1.1.0` tag 触发 4 平台构建/打包）
 - Homebrew formula（`homebrew-eazymake/ezmk.rb`）——用 Release 的 `ezmk-linux-x64.tar.gz` URL + sha256
@@ -155,7 +155,7 @@
 | `.github/copilot-instructions.md` | 修改 | 测试基线 ~538/2440 → 546/2617 |
 | `docs/{en,zh}/technical.md` | 修改 | 测试基线 545 → 546 + test-all 556/2666 |
 | `install.sh` | 修改 | zsh 补全 marker 精确匹配 + ZDOTDIR（**已应用**） |
-| `plans/release/1.1.0.md` | **新建** | 1.1.0 最终发布计划（阶段四） |
+| `plans/1.1.0/1.1.0.md` | **新建** | 1.1.0 最终发布计划（阶段四） |
 | `tutorial/{en,zh}/09-test.md` + `10-top-level-aliases.md` | **新建** | 教程新增章节（阶段四，README 同步） |
 | `plan.md` | 重写 | pre.3 执行计划（本次，已收口） |
 
@@ -168,5 +168,5 @@
                  → 1.1.0-pre.1 (改善用户触达) ✅
                  → 1.1.0-pre.2 (文档检查) ✅
                  → 1.1.0-pre.3 (缺陷收集与未实现项补全) ✅
-                 → 1.1.0 (正式版发布) → 计划见 plans/release/1.1.0.md
+                 → 1.1.0 (正式版发布) → 计划见 plans/1.1.0/1.1.0.md
 ```

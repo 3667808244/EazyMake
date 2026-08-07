@@ -12,29 +12,37 @@ trigger:
 
 ```
 plans/
-├── README.md              # Version index + roadmap + dependency graph
-├── dev/                   # Early development version plans (0.1.6 ~ 0.2.6)
+├── README.md              # Version index + roadmap + dependency graph (series-level)
+├── 0.x.x/                 # Early development version plans (0.1.6 ~ 0.2.6)
+│   ├── README.md          #   series version index
 │   ├── 0.1.6.md
 │   ├── 0.1.7.md
 │   └── ...
-├── release/               # Release version plans (0.9.0 ~ 1.1.0)
+├── 1.0.0/                 # Plans leading to 1.0.0 (0.9.0 ~ 1.0.0)
+│   ├── README.md          #   series version index
 │   ├── 0.9.0.md
-│   ├── 1.0.0.md
-│   ├── 1.1.0-dev.1.md     # 1.1.0 sub-versions (dev.1 ~ dev.6)
-│   ├── 1.1.0-dev.2.md
-│   └── ...
+│   ├── 0.9.1.md
+│   └── 1.0.0.md
+├── 1.1.0/                 # 1.1.0 release series (dev.1 ~ dev.7, pre.1 ~ pre.3, 1.1.0)
+│   ├── README.md          #   series version index
+│   ├── 1.1.0-dev.1.md
+│   ├── 1.1.0-pre.1.md
+│   └── 1.1.0.md
 └── (root)
     └── plan.md             # Current execution plan — mirrors the active version's design doc
 ```
 
-- **`dev/`** — plans for early development versions (0.1.x ~ 0.2.x). All completed.
-- **`release/`** — plans for release versions (0.9.0+) and current dev sub-versions. Each sub-version (e.g. 1.1.0-dev.3) has its own detailed design document here.
+- **`plans/README.md`** — top-level index: brief description + link for each major series (0.x.x / 1.0.0 / 1.1.0), roadmap, dependency graph, and cross-version concerns.
+- **`0.x.x/`** — plans for early development versions (0.1.x ~ 0.2.x). All completed.
+- **`1.0.0/`** — plans for release versions leading up to 1.0.0 (0.9.0 ~ 1.0.0).
+- **`1.1.0/`** — plans for the 1.1.0 release series: dev sub-versions (`1.1.0-dev.N`), pre-releases (`1.1.0-pre.N`), and the final `1.1.0` plan. Each sub-version has its own detailed design document here.
+- **`<series>/README.md`** — per-series version index: overview + version table (theme / deliverables / dependency) with links to each plan file.
 - **`plans/README.md`** — master index with version summaries, dependency graph (Mermaid), and cross-version concerns.
 - **`plan.md`** (repo root) — the **current execution plan**, derived from the active version's design doc. Contains checkboxes `[ ]` / `[x]` tracking per-phase progress.
 
 ## Plan document format
 
-Each version plan in `plans/release/` or `plans/dev/` follows this convention:
+Each version plan in `plans/0.x.x/`, `plans/1.0.0/`, or `plans/1.1.0/` follows this convention:
 
 ```markdown
 # EazyMake <version> — <short title>
@@ -67,7 +75,7 @@ The root-level `plan.md` is the executable version of the design doc. It follows
 ```markdown
 # EazyMake <version> 执行计划
 
-> 详细设计：plans/release/<version>.md
+> 详细设计：plans/<series>/<version>.md   # e.g. plans/1.1.0/1.1.0.md
 
 ---
 
@@ -83,7 +91,7 @@ The root-level `plan.md` is the executable version of the design doc. It follows
 
 ## Workflow for adding a new version plan
 
-1. **Create the design doc**: `plans/release/<version>.md` (or `plans/dev/<version>.md` for early dev)
+1. **Create the design doc**: `plans/<series>/<version>.md` — `0.x.x/` for early dev, `1.0.0/` for the 1.0.0 series, `1.1.0/` for the 1.1.0 series
    - Follow the standard format above
    - Include §1~§6 sections
 2. **Create the execution plan**: `plan.md` in repo root
@@ -109,9 +117,10 @@ As each phase is completed:
 
 | Pattern | Meaning |
 |---------|---------|
-| `0.1.6` ~ `0.2.6` | Early development (dev/ folder) |
-| `0.9.0` ~ `1.0.0` | Release candidates and stable release (release/ folder) |
+| `0.1.6` ~ `0.2.6` | Early development (0.x.x/ folder) |
+| `0.9.0` ~ `1.0.0` | Release candidates and stable release (1.0.0/ folder) |
 | `1.1.0-dev.N` | Sub-versions of 1.1.0 (incremental development) |
-| `1.1.0` | Final merged release |
+| `1.1.0-pre.N` | Pre-releases of 1.1.0 (documentation/checkpoints) |
+| `1.1.0` | Final merged release (1.1.0/ folder) |
 
 All completed dev sub-versions (dev.1 ~ dev.6) will eventually be merged into the final `1.1.0` release.
