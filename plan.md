@@ -41,16 +41,16 @@
 
 ## 3 执行阶段
 
-### 阶段一：冻结与回归（发布门槛预检）
+### 阶段一：冻结与回归（发布门槛预检）✅
 
 **文件**：`git status` / `build.sh` / `.github/workflows/ci.yml`（核验，不改动）
 
 - [x] `1.1.0-pre.3` 收尾提交全部合并，`git status` 干净（✅ pre.3 阶段五已收口）
 - [x] 版本号就绪：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.1.0`（`EZMK_VERSION` fallback）（✅ 已验证）
 - [x] 发布计划 `plans/1.1.0/1.1.0.md` + Tutorial `09-test.md` / `10-top-level-aliases.md`（en/zh）已完成（✅ pre.3 阶段四交付）
-- [ ] 本地全量回归：`bash build.sh test-all`（单元 546/2617 + 集成 556/2666）零回归
-- [ ] 确认 CI 工作流（`.github/workflows/ci.yml`）在最后一次 push 上绿色（含 zsh-completions job）
-- [ ] **发布门槛预检**（§2.1 三项）：① 实现完整（pre.3 清单收口，含 3.3.x 明确延后边界）；② API 兼容（`CHANGES.md` 稳定性承诺无破坏性变更）；③ 全量测试零回归
+- [x] 本地全量回归：`bash build.sh test-all`（单元 546/2617 + 集成 556/2666）零回归（✅ 556/2666 passed，exit 0）
+- [x] 确认 CI 工作流（`.github/workflows/ci.yml`）在最后一次 push 上绿色（含 zsh-completions job）（✅ run #31171539927，3 job 全绿）
+- [x] **发布门槛预检**（§2.1 三项）：① 实现完整（pre.3 清单收口，含 3.3.x 明确延后边界）；② API 兼容（`CHANGES.md` 稳定性承诺无破坏性变更）；③ 全量测试零回归（✅ 三项均满足）
 
 > 门槛未满足即停止，禁止带着未收口项打 tag。
 
