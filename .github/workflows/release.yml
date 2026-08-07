@@ -45,7 +45,7 @@ jobs:
         shell: msys2 {0}
         run: bash build.sh
 
-      - name: Package (zip)
+      - name: Package (zip) + standalone ezmk.exe
         shell: pwsh
         run: |
           $version = "${{ needs.version.outputs.version }}"
@@ -54,11 +54,20 @@ jobs:
           Copy-Item build/ezmk.exe dist/$name/
           Copy-Item res/ezmk.zsh dist/$name/_ezmk
           Compress-Archive -Path dist/$name/* -DestinationPath "dist/ezmk-windows-x64.zip"
+          # Standalone ezmk.exe + ezmk.exe.sha256 (required by install.ps1):
+          # install.ps1 downloads .../download/<tag>/ezmk.exe and verifies
+          # against ezmk.exe.sha256 (first whitespace token = lowercase hash).
+          Copy-Item build/ezmk.exe dist/ezmk.exe
+          $hash = (Get-FileHash build/ezmk.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  ezmk.exe" | Out-File dist/ezmk.exe.sha256 -Encoding ascii
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ezmk-windows-x64.zip
+          files: |
+            dist/ezmk-windows-x64.zip
+            dist/ezmk.exe
+            dist/ezmk.exe.sha256
 
   # ── Linux x64 ──────────────────────────────────────────────────────
   linux-x64:
