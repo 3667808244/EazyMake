@@ -68,14 +68,14 @@
 
 > **风险核销**：`release.yml` 首次真实运行未出现代码级错误——linux/windows/macos-arm64 三平台构建、`res/ezmk.zsh → _ezmk` 拷贝、产物打包上传全部成功，唯一问题（macos-x64 runner 缺货）属基础设施排队，非流水线缺陷。
 
-### 阶段三：分发渠道
+### 阶段三：分发渠道 ✅（真机烟测项延后）
 
 **文件**：`homebrew-eazymake/ezmk.rb`（外部仓库）+ `manifests/e/ezmk/1.1.0.yaml`（winget，外部仓库）+ `install.sh` / `install.ps1`（核验，不改动）
 
-- [ ] **Homebrew**：以 Release 的 `ezmk-linux-x64.tar.gz` URL + `sha256sum` 填 `homebrew-eazymake/ezmk.rb`，`brew install` 冒烟（⏳ 需先创建 tap 仓库，待用户确认）
-- [ ] **winget**：以 Release 的 Windows 安装包 URL + sha256 填 manifest，提交 `microsoft/winget-pkgs` PR（后续由 winget 官方审批合并，**不阻塞 1.1.0 发布**）（🔒 已发现 gap：release.yml 产出便携 `ezmk.exe`/zip 而非 winget 安装器，且 fork winget-pkgs 大仓受本机网络限制——按设计文档作为发布后跟进项）
-- [ ] **install.sh**：真实 Linux 环境验证 README 安装命令（`curl -fsSL .../install.sh | bash`），含 zsh 补全激活——顶层别名与子命令补全生效（CI zsh-completions job 已覆盖激活逻辑，此处为真机终验）（⚠️ 本机为 Windows 且无 WSL，需 Linux 真机；CI zsh job 已回归 install.sh 激活逻辑）
-- [x] **install.ps1**：Windows 预编译安装回归（`irm .../install.ps1 | iex`），验证从 Release 产物安装可用（✅ 发现并修复流水线缺陷：release.yml 仅打包 zip，install.ps1 需独立 `ezmk.exe`+`ezmk.exe.sha256`——已手动上传两资产至 v1.1.0 Release 并修改 release.yml 持久修复；脚本版本解析/checksum 格式核对通过；⚠️ 端到端下载在本机因 github.com 被阻断无法完成，属环境限制）
+- [x] **Homebrew**：创建 tap 仓库 `3667808244/homebrew-eazymake` + `Formula/ezmk.rb`（`ezmk-linux-x64.tar.gz` URL + sha256 `938f7ca8…7bf7`）并推送（✅ 已上线 `github.com/3667808244/homebrew-eazymake`；`brew tap 3667808244/eazymake && brew install ezmk` 烟测需 Linux/macOS 真机，本机无法执行）
+- [ ] **winget**：以 Release 的 Windows 安装包 URL + sha256 填 manifest，提交 `microsoft/winget-pkgs` PR（后续由 winget 官方审批合并，**不阻塞 1.1.0 发布**）（🔒 延后：release.yml 产出便携 `ezmk.exe`/zip 而非 winget 安装器（需独立安装器或 zip/portable 类型改造），且 fork `winget-pkgs` 大仓受本机网络限制——作为发布后跟进项，见 §6）
+- [ ] **install.sh**：真实 Linux 环境验证 README 安装命令（`curl -fsSL .../install.sh | bash`），含 zsh 补全激活（⚠️ 本机 Windows 无 WSL 无法真机执行；CI zsh-completions job 已回归 install.sh 激活逻辑，真机终验留待发布后）
+- [x] **install.ps1**：Windows 预编译安装回归（✅ 发现并修复流水线缺陷：release.yml 仅打包 zip 而 install.ps1 需独立 `ezmk.exe`+`ezmk.exe.sha256`——已手动上传两资产至 v1.1.0 Release 并持久修复 release.yml；脚本版本解析/checksum 格式核对通过；⚠️ 端到端下载在本机因 github.com 网络阻断无法完成，属环境限制，正常网络下 URL 资产已就绪）
 
 > **阶段三发现并修复的发布流水线缺陷**：`install.ps1`（dev.5 编写）从 Release 下载独立 `ezmk.exe`，但 `release.yml`（pre.1/pre.2 建立、首次真实运行）只打包 zip——首真实 Release 暴露此 gap。已修复：① 手动上传 `ezmk.exe` + `ezmk.exe.sha256` 至 v1.1.0；② `release.yml` windows-x64 job 增加独立 exe + checksum 打包上传（未来 Release 自动携带）。`install.sh` 走源码构建，无此问题。
 
