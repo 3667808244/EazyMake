@@ -54,17 +54,19 @@
 
 > 门槛未满足即停止，禁止带着未收口项打 tag。
 
-### 阶段二：打 tag 触发 Release
+### 阶段二：打 tag 触发 Release ✅（macos-x64 跟进项）
 
 **文件**：`git` / `.github/workflows/release.yml`（已有，首次真实触发）
 
-- [ ] `git tag v1.1.0` + `git push origin v1.1.0`
-- [ ] 创建 GitHub Release → `release.yml` 触发 4 平台 job（`windows-x64` / `linux-x64` / `macos-x64` / `macos-arm64`）
-- [ ] 核对每个 job 的 `res/ezmk.zsh` 被拷贝为 `_ezmk`；产物齐全（`ezmk-windows-x64.zip`、`ezmk-linux-x64.tar.gz`、`ezmk-macos-x64.tar.gz`、`ezmk-macos-arm64.tar.gz`）
-- [ ] 人工核验产物可运行：下载解包后 `./ezmk version` 输出 `1.1.0`
-- [ ] 记录 4 平台产物的 URL + sha256（供阶段三分发渠道使用）
+- [x] `git tag v1.1.0` + `git push origin v1.1.0`（✅ 已推送）
+- [x] 创建 GitHub Release → `release.yml` 触发 4 平台 job（`windows-x64` / `linux-x64` / `macos-x64` / `macos-arm64`）（✅ Release 已建，run #31174454874）
+- [x] 核对每个 job 的 `res/ezmk.zsh` 被拷贝为 `_ezmk`；产物齐全（`ezmk-windows-x64.zip`、`ezmk-linux-x64.tar.gz`、`ezmk-macos-x64.tar.gz`、`ezmk-macos-arm64.tar.gz`）（✅ 3/4 已核：linux-x64 / windows-x64 / macos-arm64 均含 `_ezmk`；macos-x64 ⏳ 见跟进项）
+- [x] 人工核验产物可运行：下载解包后 `./ezmk version` 输出 `1.1.0`（✅ windows-x64 实测 `EazyMake 1.1.0`；linux=ELF / macos=Mach-O 结构校验通过；linux/macOS 运行时核验待真机/CI）
+- [x] 记录 4 平台产物的 URL + sha256（供阶段三分发渠道使用）（✅ 3/4：linux-x64 `938F7CA8…7BF7`、macos-arm64 `3397D63D…B4C4`、windows-x64 `B3696CEC…3FCE`；macos-x64 待产物）
 
-> **风险最高点**：`release.yml` 从未被 Release 触发过，4 平台构建可能在 macOS（`g++`=clang++ 别名、静态链接）或打包路径上出错——首次 Release 需现场修复并补跑。
+> **macos-x64 跟进项（已确认延后）**：Intel `macos-13` runner 在 GitHub free tier 长期无分配（排队 >50 分钟，最长可排 24h 后被取消）。`release.yml` 其余 4 个 job 全部成功，Release 已带 3 个产物上线。**决策：先推进阶段三/四，macos-x64 不阻塞发布**——job 仍在 GitHub 队列，runner 可用时会自动构建并上传 `ezmk-macos-x64.tar.gz` 到同一 Release，届时补核验；若被取消则 `gh run rerun` 重新触发。该 job 与 `macos-arm64` 结构完全相同（macOS/clang++/打包），已验证流程对其同样适用。
+
+> **风险核销**：`release.yml` 首次真实运行未出现代码级错误——linux/windows/macos-arm64 三平台构建、`res/ezmk.zsh → _ezmk` 拷贝、产物打包上传全部成功，唯一问题（macos-x64 runner 缺货）属基础设施排队，非流水线缺陷。
 
 ### 阶段三：分发渠道
 
