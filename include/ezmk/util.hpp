@@ -101,6 +101,12 @@ void copy_recursive(const fs::path& from, const fs::path& to);
 // ezmk::fatal_error if both fail, so callers must NOT report success.
 void atomic_rename(const fs::path& from, const fs::path& to);
 
+// 1.1.2 C5: wrap a string as a TOML double-quoted string literal, escaping
+// `"` `\` and control chars. Writers that interpolate user-controlled strings
+// (project/package names, URLs) MUST use this — raw interpolation produces
+// invalid or injected TOML (e.g. a name containing a quote or newline).
+std::string toml_quote(std::string_view s);
+
 // Collect files matching extensions in a directory (non-recursive)
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);

@@ -598,6 +598,22 @@ TEST_CASE("write_default_config: round-trip executable", "[config]") {
     REQUIRE(cfg.depends.libs.empty());
 }
 
+TEST_CASE("write_default_config: escapes special chars in project name", "[config][1.1.2]") {
+    using namespace ezmk::config;
+
+    auto tmp = fs::temp_directory_path() / "ezmk_test_quote.toml";
+
+    // 1.1.2 C5: a name with a quote / newline must still produce parseable TOML
+    write_default_config(tmp, "my\"app\n2", "executable");
+    REQUIRE(fs::exists(tmp));
+
+    auto cfg = parse_config(tmp);
+    fs::remove(tmp);
+
+    REQUIRE(cfg.project.name == "my\"app\n2");
+    REQUIRE(cfg.project.type == "executable");
+}
+
 TEST_CASE("write_default_config: round-trip static", "[config]") {
     using namespace ezmk::config;
 

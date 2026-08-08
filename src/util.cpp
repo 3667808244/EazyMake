@@ -282,6 +282,25 @@ void atomic_rename(const fs::path& from, const fs::path& to) {
     }
 }
 
+// 1.1.2 C5: TOML double-quoted string literal with escaping.
+std::string toml_quote(std::string_view s) {
+    std::string r;
+    r.reserve(s.size() + 2);
+    r += '"';
+    for (char c : s) {
+        switch (c) {
+            case '"':  r += "\\\""; break;
+            case '\\': r += "\\\\"; break;
+            case '\n': r += "\\n";  break;
+            case '\t': r += "\\t";  break;
+            case '\r': r += "\\r";  break;
+            default:   r += c;      break;
+        }
+    }
+    r += '"';
+    return r;
+}
+
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts) {
     std::vector<fs::path> result;

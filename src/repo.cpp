@@ -103,28 +103,17 @@ void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
     auto path = list_toml_path(scope);
     fs::create_directories(path.parent_path());
 
-    // Escape special characters in TOML basic strings
-    auto esc = [](const std::string& s) -> std::string {
-        std::string r;
-        for (char c : s) {
-            if (c == '\\') r += "\\\\";
-            else if (c == '"') r += "\\\"";
-            else if (c == '\n') r += "\\n";
-            else r += c;
-        }
-        return r;
-    };
-
+    // 1.1.2 C5: converge on util::toml_quote (was a local esc lambda)
     std::ostringstream out;
     for (auto& e : entries) {
         out << "[[repos]]\n";
-        out << "name = \"" << esc(e.name) << "\"\n";
-        out << "url = \"" << esc(e.url) << "\"\n";
-        out << "type = \"" << esc(e.type) << "\"\n";
+        out << "name = " << util::toml_quote(e.name) << "\n";
+        out << "url = " << util::toml_quote(e.url) << "\n";
+        out << "type = " << util::toml_quote(e.type) << "\n";
         if (e.type == "git") {
-            out << "branch = \"" << esc(e.branch) << "\"\n";
+            out << "branch = " << util::toml_quote(e.branch) << "\n";
         }
-        out << "last_update = \"" << esc(e.last_update) << "\"\n";
+        out << "last_update = " << util::toml_quote(e.last_update) << "\n";
         out << "\n";
     }
 

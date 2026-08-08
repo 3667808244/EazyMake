@@ -744,13 +744,15 @@ EzConfig parse_config(const fs::path& toml_path) {
 void write_default_config(const fs::path& toml_path, std::string_view project_name,
                           std::string_view project_type) {
     std::string content;
+    // 1.1.2 C5: project name/type are user-controlled — escape for TOML so a
+    // name containing `"` or a newline cannot produce invalid/injected config.
     content += "[project]\n";
-    content += "name = \"";
-    content += project_name;
-    content += "\"\n";
-    content += "type = \"";
-    content += project_type;
-    content += "\"\n";
+    content += "name = ";
+    content += util::toml_quote(project_name);
+    content += "\n";
+    content += "type = ";
+    content += util::toml_quote(project_type);
+    content += "\n";
     content += "version = \"0.1.0\"\n";
     content += "language = \"C++17\"\n";
     content += "\n";

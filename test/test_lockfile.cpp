@@ -70,6 +70,25 @@ TEST_CASE("lockfile save/load: round-trips direct_deps", "[lockfile][1.1.2]") {
     REQUIRE(loaded->packages[0].name == "a");
 }
 
+TEST_CASE("lockfile save/load: escapes and round-trips special characters", "[lockfile][1.1.2]") {
+    TempDir tmp;
+    Lockfile lf;
+    lf.version = 1;
+    lf.direct_deps = { "my\"lib@^1.0" };
+    LockedPackage p;
+    p.name = "a\"b";
+    p.version = "1.0\nx";   // must not corrupt the lockfile
+    lf.packages = { p };
+
+    ezmk::lockfile::save(tmp.path, lf);
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->direct_deps == lf.direct_deps);
+    REQUIRE(loaded->packages.size() == 1);
+    REQUIRE(loaded->packages[0].name == "a\"b");
+    REQUIRE(loaded->packages[0].version == "1.0\nx");
+}
+
 TEST_CASE("depends_changed: transitive deps in packages do NOT trip a change", "[lockfile][1.1.2]") {
     // The bug this guards: cfg direct deps were compared against ALL lockfile
     // packages (incl. transitive/auto-installed), so --locked always fataled.

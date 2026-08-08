@@ -100,33 +100,35 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
 
     out << "[metadata]\n";
     out << "version = " << lf.version << "\n";
-    out << "generated_by = \"" << lf.generated_by << "\"\n";
-    out << "generated_at = \"" << lf.generated_at << "\"\n";
-    out << "toolchain = \"" << lf.toolchain << "\"\n";
-    out << "toolchain_version = \"" << lf.toolchain_version << "\"\n";
+    out << "generated_by = " << util::toml_quote(lf.generated_by) << "\n";
+    out << "generated_at = " << util::toml_quote(lf.generated_at) << "\n";
+    out << "toolchain = " << util::toml_quote(lf.toolchain) << "\n";
+    out << "toolchain_version = " << util::toml_quote(lf.toolchain_version) << "\n";
     // 1.1.2 C3: root project's direct deps (name or name@spec), sorted
     out << "direct_deps = [";
     for (size_t i = 0; i < lf.direct_deps.size(); ++i) {
         if (i > 0) out << ", ";
-        out << "\"" << lf.direct_deps[i] << "\"";
+        out << util::toml_quote(lf.direct_deps[i]);
     }
     out << "]\n\n";
 
+    // 1.1.2 C5: package name/version/url are user-controlled — toml_quote all
+    // interpolated strings so a `"` or newline cannot corrupt/inject ezmk.lock.
     for (auto& pkg : lf.packages) {
         out << "[[packages]]\n";
-        out << "name = \"" << pkg.name << "\"\n";
-        out << "version = \"" << pkg.version << "\"\n";
-        out << "source = \"" << pkg.source << "\"\n";
-        out << "source_url = \"" << pkg.source_url << "\"\n";
-        out << "sha256 = \"" << pkg.sha256 << "\"\n";
-        out << "type = \"" << pkg.type << "\"\n";
-        out << "scope = \"" << pkg.scope << "\"\n";
-        out << "platform = \"" << pkg.platform << "\"\n";
+        out << "name = " << util::toml_quote(pkg.name) << "\n";
+        out << "version = " << util::toml_quote(pkg.version) << "\n";
+        out << "source = " << util::toml_quote(pkg.source) << "\n";
+        out << "source_url = " << util::toml_quote(pkg.source_url) << "\n";
+        out << "sha256 = " << util::toml_quote(pkg.sha256) << "\n";
+        out << "type = " << util::toml_quote(pkg.type) << "\n";
+        out << "scope = " << util::toml_quote(pkg.scope) << "\n";
+        out << "platform = " << util::toml_quote(pkg.platform) << "\n";
         if (!pkg.dependencies.empty()) {
             out << "dependencies = [";
             for (size_t i = 0; i < pkg.dependencies.size(); ++i) {
                 if (i > 0) out << ", ";
-                out << "\"" << pkg.dependencies[i] << "\"";
+                out << util::toml_quote(pkg.dependencies[i]);
             }
             out << "]\n";
         } else {

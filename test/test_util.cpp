@@ -402,6 +402,15 @@ TEST_CASE("atomic_rename: missing source throws fatal_error", "[util][1.1.2]") {
     ezmk::util::remove_all(tmp);
 }
 
+// 1.1.2 C5: toml_quote — writers that interpolate user strings must escape.
+TEST_CASE("toml_quote: escapes special characters", "[util][1.1.2]") {
+    REQUIRE(toml_quote("plain") == "\"plain\"");
+    REQUIRE(toml_quote("a\"b") == "\"a\\\"b\"");
+    REQUIRE(toml_quote("a\\b") == "\"a\\\\b\"");
+    REQUIRE(toml_quote("line\nbreak") == "\"line\\nbreak\"");
+    REQUIRE(toml_quote("tab\there") == "\"tab\\there\"");
+}
+
 // ===================================================================
 // git_available()
 // ===================================================================
