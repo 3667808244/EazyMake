@@ -18,6 +18,7 @@
 #include "catch2.hpp"
 #include "test_helpers.hpp"
 #include "ezmk/util.hpp"
+#include "ezmk/crypto.hpp"
 #include "nlohmann_json.hpp"
 
 #include <algorithm>
@@ -767,4 +768,77 @@ TEST_CASE("integration: version constraint validation in build", "[integration][
         INFO("stderr: " << r.err);
         REQUIRE(r.exit_code == 0);
     }
+}
+
+// 1.1.2 C7: SOURCE_DATE_EPOCH is injected via child env (not process-global
+// setenv), so deterministic builds must reproduce identical objects under
+// parallel jobs. Two clean -j4 builds → identical .o hashes.
+TEST_CASE("integration: deterministic build is reproducible with parallel jobs", "[integration][1.1.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "det_proj";
+    fs::create_directories(proj_dir / "src");
+
+    file_write(proj_dir / "ezmk.toml",
+        "[project]\n"
+        "name = \"det_proj\"\n"
+        "type = \"executable\"\n"
+        "version = \"0.1.0\"\n"
+        "\n"
+        "[compile]\n"
+        "deterministic = true\n"
+        "source_date_epoch = 1700000000\n");
+
+    // deterministic builds require an existing ezmk.lock (strict mode);
+    // a project with no deps needs only a minimal metadata section.
+    file_write(proj_dir / "ezmk.lock",
+        "[metadata]\n"
+        "version = 1\n");
+
+    // 3 sources so -j4 actually runs workers in parallel
+    for (int i = 0; i < 3; ++i) {
+        file_write(proj_dir / "src" / ("a" + std::to_string(i) + ".cpp"),
+                   "int f" + std::to_string(i) + "() { return " + std::to_string(i) + "; }\n");
+    }
+    file_write(proj_dir / "src" / "main.cpp",
+               "int f0(); int f1(); int f2(); int main() { return f0() + f1() + f2(); }\n");
+
+    // project .o files land in .ezmk/temp/src/ (recursive)
+    auto hash_objs = [&]() -> std::vector<std::string> {
+        std::vector<std::string> hashes;
+        std::error_code ec;
+        for (auto& e : fs::recursive_directory_iterator(proj_dir / ".ezmk" / "temp", ec)) {
+            if (e.path().extension() == ".o") {
+                hashes.push_back(ezmk::crypto::sha256_file(e.path()));
+            }
+        }
+        std::sort(hashes.begin(), hashes.end());
+        return hashes;
+    };
+
+    {   // Build #1
+        ProcResult r = run_ezmk("project build -j4", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+    }
+    auto first = hash_objs();
+    REQUIRE(first.size() == 4);  // a0..a2 + main
+
+    {   // Force a full recompile, then build #2
+        std::error_code ec;
+        fs::remove_all(proj_dir / ".ezmk" / "cache", ec);
+        fs::remove_all(proj_dir / ".ezmk" / "temp", ec);
+        fs::remove_all(proj_dir / "build", ec);
+        ProcResult r = run_ezmk("project build -j4", proj_dir);
+        INFO("stdout: " << r.out);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+    }
+    auto second = hash_objs();
+
+    REQUIRE(first == second);  // reproducible under -j
 }

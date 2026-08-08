@@ -553,36 +553,15 @@ SingleCompileResult compile_one_source(const fs::path& src,
         util::info(util::color_msg(util::color::dim, "    cmd: " + cmd));
     }
 
-    // 1.1.0: set SOURCE_DATE_EPOCH for deterministic builds
-    std::string old_sde;
-    if (!sde_str.empty()) {
-        const char* cur = std::getenv("SOURCE_DATE_EPOCH");
-        if (cur) old_sde = cur;
-#ifdef EZMK_WIN
-        _putenv_s("SOURCE_DATE_EPOCH", sde_str.c_str());
-#else
-        setenv("SOURCE_DATE_EPOCH", sde_str.c_str(), 1);
-#endif
-    }
-
-    auto res = util::run_command(cmd);
-
-    // Restore SOURCE_DATE_EPOCH
-    if (!sde_str.empty()) {
-        if (!old_sde.empty()) {
-#ifdef EZMK_WIN
-            _putenv_s("SOURCE_DATE_EPOCH", old_sde.c_str());
-#else
-            setenv("SOURCE_DATE_EPOCH", old_sde.c_str(), 1);
-#endif
-        } else {
-#ifdef EZMK_WIN
-            _putenv_s("SOURCE_DATE_EPOCH", "");
-#else
-            unsetenv("SOURCE_DATE_EPOCH");
-#endif
-        }
-    }
+    // 1.1.0/1.1.2 C7: SOURCE_DATE_EPOCH is injected via the child's environment,
+    // not the process-global one. The old _putenv_s/setenv + restore mutated the
+    // global environment from worker threads — a data race that made deterministic
+    // -jN builds non-deterministic (thread A's value could leak into thread B's
+    // compiler, or A could unset it while B's compiler was still reading it).
+    // RunOptions.env reaches only the child (POSIX: setenv after fork).
+    util::RunOptions opts;
+    if (!sde_str.empty()) opts.env["SOURCE_DATE_EPOCH"] = sde_str;
+    auto res = util::run_command(cmd, opts);
     if (res.exit_code != 0) {
         std::ostringstream err;
         err << ezmk::i18n::fmt(ezmk::i18n::I18nKey::compilation_failed,
