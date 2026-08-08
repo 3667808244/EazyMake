@@ -32,8 +32,11 @@
 #endif
 
 // ---- miniz (C API, compiled together) ----
-#define MINIZ_NO_TIME
-#define MINIZ_NO_ARCHIVE_WRITING_APIS
+// NOTE (1.1.2 S1): do NOT define MINIZ_NO_TIME / MINIZ_NO_ARCHIVE_WRITING_APIS
+// here. The vendor sources (miniz_zip.c) are compiled WITHOUT those macros, so
+// mz_zip_archive_file_stat would have a different layout (m_time field present
+// vs absent) across TUs — mz_zip_reader_file_stat() writes the full struct and
+// would corrupt extract_zip()'s local stat (shifted fields + out-of-bounds).
 extern "C" {
 #include "miniz.h"
 }
@@ -506,6 +509,58 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
 // Archive extraction
 // ===================================================================
 
+// 1.1.2 S1: 解压输出大小上限，防止 zip-bomb（解压后数据超过该值直接拒绝）。
+// tar.gz 路径先把整个解压结果读进内存，故必须有界。
+constexpr size_t kMaxDecompressedSize = size_t(1) << 30; // 1 GiB
+
+// 1.1.2 S1: 把归档条目名解析为 dest 内的安全目标路径。
+// 归档条目名是不可信输入，须同时防三种逃逸：
+//   - `..` 分量（`../evil`、`..\evil`）——`\` 与 `/` 一律视为分隔符处理；
+//   - 绝对路径（以 `/` 或 `\` 开头，POSIX 下 operator/ 会整体替换 dest）；
+//   - 盘符 / UNC（`C:\...`、`\\server\share`，仅 Windows 有意义，统一拒绝）。
+// 最后再经 lexically_normal 做一次目录边界兜底检查，任何一步违规抛 runtime_error。
+static fs::path safe_extract_path(const fs::path& dest, std::string_view entry) {
+    std::string name(entry);
+
+    // 盘符（`C:`）与 UNC 前缀（`\\server` / `//server`）
+    if (name.size() >= 2 && std::isalpha(static_cast<unsigned char>(name[0])) && name[1] == ':') {
+        throw std::runtime_error("unsafe path in archive: " + name);
+    }
+    if (name.compare(0, 2, "\\\\") == 0 || name.compare(0, 2, "//") == 0) {
+        throw std::runtime_error("unsafe path in archive: " + name);
+    }
+
+    // 绝对路径
+    if (!name.empty() && (name.front() == '/' || name.front() == '\\')) {
+        throw std::runtime_error("unsafe path in archive: " + name);
+    }
+
+    // 按 `/` 与 `\` 切分，拒绝任何 `..` 分量（`.`. 分量无害，normalize 时消除）
+    std::string component;
+    for (size_t i = 0; i <= name.size(); ++i) {
+        char c = (i < name.size()) ? name[i] : '\0';
+        if (i == name.size() || c == '/' || c == '\\') {
+            if (component == "..") {
+                throw std::runtime_error("unsafe path in archive: " + name);
+            }
+            component.clear();
+        } else {
+            component += c;
+        }
+    }
+
+    // 兜底：normalize 后必须仍在 dest 之内（前缀 + 目录边界，防上述检查漏判）
+    fs::path joined = (dest / name).lexically_normal();
+    std::string jp = joined.generic_string();
+    std::string dp = dest.lexically_normal().generic_string();
+    if (jp.size() < dp.size() ||
+        jp.compare(0, dp.size(), dp) != 0 ||
+        (jp.size() > dp.size() && jp[dp.size()] != '/')) {
+        throw std::runtime_error("unsafe path in archive: " + name);
+    }
+    return joined;
+}
+
 void extract_zip(const fs::path& archive, const fs::path& dest) {
     mz_zip_archive zip{};
     if (!mz_zip_reader_init_file(&zip, archive.string().c_str(), 0)) {
@@ -515,7 +570,7 @@ void extract_zip(const fs::path& archive, const fs::path& dest) {
     for (mz_uint i = 0; i < num; ++i) {
         mz_zip_archive_file_stat stat{};
         if (!mz_zip_reader_file_stat(&zip, i, &stat)) continue;
-        fs::path out = dest / stat.m_filename;
+        fs::path out = safe_extract_path(dest, stat.m_filename);
         if (mz_zip_reader_is_file_a_directory(&zip, i)) {
             fs::create_directories(out);
         } else {
@@ -568,7 +623,9 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
     // Decompress with tinfl — gzip uses raw deflate (no zlib header).
     // The gzip header was already stripped by skip_gzip_header.
     std::vector<uint8_t> out;
-    out.resize(compressed.size() * 4);
+    // 1.1.2 S1: 初始容量与增长都封顶，超限抛错（防 zip-bomb / OOM）
+    size_t initial = compressed.size() * 4;
+    out.resize(std::min<size_t>(std::max<size_t>(initial, 1), kMaxDecompressedSize));
     size_t out_pos = 0;
 
     tinfl_decompressor inflator{};
@@ -579,7 +636,11 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
         size_t in_bytes = src_len - in_pos;
         size_t out_bytes = out.size() - out_pos;
         if (out_bytes == 0) {
-            out.resize(out.size() * 2);
+            size_t new_size = std::min<size_t>(out.size() * 2, kMaxDecompressedSize);
+            if (new_size <= out_pos) {
+                throw std::runtime_error("gzip decompression exceeds size limit");
+            }
+            out.resize(new_size);
             out_bytes = out.size() - out_pos;
         }
 
@@ -645,7 +706,7 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
 
         if (typeflag == '0' || typeflag == '\0') {
             // Regular file
-            fs::path outpath = dest / name;
+            fs::path outpath = safe_extract_path(dest, name);
             fs::create_directories(outpath.parent_path());
             if (off + fsize <= out.size()) {
                 std::ofstream fout(outpath, std::ios::binary);
@@ -653,7 +714,7 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
             }
         } else if (typeflag == '5') {
             // Directory
-            fs::create_directories(dest / name);
+            fs::create_directories(safe_extract_path(dest, name));
         }
         // Skip data, rounded up to 512
         off += (fsize + 511) & ~511ULL;

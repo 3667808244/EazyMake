@@ -3,6 +3,12 @@
 #include "catch2.hpp"
 #include "ezmk/util.hpp"
 
+// miniz C API — used only to build malicious/valid archive fixtures for the
+// extraction security tests (1.1.2 S1). Same extern "C" wrapping as util.cpp.
+extern "C" {
+#include "miniz.h"
+}
+
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -569,6 +575,184 @@ TEST_CASE("extract_archive: empty/invalid zip throws", "[util]") {
 TEST_CASE("extract_archive: nonexistent file throws", "[util]") {
     REQUIRE_THROWS_AS(extract_archive("nonexistent_archive_xyz.zip",
         fs::temp_directory_path() / "out"), std::runtime_error);
+}
+
+// ===================================================================
+// Archive extraction security — 1.1.2 S1 (zip-slip / path traversal)
+// ===================================================================
+//
+// Malicious archive entry names are untrusted input: "../x", absolute paths,
+// drive letters / UNC, and backslash separators must never escape `dest`.
+
+namespace {
+
+// Build one tar entry: 512-byte header + content padded to 512.
+std::string make_tar_entry(const std::string& name, char typeflag, const std::string& content) {
+    std::string hdr(512, '\0');
+    auto oct = [](size_t n, unsigned long v) -> std::string {
+        std::string s(n, '0');
+        int i = static_cast<int>(n) - 1;
+        while (i >= 0 && v) { s[i] = static_cast<char>('0' + (v & 7)); v >>= 3; --i; }
+        return s;
+    };
+    hdr.replace(0, std::min<size_t>(name.size(), 100), name.substr(0, 100));
+    hdr.replace(100, 8, oct(8, 0644));                                        // mode
+    hdr.replace(108, 8, oct(8, 0));                                           // uid
+    hdr.replace(116, 8, oct(8, 0));                                           // gid
+    hdr.replace(124, 12, oct(11, static_cast<unsigned long>(content.size())) + '\0'); // size
+    hdr.replace(136, 12, oct(11, 0) + '\0');                                  // mtime
+    // checksum: sum over header with checksum field as spaces, then "6 octal + \0 + space"
+    int sum = 0;
+    for (char c : hdr) sum += static_cast<unsigned char>(c);
+    for (int i = 148; i < 156; ++i) { sum -= static_cast<unsigned char>(hdr[i]); hdr[i] = ' '; sum += ' '; }
+    hdr.replace(148, 8, oct(6, static_cast<unsigned long>(sum)) + '\0' + ' ');
+    hdr[156] = typeflag;                                                      // typeflag
+    // NOTE: use std::string("ustar\0", 6) — a plain "ustar\0" literal has strlen 5
+    // and would shrink the header by one byte, shifting file contents off by one.
+    hdr.replace(257, 6, std::string("ustar\0", 6));                           // magic (informational)
+
+    std::string entry = hdr + content;
+    if (entry.size() % 512 != 0) entry.append(512 - entry.size() % 512, '\0');
+    return entry;
+}
+
+// Wrap bytes in a valid gzip stream: header + raw deflate + crc32/isize.
+std::string make_gzip(const std::string& data) {
+    std::string out("\x1f\x8b\x08\x00", 4);  // magic, deflate method, flags=0
+    out += std::string(4, '\0');             // mtime
+    out += '\x00';                           // XFL
+    out += '\xff';                           // OS: unknown
+    mz_stream s{};
+    if (mz_deflateInit2(&s, MZ_DEFAULT_LEVEL, MZ_DEFLATED, -MZ_DEFAULT_WINDOW_BITS,
+                        8, MZ_DEFAULT_STRATEGY) != MZ_OK)
+        throw std::runtime_error("deflateInit2 failed");
+    s.next_in = reinterpret_cast<const unsigned char*>(data.data());
+    s.avail_in = static_cast<unsigned int>(data.size());
+    std::string comp;
+    comp.resize(static_cast<size_t>(mz_deflateBound(&s, static_cast<mz_ulong>(data.size()))));
+    s.next_out = reinterpret_cast<unsigned char*>(&comp[0]);
+    s.avail_out = static_cast<unsigned int>(comp.size());
+    if (mz_deflate(&s, MZ_FINISH) != MZ_STREAM_END) {
+        mz_deflateEnd(&s);
+        throw std::runtime_error("deflate failed");
+    }
+    comp.resize(s.total_out);
+    mz_deflateEnd(&s);
+    out += comp;
+    mz_ulong crc = mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const unsigned char*>(data.data()), data.size());
+    mz_ulong isize = static_cast<mz_ulong>(data.size());
+    for (int i = 0; i < 4; ++i) out += static_cast<char>((crc >> (8 * i)) & 0xff);
+    for (int i = 0; i < 4; ++i) out += static_cast<char>((isize >> (8 * i)) & 0xff);
+    return out;
+}
+
+void write_gzip(const fs::path& path, const std::string& data) {
+    std::string gz = make_gzip(data);
+    std::ofstream f(path, std::ios::binary);
+    f.write(gz.data(), static_cast<std::streamsize>(gz.size()));
+}
+
+// Write a zip containing a single entry named `entry` with the given content.
+// miniz stores the name verbatim — this is how we craft traversal entries.
+void write_zip_with_entry(const fs::path& path, const std::string& entry, const std::string& content) {
+    mz_zip_archive zip{};
+    if (!mz_zip_writer_init_file(&zip, path.string().c_str(), 0))
+        throw std::runtime_error("zip init failed");
+    if (!mz_zip_writer_add_mem(&zip, entry.c_str(), content.data(), content.size(), MZ_NO_COMPRESSION))
+        throw std::runtime_error("zip add failed");
+    if (!mz_zip_writer_finalize_archive(&zip))
+        throw std::runtime_error("zip finalize failed");
+    mz_zip_writer_end(&zip);
+}
+
+} // namespace
+
+TEST_CASE("extract_zip: rejects path traversal / absolute entries", "[util]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_zip_slip_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto dest = tmp / "out";
+    ezmk::util::create_directories(dest);
+
+    SECTION("dotdot traversal") {
+        auto z = tmp / "a.zip";
+        write_zip_with_entry(z, "../evil.txt", "x");
+        REQUIRE_THROWS_AS(ezmk::util::extract_zip(z, dest), std::runtime_error);
+        REQUIRE_FALSE(fs::exists(tmp / "evil.txt"));
+    }
+    SECTION("windows drive + backslash") {
+        auto z = tmp / "c.zip";
+        write_zip_with_entry(z, "C:\\evil.txt", "x");
+        REQUIRE_THROWS_AS(ezmk::util::extract_zip(z, dest), std::runtime_error);
+    }
+    SECTION("backslash dotdot traversal") {
+        auto z = tmp / "d.zip";
+        write_zip_with_entry(z, "a\\..\\..\\evil.txt", "x");
+        REQUIRE_THROWS_AS(ezmk::util::extract_zip(z, dest), std::runtime_error);
+    }
+    SECTION("UNC prefix") {
+        auto z = tmp / "e.zip";
+        write_zip_with_entry(z, "\\\\server\\share\\evil.txt", "x");
+        REQUIRE_THROWS_AS(ezmk::util::extract_zip(z, dest), std::runtime_error);
+    }
+    // NOTE: leading-'/' entries are rejected by miniz's writer (add fails), so
+    // absolute-path coverage for the zip path is exercised via extract_targz
+    // below (safe_extract_path is shared).
+
+    ezmk::util::remove_all(tmp);
+}
+
+TEST_CASE("extract_zip: valid nested entry extracts correctly", "[util]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_zip_ok_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto dest = tmp / "out";
+    auto z = tmp / "ok.zip";
+    write_zip_with_entry(z, "dir/sub/file.txt", "hello");
+    ezmk::util::extract_zip(z, dest);
+    REQUIRE(fs::exists(dest / "dir" / "sub" / "file.txt"));
+    REQUIRE(ezmk::util::file_read(dest / "dir" / "sub" / "file.txt") == "hello");
+    ezmk::util::remove_all(tmp);
+}
+
+TEST_CASE("extract_targz: rejects path traversal / absolute entries", "[util]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_targz_slip_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto dest = tmp / "out";
+    ezmk::util::create_directories(dest);
+
+    SECTION("dotdot traversal") {
+        auto t = tmp / "a.tar.gz";
+        write_gzip(t, make_tar_entry("../evil.txt", '0', "x") + std::string(1024, '\0'));
+        REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+        REQUIRE_FALSE(fs::exists(tmp / "evil.txt"));
+    }
+    SECTION("absolute path") {
+        auto t = tmp / "b.tar.gz";
+        write_gzip(t, make_tar_entry("/evil.txt", '0', "x") + std::string(1024, '\0'));
+        REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+    }
+    SECTION("backslash dotdot traversal") {
+        auto t = tmp / "c.tar.gz";
+        write_gzip(t, make_tar_entry("..\\..\\evil.txt", '0', "x") + std::string(1024, '\0'));
+        REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+    }
+
+    ezmk::util::remove_all(tmp);
+}
+
+TEST_CASE("extract_targz: valid nested entry extracts correctly", "[util]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_targz_ok_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto dest = tmp / "out";
+    auto t = tmp / "ok.tar.gz";
+    write_gzip(t, make_tar_entry("dir/sub/file.txt", '0', "hello") + std::string(1024, '\0'));
+    ezmk::util::extract_targz(t, dest);
+    REQUIRE(fs::exists(dest / "dir" / "sub" / "file.txt"));
+    REQUIRE(ezmk::util::file_read(dest / "dir" / "sub" / "file.txt") == "hello");
+    ezmk::util::remove_all(tmp);
 }
 
 // ===================================================================
