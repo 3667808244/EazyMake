@@ -552,21 +552,19 @@ static int ezmk_file_write(lua_State* L) {
 
     fs::path resolved = resolve_path(path);
 
-    // Security: reject writes outside the project root
-    // We canonicalize both paths for reliable prefix check
-    std::string abs_dest = fs::absolute(resolved).generic_string();
-    std::string abs_root = fs::absolute(g_project_root).generic_string();
+    // Security: reject writes outside the project root.
+    // 1.1.2 S3: 用 norm_path()（lexically_normal）+ path_within()（目录边界检查）
+    // 替代裸字符串前缀比较——前缀比较允许 `../` 逃逸（<root>/../evil 以 <root>
+    // 开头）与 <root>X 边界误判。权限层（下方 g_current_perms 分支）已用同样的
+    // norm_path + check_write_permission；此处是最后一个不依赖权限模型的硬限制。
+    std::string abs_dest  = norm_path(resolved);
+    std::string abs_root  = norm_path(g_project_root);
+    std::string abs_temp  = norm_path(g_project_root / ".ezmk/temp");
+    std::string abs_cache = norm_path(g_project_root / ".ezmk/cache");
 
-    // Also allow writes to the temp directory (needed for some tools)
-    std::string abs_temp = fs::absolute(g_project_root / ".ezmk/temp").generic_string();
-    std::string abs_cache = fs::absolute(g_project_root / ".ezmk/cache").generic_string();
-
-    bool inside_project = (abs_dest.size() >= abs_root.size() &&
-                           abs_dest.compare(0, abs_root.size(), abs_root) == 0);
-    bool inside_temp    = (abs_dest.size() >= abs_temp.size() &&
-                           abs_dest.compare(0, abs_temp.size(), abs_temp) == 0);
-    bool inside_cache   = (abs_dest.size() >= abs_cache.size() &&
-                           abs_dest.compare(0, abs_cache.size(), abs_cache) == 0);
+    bool inside_project = path_within(abs_dest, abs_root);
+    bool inside_temp    = path_within(abs_dest, abs_temp);
+    bool inside_cache   = path_within(abs_dest, abs_cache);
 
     if (!inside_project && !inside_temp && !inside_cache) {
         lua_pushboolean(L, 0);

@@ -450,6 +450,50 @@ TEST_CASE("lua: ezmk.file_write denies write outside project root", "[lua][api][
     lua_pop(L, 2);
 }
 
+TEST_CASE("lua: ezmk.file_write rejects traversal / prefix-boundary escapes", "[lua][api][fs][sandbox][1.1.2]") {
+    init();  // idempotent — safe to call even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+
+    TempDir tmp;
+    register_api(L, tmp.path);
+    std::string root = tmp.path.generic_string();
+
+    auto run_write = [&](const std::string& path) -> std::pair<bool, std::string> {
+        std::string code = "local ok, err = ezmk.file_write('" + path + "', 'bad'); return ok, err";
+        int rc = luaL_dostring(L, code.c_str());
+        REQUIRE(rc == 0);
+        bool ok = lua_toboolean(L, -2);
+        std::string err = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+        lua_pop(L, 2);
+        return {ok, err};
+    };
+
+    SECTION("dotdot traversal escapes root") {
+        auto [ok, err] = run_write(root + "/../evil.txt");
+        REQUIRE_FALSE(ok);
+        REQUIRE(err.find("access denied") != std::string::npos);
+        REQUIRE_FALSE(fs::exists(fs::path(root).parent_path() / "evil.txt"));
+    }
+    SECTION("prefix boundary: sibling <root>X is not inside root") {
+        auto [ok, err] = run_write(root + "X/evil.txt");
+        REQUIRE_FALSE(ok);
+        REQUIRE(err.find("access denied") != std::string::npos);
+        REQUIRE_FALSE(fs::exists(fs::path(root + "X") / "evil.txt"));
+    }
+    SECTION("absolute path in parent dir") {
+        auto parent = fs::path(root).parent_path();
+        auto [ok, err] = run_write((parent / "ezmk_boundary_evil.txt").generic_string());
+        REQUIRE_FALSE(ok);
+        REQUIRE(err.find("access denied") != std::string::npos);
+    }
+    SECTION("dotdot INSIDE root is normalized and allowed") {
+        auto [ok, err] = run_write(root + "/sub/../test.txt");
+        REQUIRE(ok);
+        REQUIRE(fs::exists(fs::path(root) / "test.txt"));
+    }
+}
+
 TEST_CASE("lua: ezmk.file_write creates parent directories", "[lua][api][fs]") {
     lua_State* L = state();
     REQUIRE(L != nullptr);

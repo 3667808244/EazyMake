@@ -25,7 +25,7 @@
 
 - [x] **1.1 解压安全**（S1）：`safe_extract_path()` + `extract_zip`/`extract_targz` 接入 + tar.gz 解压上限；`test_util.cpp` 恶意归档用例（另修复 miniz ABI 布局不一致：移除 `MINIZ_NO_TIME` 等宏）
 - [x] **1.2 归档命令转义**（S2）：`compile_package()` 的 `ar`/`lib.exe` 路径转 `escape_shell_arg`（提取 `build_archive_command()` helper 便于单测）；`test_pkg.cpp` 含特殊字符路径用例
-- [ ] **1.3 file_write 边界**（S3）：`is_path_within` helper + 硬限制三处改用；`test_lua.cpp` 越界/边界用例
+- [x] **1.3 file_write 边界**（S3）：硬限制三处改用既有 `norm_path()` + `path_within()`（目录边界）；`test_lua.cpp` 越界/边界用例
 - [ ] **1.4 Lua 沙箱收敛**（S4）：受限全局表（剔 `dofile`/`loadfile`/`load`/`require`/`debug`）；`test_lua.cpp` 逃逸面用例；`docs/utils.md` 说明
 - [ ] 阶段一自测：`bash build.sh test` 相关用例通过
 
