@@ -61,6 +61,13 @@ fs::path compile_package(const fs::path& pkg_dir,
                          const std::vector<fs::path>& dep_includes = {},
                          const toolchain::Toolchain& tc = {});
 
+// 1.1.2 S2: 构造静态库归档命令（MSVC: lib.exe /OUT:，GCC/Clang: ar rcs）。
+// 所有路径经 util::escape_shell_arg 转义——对象路径源自归档内源文件名，
+// 可能含 `$`/反引号/空格等字符，裸引号在 POSIX `sh -c` 下可命令注入。
+std::string build_archive_command(bool is_msvc,
+                                  const fs::path& lib_out,
+                                  const std::vector<fs::path>& objects);
+
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.
 bool satisfies_version_constraint(std::string_view version,

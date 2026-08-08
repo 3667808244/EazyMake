@@ -323,6 +323,21 @@ fs::path select_precompiled_archive(const fs::path& lib_dir,
     throw std::runtime_error(msg);
 }
 
+// 1.1.2 S2: 构造静态库归档命令。路径统一经 escape_shell_arg 转义——
+// 对象路径源自归档内源文件名，可能含 `$`/反引号/空格等字符；裸引号包裹在
+// POSIX `sh -c` 下可命令注入（与 util.cpp 中 git_clone/git_pull 的写法一致）。
+std::string build_archive_command(bool is_msvc,
+                                  const fs::path& lib_out,
+                                  const std::vector<fs::path>& objects) {
+    std::ostringstream cmd;
+    cmd << (is_msvc ? "lib.exe /OUT:" : "ar rcs ")
+        << "\"" << util::escape_shell_arg(lib_out.string()) << "\"";
+    for (auto& o : objects) {
+        cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
+    }
+    return cmd.str();
+}
+
 fs::path compile_package(const fs::path& pkg_dir,
                          const std::vector<fs::path>& dep_includes,
                          const toolchain::Toolchain& tc) {
@@ -442,12 +457,9 @@ fs::path compile_package(const fs::path& pkg_dir,
 
     if (is_msvc) {
         // 1.1.0: MSVC — use lib.exe to create static library
-        std::ostringstream lib_cmd;
-        lib_cmd << "lib.exe /OUT:\"" << lib_tmp.string() << "\"";
-        for (auto& o : comp_result.objects) {
-            lib_cmd << " \"" << o.string() << "\"";
-        }
-        auto lib_res = util::run_command(lib_cmd.str());
+        // 1.1.2 S2: 命令构造收敛到 build_archive_command()（路径转义）
+        auto lib_res = util::run_command(
+            build_archive_command(is_msvc, lib_tmp, comp_result.objects));
         if (lib_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
@@ -456,12 +468,8 @@ fs::path compile_package(const fs::path& pkg_dir,
         }
     } else {
         // GCC/Clang: use ar
-        std::ostringstream ar_cmd;
-        ar_cmd << "ar rcs \"" << lib_tmp.string() << "\"";
-        for (auto& o : comp_result.objects) {
-            ar_cmd << " \"" << o.string() << "\"";
-        }
-        auto ar_res = util::run_command(ar_cmd.str());
+        auto ar_res = util::run_command(
+            build_archive_command(is_msvc, lib_tmp, comp_result.objects));
         if (ar_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
