@@ -43,12 +43,12 @@
 
 ### 阶段三：回归与发布准备
 
-- [ ] 全量回归：`bash build.sh test` + `test-all` 零回归
-- [ ] `CHANGES.md` 新增 1.1.2 条目（口径：安全加固 + 正确性修复；命令/配置/CLI 不变）
-- [ ] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本 `1.1.2`
-- [ ] **发布门槛预检**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归
-- [ ] 打 `v1.1.2` tag 触发 `release.yml`；产物核验 + 分发（沿用 1.1.1 流程）
-- [ ] 收尾：`plan.md` 恢复 1.2.0；`plans/README.md` / `plans/1.1.2/README.md` 状态更新
+- [x] 全量回归：`bash build.sh test-all` 零回归（592 用例 / 2813 断言）
+- [x] `CHANGES.md` 新增 1.1.2 条目（口径：安全加固 + 正确性修复；命令/配置/CLI 不变）
+- [x] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本 `1.1.2`（`ezmk version` = 1.1.2）
+- [x] **发布门槛预检**：① 计划清单全部完成（S1-S4 + C1-C7 + 阶段三实施项）；② 公共 API 无破坏性变更（均为增量/内部修复，`run_command` 旧重载保留）；③ 全量测试零回归（`bash build.sh test-all` exit 0）
+- [ ] 打 `v1.1.2` tag 触发 `release.yml`；产物核验 + 分发（沿用 1.1.1 流程）— **待用户执行**
+- [ ] 收尾：`plan.md` 恢复 1.2.0；`plans/README.md` / `plans/1.1.2/README.md` 状态更新 — **发布后执行**
 
 > 门槛未满足即停止，禁止带着未收口项打 tag。
 
