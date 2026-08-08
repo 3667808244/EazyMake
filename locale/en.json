@@ -139,6 +139,7 @@
     "on_failure_hook": "running on-failure hook: {path}",
     "hook_not_found": "hook script not found: {path} — skipping",
     "hook_nonzero": "hook script returned non-zero exit code: {path} (exit {code})",
+    "compile_db_no_sources": "no source files found — skipping compile_commands.json",
     "pkg_list_title": "Installed packages ({scope} scope):",
     "pkg_list_none": "  (none)",
     "pkg_list_item": "  {name} {version} ({type})",

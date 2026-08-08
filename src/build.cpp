@@ -567,11 +567,6 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     // Collect sources + validate
     collect_sources(st.compile_cfg.src_dirs, st.proj_root, cfg.project.type);
 
-    util::info(ezmk::i18n::I18nKey::building,
-               {{"name", cfg.project.name},
-                {"type", cfg.project.type},
-                {"lang", cfg.project.language}});
-
     fs::create_directories(st.temp_dir);
     fs::create_directories(st.build_dir);
     fs::create_directories(st.cache_obj_dir);
@@ -776,6 +771,28 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     return st;
 }
 
+// 1.1.1: Build a cache::CompileInput from prepared build state.
+// Shared by the build's compile_phase and compile_commands.json generation
+// (prepare_compile_input), so the index can never drift from a real build.
+cache::CompileInput make_compile_input(BuildState& st, const cli::BuildOptions& opts) {
+    cache::CompileInput cin;
+    cin.sources = collect_sources(st.compile_cfg.src_dirs, st.proj_root,
+                                  "utils" /* skip main.cpp check — already done */);
+    cin.obj_dir = st.temp_dir;
+    cin.dep_dir = st.temp_dir;
+    cin.proj_root = st.proj_root;
+    cin.compile = st.compile_cfg;
+    cin.lang = st.lang;
+    cin.extra_includes = st.extra_includes;
+    cin.cache_obj_dir = st.cache_obj_dir;
+    cin.disable_cache = opts.disable_cache;
+    cin.use_pic = st.use_pic;
+    cin.verbose = opts.verbose;
+    cin.tc = st.tc;
+    cin.stdlib = st.stdlib;  // 1.1.0-dev.4
+    return cin;
+}
+
 // Phase 2: Compile all sources (cache check + compilation).
 // Returns the list of compiled object paths.
 std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opts) {
@@ -830,21 +847,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     }
 
     // Build compile input (re-collect sources — already validated in prepare)
-    cache::CompileInput cin;
-    cin.sources = collect_sources(st.compile_cfg.src_dirs, st.proj_root,
-                                  "utils" /* skip main.cpp check — already done */);
-    cin.obj_dir = st.temp_dir;
-    cin.dep_dir = st.temp_dir;
-    cin.proj_root = st.proj_root;
-    cin.compile = st.compile_cfg;
-    cin.lang = st.lang;
-    cin.extra_includes = st.extra_includes;
-    cin.cache_obj_dir = st.cache_obj_dir;
-    cin.disable_cache = opts.disable_cache;
-    cin.use_pic = st.use_pic;
-    cin.verbose = opts.verbose;
-    cin.tc = st.tc;
-    cin.stdlib = st.stdlib;  // 1.1.0-dev.4
+    auto cin = make_compile_input(st, opts);
 
     int num_jobs = opts.jobs;
     if (num_jobs <= 0) {
@@ -1101,6 +1104,13 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     // Phase 1: Setup, config merge, package scan, pre-build hook
     auto st = prepare_build_state(cfg, opts);
 
+    // 1.1.1: progress message lives here (not in prepare_build_state) so
+    // compile-db reuse via prepare_compile_input() doesn't print it.
+    util::info(ezmk::i18n::I18nKey::building,
+               {{"name", cfg.project.name},
+                {"type", cfg.project.type},
+                {"lang", cfg.project.language}});
+
     // Phase 2: Compile all sources
     auto objects = compile_phase(st, opts);
 
@@ -1112,6 +1122,15 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
              ezmk::i18n::I18nKey::post_build_hook);
 
     return output;
+}
+
+// 1.1.1: Prepare a cache::CompileInput exactly as a real build would — include
+// collection, profile merge, macro folding, package extra_includes. Shared by
+// compile_commands.json generation (`ezmk utils cc` interception).
+cache::CompileInput prepare_compile_input(const config::EzConfig& cfg,
+                                          const cli::BuildOptions& opts) {
+    auto st = prepare_build_state(cfg, opts);
+    return make_compile_input(st, opts);
 }
 
 // 1.1.0: install_project — copy build artifacts to install prefix

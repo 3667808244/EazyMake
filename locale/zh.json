@@ -139,6 +139,7 @@
     "on_failure_hook": "正在执行 on-failure 钩子: {path}",
     "hook_not_found": "钩子脚本未找到: {path} — 跳过",
     "hook_nonzero": "钩子脚本返回非零退出码: {path} (退出码 {code})",
+    "compile_db_no_sources": "未找到源文件，跳过 compile_commands.json 生成",
     "pkg_list_title": "已安装包 ({scope} 作用域):",
     "pkg_list_none": "  (无)",
     "pkg_list_item": "  {name} {version} ({type})",

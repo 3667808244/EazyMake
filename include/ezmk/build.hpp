@@ -6,6 +6,7 @@
 #include <filesystem>
 #include "ezmk/config.hpp"
 #include "ezmk/cli.hpp"
+#include "ezmk/cache.hpp"
 
 namespace ezmk::build {
 namespace fs = std::filesystem;
@@ -77,5 +78,12 @@ void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
                bool verbose);
+
+// 1.1.1: Prepare a cache::CompileInput exactly as a real build would —
+// include collection, profile merge, macro folding, dependency package
+// extra_includes. Shared by compile_commands.json generation
+// (the `ezmk utils cc` interception / `ezmk project cc` path).
+cache::CompileInput prepare_compile_input(const config::EzConfig& cfg,
+                                          const cli::BuildOptions& opts);
 
 } // namespace ezmk::build
