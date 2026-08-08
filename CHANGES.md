@@ -12,6 +12,33 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.1.2 (2026-08-08) — 补丁发布
+
+1.1.x 稳定线补丁。基于多模块代码质量评审，修复 **4 处安全漏洞**与 **7 处静默产出错误结果的正确性 bug**。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
+
+### 安全加固
+
+- **解压路径包含校验（zip-slip）**：归档条目名统一按 `/` 与 `\` 切分，拒绝 `..` 分量、绝对路径、盘符与 UNC 前缀，再经目录边界兜底；tar.gz 解压输出封顶 1 GiB（防 zip-bomb）——恶意包无法再写到暂存目录之外
+- **归档命令转义**：`ar`/`lib.exe` 归档命令的所有路径经 `escape_shell_arg` 转义——对象路径源自归档内源文件名，可能含 `$`/反引号/空格，裸引号在 POSIX `sh -c` 下可命令注入
+- **`ezmk.file_write` 硬限制收紧**：项目根外禁写检查改用 `lexically_normal` + 目录边界判断，堵住 `../` 越界与 `<root>X` 前缀边界误判
+- **Lua 沙箱收敛**：utils 脚本沙箱改为受限全局表，`dofile`/`loadfile`/`load`/`require`/`debug`/`package` 解析为 `nil`，`_G` 指向沙箱自身——脚本不能读盘上文件、不能从磁盘加载代码，`[utils.permissions]` 成为真正的执行边界
+
+### 正确性修复
+
+- **链接假成功**：产物 temp→rename 失败（Windows 下被运行中 exe/杀软占用）不再打印 `build_success`，改为报错并给出路径与原因
+- **缓存签名补全**：`compile_options_signature` 纳入 `stdlib` 与 `-fPIC`——改 `[project].stdlib` 或 `type` static↔shared 不再复用陈旧对象
+- **`--locked` 误报修复**：lockfile 记录根项目直接依赖（`direct_deps`），`depends_changed` 改为直接依赖精确比较（含版本约束）——有传递依赖时 `--locked` 不再恒误报
+- **Windows 安装脚本修复**：`run_script` 不再用 `cd /d ... && ...` 前缀（`cd` 是 cmd 内建、`CreateProcessA` 无法启动），工作目录改经子进程 `lpCurrentDirectory`/`chdir` 注入——`.sh`/`.ps1`/`.bat` 安装脚本在 Windows 恢复可用
+- **TOML 写入转义**：`write_default_config` / `ezmk.lock` / repo 列表写入统一 `toml_quote`——项目名/包名含引号或换行不再写坏配置
+- **安装事务化**：安装先备份旧包、新包完全就绪后才替换，失败回滚——中途失败不再删掉既有版本；`copy_recursive`/`remove_all` 的真实失败不再被吞掉
+- **确定性构建数据竞争**：`SOURCE_DATE_EPOCH` 改经子进程环境注入（POSIX fork 后 `setenv`），不再从工作线程改进程全局环境——`deterministic` + `-jN` 输出恢复确定
+
+### 测试
+
+新增 `test_lockfile.cpp`、解压安全、`run_command` `RunOptions`、确定性等用例。全量测试零回归：592 用例 / 2813 断言（含集成）。
+
+---
+
 ## 1.1.1 (2026-08-08) — 补丁发布
 
 1.1.x 稳定线补丁。优化 `compile_commands.json`（clangd 索引）的生成算法，并新增构建后自动生成配置项。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
