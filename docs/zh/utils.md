@@ -241,7 +241,7 @@ Lua 脚本运行在受限环境：
 
 - `os.execute` 和 `io.popen` 被移除 — 必须通过 `ezmk.run()` 执行外部命令
 - `ezmk.file_write()` 拒绝写入项目根目录外的绝对路径
-- 不暴露 `require` 加载 C 扩展（仅允许纯 Lua 模块）
+- **文件加载函数不暴露**（1.1.2）：`dofile`、`loadfile`、`load`、`require` 与 `debug` 库均解析为 `nil` — 脚本不能读盘上文件、不能从磁盘加载代码，文件/进程访问一律走 `ezmk.*` API
 
 > **为什么在编译期移除 `os.execute`/`io.popen`？** 直接从 Lua 二进制中移除后，脚本完全无法触达它们——所有外部命令都必须走 `ezmk.run()`，这样 ezmk 可以审计，并在后续版本用权限管控。
 

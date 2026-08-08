@@ -959,6 +959,42 @@ end
     REQUIRE(rc == 0);
 }
 
+TEST_CASE("run_script: sandbox blocks file-loading / introspection escapes", "[lua][script][sandbox][1.1.2]") {
+    init();  // idempotent — safe to call even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+
+    // All escape vectors must resolve to nil — directly and via _G (which now
+    // points at the sandbox, not the real global table).
+    auto script = write_lua_script(tmp.path, "sandbox_escape", R"(
+function run(args)
+    local blocked = {"dofile", "loadfile", "load", "require", "debug", "package", "collectgarbage"}
+    for _, name in ipairs(blocked) do
+        if _G[name] ~= nil then
+            error("escape vector not blocked: " .. name)
+        end
+    end
+    -- benign globals must still be reachable (directly and via _G)
+    if print == nil then error("print missing") end
+    if _G.tostring == nil then error("tostring missing via _G") end
+    return 0
+end
+)");
+    REQUIRE(run_script(L, script, {}) == 0);
+
+    // Attempting to CALL an escape vector must fail (dofile is nil → error → exit 1).
+    auto evil = write_lua_script(tmp.path, "sandbox_evil", R"(
+function run(args)
+    dofile("/etc/passwd")
+    return 0
+end
+)");
+    REQUIRE(run_script(L, evil, {}) == 1);
+}
+
 // ===================================================================
 // find_utils_script tests
 // ===================================================================

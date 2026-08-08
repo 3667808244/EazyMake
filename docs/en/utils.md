@@ -249,7 +249,7 @@ Lua scripts run in a restricted environment:
 
 - `os.execute` and `io.popen` are removed — external commands must be executed via `ezmk.run()`
 - `ezmk.file_write()` denies writes to absolute paths outside the project root
-- `require` for loading C extensions is not exposed (only pure Lua modules are allowed)
+- File-loading functions are **not exposed** (1.1.2): `dofile`, `loadfile`, `load`, `require`, and the `debug` library all resolve to `nil` — scripts cannot read files or load code from disk. All file/process access must go through the `ezmk.*` API
 
 > **Why strip `os.execute`/`io.popen` at compile time?** Removing them from the
 > Lua binary means scripts cannot reach them at all — every external command must
