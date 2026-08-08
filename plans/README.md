@@ -23,14 +23,13 @@ plans/
     └── 1.2.0-dev.2.md ~ 1.2.0.md
 ```
 
-> 仓库根目录的 `plan.md` 为当前执行计划（**1.1.1**，前置补丁；发布后转回 [1.2.0](1.2.0/README.md)）。
+> 仓库根目录的 `plan.md` 为当前执行计划（**1.2.0**，开发中）。
 
 ---
 
 ## 当前执行
 
-- **[1.1.1](1.1.1/README.md)** — 补丁：拦截 `ezmk utils cc`（编译命令单一事实源），1.2.0 的前置（`plan.md`）
-- **[1.2.0](1.2.0/README.md)** — 工具链互操作与开箱工程化（`ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile），开发中（执行计划：`1.2.0/execution.md`，1.1.1 发布后 `plan.md` 接回）
+- **[1.2.0](1.2.0/README.md)** — 工具链互操作与开箱工程化（`ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile），开发中（`plan.md`）
 
 ## 未来规划
 
@@ -41,6 +40,7 @@ plans/
 - **[0.x.x](0.x.x/README.md)** — 0.x 早期开发版本（0.1.6 ~ 0.2.6），全部完成 ✅
 - **[1.0.0](1.0.0/README.md)** — 正式版发布系列（0.9.0 ~ 1.0.0，含发布准备版本），全部完成 ✅
 - **[1.1.0](1.1.0/README.md)** — 正式版发布系列（dev.1~dev.7 + pre.1~pre.3 + 1.1.0），全部完成 ✅
+- **[1.1.1](1.1.1/README.md)** — 补丁：拦截 `ezmk utils cc` + `[compile].compile_commands` 自动生成 ✅
 
 ## 版本系列概览
 
@@ -73,8 +73,8 @@ graph TD
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
-    class v0xx,v100,v110 done;
-    class v111,v120 active;
+    class v0xx,v100,v110,v111 done;
+    class v120 active;
     class v200 todo;
 ```
 

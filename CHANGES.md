@@ -31,6 +31,10 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 全量测试零回归：单元 546 用例 / 2621 断言。
 
+### 发布后跟进项
+
+- `macos-x64` 产物：Intel `macos-13` runner 在 GitHub free tier 长期无分配，job 仍在队列（与 1.1.0 相同情况；runner 可用时自动上传 `ezmk-macos-x64.tar.gz` 至 v1.1.1 Release）
+
 ---
 
 ## 1.1.0 (2026-08-07) — 正式版发布

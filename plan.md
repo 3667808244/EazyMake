@@ -1,23 +1,20 @@
-# EazyMake 1.1.1 执行计划
+# EazyMake 1.2.0 执行计划
 
-> 正式发布计划：**1.1.1**（拦截 `ezmk utils cc` + 构建后自动生成 compile_commands）。详细设计：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md)。
+> 正式发布计划：**1.2.0**（工具链互操作与开箱工程化）。详细设计：[`1.2.0.md`](plans/1.2.0/1.2.0.md)；功能子计划：[dev.1](plans/1.2.0/1.2.0-dev.1.md)（`ezmk project cc` 命令）、[dev.2](plans/1.2.0/1.2.0-dev.2.md)（CMakeLists.txt 导出）、[dev.3](plans/1.2.0/1.2.0-dev.3.md)（默认模板内建 Profile）、[dev.4](plans/1.2.0/1.2.0-dev.4.md)（CMake 项目导入，实验性）；dev.1 的核心重构/拦截由前置补丁 [1.1.1](plans/1.1.1/1.1.1.md) 先行交付。
 >
-> **1.1.x 稳定线补丁**：不新增命令、不弃用、不触碰 1.1.0 稳定 API；`ezmk project cc` 正式命令与 `ezmk utils cc` 弃用推迟至 [1.2.0](plans/1.2.0/1.2.0.md)。
->
-> **⛔ 发布门槛**：实现完整 + API 兼容 + 全量测试零回归，三项同时满足才可发布（Gate 定义见 [1.1.0-pre.3](plans/1.1.0/1.1.0-pre.3.md#-发布门槛release-gate)）。本补丁发布后，`plan.md` 转回 [1.2.0](plans/1.2.0/) 执行计划。
+> **⛔ 发布门槛**：实现完整 + API 兼容 + 全量测试零回归，三项同时满足才可发布（Gate 定义见 [1.1.0-pre.3](plans/1.1.0/1.1.0-pre.3.md#-发布门槛release-gate)）。前置 **1.1.1** 已发布（2026-08-08）。
 
 ---
 
 ## 1 背景
 
-`compile_commands.json` 由外置 Lua 工具（`ezmk utils cc`，`ezmk-official-utils/utils/cc.lua`）生成，与 `ezmk build` 真实命令存在**系统性 drift**：缺 `@link:` 解析目录、依赖包 `extra_includes`、`-stdlib`、`-fPIC`、确定性标志、宏 `-D`、`--profile`、MSVC 翻译等。clangd 等索引看到的是"假设命令"，而非真实构建命令。
+1.1.0 发布后，三个开发体验缺口未闭合：
 
-1.1.1 做两件事——**不改命令名、不新增命令、不弃用**：
+1. `compile_commands.json` 由外置 Lua 工具（`ezmk utils cc`）生成，命令与 `ezmk build` 真实命令 drift。**重构（`build_compile_args()`）、对 `ezmk utils cc` 的拦截、`[compile].compile_commands` 自动生成已在 1.1.1 落地**；1.2.0 补齐正式命令 `ezmk project cc`。
+2. 缺少从 `ezmk.toml` 导出 CMakeLists.txt 的通道，无法与 CMake 生态互操作。
+3. `ezmk project new` 默认模板缺少 Debug/Release Profile。
 
-1. **拦截 `ezmk utils cc`**：修复既有命令的输出正确性。在 CLI 分发处拦截 `utils cc`，改由内置 C++ 逻辑（复用真实命令构造）服务。
-2. **`[compile].compile_commands` 自动生成**：新增配置项，`ezmk build` 成功后自动生成 compile_commands.json（对标 CMake `CMAKE_EXPORT_COMPILE_COMMANDS`）。
-
-同时把编译命令构造重构为**单一事实源**（`build_compile_args()`），为 1.2.0 的 `ezmk project cc` 正式命令铺路（命令与弃用均在 1.2.0 交付）。
+本计划以 **dev.2**、**dev.3** + 直接交付 `ezmk project cc` 命令实现，聚合为 1.2.0 正式发布。均为纯增量，不触碰 1.1.0 起的 API 稳定性承诺。
 
 ---
 
@@ -25,59 +22,82 @@
 
 | # | 目标 | 类别 | 优先级 | 状态 |
 |---|------|------|--------|------|
-| 1 | 重构 `compile_one_source()`，提取 `build_compile_args()`（参数向量）+ `join_shell_args()`（shell 转义），构建路径行为不变 | 功能 | P0 | ✅ 已完成 |
-| 2 | 新建 `compile_db` 模块 `generate_compile_db()`：复用真实命令构造，`arguments` 数组输出，相对项目根、顺序稳定、原子写 | 功能 | P0 | ✅ 已完成 |
-| 3 | `Command::Utils` 分发处拦截 `utils_name == "cc"`，改由内置 C++ 生成器服务，`-o`/`--help`/`--profile` 兼容 | 功能 | P0 | ✅ 已完成 |
-| 4 | 新增 `[compile].compile_commands`（bool，默认 false）：`ezmk build` 成功后自动生成，输出与本次构建完全一致 | 功能 | P1 | ✅ 已完成 |
-| 5 | `ezmk utils cc` 输出与 `ezmk build` 完全一致（drift-free），零外部包依赖 | 质量 | P0 | ✅ 已完成 |
-| 6 | 单测 + 集成覆盖拦截 / 自动生成 / 配置解析；全量测试零回归（基线 546/2617） | 质量 | P0 | ✅ 已完成 |
-| 7 | 文档与发布收口：`docs/config_file.md` / `CHANGES.md`（§3.6 口径）+ 版本号 1.1.1 | 文档 | P1 | ✅ 已完成 |
+| 1 | dev.1：`ezmk project cc` 内置命令（基于 1.1.1 的 `build_compile_args()` + `compile_db`），`arguments` 数组输出，零外部包依赖 | 功能 | P0 | 待实现 |
+| 2 | dev.1：`ezmk utils cc` 保留可用 + 弃用提示（2.0.0 移除） | 兼容 | P1 | 待实现 |
+| 3 | dev.2：`ezmk project export cmake` 命令，project/compile/link/deps 全映射，默认拒绝覆盖 | 功能 | P0 | 待实现 |
+| 4 | dev.2：依赖 best-effort 映射 + `--resolve` 具体路径模式 | 功能 | P1 | 待实现 |
+| 5 | dev.2：进阶映射（profiles / test / install / deterministic） | 功能 | P2 | 延后/可选 |
+| 6 | dev.3：`ezmk project new` 默认模板内建 Debug/Release profile（base 去 `-O2`、优化归 profile） | 功能 | P0 | 待实现 |
+| 7 | dev.4：`ezmk project import --from cmake`（实验性）——标准命令映射 + `find_package` best-effort + 非标准写法拒绝 | 功能 | P0 | 待实现 |
+| 8 | i18n key + en/zh 翻译，`check_i18n.py` 三向一致 | 质量 | P0 | 待实现 |
+| 9 | 单测 + 集成测试覆盖新命令与模板；全量测试零回归 | 质量 | P0 | 待实现 |
+| 10 | 文档与计划收口（cli.md / utils.md / config_file.md / 迁移文档 / README / CHANGES / plans） | 文档 | P1 | 待实现 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：命令构造重构（核心）
+### 阶段一（dev.1）：`ezmk project cc` 命令
 
-**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.1
+**设计**：[`1.2.0-dev.1.md`](plans/1.2.0/1.2.0-dev.1.md)；前置基础（`build_compile_args()` / `compile_db` / 拦截）由 [`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) 交付
 
-- [x] 提取 `build_compile_args()` / `join_shell_args()` 到 `include/ezmk/cache.hpp`；`compile_one_source()` 改为调用
-- [x] `build_compile_args()` 完整包含：真实编译器（`detected_compiler` 优先）/ `-std=` / stdlib 标志 / 确定性标志 / `-fPIC` / `[compile].flags`（MSVC 翻译 + `msvc_flags`）/ `-I`（`@link:` + 依赖包 `extra_includes`）/ 宏 `-D` / `-MMD -MF` / `-c <src> -o <obj>`
-- [x] 验收：重构前后命令逐字节一致，`bash build.sh test` 零回归
+- [x] 前置确认：1.1.1 已发布（`build_compile_args()` / `compile_db` / 拦截 / 自动生成）
+- [ ] 命令：`Command::ProjectCc` + `project cc` 子命令 + `-o/--output`、`--profile`；`main.cpp` 分发（拦截逻辑迁移为新命令入口）
+- [ ] i18n：`compile_db_*`/`help_*`/弃用提示 key（en/zh）
+- [ ] 测试：`test_compile_db.cpp` 单测 + 集成场景（`ezmk project cc` 输出）
+- [ ] 兼容：`ezmk utils cc` 转弃用提示（`use ezmk project cc instead`）+ `ezmk-official-utils` cc.lua/README 标注
 
-### 阶段二：compile_db 模块
+### 阶段二（dev.2）：CMakeLists.txt 导出
 
-**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.2
+**设计**：[`1.2.0-dev.2.md`](plans/1.2.0/1.2.0-dev.2.md)
 
-- [x] 新建 `src/compile_db.cpp` + `include/ezmk/compile_db.hpp`：`generate_compile_db(project_root, config, profile, output_path)`
-- [x] 复用 `build::prepare_build_state()` → `build_compile_args()`；**最小规范化**（剔除 `-MMD`/`-MF <path>`/`-frandom-seed=<x>`/`/showIncludes`）
-- [x] `file` 相对项目根 `rel_src`、`directory` 项目根绝对路径、按 `rel_src` 字典序、temp → rename 原子写；无源文件 → warning + 成功
+- [ ] 命令骨架：`Command::ProjectExport` + `export <target>` 子命令 + `-o`/`--overwrite`/`--profile`/`--resolve`/`--glob`/`--no-glob`；`main.cpp` 分发
+- [ ] 项目级映射：`project()` / `add_executable`/`add_library`（utils 跳过 / header_only / precompiled）
+- [ ] 编译映射：src glob / include（含 `@link:`）/ 宏（`ezmk_macros` 一致）/ `-std` 拆分 / flags / `msvc_flags` / stdlib
+- [ ] 链接映射：link_dirs / system_targets / link flags 拆分
+- [ ] 覆盖安全：已有文件拒绝 + `--overwrite`；文件头生成标注
+- [ ] P1 依赖映射：常见包别名映射表 + `find_package` 模板 + `--resolve` 路径解析
+- [ ] i18n：`export_*`/`help_*` key（en/zh）
+- [ ] 测试：`test_export.cpp` 单测 + 集成场景
+- [ ] P2 进阶（按需）：profiles / test / install / deterministic 映射
 
-### 阶段三：拦截 `ezmk utils cc`
+### 阶段三（dev.3）：默认模板内建 Debug/Release Profile
 
-**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.3
+**设计**：[`1.2.0-dev.3.md`](plans/1.2.0/1.2.0-dev.3.md)
 
-- [x] `main.cpp` `Command::Utils` 分发处（`find_utils_script()` **之前**）拦截 `cc`，改由内置 C++ 生成器服务
-- [x] 兼容行为：默认输出 `<proj_root>/compile_commands.json`；`-o <path>` 相对项目根解析；`-h/--help` 复用原工具文案；`--profile <name>` 透传
-- [x] 不调用 `find_utils_script("cc")`；`cc.lua` 不再执行（包内文件保留，1.2.0 弃用）
+- [ ] `write_default_config()` 模板更新：base 去 `-O2`（仅 `["-Wall", "-Wextra"]`）+ 新增 `[compile.profile.debug/release]`（含 `msvc_flags`）
+- [ ] 单测：模板内容断言 + `parse_config()` round-trip
+- [ ] 集成：`ezmk project new` → 校验模板；`--profile debug/release` 构建成功
+- [ ] 文档：`docs/en|zh/config_file.md` + `docs/en|zh/cli.md` + `CHANGES.md`（明确基准行为变更）
 
-### 阶段四：`[compile].compile_commands` 自动生成
+### 阶段四（dev.4）：CMake 项目导入
 
-**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.4
+**设计**：[`1.2.0-dev.4.md`](plans/1.2.0/1.2.0-dev.4.md)
 
-- [x] `CompileSection::compile_commands` 字段 + `src/config.cpp` 解析（默认 false）
-- [x] `build.cpp` 链接成功后 hook：用**构建期 `CompileInput`**（含 profile 应用后标志、依赖包 include、`@link:` 结果），输出与本次构建逐条一致
-- [x] 失败 warning 不阻塞构建；`--compile-commands` flag 允许临时开启而不改配置
+- [ ] 命令骨架：`Command::ProjectImport` + `--from`（默认 cmake、大小写不敏感）+ `--overwrite`；`main.cpp` 分发
+- [ ] 解析器：轻量 CMake 函数调用解析（引号/括号嵌套/注释/`[[...]]`）
+- [ ] 核心映射：project / executable / library / sources / includes / definitions / options / link
+- [ ] 依赖 best-effort：`find_package` 包名映射（共享别名表）→ `[depends]` 注释条目 + i18n TODO
+- [ ] 条件编译 best-effort：平台条件求值 / 跳过未求值块 + TODO 注释
+- [ ] 拒绝逻辑：非声明式写法检测 + 事务性中止 + i18n 报错 + 迁移文档指引
+- [ ] 生成物头部注释 + 覆盖拒绝；i18n key；单测 + 集成；迁移文档/教程
 
-### 阶段五：i18n / 测试 / 文档 / 发布
+### 阶段五：i18n / 文档 / 收尾
 
-- [x] i18n：`compile_db_*`/`help_*`/自动生成 warning key（en/zh），`check_i18n.py` 三向一致通过
-- [x] 测试：`test_compile_db.cpp`（新建）+ `test_config.cpp`（字段解析）+ `test_integration.cpp`（拦截 / 自动生成）；全量零回归
-- [x] `docs/en|zh/config_file.md` 补 `[compile].compile_commands` 字段说明
-- [x] `CHANGES.md` 新增 `1.1.1` 条目——**口径：优化 compile_commands.json 生成算法 + 新增配置项；不宣布拦截 / 弃用**（`cc` 工具弃用声明在 1.2.0）
-- [x] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.1.1`
-- [x] **发布门槛预检**：① 计划清单全部完成或明确收口；② API 兼容（无破坏性变更）；③ 全量测试零回归
-- [ ] 打 `v1.1.1` tag 触发 `release.yml`（沿用 1.1.0 流程）；发布后 `plan.md` 转回 [1.2.0](plans/1.2.0/) 执行计划
+- [ ] `check_i18n.py` 三向一致通过
+- [ ] `docs/en|zh/cli.md` 命令表新增 `project cc`、`project export cmake`、`project import`
+- [ ] `docs/en|zh/utils.md` 标注 cc 工具内化 + 弃用
+- [ ] 迁移文档 `docs/en|zh/migrate-from-cmake.md` + 教程（dev.4）
+- [ ] `README.md` / `README_ZH.md` 命令速览补充
+- [ ] `CHANGES.md` 新增 `1.2.0-dev.1`（`ezmk project cc` + `utils cc` 弃用）、`1.2.0-dev.2`、`1.2.0-dev.3`、`1.2.0-dev.4`、`1.2.0` 条目（`1.1.1` 条目在 1.1.1 发布时记录）
+
+### 阶段六：发布准备
+
+- [ ] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.2.0`
+- [ ] 本地全量回归：`bash build.sh test-all` 零回归（基线 565/2727）
+- [ ] **发布门槛预检**：① 计划清单全部完成或明确收口；② API 兼容（无破坏性变更）；③ 全量测试零回归
+- [ ] 打 `v1.2.0` tag 触发 `release.yml`；产物核验 + 分发渠道（沿用 1.1.0 流程）
+- [ ] `plans/README.md` / `plan.md` 状态收口（1.2.0 → 已完成）
 
 > 门槛未满足即停止，禁止带着未收口项打 tag。
 
@@ -87,13 +107,13 @@
 
 | 决策 | 说明 |
 |------|------|
-| **拦截而非改名** | 修复既有 `ezmk utils cc` 输出正确性，不改命令名/参数，不破坏现有脚本；1.1.1 是纯修复补丁 |
-| **命令构造单一事实源** | 编译命令拼装收敛到 `build_compile_args()`，构建与 compile-db 共用，从结构上消除 drift |
-| **拦截改由 C++ 服务** | `cc.lua` 不再执行；输出由 C++ 生成，等价且更准；脚本保留待 1.2.0 弃用 |
-| **自动生成用构建期状态** | 直接复用本次构建 `CompileInput`，保证零 drift 且无额外探测开销 |
-| **最小规范化** | 仅剔除 clangd 不需要的 `-MMD`/`-MF`/`-frandom-seed`/`/showIncludes`，其余保留 |
-| **`arguments` 数组输出** | 而非 `command` 字符串，避免 shell 双重转义歧义，clangd 推荐格式 |
-| **发布口径** | 1.1.1 对外仅表述"优化生成算法 + 新配置项"；拦截是内部实现细节，`cc` 工具不声明废弃（弃用在 1.2.0） |
+| **命令面** | `ezmk project cc`；`ezmk project export <target>`（`export` 为 `project` 子命令，预留 make/meson 子目标） |
+| **`arguments` 数组输出** | compile_commands.json 用 `arguments` 而非 `command`，避免 shell 双重转义歧义，clangd 推荐格式 |
+| **命令构造单一事实源（1.1.1 交付）** | 编译命令拼装收敛到 `build_compile_args()`（1.1.1 重构），构建与 compile-db 共用，从结构上消除 drift；1.2.0 只在其上加新命令 |
+| **`ezmk utils cc` 只弃用不删** | 按 API 稳定性承诺，破坏性变更仅 2.0.0；1.2.0 保留工具 + 弃用提示 |
+| **导出为单向快照** | `ezmk.toml` 为唯一事实源，`CMakeLists.txt` 重新生成、勿手改；默认拒绝覆盖手写文件 |
+| **依赖 best-effort** | 默认便携 `find_package`（内置常见包别名表），`--resolve` 输出具体安装路径（本机可用、不可移植） |
+| **默认模板收敛优化** | 新项目模板 base 仅 `["-Wall", "-Wextra"]`，优化级别由 profile 显式决定（debug `-O0` / release `-O2`）；旧项目不受影响 |
 
 ---
 
@@ -101,30 +121,30 @@
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| `ezmk utils cc` 输出修正 | 现有命令行为 | **行为修复**：输出从"假设命令"变为真实命令，clangd 索引更准；命令名/参数不变 |
-| `compile_one_source()` 重构 | 内部 | 行为不变；逐字节一致 + 全量测试零回归验收 |
-| 拦截跳过 `cc.lua` | 工具脚本不再执行 | 输出由 C++ 生成，等价且更准；脚本保留（1.2.0 弃用） |
-| 新增 `[compile].compile_commands` | 可选字段 | 默认 false，旧配置行为不变 |
-| 无新命令 / 无弃用 | 无 | 纯修复补丁，不触碰 1.1.0 稳定 API |
+| 新增 `ezmk project cc` | 纯新增命令 | 不影响既有命令 |
+| 新增 `ezmk project export cmake` | 纯新增命令 | 不影响既有命令 |
+| 前置 1.1.1（`build_compile_args()` 重构 + 拦截 + `compile_commands` 自动生成） | 1.2.0 基础 | 1.1.1 先发布；行为已由 1.1.1 回归验证 |
+| `ezmk utils cc` 弃用 | 工具仍可用 | 仅弃用提示；2.0.0 移除 |
+| `compile_commands.json` 格式 `command`→`arguments` | clangd 用户 | 两者 clangd 均支持，`arguments` 更优 |
 
 ---
 
 ## 6 延后项
 
-- **`ezmk project cc` 正式命令**：1.2.0 交付（`Command::ProjectCc`，复用 `build_compile_args()` + `compile_db`）
-- **`ezmk utils cc` 弃用**：1.2.0 声明（`use ezmk project cc instead`），2.0.0 移除
-- **`ezmk-official-utils` `cc` 工具标注**：1.2.0 加 `@deprecated` 标注 + 包版本提升（1.1.0 → 1.2.0）
+- **dev.2 P2 进阶映射**（profiles / `[test]` / `[install]` / deterministic → CMake）：不作为 1.2.0 阻塞项，按需实现
+- **`ezmk utils cc` 移除**：推迟到 2.0.0 破坏性窗口
+- **`project export make` / `project export meson`**：`Command::ProjectExport` 预留扩展点，后续版本实现
 
 ---
 
 ## 7 版本路线图
 
 ```
-1.1.0 (正式版) ──→ 1.1.1 (拦截 ezmk utils cc) 🔄 本计划
+1.1.0 (正式版) ──→ 1.1.1 (拦截 ezmk utils cc) ✅ 前置
                  → 1.2.0-dev.1 (`ezmk project cc` 命令)
                  → 1.2.0-dev.2 (CMakeLists.txt 导出)
                  → 1.2.0-dev.3 (默认模板内建 Profile)
                  → 1.2.0-dev.4 (CMake 项目导入, 实验性)
-                 → 1.2.0 (正式发布)
+                 → 1.2.0 (正式发布) 🔄 本计划
                  → 2.0.0 (未来) —— 破坏性变更窗口
 ```

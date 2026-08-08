@@ -6,7 +6,7 @@
 
 | 版本 | 主题 | 关键交付 | 状态 |
 |------|------|----------|------|
-| [1.1.1](1.1.1.md) | 拦截 `ezmk utils cc` + 自动生成 | `build_compile_args()` 重构 + `compile_db` 模块；`Command::Utils` 拦截 `cc` 改由 C++ 生成器服务；`[compile].compile_commands` 构建后自动生成；输出 drift-free | 待实现 |
+| [1.1.1](1.1.1.md) | 拦截 `ezmk utils cc` + 自动生成 | `build_compile_args()` 重构 + `compile_db` 模块；`Command::Utils` 拦截 `cc` 改由 C++ 生成器服务；`[compile].compile_commands` 构建后自动生成；输出 drift-free | 已发布（2026-08-08） |
 
 ## 与 1.2.0 的关系
 
