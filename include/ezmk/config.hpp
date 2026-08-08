@@ -45,6 +45,7 @@ struct CompileSection {
     bool ezmk_macros = true;                   // 0.2.2+ inject EZMK_* standard macros
     bool deterministic = false;                // 1.1.0: reproducible builds
     uint64_t source_date_epoch = 0;            // 1.1.0: SOURCE_DATE_EPOCH override (0 = auto)
+    bool compile_commands = false;             // 1.1.1: auto-generate compile_commands.json after build
 };
 
 struct LinkSection {

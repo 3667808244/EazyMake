@@ -487,6 +487,11 @@ EzConfig parse_config(const fs::path& toml_path) {
         if (auto sde = (*comp)["source_date_epoch"].value<int64_t>()) {
             if (*sde >= 0) cfg.compile.source_date_epoch = static_cast<uint64_t>(*sde);
         }
+
+        // 1.1.1: compile_commands — auto-generate compile_commands.json after build
+        if (auto cc = (*comp)["compile_commands"].as_boolean()) {
+            cfg.compile.compile_commands = cc->get();
+        }
     }
 
     // Apply default for include_dirs if empty

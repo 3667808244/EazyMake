@@ -43,6 +43,7 @@ struct BuildOptions {
     int jobs = 0;              // 0.2.3+ (0 = auto-detect via hardware_concurrency)
     std::string profile;        // 0.2.3+ build profile name (debug, release, etc.)
     bool auto_update = false;   // 0.2.5+: auto-update repo indices before build
+    bool compile_commands = false;  // 1.1.1: also generate compile_commands.json after build
 };
 
 // 1.1.0: project install options

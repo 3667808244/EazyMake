@@ -83,6 +83,8 @@ namespace ezmk::cli
             b.profile = *v;
         if (p.has("auto-update"))          // 0.2.5+
             b.auto_update = true;
+        if (p.has("compile-commands"))     // 1.1.1
+            b.compile_commands = true;
     }
 
     // ===================================================================
@@ -135,6 +137,7 @@ namespace ezmk::cli
                 {'\0', "disable-cache", false},
                 {'\0', "profile", true},
                 {'\0', "auto-update", false},    // 0.2.5+
+                {'\0', "compile-commands", false}, // 1.1.1
             };
             std::string cmd_name;
             if (action == "build")

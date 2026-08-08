@@ -1,5 +1,6 @@
 ﻿#include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
+#include "ezmk/compile_db.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/lockfile.hpp"
@@ -1116,6 +1117,19 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
 
     // Phase 3: Link
     auto output = link_phase(st, objects, opts, cfg);
+
+    // 1.1.1: auto-generate compile_commands.json after a successful link.
+    // Reuses the build-time state (make_compile_input) so the index matches
+    // this build's flags/includes/profile entry-for-entry. Failure is
+    // non-blocking (warning) — the build itself already succeeded.
+    if (st.compile_cfg.compile_commands || opts.compile_commands) {
+        try {
+            auto cin = make_compile_input(st, opts);
+            compile_db::generate_compile_db(cin, st.proj_root, {});
+        } catch (const std::exception& e) {
+            util::warn(std::string("compile_commands.json generation failed: ") + e.what());
+        }
+    }
 
     // Post-build hook
     run_hook(cfg.hooks.post_build, st.proj_root, output, opts.profile,
