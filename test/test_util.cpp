@@ -372,6 +372,36 @@ TEST_CASE("run_script: executes script in the given working directory", "[util][
     ezmk::util::remove_all(tmp);
 }
 
+// 1.1.2 C1: atomic_rename must not silently fail — a failed move previously let
+// execute_link print build_success with a stale/missing artifact.
+TEST_CASE("atomic_rename: moves file into place, overwriting existing target", "[util][1.1.2]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_rename_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto from = tmp / "src.tmp";
+    auto to = tmp / "out.bin";
+    { std::ofstream f(from); f << "new"; }
+    { std::ofstream f(to); f << "old"; }
+
+    ezmk::util::atomic_rename(from, to);
+    REQUIRE_FALSE(fs::exists(from));
+    REQUIRE(ezmk::util::file_read(to) == "new");
+
+    ezmk::util::remove_all(tmp);
+}
+
+TEST_CASE("atomic_rename: missing source throws fatal_error", "[util][1.1.2]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_rename_missing_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+
+    REQUIRE_THROWS_AS(ezmk::util::atomic_rename(tmp / "nope.tmp", tmp / "out.bin"),
+                      ezmk::fatal_error);
+    REQUIRE_FALSE(fs::exists(tmp / "out.bin"));
+
+    ezmk::util::remove_all(tmp);
+}
+
 // ===================================================================
 // git_available()
 // ===================================================================

@@ -993,7 +993,9 @@ static fs::path execute_link(
         util::fatal(ezmk::i18n::I18nKey::build_failed);
     }
 
-    fs::rename(output_tmp, output, ec);
+    // 1.1.2 C1: check the atomic-rename result — a failed rename (locked target)
+    // previously still printed build_success with a stale/missing output.
+    util::atomic_rename(output_tmp, output);
     util::info(ezmk::i18n::I18nKey::build_success, {{"path", output.string()}});
     return output;
 }

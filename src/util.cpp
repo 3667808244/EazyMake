@@ -264,6 +264,24 @@ void copy_recursive(const fs::path& from, const fs::path& to) {
     fs::copy(from, to, fs::copy_options::recursive, ec);
 }
 
+// 1.1.2 C1: atomic move of a build artifact into place. rename first; if that
+// fails (e.g. the target is locked by a running exe / antivirus on Windows),
+// fall back to copy_file + remove the temp. If both fail, fatal — a caller that
+// ignores this would otherwise report success with a stale/missing artifact.
+void atomic_rename(const fs::path& from, const fs::path& to) {
+    std::error_code ec;
+    fs::rename(from, to, ec);
+    if (!ec) return;
+    ec.clear();
+    fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
+    std::error_code rm_ec;
+    fs::remove(from, rm_ec);
+    if (ec) {
+        fatal("failed to move build output into place: " + to.string() +
+              " (" + ec.message() + ")");
+    }
+}
+
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts) {
     std::vector<fs::path> result;

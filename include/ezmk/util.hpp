@@ -96,6 +96,11 @@ void create_directories(const fs::path& p);
 void remove_all(const fs::path& p);
 void copy_recursive(const fs::path& from, const fs::path& to);
 
+// 1.1.2 C1: atomically move `from` into place at `to` (rename first; on failure
+// e.g. a locked target on Windows, fall back to copy_file + remove temp). Throws
+// ezmk::fatal_error if both fail, so callers must NOT report success.
+void atomic_rename(const fs::path& from, const fs::path& to);
+
 // Collect files matching extensions in a directory (non-recursive)
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);
