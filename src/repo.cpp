@@ -405,7 +405,7 @@ void add(const cli::RepoOptions& opts) {
         auto dest = cache_dir(scope, repo_name);
         util::info(ezmk::i18n::I18nKey::cloning, {{"url", opts.url}});
         if (!util::git_clone(opts.url, dest, opts.branch)) {
-            util::remove_all(dest);
+            { std::error_code ec; fs::remove_all(dest, ec); }  // best-effort
             throw std::runtime_error("failed to clone repository");
         }
 
@@ -413,7 +413,7 @@ void add(const cli::RepoOptions& opts) {
         try {
             validate_local_repo(dest);
         } catch (...) {
-            util::remove_all(dest);
+            { std::error_code ec; fs::remove_all(dest, ec); }  // best-effort
             throw;
         }
 
@@ -448,7 +448,7 @@ void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
                     if (util::file_exists(cd)) {
                         util::info(ezmk::i18n::I18nKey::removing_cache,
                                    {{"path", cd.string()}});
-                        util::remove_all(cd);
+                        { std::error_code ec; fs::remove_all(cd, ec); }  // best-effort
                     }
                 }
 

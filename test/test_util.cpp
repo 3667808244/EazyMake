@@ -411,6 +411,22 @@ TEST_CASE("toml_quote: escapes special characters", "[util][1.1.2]") {
     REQUIRE(toml_quote("tab\there") == "\"tab\\there\"");
 }
 
+// 1.1.2 C6: filesystem helpers must surface real failures (a swallowed
+// error_code previously let copy failures report "installed").
+TEST_CASE("copy_recursive: missing source throws", "[util][1.1.2]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_copy_missing_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    REQUIRE_THROWS_AS(ezmk::util::copy_recursive(tmp / "no_such_src", tmp / "dest"),
+                      std::runtime_error);
+    ezmk::util::remove_all(tmp);
+}
+
+TEST_CASE("remove_all: nonexistent path is a no-op", "[util][1.1.2]") {
+    REQUIRE_NOTHROW(ezmk::util::remove_all(
+        fs::temp_directory_path() / "ezmk_nonexistent_xyz_12345"));
+}
+
 // ===================================================================
 // git_available()
 // ===================================================================

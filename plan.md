@@ -37,7 +37,7 @@
 - [x] **2.3 lockfile 直接依赖**（C3）：`direct_deps` 元数据 + `depends_changed` 精确比较（含约束）+ 生成侧写入；`test_lockfile.cpp`（新建，7 用例）
 - [x] **2.4 Windows 脚本**（C4）：`run_script` 去 cd 前缀、走 `RunOptions.cwd`；`test_util.cpp` 行为用例（脚本在指定 cwd 运行）
 - [x] **2.5 TOML 转义**（C5）：`toml_quote()` + `write_default_config`/`lockfile::save`/`save_repo_list`；round-trip 用例
-- [ ] **2.6 安装事务化**（C6）：`remove_all`/`copy_recursive` 抛错 + 调用点过一遍；`pkg.cpp` swap 流程；失败保留旧版用例
+- [x] **2.6 安装事务化**（C6）：`remove_all`/`copy_recursive` 抛错 + 尽力清理点改内联吞错；`pkg.cpp` swap 流程（备份→复制→回滚→删备份）；`test_util.cpp` 用例（另修复 extract_zip reader 句柄泄漏）
 - [x] **2.7 确定性竞争**（C7）：`compile_one_source` 改 `RunOptions.env` 注入，删 `setenv`/恢复；`-j4` 确定性集成用例
 - [ ] 阶段二自测：`bash build.sh test` 相关用例通过
 

@@ -1306,8 +1306,11 @@ void pack_project(const config::EzConfig& cfg,
 
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_collecting,
                                 {{"name", name}, {"version", version}}));
-    // Clean up any leftover staging
-    if (util::file_exists(stage_dir)) util::remove_all(stage_dir);
+    // Clean up any leftover staging (best-effort)
+    if (util::file_exists(stage_dir)) {
+        std::error_code ec;
+        fs::remove_all(stage_dir, ec);
+    }
     fs::create_directories(stage_dir / "lib");
 
     // Step 4: Copy files
@@ -1335,8 +1338,9 @@ void pack_project(const config::EzConfig& cfg,
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_sha256,
                                 {{"sha256", sha}}));
 
-    // Step 7: Cleanup staging
-    util::remove_all(stage_dir);
+    // Step 7: Cleanup staging (best-effort — failure to remove a temp dir should
+    // not fail the pack command)
+    { std::error_code ec; fs::remove_all(stage_dir, ec); }
 
     // Step 8: Verbose output — index.toml snippet
     if (opts.verbose) {

@@ -707,6 +707,10 @@ void install(const std::string& pkg_file, cli::Scope scope,
         }
 
         // Check for existing install
+        // 1.1.2 C6: do NOT delete the old install here — dependency resolution,
+        // compilation and hooks run below, and a failure would leave the package
+        // uninstalled. The old version is swapped out only once the new one is
+        // fully staged (see the transactional copy below).
         fs::path install_path = dest_dir / pkg_name;
         if (util::file_exists(install_path)) {
             if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::overwrite_confirm,
@@ -715,7 +719,6 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 util::remove_all(stage);
                 return;
             }
-            util::remove_all(install_path);
         }
 
         // Collect all involved packages for dependency resolution
@@ -927,10 +930,34 @@ void install(const std::string& pkg_file, cli::Scope scope,
             compile_package(dir, dep_includes, tc);
         }
 
-        // Copy to install directory
+        // Copy to install directory — transactionally (1.1.2 C6).
+        // Back up the old install, place the new one, and only then delete the
+        // backup. If the copy fails, roll the old version back. Previously the
+        // old install was deleted before staging, so any failure left the
+        // package uninstalled with no recovery.
         fs::create_directories(dest_dir);
         util::info(ezmk::i18n::I18nKey::installing_to, {{"path", install_path.string()}});
-        util::copy_recursive(pkg_root, install_path);
+        fs::path backup = install_path;
+        backup += ".old";
+        { std::error_code ec; fs::remove_all(backup, ec); }  // stale crash backup
+        bool had_old = util::file_exists(install_path);
+        if (had_old) {
+            std::error_code ec;
+            fs::rename(install_path, backup, ec);
+            if (ec) {
+                throw std::runtime_error("failed to back up existing install: " +
+                                         install_path.string() + " (" + ec.message() + ")");
+            }
+        }
+        try {
+            util::copy_recursive(pkg_root, install_path);
+        } catch (...) {
+            std::error_code ec;
+            fs::remove_all(install_path, ec);      // drop the partial new install
+            if (had_old) fs::rename(backup, install_path, ec);  // restore old
+            throw;
+        }
+        { std::error_code ec; fs::remove_all(backup, ec); }  // old version gone for good
 
         // Postinstall hook
         fs::path postinstall_script = detect_install_script(install_path, "postinstall");
@@ -950,13 +977,14 @@ void install(const std::string& pkg_file, cli::Scope scope,
         util::info(ezmk::i18n::I18nKey::installed, {{"pkg", pkg_name}});
 
     } catch (...) {
-        // Clean up staging on error
-        util::remove_all(stage);
+        // Clean up staging on error (best-effort — a cleanup failure must not
+        // mask the original error)
+        { std::error_code ec; fs::remove_all(stage, ec); }
         throw;
     }
 
-    // Cleanup temp
-    util::remove_all(stage);
+    // Cleanup temp (best-effort)
+    { std::error_code ec; fs::remove_all(stage, ec); }
 
     auto now_iso = []() -> std::string {
         auto t = std::time(nullptr);

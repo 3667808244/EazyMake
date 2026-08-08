@@ -16,6 +16,7 @@
 #include <atomic>
 #include <csignal>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <thread>
 
@@ -81,6 +82,8 @@ static int run_builtin_cc(const std::vector<std::string>& utils_args) {
     ezmk::compile_db::generate_compile_db(cfg, opts, proj_root, out);
     return 0;
 }
+
+namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
     ezmk::util::init_console();
@@ -154,7 +157,7 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::ProjectClean:
             ezmk::cache::clear_cache();
-            ezmk::util::remove_all(".ezmk/temp");
+            { std::error_code ec; fs::remove_all(".ezmk/temp", ec); }  // best-effort
             ezmk::util::info(ezmk::i18n::I18nKey::cleaned);
             break;
 
@@ -404,13 +407,13 @@ int main(int argc, char** argv) {
         } // switch
 
     } catch (const ezmk::fatal_error&) {
-        // fatal() already printed the message; just clean up
-        ezmk::util::remove_all(".ezmk/temp");
+        // fatal() already printed the message; just clean up (best-effort)
+        { std::error_code ec; fs::remove_all(".ezmk/temp", ec); }
         ezmk::lua::shutdown();
         return 1;
     } catch (const std::exception& e) {
         ezmk::util::error(e.what());
-        ezmk::util::remove_all(".ezmk/temp");
+        { std::error_code ec; fs::remove_all(".ezmk/temp", ec); }
         ezmk::lua::shutdown();
         return 1;
     }

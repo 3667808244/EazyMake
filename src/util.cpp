@@ -254,14 +254,25 @@ void create_directories(const fs::path& p) {
     fs::create_directories(p, ec);
 }
 
+// 1.1.2 C6: surface real filesystem failures instead of silently ignoring them.
+// fs::remove_all on a NONEXISTENT path is a no-op (no ec) — only genuine errors
+// (permission, disk full, ...) throw, so best-effort cleanup of possibly-missing
+// dirs keeps working.
 void remove_all(const fs::path& p) {
     std::error_code ec;
     fs::remove_all(p, ec);
+    if (ec) {
+        throw std::runtime_error("failed to remove: " + p.string() + " (" + ec.message() + ")");
+    }
 }
 
 void copy_recursive(const fs::path& from, const fs::path& to) {
     std::error_code ec;
     fs::copy(from, to, fs::copy_options::recursive, ec);
+    if (ec) {
+        throw std::runtime_error("failed to copy " + from.string() + " -> " +
+                                 to.string() + " (" + ec.message() + ")");
+    }
 }
 
 // 1.1.2 C1: atomic move of a build artifact into place. rename first; if that
@@ -604,19 +615,27 @@ void extract_zip(const fs::path& archive, const fs::path& dest) {
         throw std::runtime_error("failed to open ZIP: " + archive.string());
     }
     mz_uint num = mz_zip_reader_get_num_files(&zip);
-    for (mz_uint i = 0; i < num; ++i) {
-        mz_zip_archive_file_stat stat{};
-        if (!mz_zip_reader_file_stat(&zip, i, &stat)) continue;
-        fs::path out = safe_extract_path(dest, stat.m_filename);
-        if (mz_zip_reader_is_file_a_directory(&zip, i)) {
-            fs::create_directories(out);
-        } else {
-            fs::create_directories(out.parent_path());
-            if (!mz_zip_reader_extract_to_file(&zip, i, out.string().c_str(), 0)) {
-                mz_zip_reader_end(&zip);
-                throw std::runtime_error("failed to extract: " + std::string(stat.m_filename));
+    // 1.1.2 S1: ensure mz_zip_reader_end() runs even when a malicious entry name
+    // makes safe_extract_path throw — otherwise the reader's FILE* leaks and the
+    // archive stays locked on Windows, so callers can't delete it.
+    try {
+        for (mz_uint i = 0; i < num; ++i) {
+            mz_zip_archive_file_stat stat{};
+            if (!mz_zip_reader_file_stat(&zip, i, &stat)) continue;
+            fs::path out = safe_extract_path(dest, stat.m_filename);
+            if (mz_zip_reader_is_file_a_directory(&zip, i)) {
+                fs::create_directories(out);
+            } else {
+                fs::create_directories(out.parent_path());
+                if (!mz_zip_reader_extract_to_file(&zip, i, out.string().c_str(), 0)) {
+                    mz_zip_reader_end(&zip);
+                    throw std::runtime_error("failed to extract: " + std::string(stat.m_filename));
+                }
             }
         }
+    } catch (...) {
+        mz_zip_reader_end(&zip);
+        throw;
     }
     mz_zip_reader_end(&zip);
 }
