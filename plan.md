@@ -1,24 +1,23 @@
-# EazyMake 1.1.0 执行计划
+# EazyMake 1.1.1 执行计划
 
-> 详细设计：[`plans/1.1.0/1.1.0.md`](plans/1.1.0/1.1.0.md)
+> 正式发布计划：**1.1.1**（拦截 `ezmk utils cc` + 构建后自动生成 compile_commands）。详细设计：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md)。
 >
-> **状态：✅ 已完成（1.1.0 正式版已发布）。** 这是 1.1.0 正式版发布执行计划，聚合 dev.1~dev.7 + pre.1~pre.3 的全部交付，并收口 pre.3 延后的 3.3.x 发布流水线项。前置条件为 `1.1.0-pre.3` 全部缺陷修复与 CI 工作流已完成（✅，见 `CHANGES.md`）。
+> **1.1.x 稳定线补丁**：不新增命令、不弃用、不触碰 1.1.0 稳定 API；`ezmk project cc` 正式命令与 `ezmk utils cc` 弃用推迟至 [1.2.0](plans/1.2.0/1.2.0.md)。
 >
-> **⛔ 发布门槛**：实现完整 + API 兼容 + 全量测试零回归，三项同时满足才可发布。详细 Gate 定义见 [1.1.0-pre.3](plans/1.1.0/1.1.0-pre.3.md#-发布门槛release-gate)。
+> **⛔ 发布门槛**：实现完整 + API 兼容 + 全量测试零回归，三项同时满足才可发布（Gate 定义见 [1.1.0-pre.3](plans/1.1.0/1.1.0-pre.3.md#-发布门槛release-gate)）。本补丁发布后，`plan.md` 转回 [1.2.0](plans/1.2.0/) 执行计划。
 
 ---
 
 ## 1 背景
 
-`1.1.0-pre.3` 收口了全量已知缺陷、CI 测试工作流与文档修正，并把 3.3.x 发布流水线项（依赖真实 GitHub Release 产物的 URL 与哈希）明确延后至正式版发布时执行。至此，1.1.0 的功能交付已完整：
+`compile_commands.json` 由外置 Lua 工具（`ezmk utils cc`，`ezmk-official-utils/utils/cc.lua`）生成，与 `ezmk build` 真实命令存在**系统性 drift**：缺 `@link:` 解析目录、依赖包 `extra_includes`、`-stdlib`、`-fPIC`、确定性标志、宏 `-D`、`--profile`、MSVC 翻译等。clangd 等索引看到的是"假设命令"，而非真实构建命令。
 
-1. **dev 阶段**（dev.1~dev.7）：`precompiled` 包与 `[install]`、多平台共包（`os_arch_toolchain` triple）与 `pack`、Agent Skills、`stdlib`/`lang` 泛化、`ezmk-official-utils`、`ezmk test` 测试系统、包生态拓充
-2. **pre 阶段**（pre.1~pre.3）：顶层别名 / `--help` 重组 / API 稳定承诺、文档审计、测试系统缺陷修复与 CI 测试工作流
-3. **发布就绪预置**：`include/ezmk/version.hpp` / `build.sh` 默认版本已为 `1.1.0`；`plans/1.1.0/1.1.0.md` 发布计划与 Tutorial 09/10 已交付
+1.1.1 做两件事——**不改命令名、不新增命令、不弃用**：
 
-剩余工作全部属于**正式发布动作**：冻结回归 → 打 `v1.1.0` tag 触发 `release.yml` 首次真实 Release → Homebrew / winget / 安装脚本分发渠道 → 文档与版本索引收尾。
+1. **拦截 `ezmk utils cc`**：修复既有命令的输出正确性。在 CLI 分发处拦截 `utils cc`，改由内置 C++ 逻辑（复用真实命令构造）服务。
+2. **`[compile].compile_commands` 自动生成**：新增配置项，`ezmk build` 成功后自动生成 compile_commands.json（对标 CMake `CMAKE_EXPORT_COMPILE_COMMANDS`）。
 
-`README.md` 已宣告 **"Stable public API as of v1.1.0"** 并给出安装命令（`curl ... install.sh | bash` / `irm ... install.ps1 | iex`）——安装脚本回归即以这两条命令 + Release 产物为验收目标，发布成功后 README 无需改动。
+同时把编译命令构造重构为**单一事实源**（`build_compile_args()`），为 1.2.0 的 `ezmk project cc` 正式命令铺路（命令与弃用均在 1.2.0 交付）。
 
 ---
 
@@ -26,68 +25,61 @@
 
 | # | 目标 | 类别 | 优先级 | 状态 |
 |---|------|------|--------|------|
-| 1 | 冻结与回归：`bash build.sh test-all` 全量零回归（556/2666）+ CI 绿色 | 门槛 | P0 | ✅ 已完成 |
-| 2 | 打 `v1.1.0` tag 触发 `release.yml` 首次真实 Release | 发布 | P0 | ✅ 已完成 |
-| 3 | 4 平台产物核验（windows/linux/macos x64+arm64，含 `_ezmk` 拷贝 + `./ezmk version`） | 发布 | P0 | ✅ 3/4（macos-x64 跟进） |
-| 4 | Homebrew formula `homebrew-eazymake/ezmk.rb`（Release 产物 URL + sha256） | 分发 | P1 | ✅ 已完成（brew 烟测延后真机） |
-| 5 | winget manifest `manifests/e/ezmk/1.1.0.yaml`（Release `.exe` URL + sha256） | 分发 | P1 | 🔄 延后跟进（见 §6） |
-| 6 | `install.sh`（Linux，含 zsh 补全）/ `install.ps1`（Windows 预编译）回归 | 回归 | P1 | 🔄 部分（资产已修，真机/下载受网络限） |
-| 7 | `CHANGES.md` 新增 `1.1.0` 条目（汇总 dev/pre 交付，标注里程碑） | 文档 | P1 | ✅ 已完成 |
-| 8 | `plans/README.md` / `plan.md` 状态收口（1.1.0 → 已完成） | 文档 | P2 | ✅ 已完成 |
-| 9 | 版本号就绪：`version.hpp` / `build.sh` 默认版本为 `1.1.0` | 预置 | P0 | ✅ 已就绪 |
-| 10 | `plans/1.1.0/1.1.0.md` 发布计划 + Tutorial 09/10 | 预置 | P2 | ✅ 已交付（pre.3） |
+| 1 | 重构 `compile_one_source()`，提取 `build_compile_args()`（参数向量）+ `join_shell_args()`（shell 转义），构建路径行为不变 | 功能 | P0 | 待实现 |
+| 2 | 新建 `compile_db` 模块 `generate_compile_db()`：复用真实命令构造，`arguments` 数组输出，相对项目根、顺序稳定、原子写 | 功能 | P0 | 待实现 |
+| 3 | `Command::Utils` 分发处拦截 `utils_name == "cc"`，改由内置 C++ 生成器服务，`-o`/`--help`/`--profile` 兼容 | 功能 | P0 | 待实现 |
+| 4 | 新增 `[compile].compile_commands`（bool，默认 false）：`ezmk build` 成功后自动生成，输出与本次构建完全一致 | 功能 | P1 | 待实现 |
+| 5 | `ezmk utils cc` 输出与 `ezmk build` 完全一致（drift-free），零外部包依赖 | 质量 | P0 | 待实现 |
+| 6 | 单测 + 集成覆盖拦截 / 自动生成 / 配置解析；全量测试零回归（基线 546/2617） | 质量 | P0 | 待实现 |
+| 7 | 文档与发布收口：`docs/config_file.md` / `CHANGES.md`（§3.6 口径）+ 版本号 1.1.1 | 文档 | P1 | 待实现 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：冻结与回归（发布门槛预检）✅
+### 阶段一：命令构造重构（核心）
 
-**文件**：`git status` / `build.sh` / `.github/workflows/ci.yml`（核验，不改动）
+**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.1
 
-- [x] `1.1.0-pre.3` 收尾提交全部合并，`git status` 干净（✅ pre.3 阶段五已收口）
-- [x] 版本号就绪：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.1.0`（`EZMK_VERSION` fallback）（✅ 已验证）
-- [x] 发布计划 `plans/1.1.0/1.1.0.md` + Tutorial `09-test.md` / `10-top-level-aliases.md`（en/zh）已完成（✅ pre.3 阶段四交付）
-- [x] 本地全量回归：`bash build.sh test-all`（单元 546/2617 + 集成 556/2666）零回归（✅ 556/2666 passed，exit 0）
-- [x] 确认 CI 工作流（`.github/workflows/ci.yml`）在最后一次 push 上绿色（含 zsh-completions job）（✅ run #31171539927，3 job 全绿）
-- [x] **发布门槛预检**（§2.1 三项）：① 实现完整（pre.3 清单收口，含 3.3.x 明确延后边界）；② API 兼容（`CHANGES.md` 稳定性承诺无破坏性变更）；③ 全量测试零回归（✅ 三项均满足）
+- [ ] 提取 `build_compile_args()` / `join_shell_args()` 到 `include/ezmk/cache.hpp`；`compile_one_source()` 改为调用
+- [ ] `build_compile_args()` 完整包含：真实编译器（`detected_compiler` 优先）/ `-std=` / stdlib 标志 / 确定性标志 / `-fPIC` / `[compile].flags`（MSVC 翻译 + `msvc_flags`）/ `-I`（`@link:` + 依赖包 `extra_includes`）/ 宏 `-D` / `-MMD -MF` / `-c <src> -o <obj>`
+- [ ] 验收：重构前后命令逐字节一致，`bash build.sh test` 零回归
+
+### 阶段二：compile_db 模块
+
+**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.2
+
+- [ ] 新建 `src/compile_db.cpp` + `include/ezmk/compile_db.hpp`：`generate_compile_db(project_root, config, profile, output_path)`
+- [ ] 复用 `build::prepare_build_state()` → `build_compile_args()`；**最小规范化**（剔除 `-MMD`/`-MF <path>`/`-frandom-seed=<x>`/`/showIncludes`）
+- [ ] `file` 相对项目根 `rel_src`、`directory` 项目根绝对路径、按 `rel_src` 字典序、temp → rename 原子写；无源文件 → warning + 成功
+
+### 阶段三：拦截 `ezmk utils cc`
+
+**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.3
+
+- [ ] `main.cpp` `Command::Utils` 分发处（`find_utils_script()` **之前**）拦截 `cc`，改由内置 C++ 生成器服务
+- [ ] 兼容行为：默认输出 `<proj_root>/compile_commands.json`；`-o <path>` 相对项目根解析；`-h/--help` 复用原工具文案；`--profile <name>` 透传
+- [ ] 不调用 `find_utils_script("cc")`；`cc.lua` 不再执行（包内文件保留，1.2.0 弃用）
+
+### 阶段四：`[compile].compile_commands` 自动生成
+
+**设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.4
+
+- [ ] `CompileSection::compile_commands` 字段 + `src/config.cpp` 解析（默认 false）
+- [ ] `build.cpp` 链接成功后 hook：用**构建期 `CompileInput`**（含 profile 应用后标志、依赖包 include、`@link:` 结果），输出与本次构建逐条一致
+- [ ] 失败 warning 不阻塞构建；`--compile-commands` flag 允许临时开启而不改配置
+
+### 阶段五：i18n / 测试 / 文档 / 发布
+
+- [ ] i18n：`compile_db_*`/`help_*`/自动生成 warning key（en/zh），`check_i18n.py` 三向一致通过
+- [ ] 测试：`test_compile_db.cpp`（新建）+ `test_config.cpp`（字段解析）+ `test_integration.cpp`（拦截 / 自动生成）；全量零回归
+- [ ] `docs/en|zh/config_file.md` 补 `[compile].compile_commands` 字段说明
+- [ ] `CHANGES.md` 新增 `1.1.1` 条目——**口径：优化 compile_commands.json 生成算法 + 新增配置项；不宣布拦截 / 弃用**（`cc` 工具弃用声明在 1.2.0）
+- [ ] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.1.1`
+- [ ] **发布门槛预检**：① 计划清单全部完成或明确收口；② API 兼容（无破坏性变更）；③ 全量测试零回归
+- [ ] 打 `v1.1.1` tag 触发 `release.yml`（沿用 1.1.0 流程）；发布后 `plan.md` 转回 [1.2.0](plans/1.2.0/) 执行计划
 
 > 门槛未满足即停止，禁止带着未收口项打 tag。
-
-### 阶段二：打 tag 触发 Release ✅（macos-x64 跟进项）
-
-**文件**：`git` / `.github/workflows/release.yml`（已有，首次真实触发）
-
-- [x] `git tag v1.1.0` + `git push origin v1.1.0`（✅ 已推送）
-- [x] 创建 GitHub Release → `release.yml` 触发 4 平台 job（`windows-x64` / `linux-x64` / `macos-x64` / `macos-arm64`）（✅ Release 已建，run #31174454874）
-- [x] 核对每个 job 的 `res/ezmk.zsh` 被拷贝为 `_ezmk`；产物齐全（`ezmk-windows-x64.zip`、`ezmk-linux-x64.tar.gz`、`ezmk-macos-x64.tar.gz`、`ezmk-macos-arm64.tar.gz`）（✅ 3/4 已核：linux-x64 / windows-x64 / macos-arm64 均含 `_ezmk`；macos-x64 ⏳ 见跟进项）
-- [x] 人工核验产物可运行：下载解包后 `./ezmk version` 输出 `1.1.0`（✅ windows-x64 实测 `EazyMake 1.1.0`；linux=ELF / macos=Mach-O 结构校验通过；linux/macOS 运行时核验待真机/CI）
-- [x] 记录 4 平台产物的 URL + sha256（供阶段三分发渠道使用）（✅ 3/4：linux-x64 `938F7CA8…7BF7`、macos-arm64 `3397D63D…B4C4`、windows-x64 `B3696CEC…3FCE`；macos-x64 待产物）
-
-> **macos-x64 跟进项（已确认延后）**：Intel `macos-13` runner 在 GitHub free tier 长期无分配（排队 >50 分钟，最长可排 24h 后被取消）。`release.yml` 其余 4 个 job 全部成功，Release 已带 3 个产物上线。**决策：先推进阶段三/四，macos-x64 不阻塞发布**——job 仍在 GitHub 队列，runner 可用时会自动构建并上传 `ezmk-macos-x64.tar.gz` 到同一 Release，届时补核验；若被取消则 `gh run rerun` 重新触发。该 job 与 `macos-arm64` 结构完全相同（macOS/clang++/打包），已验证流程对其同样适用。
-
-> **风险核销**：`release.yml` 首次真实运行未出现代码级错误——linux/windows/macos-arm64 三平台构建、`res/ezmk.zsh → _ezmk` 拷贝、产物打包上传全部成功，唯一问题（macos-x64 runner 缺货）属基础设施排队，非流水线缺陷。
-
-### 阶段三：分发渠道 ✅（真机烟测项延后）
-
-**文件**：`homebrew-eazymake/ezmk.rb`（外部仓库）+ `manifests/e/ezmk/1.1.0.yaml`（winget，外部仓库）+ `install.sh` / `install.ps1`（核验，不改动）
-
-- [x] **Homebrew**：创建 tap 仓库 `3667808244/homebrew-eazymake` + `Formula/ezmk.rb`（`ezmk-linux-x64.tar.gz` URL + sha256 `938f7ca8…7bf7`）并推送（✅ 已上线 `github.com/3667808244/homebrew-eazymake`；`brew tap 3667808244/eazymake && brew install ezmk` 烟测需 Linux/macOS 真机，本机无法执行）
-- [ ] **winget**：以 Release 的 Windows 安装包 URL + sha256 填 manifest，提交 `microsoft/winget-pkgs` PR（后续由 winget 官方审批合并，**不阻塞 1.1.0 发布**）（🔒 延后：release.yml 产出便携 `ezmk.exe`/zip 而非 winget 安装器（需独立安装器或 zip/portable 类型改造），且 fork `winget-pkgs` 大仓受本机网络限制——作为发布后跟进项，见 §6）
-- [ ] **install.sh**：真实 Linux 环境验证 README 安装命令（`curl -fsSL .../install.sh | bash`），含 zsh 补全激活（⚠️ 本机 Windows 无 WSL 无法真机执行；CI zsh-completions job 已回归 install.sh 激活逻辑，真机终验留待发布后）
-- [x] **install.ps1**：Windows 预编译安装回归（✅ 发现并修复流水线缺陷：release.yml 仅打包 zip 而 install.ps1 需独立 `ezmk.exe`+`ezmk.exe.sha256`——已手动上传两资产至 v1.1.0 Release 并持久修复 release.yml；脚本版本解析/checksum 格式核对通过；⚠️ 端到端下载在本机因 github.com 网络阻断无法完成，属环境限制，正常网络下 URL 资产已就绪）
-
-> **阶段三发现并修复的发布流水线缺陷**：`install.ps1`（dev.5 编写）从 Release 下载独立 `ezmk.exe`，但 `release.yml`（pre.1/pre.2 建立、首次真实运行）只打包 zip——首真实 Release 暴露此 gap。已修复：① 手动上传 `ezmk.exe` + `ezmk.exe.sha256` 至 v1.1.0；② `release.yml` windows-x64 job 增加独立 exe + checksum 打包上传（未来 Release 自动携带）。`install.sh` 走源码构建，无此问题。
-
-### 阶段四：收尾 ✅
-
-**文件**：`CHANGES.md` + `plans/README.md` + `plan.md`
-
-- [x] `CHANGES.md` 新增 `1.1.0` 条目（汇总 dev.1~dev.7 + pre.1~pre.3 全部交付，标注里程碑 + 发布后跟进项）
-- [x] `plans/README.md` 更新：1.1.0 从「当前执行」移至「已完成」，路线图推进至 2.0.0
-- [x] 更新 `plan.md`（本计划 → 收口状态）
-- [x] **发布门槛最终核对**（§2.1 三项）：① 实现完整（dev.1~pre.3 全交付 + 3.3.x 收口或明确延后）；② API 兼容（`CHANGES.md` 稳定性承诺，无破坏性变更）；③ 全量测试零回归（`bash build.sh test-all` 556/2666 + CI run #31171539927 全绿）——**三项均满足，予以发布**
-- [x] 回退条件核对：无任何门槛项不满足，未触发回退（macos-x64 runner 缺货为基础设施跟进项，非实现/兼容/回归缺陷）
 
 ---
 
@@ -95,60 +87,44 @@
 
 | 决策 | 说明 |
 |------|------|
-| **tag → 版本号映射** | `release.yml` 从 tag 剥离 `v` 前缀（`${TAG#v}`）得到版本号，并以 `EZMK_VERSION` 环境变量传给各平台 job——tag 命名必须为 `v1.1.0` |
-| **发布顺序强依赖** | Homebrew / winget / install.ps1 全部依赖阶段二 Release 产物 URL + sha256，阶段二未完成不得进入阶段三 |
-| **winget 审批不阻塞** | `winget-pkgs` 由官方维护者审批，周期不可控，作为 1.1.0 发布后跟进项，不设阻塞 |
-| **zsh 补全真机终验** | Windows 无法运行 zsh；CI zsh-completions job 已在真实 zsh 覆盖 install.sh 激活逻辑（marker 幂等 + `_ezmk` 注册），阶段三真机验证为其补充终验 |
-| **release.yml 首次激活风险最高** | 从未被 Release 触发，macOS（clang++ 别名 / 静态链接）与打包路径是最大不确定点——首次 Release 需现场修复并补跑 |
-| **版本号已预置** | `version.hpp` / `build.sh` 默认版本在 pre.3 阶段已置为 `1.1.0`，发布时无需再改，避免最后一刻改动引入回归 |
+| **拦截而非改名** | 修复既有 `ezmk utils cc` 输出正确性，不改命令名/参数，不破坏现有脚本；1.1.1 是纯修复补丁 |
+| **命令构造单一事实源** | 编译命令拼装收敛到 `build_compile_args()`，构建与 compile-db 共用，从结构上消除 drift |
+| **拦截改由 C++ 服务** | `cc.lua` 不再执行；输出由 C++ 生成，等价且更准；脚本保留待 1.2.0 弃用 |
+| **自动生成用构建期状态** | 直接复用本次构建 `CompileInput`，保证零 drift 且无额外探测开销 |
+| **最小规范化** | 仅剔除 clangd 不需要的 `-MMD`/`-MF`/`-frandom-seed`/`/showIncludes`，其余保留 |
+| **`arguments` 数组输出** | 而非 `command` 字符串，避免 shell 双重转义歧义，clangd 推荐格式 |
+| **发布口径** | 1.1.1 对外仅表述"优化生成算法 + 新配置项"；拦截是内部实现细节，`cc` 工具不声明废弃（弃用在 1.2.0） |
 
 ---
 
 ## 5 兼容性矩阵
 
-1.1.0 全周期（dev.1 ~ pre.3）公共 API 无破坏性变更（破坏性变更仅在 `2.0.0` 引入）：
-
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 顶层别名（`ezmk build` 等） | 新增命令入口 | 纯增量，完整形式 `project <action>` 不变 |
-| `[test]` / `[install]` 配置节 | 新增可选字段 | 不影响既有配置 |
-| `run_command()` 加 timeout 参数 | 函数签名变化（内部 API） | 默认参数，调用方不传即无超时 |
-| `check_built` / Catch2 解析修正 | 行为更正确 | 修复边缘 bug |
-| Homebrew / winget 渠道 | 新分发渠道 | 纯增量，不影响既有安装方式 |
-| `install.sh` zsh 补全 marker | 重复安装不再误判 | pre.3 已修复，本版本回归验证 |
+| `ezmk utils cc` 输出修正 | 现有命令行为 | **行为修复**：输出从"假设命令"变为真实命令，clangd 索引更准；命令名/参数不变 |
+| `compile_one_source()` 重构 | 内部 | 行为不变；逐字节一致 + 全量测试零回归验收 |
+| 拦截跳过 `cc.lua` | 工具脚本不再执行 | 输出由 C++ 生成，等价且更准；脚本保留（1.2.0 弃用） |
+| 新增 `[compile].compile_commands` | 可选字段 | 默认 false，旧配置行为不变 |
+| 无新命令 / 无弃用 | 无 | 纯修复补丁，不触碰 1.1.0 稳定 API |
 
 ---
 
-## 6 延后项（发布后跟进）
+## 6 延后项
 
-- **macos-x64 产物**：Intel `macos-13` runner 在 GitHub free tier 长期无分配，job 仍在队列（runner 可用时自动构建并上传 `ezmk-macos-x64.tar.gz` 至 v1.1.0 Release；若被取消则 `gh run rerun` 重触发），届时补核验
-- **winget manifest**：Release 产出便携 `ezmk.exe`/zip 而非 winget 安装器（需独立安装器或 zip/portable 类型改造），且 `microsoft/winget-pkgs` PR 需 fork 大仓受网络限制——作为发布后跟进项，提交后由官方审批（周期不可控，不阻塞）
-- **真机烟测**：`brew install`（Linux/macOS）、`install.sh` Linux 真机（含 zsh 补全，CI zsh-completions job 已覆盖激活逻辑）、install.ps1 端到端下载（本机 github.com 网络阻断，正常网络下 Release 资产已就绪）
-- **2.0.0 破坏性变更窗口**：`CHANGES.md` API 稳定性承诺——破坏性变更仅在 `2.0.0` 引入，且至少在 1 个 minor 版本前给出 deprecation warning；1.1.0 无任何破坏性变更
-
----
-
-## 7 涉及文件变更摘要
-
-| 文件 | 变更类型 | 说明 |
-|------|----------|------|
-| `include/ezmk/version.hpp` / `build.sh` | 已就绪 | 默认版本 `1.1.0`（pre.3 已置，无需再改） |
-| `.github/workflows/release.yml` | 已有，首次激活 | 打 `v1.1.0` tag 触发 4 平台构建/打包（阶段二），`res/ezmk.zsh` → `_ezmk` |
-| `homebrew-eazymake/ezmk.rb` | **新建**（外部仓库） | Homebrew formula，Release 的 `ezmk-linux-x64.tar.gz` URL + sha256 |
-| `manifests/e/ezmk/1.1.0.yaml` | **新建**（winget，外部仓库） | Release 的 Windows `.exe` URL + sha256，提交 `microsoft/winget-pkgs` |
-| `install.sh` / `install.ps1` | 回归验证 | 真实 Linux / Windows 验证 README 安装命令（原则上不改代码，除非发现问题） |
-| `CHANGES.md` | 修改 | 新增 `1.1.0` 条目（阶段四） |
-| `plans/README.md` | 修改 | 1.1.0 → 已完成，路线图推进（阶段四） |
-| `plan.md` | 重写 | 1.1.0 执行计划（本次） |
-| `plans/1.1.0/1.1.0.md` | 已交付 | 1.1.0 最终发布计划（pre.3 阶段四） |
+- **`ezmk project cc` 正式命令**：1.2.0 交付（`Command::ProjectCc`，复用 `build_compile_args()` + `compile_db`）
+- **`ezmk utils cc` 弃用**：1.2.0 声明（`use ezmk project cc instead`），2.0.0 移除
+- **`ezmk-official-utils` `cc` 工具标注**：1.2.0 加 `@deprecated` 标注 + 包版本提升（1.1.0 → 1.2.0）
 
 ---
 
-## 8 版本路线图
+## 7 版本路线图
 
 ```
-1.0.0 (正式版) ──→ 1.1.0-dev.1~7 (包编译与开发体验) ✅
-                 → 1.1.0-pre.1~3 (用户触达 / 文档 / 缺陷收口) ✅
-                 → 1.1.0 (正式版发布) 🔄 本计划
+1.1.0 (正式版) ──→ 1.1.1 (拦截 ezmk utils cc) 🔄 本计划
+                 → 1.2.0-dev.1 (`ezmk project cc` 命令)
+                 → 1.2.0-dev.2 (CMakeLists.txt 导出)
+                 → 1.2.0-dev.3 (默认模板内建 Profile)
+                 → 1.2.0-dev.4 (CMake 项目导入, 实验性)
+                 → 1.2.0 (正式发布)
                  → 2.0.0 (未来) —— 破坏性变更窗口
 ```

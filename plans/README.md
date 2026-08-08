@@ -15,18 +15,22 @@ plans/
 ├── 1.0.0/          # 1.0.0 发布系列（0.9.0 ~ 1.0.0，含发布准备版本）
 │   ├── README.md
 │   └── 0.9.0.md ~ 1.0.0.md
-└── 1.1.0/          # 1.1.0 发布系列（dev.1 ~ dev.7 / pre.1 ~ pre.3 / 1.1.0）
+├── 1.1.1/          # 1.1.1 补丁系列（拦截 ezmk utils cc）
+│   ├── README.md
+│   └── 1.1.1.md
+└── 1.2.0/          # 1.2.0 发布系列（dev.2 / dev.3 / 1.2.0）
     ├── README.md
-    └── 1.1.0-dev.1.md ~ 1.1.0.md
+    └── 1.2.0-dev.2.md ~ 1.2.0.md
 ```
 
-> 仓库根目录的 `plan.md` 为当前执行计划（1.1.0 正式版已发布 ✅）。
+> 仓库根目录的 `plan.md` 为当前执行计划（**1.1.1**，前置补丁；发布后转回 [1.2.0](1.2.0/README.md)）。
 
 ---
 
 ## 当前执行
 
-- 无（1.1.0 已发布；下一里程碑 2.0.0 见「未来规划」）
+- **[1.1.1](1.1.1/README.md)** — 补丁：拦截 `ezmk utils cc`（编译命令单一事实源），1.2.0 的前置（`plan.md`）
+- **[1.2.0](1.2.0/README.md)** — 工具链互操作与开箱工程化（`ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile），开发中（执行计划：`1.2.0/execution.md`，1.1.1 发布后 `plan.md` 接回）
 
 ## 未来规划
 
@@ -45,6 +49,8 @@ plans/
 | 0.x.x | 早期开发 | 测试框架 / i18n / 跨平台 / Lua 工具链 / MSVC 支持 / 精细化控制 / 开发者体验 / 生态与安全 / 翻译收尾 | [0.x.x/README.md](0.x.x/README.md) |
 | 1.0.0 | 打磨发布 | 一键安装 / 默认仓库 / 文档多语言 / 捆绑包迁移 / 跨平台测试 / 正式版发布 | [1.0.0/README.md](1.0.0/README.md) |
 | 1.1.0 | 包编译与开发体验 | 顶层别名 / 文档检查 / 缺陷收集与 CI / 正式版发布 | [1.1.0/README.md](1.1.0/README.md) |
+| 1.1.1 | 补丁：cc 拦截 | 拦截 `ezmk utils cc`（`build_compile_args()` 重构 + `compile_db` 模块） | [1.1.1/README.md](1.1.1/README.md) |
+| 1.2.0 | 工具链互操作与开箱工程化 | `ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile | [1.2.0/README.md](1.2.0/README.md) |
 
 ## 依赖关系图
 
@@ -53,17 +59,22 @@ graph TD
     v0xx["0.x.x 早期开发"]
     v100["1.0.0 正式版发布"]
     v110["1.1.0 正式版发布"]
+    v111["1.1.1 拦截 ezmk utils cc"]
+    v120["1.2.0 工具链互操作与开箱工程化"]
     v200["2.0.0 (未来)"]
 
     v0xx --> v100
     v100 --> v110
-    v110 -.-> v200
+    v110 --> v111
+    v111 --> v120
+    v120 -.-> v200
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724;
     classDef active fill:#fff3cd,stroke:#ffc107,color:#856404;
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
     class v0xx,v100,v110 done;
+    class v111,v120 active;
     class v200 todo;
 ```
 
