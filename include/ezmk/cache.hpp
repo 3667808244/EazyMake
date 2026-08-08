@@ -88,6 +88,20 @@ SingleCompileResult compile_one_source(const fs::path& src,
                                        const CompileInput& in,
                                        const CacheRecord& record);
 
+// 1.1.1: Construct the real (unescaped) compile args for a single source file.
+// Single source of truth for the compile command: the build path
+// (compile_one_source) runs it via join_shell_args(), and compile_db reuses
+// the same args for compile_commands.json — so the index can never drift from
+// the actual build. `obj` is the (temp) object path the compiler writes to.
+std::vector<std::string> build_compile_args(const CompileInput& in,
+                                            const fs::path& src,
+                                            const fs::path& obj);
+
+// 1.1.1: Join an arg vector into a shell command string (escaping + quoting).
+// Args containing whitespace or shell metacharacters are double-quoted so
+// run_command() parses them intact (paths with spaces); others are emitted bare.
+std::string join_shell_args(const std::vector<std::string>& args);
+
 // Parse .d file (gcc -MMD output) and hash every listed header.
 // Returns vector of {path, sha256} for each dependency.
 std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile);

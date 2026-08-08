@@ -299,6 +299,122 @@ void clear_cache() {
 }
 
 // ===================================================================
+// 1.1.1: Single-source compile command construction (single source of truth)
+//
+// build_compile_args() returns the UNESCAPED compile args for one source
+// file. The build path (compile_one_source) joins them via join_shell_args()
+// and runs the compiler; compile_db reuses the same args for
+// compile_commands.json — so the index can never drift from the real build.
+// ===================================================================
+
+std::vector<std::string> build_compile_args(const CompileInput& in,
+                                            const fs::path& src,
+                                            const fs::path& obj) {
+    std::vector<std::string> args;
+    bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
+    auto rel = fs::relative(src, in.proj_root);
+
+    if (is_msvc) {
+        args.push_back("cl.exe");
+        args.push_back("/c");
+        // 1.1.0: deterministic build flags
+        if (in.compile.deterministic) {
+            args.push_back("/Brepro");
+        }
+        auto translated = toolchain::translate_compile_flags(
+            std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
+        if (!translated.translated.empty()) {
+            args.push_back(translated.translated[0]);
+        }
+        auto flag_trans = toolchain::translate_compile_flags(
+            in.compile.flags, toolchain::CompilerFamily::Msvc);
+        for (auto& f : flag_trans.translated) args.push_back(f);
+        for (auto& f : flag_trans.unrecognized) {
+            if (in.verbose) {
+                util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
+            }
+        }
+        for (auto& f : in.compile.msvc_flags) args.push_back(f);
+        args.push_back("/utf-8");
+        args.push_back("/MD");
+        auto def_inc = in.proj_root / "include";
+        if (util::file_exists(def_inc)) args.push_back("/I" + def_inc.string());
+        for (auto& d : in.compile.include_dirs) {
+            fs::path resolved = d;
+            if (resolved.is_relative()) resolved = in.proj_root / resolved;
+            args.push_back("/I" + resolved.string());
+        }
+        for (auto& inc : in.extra_includes) args.push_back("/I" + inc.string());
+        args.push_back("/Fo" + obj.string());
+        args.push_back("/showIncludes");
+        args.push_back(src.string());
+    } else {
+        std::string compiler = in.lang.detected_compiler.empty()
+            ? in.lang.compiler : in.lang.detected_compiler;
+        args.push_back(compiler);
+        args.push_back(in.lang.std_flag);
+        // 1.1.0-dev.4: inject stdlib flags (e.g., -stdlib=libc++)
+        if (!in.stdlib.empty()) {
+            auto stdlib_flags = toolchain::get_stdlib_flags(in.stdlib, in.tc.family);
+            for (auto& sf : stdlib_flags) args.push_back(sf);
+        }
+        args.push_back("-c");
+        // 1.1.0: deterministic build flags
+        if (in.compile.deterministic) {
+            args.push_back("-ffile-prefix-map=" + in.proj_root.string() + "=.");
+            args.push_back("-frandom-seed=" + src.filename().string());
+        }
+        for (auto& f : in.compile.flags) args.push_back(f);
+        if (in.use_pic) args.push_back("-fPIC");
+        auto def_inc = in.proj_root / "include";
+        if (util::file_exists(def_inc)) args.push_back("-I" + def_inc.string());
+        for (auto& d : in.compile.include_dirs) {
+            fs::path resolved = d;
+            if (resolved.is_relative()) resolved = in.proj_root / resolved;
+            args.push_back("-I" + resolved.string());
+        }
+        for (auto& inc : in.extra_includes) args.push_back("-I" + inc.string());
+        fs::path dep = in.dep_dir / rel;
+        dep.replace_extension(".d");
+        args.push_back("-MMD");
+        args.push_back("-MF");
+        args.push_back(dep.string());
+        args.push_back(src.string());
+        args.push_back("-o");
+        args.push_back(obj.string());
+    }
+
+    return args;
+}
+
+std::string join_shell_args(const std::vector<std::string>& args) {
+    std::string r;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i > 0) r += ' ';
+        const auto& a = args[i];
+        // Double-quote args containing whitespace or a shell metacharacter so
+        // paths with spaces survive run_command() intact (escape_shell_arg does
+        // not escape spaces). Args without special chars are emitted bare —
+        // behaviorally equivalent to the historical always-quoted form.
+        bool need_quote = false;
+        for (char c : a) {
+            if (c == ' ' || c == '\t' || c == '"' || c == '\\' || c == '`' || c == '$') {
+                need_quote = true;
+                break;
+            }
+        }
+        if (need_quote) {
+            r += '"';
+            r += util::escape_shell_arg(a);
+            r += '"';
+        } else {
+            r += util::escape_shell_arg(a);
+        }
+    }
+    return r;
+}
+
+// ===================================================================
 // 0.2.3+: Single-source compile (thread-safe — read-only on record)
 //
 // INVARIANT: This function only reads from `record` (const ref).
@@ -429,74 +545,12 @@ SingleCompileResult compile_one_source(const fs::path& src,
     }
     std::string sde_str = sde > 0 ? std::to_string(sde) : "";
 
-    // Build compile command
-    std::ostringstream cmd;
-
-    if (is_msvc) {
-        cmd << "cl.exe /c ";
-        // 1.1.0: deterministic build flags
-        if (in.compile.deterministic) {
-            cmd << "/Brepro ";
-        }
-        auto translated = toolchain::translate_compile_flags(
-            std::vector<std::string>{in.lang.std_flag}, toolchain::CompilerFamily::Msvc);
-        if (!translated.translated.empty()) {
-            cmd << util::escape_shell_arg(translated.translated[0]) << " ";
-        }
-        auto flag_trans = toolchain::translate_compile_flags(
-            in.compile.flags, toolchain::CompilerFamily::Msvc);
-        for (auto& f : flag_trans.translated) cmd << util::escape_shell_arg(f) << " ";
-        for (auto& f : flag_trans.unrecognized) {
-            if (in.verbose) {
-                util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
-            }
-        }
-        for (auto& f : in.compile.msvc_flags) cmd << util::escape_shell_arg(f) << " ";
-        cmd << "/utf-8 /MD ";
-        auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) cmd << "/I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
-        for (auto& d : in.compile.include_dirs) {
-            fs::path resolved = d;
-            if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            cmd << "/I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
-        }
-        for (auto& inc : in.extra_includes) cmd << "/I\"" << util::escape_shell_arg(inc.string()) << "\" ";
-        cmd << "/Fo\"" << util::escape_shell_arg(obj_tmp.string()) << "\" ";
-        cmd << "/showIncludes ";
-        cmd << "\"" << util::escape_shell_arg(src.string()) << "\"";
-    } else {
-        std::string compiler = in.lang.detected_compiler.empty()
-            ? in.lang.compiler : in.lang.detected_compiler;
-        cmd << compiler << " " << in.lang.std_flag;
-        // 1.1.0-dev.4: inject stdlib flags (e.g., -stdlib=libc++)
-        if (!in.stdlib.empty()) {
-            auto stdlib_flags = toolchain::get_stdlib_flags(in.stdlib, in.tc.family);
-            for (auto& sf : stdlib_flags) cmd << " " << sf;
-        }
-        cmd << " -c ";
-        // 1.1.0: deterministic build flags
-        if (in.compile.deterministic) {
-            cmd << "-ffile-prefix-map=" << util::escape_shell_arg(in.proj_root.string()) << "=. ";
-            cmd << "-frandom-seed=" << util::escape_shell_arg(src.filename().string()) << " ";
-        }
-        for (auto& f : in.compile.flags) cmd << util::escape_shell_arg(f) << " ";
-        if (in.use_pic) cmd << "-fPIC ";
-        auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) cmd << "-I\"" << util::escape_shell_arg(def_inc.string()) << "\" ";
-        for (auto& d : in.compile.include_dirs) {
-            fs::path resolved = d;
-            if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            cmd << "-I\"" << util::escape_shell_arg(resolved.string()) << "\" ";
-        }
-        for (auto& inc : in.extra_includes) cmd << "-I\"" << util::escape_shell_arg(inc.string()) << "\" ";
-        fs::path dep = in.dep_dir / rel;
-        dep.replace_extension(".d");
-        cmd << "-MMD -MF \"" << util::escape_shell_arg(dep.string()) << "\" ";
-        cmd << "\"" << util::escape_shell_arg(src.string()) << "\" -o \"" << util::escape_shell_arg(obj_tmp.string()) << "\"";
-    }
+    // 1.1.1: single-source command construction — shared with compile_db
+    auto args = build_compile_args(in, src, obj_tmp);
+    std::string cmd = join_shell_args(args);
 
     if (in.verbose) {
-        util::info(util::color_msg(util::color::dim, "    cmd: " + cmd.str()));
+        util::info(util::color_msg(util::color::dim, "    cmd: " + cmd));
     }
 
     // 1.1.0: set SOURCE_DATE_EPOCH for deterministic builds
@@ -511,7 +565,7 @@ SingleCompileResult compile_one_source(const fs::path& src,
 #endif
     }
 
-    auto res = util::run_command(cmd.str());
+    auto res = util::run_command(cmd);
 
     // Restore SOURCE_DATE_EPOCH
     if (!sde_str.empty()) {
@@ -536,7 +590,7 @@ SingleCompileResult compile_one_source(const fs::path& src,
                                  {"code", std::to_string(res.exit_code)}}) << "\n";
         if (!res.err.empty()) err << res.err << "\n";
         if (!res.out.empty()) err << res.out << "\n";
-        err << "  cmd: " << cmd.str();
+        err << "  cmd: " << cmd;
         result.error_msg = err.str();
         std::error_code ec;
         fs::remove(obj_tmp, ec);
