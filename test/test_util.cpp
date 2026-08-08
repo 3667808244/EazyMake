@@ -9,6 +9,7 @@ extern "C" {
 #include "miniz.h"
 }
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -308,6 +309,50 @@ TEST_CASE("run_command: timeout", "[util]") {
         REQUIRE(result.exit_code != 0);
     }
 }
+
+TEST_CASE("run_command: RunOptions.env reaches the child", "[util][1.1.2]") {
+    RunOptions opts;
+    opts.env["EZMK_TEST_ENV_VAR"] = "hello_123";
+#ifdef EZMK_WIN
+    auto result = run_command("cmd /c echo %EZMK_TEST_ENV_VAR%", opts);
+#else
+    auto result = run_command("echo $EZMK_TEST_ENV_VAR", opts);
+#endif
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.out.find("hello_123") != std::string::npos);
+}
+
+TEST_CASE("run_command: RunOptions.cwd sets child working directory", "[util][1.1.2]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_run_cwd_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+
+    RunOptions opts;
+    opts.cwd = tmp;
+#ifdef EZMK_WIN
+    // `cd` is a cmd builtin, not an executable — go through cmd to print CWD.
+    auto result = run_command("cmd /c cd", opts);
+#else
+    auto result = run_command("pwd", opts);
+#endif
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.out.find("ezmk_run_cwd_test") != std::string::npos);
+
+    ezmk::util::remove_all(tmp);
+}
+
+// 1.1.2 C7: the whole point of injecting env via RunOptions (child-only on
+// POSIX) is that the PARENT environment is never mutated — the data-race fix.
+#ifndef EZMK_WIN
+TEST_CASE("run_command: env injection does not pollute the parent", "[util][1.1.2]") {
+    unsetenv("EZMK_TEST_ENV_VAR");
+    RunOptions opts;
+    opts.env["EZMK_TEST_ENV_VAR"] = "child_only";
+    auto result = run_command("echo $EZMK_TEST_ENV_VAR", opts);
+    REQUIRE(result.out.find("child_only") != std::string::npos);
+    REQUIRE(std::getenv("EZMK_TEST_ENV_VAR") == nullptr);
+}
+#endif
 
 // ===================================================================
 // git_available()

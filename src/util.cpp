@@ -877,7 +877,46 @@ void download(std::string_view url_sv, const fs::path& dest) {
 // Process
 // ===================================================================
 
+// 1.1.2: int overload (backward compat) forwards to the RunOptions version.
 ProcResult run_command(const std::string& cmd, int timeout_sec) {
+    RunOptions opts;
+    opts.timeout_sec = timeout_sec;
+    return run_command(cmd, opts);
+}
+
+#ifdef EZMK_WIN
+// Build an environment block (double-null-terminated "K=V\0...") that is the
+// current process environment with `extra` applied (keys added or replaced).
+// Returns an empty vector when extra is empty → caller passes nullptr (inherit).
+// The child gets a private environment, so no parent-global mutation / race.
+static std::vector<char> build_env_block(const std::map<std::string, std::string>& extra) {
+    std::vector<char> block;
+    if (extra.empty()) return block;
+    char* env = GetEnvironmentStringsA();
+    if (env) {
+        for (char* p = env; *p; p += strlen(p) + 1) {
+            std::string entry(p);
+            auto eq = entry.find('=');
+            std::string key = (eq == std::string::npos) ? entry : entry.substr(0, eq);
+            if (extra.find(key) == extra.end()) {
+                block.insert(block.end(), entry.begin(), entry.end());
+                block.push_back('\0');
+            }
+            // else: replaced by `extra` below
+        }
+        FreeEnvironmentStringsA(env);
+    }
+    for (auto& [k, v] : extra) {
+        std::string entry = k + "=" + v;
+        block.insert(block.end(), entry.begin(), entry.end());
+        block.push_back('\0');
+    }
+    block.push_back('\0');
+    return block;
+}
+#endif
+
+ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     ProcResult result{};
 #ifdef EZMK_WIN
     HANDLE hReadOut, hWriteOut, hReadErr, hWriteErr;
@@ -898,8 +937,14 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
     std::vector<char> cmdBuf(cmd.begin(), cmd.end());
     cmdBuf.push_back('\0');
 
+    // 1.1.2: optional working directory + private environment block
+    std::string cwd_str = opts.cwd.empty() ? std::string() : opts.cwd.string();
+    LPCSTR cwd_ptr = cwd_str.empty() ? nullptr : cwd_str.c_str();
+    std::vector<char> env_block = build_env_block(opts.env);
+    LPVOID env_ptr = env_block.empty() ? nullptr : env_block.data();
+
     if (CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
-                       0, nullptr, nullptr, &si, &pi)) {
+                       0, env_ptr, cwd_ptr, &si, &pi)) {
         CloseHandle(hWriteOut);
         CloseHandle(hWriteErr);
 
@@ -921,7 +966,7 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
         };
 
         auto deadline = std::chrono::steady_clock::now();
-        if (timeout_sec > 0) deadline += std::chrono::seconds(timeout_sec);
+        if (opts.timeout_sec > 0) deadline += std::chrono::seconds(opts.timeout_sec);
         for (;;) {
             drain_pipe(hReadOut, result.out);
             drain_pipe(hReadErr, result.err);
@@ -929,7 +974,7 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
             DWORD wr = WaitForSingleObject(pi.hProcess, 25);
             if (wr == WAIT_OBJECT_0) break;           // child exited
             if (wr != WAIT_TIMEOUT) break;            // wait failed
-            if (timeout_sec > 0 && std::chrono::steady_clock::now() >= deadline) {
+            if (opts.timeout_sec > 0 && std::chrono::steady_clock::now() >= deadline) {
                 TerminateProcess(pi.hProcess, 1);
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 result.timed_out = true;
@@ -980,7 +1025,17 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
 
     pid_t pid = fork();
     if (pid == 0) {
-        // Child: bind stdout/stderr to the temp files, then exec the shell.
+        // Child: apply cwd + extra env BEFORE exec — fork() copy-on-write means
+        // these only affect the child, so no parent-global mutation / race.
+        // (1.1.2 C4/C7: this is how run_script cwd and SOURCE_DATE_EPOCH reach
+        // the child without process-global setenv in a multi-threaded build.)
+        if (!opts.cwd.empty() && chdir(opts.cwd.string().c_str()) != 0) {
+            _exit(126); // chdir failed
+        }
+        for (auto& [k, v] : opts.env) {
+            setenv(k.c_str(), v.c_str(), 1);
+        }
+        // Bind stdout/stderr to the temp files, then exec the shell.
         dup2(out_fd, STDOUT_FILENO);
         dup2(err_fd, STDERR_FILENO);
         close(out_fd);
@@ -992,10 +1047,10 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
         close(err_fd);
 
         int status = 0;
-        if (timeout_sec > 0) {
+        if (opts.timeout_sec > 0) {
             // Poll waitpid (WNOHANG) against a deadline; SIGKILL on timeout.
             auto deadline = std::chrono::steady_clock::now()
-                + std::chrono::seconds(timeout_sec);
+                + std::chrono::seconds(opts.timeout_sec);
             bool timed_out = false;
             for (;;) {
                 pid_t r = waitpid(pid, &status, WNOHANG);

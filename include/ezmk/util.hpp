@@ -139,6 +139,17 @@ struct ProcResult {
 // (sets ProcResult::timed_out = true); 0 means no timeout (default).
 ProcResult run_command(const std::string& cmd, int timeout_sec = 0);
 
+// 1.1.2 C4/C7: extended run_command options.
+struct RunOptions {
+    int timeout_sec = 0;                       // 0 = no timeout (default)
+    fs::path cwd;                              // child working directory (empty = inherit)
+    std::map<std::string, std::string> env;    // extra env vars for the child (empty = inherit)
+};
+// Overload taking RunOptions. POSIX: cwd/env applied via chdir/setenv AFTER fork
+// (child-only, no race). Windows: lpCurrentDirectory + a built environment block.
+// NOTE: keep the int overload above — it forwards here so existing callers work.
+ProcResult run_command(const std::string& cmd, const RunOptions& opts);
+
 // ---- Git helpers ----
 // Check if git is available in PATH.
 bool git_available();
