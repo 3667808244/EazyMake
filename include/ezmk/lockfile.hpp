@@ -25,4 +25,10 @@ std::vector<std::string> verify(const fs::path& proj_root,
 bool depends_changed(const config::EzConfig& cfg,
                      const config::Lockfile& lf);
 
+// 1.1.2 C3: format the root project's direct [depends] entries (lib + want) as
+// spec strings ("name" or "name@^1.2"), sorted. Used both when generating
+// ezmk.lock (pkg.cpp writes lf.direct_deps) and in depends_changed — the two
+// sides must agree on the format.
+std::vector<std::string> direct_dep_specs(const config::EzConfig& cfg);
+
 } // namespace ezmk::lockfile

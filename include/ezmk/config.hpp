@@ -141,6 +141,10 @@ struct Lockfile {
     std::string generated_at;
     std::string toolchain;         // "gcc" / "clang" / "msvc"
     std::string toolchain_version;
+    // 1.1.2 C3: root project's DIRECT [depends] entries as spec strings
+    // ("name" or "name@^1.2"). packages[] also includes transitive/auto-installed
+    // deps, so depends_changed must compare direct-vs-direct, not direct-vs-all.
+    std::vector<std::string> direct_deps;
     std::vector<LockedPackage> packages;
 };
 

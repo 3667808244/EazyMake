@@ -5,6 +5,7 @@
 #include "ezmk/util.hpp"
 #include "toml.hpp"
 
+#include <algorithm>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -39,6 +40,15 @@ std::optional<config::Lockfile> load(const fs::path& proj_root) {
             lf.generated_at = (*meta)["generated_at"].value_or("");
             lf.toolchain = (*meta)["toolchain"].value_or("");
             lf.toolchain_version = (*meta)["toolchain_version"].value_or("");
+            // 1.1.2 C3: direct deps (absent in pre-1.1.2 lockfiles → empty)
+            auto dd = (*meta)["direct_deps"].as_array();
+            if (dd) {
+                for (size_t i = 0; i < dd->size(); ++i) {
+                    if (auto v = (*dd)[i].value<std::string>()) {
+                        lf.direct_deps.push_back(*v);
+                    }
+                }
+            }
         }
 
         // [[packages]]
@@ -93,7 +103,14 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
     out << "generated_by = \"" << lf.generated_by << "\"\n";
     out << "generated_at = \"" << lf.generated_at << "\"\n";
     out << "toolchain = \"" << lf.toolchain << "\"\n";
-    out << "toolchain_version = \"" << lf.toolchain_version << "\"\n\n";
+    out << "toolchain_version = \"" << lf.toolchain_version << "\"\n";
+    // 1.1.2 C3: root project's direct deps (name or name@spec), sorted
+    out << "direct_deps = [";
+    for (size_t i = 0; i < lf.direct_deps.size(); ++i) {
+        if (i > 0) out << ", ";
+        out << "\"" << lf.direct_deps[i] << "\"";
+    }
+    out << "]\n\n";
 
     for (auto& pkg : lf.packages) {
         out << "[[packages]]\n";
@@ -185,18 +202,50 @@ std::vector<std::string> verify(const fs::path& proj_root,
 // Depends changed detection
 // ===================================================================
 
+std::vector<std::string> direct_dep_specs(const config::EzConfig& cfg) {
+    std::vector<std::string> specs;
+    auto push = [&](const config::DependsEntry& d) {
+        // user syntax: "pkg" | "pkg@1.2" | "pkg@^1.2" | "pkg@~1.2" | "pkg@>=1.2" ...
+        std::string s = d.name;
+        if (d.constraint.op != config::VersionConstraint::None) {
+            s += "@";
+            switch (d.constraint.op) {
+                case config::VersionConstraint::Exact:     break;   // "name@1.2"
+                case config::VersionConstraint::Compatible: s += "^"; break;
+                case config::VersionConstraint::Approx:    s += "~";  break;
+                case config::VersionConstraint::Gte:       s += ">="; break;
+                case config::VersionConstraint::Gt:        s += ">";  break;
+                default: break;
+            }
+            s += d.constraint.version;
+        }
+        specs.push_back(std::move(s));
+    };
+    for (auto& d : cfg.depends.libs) push(d);
+    for (auto& d : cfg.depends.want) push(d);
+    std::sort(specs.begin(), specs.end());
+    return specs;
+}
+
 bool depends_changed(const config::EzConfig& cfg,
                      const config::Lockfile& lf) {
-    // Collect dependency names from ezmk.toml
-    std::set<std::string> cfg_deps;
-    for (auto& d : cfg.depends.libs) cfg_deps.insert(d.name);
-    for (auto& d : cfg.depends.want) cfg_deps.insert(d.name);
+    // 1.1.2 C3: compare DIRECT deps (with constraints), not cfg deps vs ALL
+    // lockfile packages. packages[] includes transitive/auto-installed deps, so
+    // the old name-set comparison was always "changed" whenever there was any
+    // transitive dep — making --locked always fatal even when nothing changed.
+    // NOTE: bind the vector — the set ctor must use one object's begin/end pair
+    // (two separate temporaries would be undefined behavior).
+    auto cfg_vec = direct_dep_specs(cfg);
+    std::set<std::string> cfg_deps(cfg_vec.begin(), cfg_vec.end());
+    std::set<std::string> lock_deps(lf.direct_deps.begin(), lf.direct_deps.end());
 
-    // Collect dependency names from lockfile
-    std::set<std::string> lock_deps;
-    for (auto& p : lf.packages) lock_deps.insert(p.name);
+    if (cfg_deps != lock_deps) return true;
 
-    return cfg_deps != lock_deps;
+    // Backward compat: a pre-1.1.2 lockfile has no direct_deps field. If the
+    // project declares deps, treat as changed so the lockfile regenerates.
+    if (lf.direct_deps.empty() && !lf.packages.empty() && !cfg_deps.empty()) return true;
+
+    return false;
 }
 
 } // namespace ezmk::lockfile

@@ -976,6 +976,14 @@ void install(const std::string& pkg_file, cli::Scope scope,
             lf.toolchain = (tc.family == toolchain::CompilerFamily::Msvc) ? "msvc"
                          : (tc.family == toolchain::CompilerFamily::Clang) ? "clang" : "gcc";
             lf.toolchain_version = tc.version;
+            // 1.1.2 C3: record the root project's DIRECT deps so depends_changed
+            // compares direct-vs-direct (packages[] includes transitive deps).
+            try {
+                auto root_cfg = config::parse_config(fs::current_path() / "ezmk.toml");
+                lf.direct_deps = lockfile::direct_dep_specs(root_cfg);
+            } catch (...) {
+                // Unparseable root config → leave direct_deps empty
+            }
 
             // Scan installed packages in project scope
             fs::path pkg_dir = dest_dir;
