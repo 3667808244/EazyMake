@@ -18,18 +18,22 @@ plans/
 ├── 1.1.1/          # 1.1.1 补丁系列（拦截 ezmk utils cc）
 │   ├── README.md
 │   └── 1.1.1.md
+├── 1.1.2/          # 1.1.2 补丁系列（安全加固 + 静默错误修复）
+│   ├── README.md
+│   └── 1.1.2.md
 └── 1.2.0/          # 1.2.0 发布系列（dev.2 / dev.3 / 1.2.0）
     ├── README.md
     └── 1.2.0-dev.2.md ~ 1.2.0.md
 ```
 
-> 仓库根目录的 `plan.md` 为当前执行计划（**1.2.0**，开发中）。
+> 仓库根目录的 `plan.md` 为当前执行计划（**1.1.2**，补丁进行中；完成后恢复 1.2.0）。
 
 ---
 
 ## 当前执行
 
-- **[1.2.0](1.2.0/README.md)** — 工具链互操作与开箱工程化（`ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile），开发中（`plan.md`）
+- **[1.1.2](1.1.2/README.md)** — 安全加固 + 静默错误修复（`plan.md`，补丁进行中）
+- **[1.2.0](1.2.0/README.md)** — 工具链互操作与开箱工程化（`ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile），1.1.2 发布后恢复推进
 
 ## 未来规划
 
@@ -50,6 +54,7 @@ plans/
 | 1.0.0 | 打磨发布 | 一键安装 / 默认仓库 / 文档多语言 / 捆绑包迁移 / 跨平台测试 / 正式版发布 | [1.0.0/README.md](1.0.0/README.md) |
 | 1.1.0 | 包编译与开发体验 | 顶层别名 / 文档检查 / 缺陷收集与 CI / 正式版发布 | [1.1.0/README.md](1.1.0/README.md) |
 | 1.1.1 | 补丁：cc 拦截 | 拦截 `ezmk utils cc`（`build_compile_args()` 重构 + `compile_db` 模块） | [1.1.1/README.md](1.1.1/README.md) |
+| 1.1.2 | 补丁：安全与正确性 | 解压/命令注入/沙箱安全修复；链接/缓存/锁文件/脚本/安装/确定性正确性修复 | [1.1.2/README.md](1.1.2/README.md) |
 | 1.2.0 | 工具链互操作与开箱工程化 | `ezmk project cc` / CMakeLists.txt 导出 / 默认模板 Profile | [1.2.0/README.md](1.2.0/README.md) |
 
 ## 依赖关系图
@@ -60,13 +65,15 @@ graph TD
     v100["1.0.0 正式版发布"]
     v110["1.1.0 正式版发布"]
     v111["1.1.1 拦截 ezmk utils cc"]
+    v112["1.1.2 安全加固 + 静默错误修复"]
     v120["1.2.0 工具链互操作与开箱工程化"]
     v200["2.0.0 (未来)"]
 
     v0xx --> v100
     v100 --> v110
     v110 --> v111
-    v111 --> v120
+    v111 --> v112
+    v112 --> v120
     v120 -.-> v200
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724;
@@ -74,8 +81,8 @@ graph TD
     classDef todo fill:#e2e3e5,stroke:#6c757d,color:#383d41;
 
     class v0xx,v100,v110,v111 done;
-    class v120 active;
-    class v200 todo;
+    class v112 active;
+    class v120,v200 todo;
 ```
 
 > 说明:绿色=已完成,黄色=当前执行,灰色=待执行;虚线为可选依赖。各系列内版本的详细依赖见系列 README 的版本列表。
@@ -103,6 +110,8 @@ graph TD
 - Lua sandbox(0.2.0):`os.execute`/`io.popen` 编译期移除,文件写入限制,独立环境表,脚本间隔离
 - Utils 权限管理(0.2.5):细粒度白名单控制(read/write/run),向后兼容(未声明权限的旧包行为不变 + deprecation warning)
 - repo 校验(已有):`index.toml` 解析 + clone 失败清理;0.2.5 增强本地仓库校验(file 存在性,sha256 格式)
+- 解压路径包含校验(1.1.2):归档条目名经 `safe_extract_path()` 校验,拒绝 `..`/绝对路径/盘符/UNC,并设 tar.gz 解压大小上限
+- Lua 沙箱收敛(1.1.2):沙箱 `__index` 从裸 `_G` 改为受限全局表,不暴露 `dofile`/`loadfile`/`load`/`require`/`debug`(详见 [`plans/1.1.2/1.1.2.md`](1.1.2/1.1.2.md#34-s4lua-沙箱收敛))
 
 ### 跨平台一致性
 - 0.1.8 编译器探测 + 0.2.1 MSVC 支持:同一份 `ezmk.toml` 可在 Windows/MSVC 和 Linux/GCC 下编译
