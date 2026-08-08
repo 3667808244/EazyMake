@@ -27,7 +27,7 @@
 - [x] **1.2 归档命令转义**（S2）：`compile_package()` 的 `ar`/`lib.exe` 路径转 `escape_shell_arg`（提取 `build_archive_command()` helper 便于单测）；`test_pkg.cpp` 含特殊字符路径用例
 - [x] **1.3 file_write 边界**（S3）：硬限制三处改用既有 `norm_path()` + `path_within()`（目录边界）；`test_lua.cpp` 越界/边界用例
 - [x] **1.4 Lua 沙箱收敛**（S4）：受限全局表（剔 `dofile`/`loadfile`/`load`/`require`/`debug`/`package`/`_G`）+ 沙箱 `_G` 自引用；`test_lua.cpp` 逃逸面用例；`docs/utils.md` 说明
-- [ ] 阶段一自测：`bash build.sh test` 相关用例通过
+- [x] 阶段一自测：`bash build.sh test`（561 用例/2714 断言）+ `bash build.sh test-all`（572/2772，含集成）零失败
 
 ### 阶段二：静默错误修复（C1–C7）
 
