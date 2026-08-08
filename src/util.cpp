@@ -1204,14 +1204,9 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
     auto ext = script.extension().string();
     std::ostringstream cmd;
 
-    // Change to cwd, run script, restore
     if (ext == ".sh") {
-#ifdef EZMK_WIN
-        cmd << "bash ";
-#else
-        cmd << "bash ";
-#endif
-        cmd << "\"" << escape_shell_arg(script.string()) << "\"";
+        cmd << "bash \""
+            << escape_shell_arg(script.string()) << "\"";
     } else if (ext == ".ps1") {
         cmd << "powershell -ExecutionPolicy Bypass -File \""
             << escape_shell_arg(script.string()) << "\"";
@@ -1224,15 +1219,13 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
         return bad;
     }
 
-    // Build command with cd
-    std::ostringstream full_cmd;
-#ifdef EZMK_WIN
-    full_cmd << "cd /d \"" << escape_shell_arg(cwd.string()) << "\" && " << cmd.str();
-#else
-    full_cmd << "cd \"" << escape_shell_arg(cwd.string()) << "\" && " << cmd.str();
-#endif
-
-    return run_command(full_cmd.str());
+    // 1.1.2 C4: cwd is passed via RunOptions (Windows lpCurrentDirectory /
+    // POSIX chdir-after-fork), NOT a "cd <cwd> && ..." shell prefix. On Windows
+    // `cd` is a cmd builtin, not an executable — CreateProcessA would fail to
+    // spawn it, so every install script (.sh/.ps1/.bat) failed to run.
+    RunOptions opts;
+    opts.cwd = cwd;
+    return run_command(cmd.str(), opts);
 }
 
 std::string escape_shell_arg(std::string_view s) {

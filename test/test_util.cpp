@@ -354,6 +354,24 @@ TEST_CASE("run_command: env injection does not pollute the parent", "[util][1.1.
 }
 #endif
 
+// 1.1.2 C4: run_script must NOT use a "cd <cwd> &&" prefix (Windows `cd` is a
+// cmd builtin — CreateProcessA can't spawn it). cwd goes through RunOptions.
+TEST_CASE("run_script: executes script in the given working directory", "[util][1.1.2]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_runscript_cwd_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+
+    auto script = tmp / "cwd_probe.sh";
+    { std::ofstream f(script); f << "pwd\n"; }
+
+    ProcResult r = run_script(script, tmp);
+    REQUIRE(r.exit_code == 0);
+    // pwd output must reflect the requested cwd (not the test's process cwd)
+    REQUIRE(r.out.find("ezmk_runscript_cwd_test") != std::string::npos);
+
+    ezmk::util::remove_all(tmp);
+}
+
 // ===================================================================
 // git_available()
 // ===================================================================
