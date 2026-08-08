@@ -3,6 +3,7 @@
 #include "ezmk/project.hpp"
 #include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
+#include "ezmk/compile_db.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
@@ -26,6 +27,65 @@ static void auto_update_repos(const ezmk::cli::BuildOptions& opts) {
                                  ezmk::cli::Scope::User,
                                  ezmk::cli::Scope::Global});
     }
+}
+
+// 1.1.1: Built-in `cc` tool — generates compile_commands.json via the C++
+// compile_db generator (drift-free). Intercepts `ezmk utils cc` before the
+// Lua script lookup; the Lua cc.lua is no longer executed (deprecated in 1.2.0).
+static int run_builtin_cc(const std::vector<std::string>& utils_args) {
+    std::string output_path;
+    std::string profile;
+    bool show_help = false;
+
+    for (size_t i = 0; i < utils_args.size(); ++i) {
+        const auto& a = utils_args[i];
+        if (a == "-h" || a == "--help") {
+            show_help = true;
+        } else if (a == "-o" || a == "--output") {
+            if (i + 1 >= utils_args.size()) {
+                ezmk::util::fatal(std::string("option '") + a +
+                                  "' for 'ezmk utils cc' requires a value");
+            }
+            output_path = utils_args[++i];
+        } else if (a.rfind("--output=", 0) == 0) {
+            output_path = a.substr(9);
+        } else if (a == "--profile") {
+            if (i + 1 >= utils_args.size()) {
+                ezmk::util::fatal(std::string("option '") + a +
+                                  "' for 'ezmk utils cc' requires a value");
+            }
+            profile = utils_args[++i];
+        } else if (a.rfind("--profile=", 0) == 0) {
+            profile = a.substr(10);
+        } else {
+            ezmk::util::fatal(std::string("unknown option for 'ezmk utils cc': ") + a);
+        }
+    }
+
+    if (show_help) {
+        std::cout << "Usage: ezmk utils cc [options]\n"
+                  << "Generate compile_commands.json from the current project.\n"
+                  << "\n"
+                  << "Options:\n"
+                  << "  -o, --output <path>   Output file (default: compile_commands.json)\n"
+                  << "  --profile <name>      Apply a build profile (flags/macros)\n"
+                  << "  -h, --help            Show this help\n";
+        return 0;
+    }
+
+    auto cfg = ezmk::config::parse_config("ezmk.toml");
+    ezmk::cli::BuildOptions opts;
+    opts.profile = profile;
+    auto proj_root = std::filesystem::current_path();
+
+    std::filesystem::path out;
+    if (!output_path.empty()) {
+        out = output_path;
+        if (out.is_relative()) out = proj_root / out;
+    }
+
+    ezmk::compile_db::generate_compile_db(cfg, opts, proj_root, out);
+    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -328,6 +388,13 @@ int main(int argc, char** argv) {
             break;
 
         case ezmk::cli::Command::Utils: {
+            // 1.1.1: intercept `cc` — served by the built-in C++ generator
+            // (drift-free compile_commands.json). Other tools keep the Lua path.
+            if (args.utils_name == "cc") {
+                int rc = run_builtin_cc(args.utils_args);
+                if (rc != 0) return rc;
+                break;
+            }
             // Search for the Lua script across project/user/global scopes
             auto script_path = ezmk::util::find_utils_script(args.utils_name);
             if (script_path.empty()) {
