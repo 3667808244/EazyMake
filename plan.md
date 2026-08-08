@@ -39,7 +39,7 @@
 - [x] **2.5 TOML 转义**（C5）：`toml_quote()` + `write_default_config`/`lockfile::save`/`save_repo_list`；round-trip 用例
 - [x] **2.6 安装事务化**（C6）：`remove_all`/`copy_recursive` 抛错 + 尽力清理点改内联吞错；`pkg.cpp` swap 流程（备份→复制→回滚→删备份）；`test_util.cpp` 用例（另修复 extract_zip reader 句柄泄漏）
 - [x] **2.7 确定性竞争**（C7）：`compile_one_source` 改 `RunOptions.env` 注入，删 `setenv`/恢复；`-j4` 确定性集成用例
-- [ ] 阶段二自测：`bash build.sh test` 相关用例通过
+- [x] 阶段二自测：`bash build.sh test` + `test-all` 零失败（592 用例 / 2813 断言）
 
 ### 阶段三：回归与发布准备
 
