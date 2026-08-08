@@ -2,7 +2,7 @@
 
 1.2.0 为 1.1.0（经 1.1.1 补丁）之后的次版本，主题：**工具链互操作 + 开箱工程化**。开发子版本并行推进，最终合并为 `1.2.0` 正式发布。
 
-> **前置补丁**：dev.1 的**核心重构**（`build_compile_args()` + `compile_db` 模块 + 拦截 `ezmk utils cc` + `[compile].compile_commands` 自动生成）已移入 **[1.1.1](../1.1.1/1.1.1.md)**（1.1.x 稳定线补丁）。dev.1 本身保留，内容调整为仅覆盖 `ezmk project cc` 命令交付 + `ezmk utils cc` 弃用。
+> **前置补丁**：dev.1 的**核心重构**（`build_compile_args()` + `compile_db` 模块 + 拦截 `ezmk utils cc` + `[compile].compile_commands` 自动生成）已移入 **[1.1.1](../1.1.x/1.1.1.md)**（1.1.x 稳定线补丁）。dev.1 本身保留，内容调整为仅覆盖 `ezmk project cc` 命令交付 + `ezmk utils cc` 弃用。
 
 ## 版本列表
 
