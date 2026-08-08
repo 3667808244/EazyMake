@@ -140,6 +140,8 @@
     "hook_not_found": "hook script not found: {path} — skipping",
     "hook_nonzero": "hook script returned non-zero exit code: {path} (exit {code})",
     "compile_db_no_sources": "no source files found — skipping compile_commands.json",
+    "compile_db_generate_failed": "compile_commands.json generation failed: {msg}",
+    "cc_help": "Usage: ezmk utils cc [options]\nGenerate compile_commands.json from the current project.\n\nOptions:\n  -o, --output <path>   Output file (default: compile_commands.json)\n  --profile <name>      Apply a build profile (flags/macros)\n  -h, --help            Show this help",
     "pkg_list_title": "Installed packages ({scope} scope):",
     "pkg_list_none": "  (none)",
     "pkg_list_item": "  {name} {version} ({type})",

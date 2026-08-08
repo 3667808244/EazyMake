@@ -25,13 +25,13 @@
 
 | # | 目标 | 类别 | 优先级 | 状态 |
 |---|------|------|--------|------|
-| 1 | 重构 `compile_one_source()`，提取 `build_compile_args()`（参数向量）+ `join_shell_args()`（shell 转义），构建路径行为不变 | 功能 | P0 | 待实现 |
-| 2 | 新建 `compile_db` 模块 `generate_compile_db()`：复用真实命令构造，`arguments` 数组输出，相对项目根、顺序稳定、原子写 | 功能 | P0 | 待实现 |
-| 3 | `Command::Utils` 分发处拦截 `utils_name == "cc"`，改由内置 C++ 生成器服务，`-o`/`--help`/`--profile` 兼容 | 功能 | P0 | 待实现 |
-| 4 | 新增 `[compile].compile_commands`（bool，默认 false）：`ezmk build` 成功后自动生成，输出与本次构建完全一致 | 功能 | P1 | 待实现 |
-| 5 | `ezmk utils cc` 输出与 `ezmk build` 完全一致（drift-free），零外部包依赖 | 质量 | P0 | 待实现 |
-| 6 | 单测 + 集成覆盖拦截 / 自动生成 / 配置解析；全量测试零回归（基线 546/2617） | 质量 | P0 | 待实现 |
-| 7 | 文档与发布收口：`docs/config_file.md` / `CHANGES.md`（§3.6 口径）+ 版本号 1.1.1 | 文档 | P1 | 待实现 |
+| 1 | 重构 `compile_one_source()`，提取 `build_compile_args()`（参数向量）+ `join_shell_args()`（shell 转义），构建路径行为不变 | 功能 | P0 | ✅ 已完成 |
+| 2 | 新建 `compile_db` 模块 `generate_compile_db()`：复用真实命令构造，`arguments` 数组输出，相对项目根、顺序稳定、原子写 | 功能 | P0 | ✅ 已完成 |
+| 3 | `Command::Utils` 分发处拦截 `utils_name == "cc"`，改由内置 C++ 生成器服务，`-o`/`--help`/`--profile` 兼容 | 功能 | P0 | ✅ 已完成 |
+| 4 | 新增 `[compile].compile_commands`（bool，默认 false）：`ezmk build` 成功后自动生成，输出与本次构建完全一致 | 功能 | P1 | ✅ 已完成 |
+| 5 | `ezmk utils cc` 输出与 `ezmk build` 完全一致（drift-free），零外部包依赖 | 质量 | P0 | ✅ 已完成 |
+| 6 | 单测 + 集成覆盖拦截 / 自动生成 / 配置解析；全量测试零回归（基线 546/2617） | 质量 | P0 | ✅ 已完成 |
+| 7 | 文档与发布收口：`docs/config_file.md` / `CHANGES.md`（§3.6 口径）+ 版本号 1.1.1 | 文档 | P1 | ✅ 已完成 |
 
 ---
 
@@ -41,42 +41,42 @@
 
 **设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.1
 
-- [ ] 提取 `build_compile_args()` / `join_shell_args()` 到 `include/ezmk/cache.hpp`；`compile_one_source()` 改为调用
-- [ ] `build_compile_args()` 完整包含：真实编译器（`detected_compiler` 优先）/ `-std=` / stdlib 标志 / 确定性标志 / `-fPIC` / `[compile].flags`（MSVC 翻译 + `msvc_flags`）/ `-I`（`@link:` + 依赖包 `extra_includes`）/ 宏 `-D` / `-MMD -MF` / `-c <src> -o <obj>`
-- [ ] 验收：重构前后命令逐字节一致，`bash build.sh test` 零回归
+- [x] 提取 `build_compile_args()` / `join_shell_args()` 到 `include/ezmk/cache.hpp`；`compile_one_source()` 改为调用
+- [x] `build_compile_args()` 完整包含：真实编译器（`detected_compiler` 优先）/ `-std=` / stdlib 标志 / 确定性标志 / `-fPIC` / `[compile].flags`（MSVC 翻译 + `msvc_flags`）/ `-I`（`@link:` + 依赖包 `extra_includes`）/ 宏 `-D` / `-MMD -MF` / `-c <src> -o <obj>`
+- [x] 验收：重构前后命令逐字节一致，`bash build.sh test` 零回归
 
 ### 阶段二：compile_db 模块
 
 **设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.2
 
-- [ ] 新建 `src/compile_db.cpp` + `include/ezmk/compile_db.hpp`：`generate_compile_db(project_root, config, profile, output_path)`
-- [ ] 复用 `build::prepare_build_state()` → `build_compile_args()`；**最小规范化**（剔除 `-MMD`/`-MF <path>`/`-frandom-seed=<x>`/`/showIncludes`）
-- [ ] `file` 相对项目根 `rel_src`、`directory` 项目根绝对路径、按 `rel_src` 字典序、temp → rename 原子写；无源文件 → warning + 成功
+- [x] 新建 `src/compile_db.cpp` + `include/ezmk/compile_db.hpp`：`generate_compile_db(project_root, config, profile, output_path)`
+- [x] 复用 `build::prepare_build_state()` → `build_compile_args()`；**最小规范化**（剔除 `-MMD`/`-MF <path>`/`-frandom-seed=<x>`/`/showIncludes`）
+- [x] `file` 相对项目根 `rel_src`、`directory` 项目根绝对路径、按 `rel_src` 字典序、temp → rename 原子写；无源文件 → warning + 成功
 
 ### 阶段三：拦截 `ezmk utils cc`
 
 **设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.3
 
-- [ ] `main.cpp` `Command::Utils` 分发处（`find_utils_script()` **之前**）拦截 `cc`，改由内置 C++ 生成器服务
-- [ ] 兼容行为：默认输出 `<proj_root>/compile_commands.json`；`-o <path>` 相对项目根解析；`-h/--help` 复用原工具文案；`--profile <name>` 透传
-- [ ] 不调用 `find_utils_script("cc")`；`cc.lua` 不再执行（包内文件保留，1.2.0 弃用）
+- [x] `main.cpp` `Command::Utils` 分发处（`find_utils_script()` **之前**）拦截 `cc`，改由内置 C++ 生成器服务
+- [x] 兼容行为：默认输出 `<proj_root>/compile_commands.json`；`-o <path>` 相对项目根解析；`-h/--help` 复用原工具文案；`--profile <name>` 透传
+- [x] 不调用 `find_utils_script("cc")`；`cc.lua` 不再执行（包内文件保留，1.2.0 弃用）
 
 ### 阶段四：`[compile].compile_commands` 自动生成
 
 **设计**：[`plans/1.1.1/1.1.1.md`](plans/1.1.1/1.1.1.md) §3.4
 
-- [ ] `CompileSection::compile_commands` 字段 + `src/config.cpp` 解析（默认 false）
-- [ ] `build.cpp` 链接成功后 hook：用**构建期 `CompileInput`**（含 profile 应用后标志、依赖包 include、`@link:` 结果），输出与本次构建逐条一致
-- [ ] 失败 warning 不阻塞构建；`--compile-commands` flag 允许临时开启而不改配置
+- [x] `CompileSection::compile_commands` 字段 + `src/config.cpp` 解析（默认 false）
+- [x] `build.cpp` 链接成功后 hook：用**构建期 `CompileInput`**（含 profile 应用后标志、依赖包 include、`@link:` 结果），输出与本次构建逐条一致
+- [x] 失败 warning 不阻塞构建；`--compile-commands` flag 允许临时开启而不改配置
 
 ### 阶段五：i18n / 测试 / 文档 / 发布
 
-- [ ] i18n：`compile_db_*`/`help_*`/自动生成 warning key（en/zh），`check_i18n.py` 三向一致通过
-- [ ] 测试：`test_compile_db.cpp`（新建）+ `test_config.cpp`（字段解析）+ `test_integration.cpp`（拦截 / 自动生成）；全量零回归
-- [ ] `docs/en|zh/config_file.md` 补 `[compile].compile_commands` 字段说明
-- [ ] `CHANGES.md` 新增 `1.1.1` 条目——**口径：优化 compile_commands.json 生成算法 + 新增配置项；不宣布拦截 / 弃用**（`cc` 工具弃用声明在 1.2.0）
-- [ ] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.1.1`
-- [ ] **发布门槛预检**：① 计划清单全部完成或明确收口；② API 兼容（无破坏性变更）；③ 全量测试零回归
+- [x] i18n：`compile_db_*`/`help_*`/自动生成 warning key（en/zh），`check_i18n.py` 三向一致通过
+- [x] 测试：`test_compile_db.cpp`（新建）+ `test_config.cpp`（字段解析）+ `test_integration.cpp`（拦截 / 自动生成）；全量零回归
+- [x] `docs/en|zh/config_file.md` 补 `[compile].compile_commands` 字段说明
+- [x] `CHANGES.md` 新增 `1.1.1` 条目——**口径：优化 compile_commands.json 生成算法 + 新增配置项；不宣布拦截 / 弃用**（`cc` 工具弃用声明在 1.2.0）
+- [x] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本为 `1.1.1`
+- [x] **发布门槛预检**：① 计划清单全部完成或明确收口；② API 兼容（无破坏性变更）；③ 全量测试零回归
 - [ ] 打 `v1.1.1` tag 触发 `release.yml`（沿用 1.1.0 流程）；发布后 `plan.md` 转回 [1.2.0](plans/1.2.0/) 执行计划
 
 > 门槛未满足即停止，禁止带着未收口项打 tag。

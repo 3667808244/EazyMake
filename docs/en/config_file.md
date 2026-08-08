@@ -71,8 +71,17 @@ Prefix `GNU` before the language to enable GNU compiler extensions:
 | `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root |
 | `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error |
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
+| `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
+
+> **`compile_commands` (1.1.1+):** When `true`, `ezmk build` writes `compile_commands.json`
+> after a successful link. The index is produced from the same command construction as
+> the build (single source of truth), so it can never drift from the real compile flags —
+> `-D` macros, include dirs, `@link:` resolutions, and the active profile are all reflected.
+> Equivalent to CMake's `CMAKE_EXPORT_COMPILE_COMMANDS`. `ezmk utils cc` generates it on
+> demand, and the `--compile-commands` build flag enables it for a single invocation
+> without changing the config.
 
 > **Why a separate, untranslated `msvc_flags`?** The GCC→MSVC auto-translation can't
 > cover every difference (e.g. `/Zi`, `/Od` have no GCC equivalent). `msvc_flags` is

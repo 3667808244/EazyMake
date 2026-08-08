@@ -18,13 +18,16 @@
 #include "catch2.hpp"
 #include "test_helpers.hpp"
 #include "ezmk/util.hpp"
+#include "nlohmann_json.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace ezmk::util;
@@ -384,6 +387,63 @@ TEST_CASE("integration: utils cc generates compile_commands.json", "[integration
                             content.find(']') != std::string::npos &&
                             content.find('{') != std::string::npos);
     REQUIRE(looks_like_json);
+}
+
+// 1.1.1: [compile].compile_commands — build auto-generates compile_commands.json.
+TEST_CASE("integration: compile_commands auto-generation", "[integration]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found 鈥?build it first with: bash build.sh");
+    }
+
+    SECTION("via --compile-commands flag") {
+        TempDir tmp;
+        std::string proj_name = "auto_cc_flag";
+
+        ProcResult new_r = run_ezmk(
+            "project new " + proj_name + " --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(new_r.exit_code == 0);
+
+        ProcResult r = run_ezmk("build --compile-commands",
+                                tmp.path / proj_name);
+        REQUIRE(r.exit_code == 0);
+
+        fs::path cc_file = tmp.path / proj_name / "compile_commands.json";
+        REQUIRE(fs::exists(cc_file));
+    }
+
+    SECTION("via [compile].compile_commands = true") {
+        TempDir tmp;
+        std::string proj_name = "auto_cc_cfg";
+
+        ProcResult new_r = run_ezmk(
+            "project new " + proj_name + " --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(new_r.exit_code == 0);
+
+        fs::path proj_dir = tmp.path / proj_name;
+        {
+            std::ofstream of(proj_dir / "ezmk.toml");
+            of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+                  "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+                  "[compile]\nflags = [\"-Wall\"]\ncompile_commands = true\n\n"
+                  "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+                  "[depends]\nlib = []\n";
+        }
+
+        ProcResult r = run_ezmk("build", proj_dir);
+        REQUIRE(r.exit_code == 0);
+
+        fs::path cc_file = proj_dir / "compile_commands.json";
+        REQUIRE(fs::exists(cc_file));
+
+        // The generated index reflects the build's flags.
+        auto j = nlohmann::json::parse(file_read(cc_file));
+        REQUIRE(j.is_array());
+        REQUIRE(j.size() >= 1);
+        std::vector<std::string> args = j[0]["arguments"].get<std::vector<std::string>>();
+        REQUIRE(std::find(args.begin(), args.end(), "-Wall") != args.end());
+    }
 }
 
 // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// Scenario 5: project new creates expected directory layout

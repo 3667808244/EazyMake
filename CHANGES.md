@@ -12,6 +12,27 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.1.1 (2026-08-08) — 补丁发布
+
+1.1.x 稳定线补丁。优化 `compile_commands.json`（clangd 索引）的生成算法，并新增构建后自动生成配置项。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
+
+### 优化 compile_commands.json 生成算法
+
+- `ezmk utils cc` 输出的 compile_commands.json 现在与真实构建命令**完全一致（drift-free）**：完整包含此前缺失的 `@link:` 解析目录、依赖包 `extra_includes`、`-stdlib`、确定性标志、宏 `-D`、`--profile` 与 MSVC 翻译等
+- 输出为 clangd 推荐的 `arguments` 数组（免 shell 双重转义歧义），`file` 相对项目根、`directory` 为项目根绝对路径，条目稳定排序、原子写
+- 编译命令构造收敛为**单一事实源**（`build_compile_args()`），构建与索引共用同一实现——任何新增编译标志自动进入 compile_commands.json
+
+### 新增配置项
+
+- `[compile].compile_commands`（bool，默认 `false`）：为 `true` 时 `ezmk build` 链接成功后自动生成 compile_commands.json（对标 CMake `CMAKE_EXPORT_COMPILE_COMMANDS`），输出与本次构建逐条一致
+- `ezmk build --compile-commands`：单次临时启用，无需改配置
+
+### 测试
+
+全量测试零回归：单元 546 用例 / 2621 断言。
+
+---
+
 ## 1.1.0 (2026-08-07) — 正式版发布
 
 合并 `1.1.0-dev.1` ~ `dev.7` 与 `1.1.0-pre.1` ~ `pre.3` 的正式版：包编译与开发体验（dev）+ 用户触达改善（pre.1）+ 文档检查（pre.2）+ 缺陷收集与 CI（pre.3）。**公共 API 自此永久稳定**（见文首 API Stability）。

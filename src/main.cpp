@@ -63,13 +63,7 @@ static int run_builtin_cc(const std::vector<std::string>& utils_args) {
     }
 
     if (show_help) {
-        std::cout << "Usage: ezmk utils cc [options]\n"
-                  << "Generate compile_commands.json from the current project.\n"
-                  << "\n"
-                  << "Options:\n"
-                  << "  -o, --output <path>   Output file (default: compile_commands.json)\n"
-                  << "  --profile <name>      Apply a build profile (flags/macros)\n"
-                  << "  -h, --help            Show this help\n";
+        std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::cc_help) << "\n";
         return 0;
     }
 

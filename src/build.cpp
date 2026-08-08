@@ -1127,7 +1127,8 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
             auto cin = make_compile_input(st, opts);
             compile_db::generate_compile_db(cin, st.proj_root, {});
         } catch (const std::exception& e) {
-            util::warn(std::string("compile_commands.json generation failed: ") + e.what());
+            util::warn(ezmk::i18n::I18nKey::compile_db_generate_failed,
+                       {{"msg", e.what()}});
         }
     }
 

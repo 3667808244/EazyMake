@@ -51,6 +51,8 @@ EZMK_I18N_KEY(on_failure_hook)          // 0.2.3+
 EZMK_I18N_KEY(hook_not_found)           // 0.2.3+
 EZMK_I18N_KEY(hook_nonzero)             // 0.2.3+
 EZMK_I18N_KEY(compile_db_no_sources)    // 1.1.1
+EZMK_I18N_KEY(compile_db_generate_failed) // 1.1.1
+EZMK_I18N_KEY(cc_help)                  // 1.1.1
 
 // ---- cache (verbose) ----
 EZMK_I18N_KEY(cache_hit)

@@ -21,16 +21,18 @@ std::vector<std::string> normalize_for_index(std::vector<std::string> args,
                                              const fs::path& rel_src) {
     std::vector<std::string> out;
     out.reserve(args.size());
+    auto abs_src = proj_root / rel_src;
     for (size_t i = 0; i < args.size(); ++i) {
         const auto& a = args[i];
         if (a == "-MMD") continue;                        // gcc: dep output flag
         if (a == "/showIncludes") continue;               // msvc: include listing
         if (a == "-MF") { ++i; continue; }                // gcc: dep output path
         if (a.rfind("-frandom-seed=", 0) == 0) continue;  // determinism
-        if (a == "-c" && i + 1 < args.size()) {           // source (relativized)
-            out.push_back(a);
+        // Relativize the source path so it matches the `file` field — clangd
+        // substitutes `file` into `arguments`. (The `-c` flag stays where the
+        // real command puts it, followed by flags — NOT the source file.)
+        if (a == abs_src.string() || a == abs_src.generic_string()) {
             out.push_back(rel_src.generic_string());
-            ++i;
             continue;
         }
         if (a == "-o" && i + 1 < args.size()) {           // object (relativized)

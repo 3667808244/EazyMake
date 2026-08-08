@@ -1150,6 +1150,41 @@ msvc_flags = ["/utf-8", "/MD"]
     REQUIRE(cfg.compile.msvc_flags[1] == "/MD");
 }
 
+TEST_CASE("parse_config: compile_commands set to true (1.1.1)", "[config][1.1.1]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+flags = ["-Wall"]
+compile_commands = true
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.compile_commands == true);
+}
+
+TEST_CASE("parse_config: compile_commands defaults to false (1.1.1)", "[config][1.1.1]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+flags = ["-Wall"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.compile_commands == false);
+}
+
 // ===================================================================
 // 0.2.3+: [compile.profile.<name>] parsing
 // ===================================================================

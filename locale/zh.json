@@ -140,6 +140,8 @@
     "hook_not_found": "钩子脚本未找到: {path} — 跳过",
     "hook_nonzero": "钩子脚本返回非零退出码: {path} (退出码 {code})",
     "compile_db_no_sources": "未找到源文件，跳过 compile_commands.json 生成",
+    "compile_db_generate_failed": "compile_commands.json 生成失败: {msg}",
+    "cc_help": "用法: ezmk utils cc [选项]\n从当前项目生成 compile_commands.json。\n\n选项:\n  -o, --output <路径>   输出文件（默认: compile_commands.json）\n  --profile <名称>      应用构建 profile（flags/宏）\n  -h, --help            显示此帮助",
     "pkg_list_title": "已安装包 ({scope} 作用域):",
     "pkg_list_none": "  (无)",
     "pkg_list_item": "  {name} {version} ({type})",

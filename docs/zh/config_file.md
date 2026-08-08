@@ -64,8 +64,11 @@
 | `include_dirs` | string[] | 否 | `["include"]` | 编译时 `-I` 搜索路径，相对于项目根目录 |
 | `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错 |
 | `ezmk_macros` | bool | 否 | `true` | **0.2.2+** 是否自动注入 `EZMK_*` 标准预处理器宏（`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`） |
+| `compile_commands` | bool | 否 | `false` | **1.1.1+** 构建成功后自动生成 `compile_commands.json`（clangd 索引） |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
+
+> **`compile_commands`（1.1.1+）：** 为 `true` 时，`ezmk build` 链接成功后写入 `compile_commands.json`。索引由与构建相同的命令构造（单一事实源）生成，因此不会与真实编译参数漂移——`-D` 宏、include 目录、`@link:` 解析结果与当前 profile 都会反映在内。对标 CMake 的 `CMAKE_EXPORT_COMPILE_COMMANDS`。`ezmk utils cc` 可随时按需生成；`--compile-commands` 构建 flag 可在不改配置的情况下单次启用。
 
 > **为什么单独提供不翻译的 `msvc_flags`？** GCC→MSVC 自动翻译覆盖不了所有差异（如 `/Zi`、`/Od` 在 GCC 下没有对应项）。`msvc_flags` 原样透传，MSVC 用户可精确控制而无需与翻译层博弈。
 
