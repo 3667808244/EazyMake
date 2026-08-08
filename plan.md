@@ -33,7 +33,7 @@
 
 - [x] **2.0 run_command RunOptions**（前置）：`RunOptions{timeout,cwd,env}` + POSIX fork 后 chdir/setenv + Windows lpCurrentDirectory/环境块；旧调用点迁移；`test_util.cpp` env/cwd/父环境不污染用例
 - [x] **2.1 链接假成功**（C1）：`util::atomic_rename` + `execute_link` 接入；`test_util.cpp` 覆盖目标/源缺失用例
-- [ ] **2.2 缓存签名**（C2）：`compile_options_signature` 加 `stdlib`/`use_pic`；`test_cache.cpp` 用例
+- [x] **2.2 缓存签名**（C2）：`compile_options_signature`/`check_cache` 加 `stdlib`/`use_pic`（build/pkg 调用点透传）；`test_cache.cpp` 用例
 - [ ] **2.3 lockfile 直接依赖**（C3）：`direct_deps` 元数据 + `depends_changed` 精确比较 + 生成侧写入；`test_lockfile.cpp`（新建）+ `--locked` 集成用例
 - [x] **2.4 Windows 脚本**（C4）：`run_script` 去 cd 前缀、走 `RunOptions.cwd`；`test_util.cpp` 行为用例（脚本在指定 cwd 运行）
 - [ ] **2.5 TOML 转义**（C5）：`toml_quote()` + 两处写入器 + `repo.cpp` 收敛；round-trip 用例

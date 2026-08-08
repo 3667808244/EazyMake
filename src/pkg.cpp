@@ -394,8 +394,10 @@ fs::path compile_package(const fs::path& pkg_dir,
     // 1.1.0: deterministic flag
     record.deterministic = cfg.compile.deterministic;
 
-    // Check global compile options signature
-    auto cur_sig = cache::compile_options_signature(cfg.compile);
+    // Check global compile options signature (1.1.2 C2: include stdlib; use_pic
+    // is always false for packages — static libs)
+    auto cur_sig = cache::compile_options_signature(cfg.compile, {}, "",
+                                                    cfg.project.stdlib, false);
     // 1.1.0: deterministic build — include lockfile hash
     if (cfg.compile.deterministic) {
         auto lock_path = fs::current_path() / "ezmk.lock";

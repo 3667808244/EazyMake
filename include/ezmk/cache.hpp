@@ -111,9 +111,14 @@ std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile);
 std::string compile_options_signature(const config::CompileSection& compile);
 
 // Compute a signature including extra include paths and language standard.
+// 1.1.2 C2: also folds in stdlib and use_pic — both change the emitted compile
+// command (build_compile_args injects -stdlib=... and -fPIC), so omitting them
+// served stale objects when [project].stdlib or type static↔shared changed.
 std::string compile_options_signature(const config::CompileSection& compile,
                                       const std::vector<fs::path>& extra_includes,
-                                      std::string_view std_flag = "");
+                                      std::string_view std_flag = "",
+                                      std::string_view stdlib = "",
+                                      bool use_pic = false);
 
 // Check whether a cached .o file is still valid, by comparing:
 //  1) source file hash, 2) compile options signature, 3) all stored header hashes.
@@ -138,7 +143,9 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
                                     const CacheRecord& record,
                                     const fs::path& proj_root,
                                     const std::vector<fs::path>& extra_includes,
-                                    std::string_view std_flag = "");
+                                    std::string_view std_flag = "",
+                                    std::string_view stdlib = "",
+                                    bool use_pic = false);
 
 // Load record.json. Returns empty record if file doesn't exist.
 CacheRecord load_record();

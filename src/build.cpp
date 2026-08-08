@@ -819,7 +819,8 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     }
 
     auto cur_sig = cache::compile_options_signature(st.compile_cfg, st.extra_includes,
-                                                    st.lang.std_flag);
+                                                    st.lang.std_flag,
+                                                    st.stdlib, st.use_pic);
     // 1.1.0: deterministic build — include lockfile hash in signature
     if (st.compile_cfg.deterministic) {
         auto lock_path = st.proj_root / "ezmk.lock";

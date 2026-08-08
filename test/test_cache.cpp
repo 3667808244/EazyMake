@@ -92,6 +92,22 @@ TEST_CASE("compile_options_signature: empty compile section", "[cache]") {
     REQUIRE(sig.size() == 64); // Still a valid hash
 }
 
+TEST_CASE("compile_options_signature: stdlib affects signature", "[cache][1.1.2]") {
+    CompileSection cs;
+    // 1.1.2 C2: changing [project].stdlib must invalidate the cache
+    auto sig1 = compile_options_signature(cs, {}, "", "libstdc++", false);
+    auto sig2 = compile_options_signature(cs, {}, "", "libc++", false);
+    REQUIRE(sig1 != sig2);
+}
+
+TEST_CASE("compile_options_signature: use_pic affects signature", "[cache][1.1.2]") {
+    CompileSection cs;
+    // 1.1.2 C2: switching type static↔shared toggles -fPIC and must invalidate
+    auto sig1 = compile_options_signature(cs, {}, "", "", false);
+    auto sig2 = compile_options_signature(cs, {}, "", "", true);
+    REQUIRE(sig1 != sig2);
+}
+
 // ===================================================================
 // iso_time()
 // ===================================================================
