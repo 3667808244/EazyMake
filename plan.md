@@ -55,7 +55,7 @@
 - [x] **1.4 URL 完整性**（S3）：无 sha256 的 URL 安装确认流程 + 显式 `http://` MITM 警告；`test_pkg.cpp` 用例
 - [x] **1.5 flags 元字符引号**（S4）：`join_shell_args` 元字符集补全 + `build.cpp` GCC/MSVC 链接 flags 双引号包裹；`test_compile_db.cpp` 用例
 - [x] **1.6 编辑器/vcvars 转义**（S5）：`open_in_editor`/`find_editor` 转义 + 移除全库唯一 `system()`；vcvars 路径转义；`test_util.cpp` 用例
-- [ ] 阶段一自测：`bash build.sh test` 相关用例通过
+- [x] 阶段一自测：`bash build.sh test` 相关用例通过（591 用例 / 2806 断言）
 
 ### 阶段二：健壮性收口（C1–C5）
 
