@@ -12,6 +12,40 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.1.3 (2026-08-10) — 补丁发布
+
+1.1.x 稳定线补丁。基于第二轮多模块安全与质量审计，修复 **5 处安全缺口**与 **5 处健壮性问题**，并收敛代码质量与测试质量问题。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
+
+### 安全收敛（二轮）
+
+- **钩子沙箱统一**：构建钩子/安装钩子共用的沙箱 `__index` 从裸 `_G` 改为受限全局表（`dofile`/`loadfile`/`load`/`require`/`debug`/`package`/`collectgarbage` 解析为 `nil`），与 utils 脚本一致——第三方钩子脚本无法再读盘上文件或从磁盘加载代码
+- **包名校验**：新增 `util::validate_pkg_name`，安装/`pkg remove`/`search`/lockfile 恢复统一拒绝含路径分隔符、盘符、`..` 等的恶意包名——不再可能经包名路径穿越越界写盘
+- **URL 安装完整性**：无 sha256 的 URL 安装下载前要求确认（`-y` 可跳过）；显式 `http://` 明文下载提示 MITM 风险并建议 `https://`——不再静默下载不可校验的包
+- **flags 命令注入修复**：`join_shell_args` 引号元字符集补全为 POSIX `/bin/sh` 解析涉及的全部字符，GCC/MSVC 链接 flags 改双引号包裹——恶意 `link.flags` 不再被 `sh -c` 执行
+- **编辑器命令转义**：`open_in_editor` 的 `EDITOR`/`VISUAL` 派生命令经 `escape_shell_arg` + 双引号包裹，`find_editor` 移除全库唯一 `system()`，vcvars 路径转义——`EDITOR="vim; evil"` 不再注入
+
+### 健壮性收口
+
+- **`SOURCE_DATE_EPOCH` 安全解析**：非数字值不再在 `-jN` worker 线程抛异常崩线程，改为警告并视为未设置（提取为可单测的 `resolve_source_date_epoch`）
+- **`~` 前缀边界**：install prefix 仅 `~/`（或 `~\`）与单独 `~` 展开，`"~abc"` 不再被误截断为 `"c"`
+- **watcher OVERLAPPED 池实例化**：`g_overlapped_pool` 从文件级全局改为 `FileWatcher` 实例成员——多实例时不再互相悬垂
+- **`recursive_` 死代码收口**：删除从未被读取的字段，头文件注明实际递归行为（Windows 递归 / Linux·macOS 非递归）
+- **边缘批处理**：`name.back()` 空串防御（根目录 `filename()` 为空）、`.o`/`.obj` 后缀提为常量、CLI argv 嵌入 NUL 已知限制注释
+
+### 代码质量
+
+- **JSON 解析器替换**：手写 `load_links_json` 解析器改 `nlohmann/json`——支持标准转义与 Unicode，畸形 JSON 报错清晰
+- **大函数拆分**：`parse_config` 按 TOML 节拆为 9 个私有 helper；`compile_one_source` 拆出记录条目/依赖解析 helper——纯提取零行为漂移
+- **cli 重复代码收敛**：positional 数量校验提取 `require_positional`/`optional_positional`/`reject_positionals` 共享 helper
+
+### 测试
+
+- **永真断言清理**：`test_file_watcher` 三个 `call_count >= 0` 永真断言改为轮询等待 + 精确路径集合断言，事件无法送达的环境显式 SKIP
+- **argparse 单测**：新增 `test_argparse.cpp` 直接测 tokenizer（长短选项/分组/`--` 透传/报错路径）
+- 全量测试零回归：630 用例 / 2918 断言（含集成）。
+
+---
+
 ## 1.1.2 (2026-08-08) — 补丁发布
 
 1.1.x 稳定线补丁。基于多模块代码质量评审，修复 **4 处安全漏洞**与 **7 处静默产出错误结果的正确性 bug**。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。

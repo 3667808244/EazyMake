@@ -77,9 +77,9 @@
 
 - [x] **4.1 永真断言清理**（T1）：`test_file_watcher.cpp` 三个 `>= 0` 永真断言改为「轮询等待 + 精确路径集合 + 不支持时 SKIP」；本地 test-all 通过
 - [x] **4.2 argparse/main 单测**（T2）：新建 `test_argparse.cpp`（15 用例：长短选项/分组/`--` 透传/缺值报错/`has`/`value`）；main 别名展开 + 未知命令已由 test_cli.cpp 覆盖
-- [ ] 全量回归：`bash build.sh test` + `test-all` 零回归（基线 1.1.2 发布值 592 用例 / 2813 断言，2026-08-08）
-- [ ] `CHANGES.md` 新增 1.1.3 条目（口径：安全收敛二轮 + 健壮性收口；命令/配置/CLI 不变）
-- [ ] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本 `1.1.3`（在 1.1.2 发布后执行）
+- [x] 全量回归：`bash build.sh test` + `test-all` 零回归（630 用例 / 2918 断言，基线 592/2813）
+- [x] `CHANGES.md` 新增 1.1.3 条目（口径：安全收敛二轮 + 健壮性收口；命令/配置/CLI 不变）
+- [x] 版本号预置：`build.sh` 默认版本 `1.1.3`（`ezmk version` = 1.1.3；version.hpp 由构建自动生成）
 - [ ] **发布门槛预检**：① 计划清单全部完成或明确收口（含 S1b 决策）；② 公共 API 无破坏性变更；③ 全量测试零回归
 - [ ] 打 `v1.1.3` tag 触发 `release.yml`；产物核验 + 分发（沿用 1.1.2 流程）— **待用户执行**
 - [ ] 收尾：`plan.md` 状态更新（1.1.2 已发布 → 1.1.3 执行 → 完成后恢复 1.2.0）；`plans/README.md` / `plans/1.1.x/README.md` 状态更新 — **发布后执行**
