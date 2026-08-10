@@ -91,6 +91,43 @@ namespace ezmk::cli
     // Command-group parsers
     // ===================================================================
 
+    // 1.1.3 Q3: positional 数量校验 helper —— 替换三个 parse_* 中的重复块。
+    // 恰好一个 positional（空 → required 报错；>1 → 太多报错）。
+    static std::string require_positional(const ParsedOptions &p,
+                                          std::string_view cmd,
+                                          std::string_view what)
+    {
+        if (p.positionals.empty())
+            util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
+                        {{"cmd", std::string(cmd)},
+                         {"what", std::string(what)}});
+        if (p.positionals.size() > 1)
+            util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
+                        {{"cmd", std::string(cmd)},
+                         {"what", std::string(what)}});
+        return p.positionals[0];
+    }
+
+    // 至多一个 positional（允许为空，>1 报错）。
+    static std::string optional_positional(const ParsedOptions &p,
+                                           std::string_view cmd,
+                                           std::string_view what)
+    {
+        if (p.positionals.size() > 1)
+            util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
+                        {{"cmd", std::string(cmd)},
+                         {"what", std::string(what)}});
+        return p.positionals.empty() ? "" : p.positionals[0];
+    }
+
+    // 不允许任何 positional。
+    static void reject_positionals(const ParsedOptions &p, std::string_view cmd)
+    {
+        if (!p.positionals.empty())
+            util::fatal(ezmk::i18n::I18nKey::cli_unexpected_arg,
+                        {{"cmd", std::string(cmd)}, {"arg", p.positionals[0]}});
+    }
+
     static CliArgs parse_project_args(int argc, char **argv)
     {
         CliArgs args;
@@ -106,15 +143,9 @@ namespace ezmk::cli
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project new");
 
-            if (p.positionals.empty())
-                util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
-                            {{"cmd", "ezmk project new"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_project_name)}});
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk project new"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_project_name)}});
-            args.project_name = p.positionals[0];
+            args.project_name = require_positional(
+                p, "ezmk project new",
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_project_name));
 
             if (auto t = p.value("type"))
             {
@@ -169,15 +200,11 @@ namespace ezmk::cli
             {
                 if (p.has("no-build-on-start"))
                     args.watch_no_build_on_start = true;
-                if (!p.positionals.empty())
-                    util::fatal(ezmk::i18n::I18nKey::cli_unexpected_arg,
-                                {{"cmd", "ezmk project watch"}, {"arg", p.positionals[0]}});
+                reject_positionals(p, "ezmk project watch");
             }
             else // build
             {
-                if (!p.positionals.empty())
-                    util::fatal(ezmk::i18n::I18nKey::cli_unexpected_arg,
-                                {{"cmd", "ezmk project build"}, {"arg", p.positionals[0]}});
+                reject_positionals(p, "ezmk project build");
             }
             return args;
         }
@@ -274,17 +301,10 @@ namespace ezmk::cli
                 util::fatal(ezmk::i18n::I18nKey::cli_one_scope,
                             {{"cmd", "ezmk pkg install"}});
 
-            if (p.positionals.empty())
-                util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
-                            {{"cmd", "ezmk pkg install"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_arg)}});
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk pkg install"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_arg)}});
-
             InstallOptions opts;
-            opts.pkg_file = p.positionals[0];
+            opts.pkg_file = require_positional(
+                p, "ezmk pkg install",
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_arg));
             opts.scope = scopes.empty() ? Scope::Project : scopes[0];
             if (auto s = p.value("sha256"))
                 opts.sha256 = *s;
@@ -313,17 +333,10 @@ namespace ezmk::cli
             auto p = parse_options(argc, argv, 3, spec,
                                    "ezmk pkg " + std::string(action));
 
-            if (p.positionals.empty())
-                util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
-                            {{"cmd", "ezmk pkg " + std::string(action)},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_name)}});
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk pkg " + std::string(action)},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_name)}});
-
             QueryOptions opts;
-            opts.pkg_name = p.positionals[0];
+            opts.pkg_name = require_positional(
+                p, "ezmk pkg " + std::string(action),
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_name));
             opts.scopes = collect_scopes(p);
             if (opts.scopes.empty())
                 opts.scopes = {Scope::Project, Scope::User, Scope::Global};
@@ -361,12 +374,9 @@ namespace ezmk::cli
 
             QueryOptions opts;
             opts.update_all = p.has("all");
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk pkg update"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_name)}});
-
-            std::string pkg_name = p.positionals.empty() ? "" : p.positionals[0];
+            std::string pkg_name = optional_positional(
+                p, "ezmk pkg update",
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_name));
             if (opts.update_all)
             {
                 if (!pkg_name.empty())
@@ -413,17 +423,10 @@ namespace ezmk::cli
             if (scopes.size() > 1)
                 util::fatal(ezmk::i18n::I18nKey::cli_one_scope, {{"cmd", "ezmk repo add"}});
 
-            if (p.positionals.empty())
-                util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
-                            {{"cmd", "ezmk repo add"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_url)}});
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk repo add"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_url)}});
-
             RepoOptions opts;
-            opts.url = p.positionals[0];
+            opts.url = require_positional(
+                p, "ezmk repo add",
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_url));
             opts.scopes = scopes.empty() ? std::vector<Scope>{Scope::Project} : scopes;
             if (auto n = p.value("name"))
                 opts.name = *n;
@@ -444,11 +447,9 @@ namespace ezmk::cli
             auto p = parse_options(argc, argv, 3, spec,
                                    "ezmk repo " + std::string(action));
 
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk repo " + std::string(action)},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_name)}});
-            std::string name = p.positionals.empty() ? "" : p.positionals[0];
+            std::string name = optional_positional(
+                p, "ezmk repo " + std::string(action),
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_name));
             if (is_remove && name.empty())
                 util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
                             {{"cmd", "ezmk repo remove"},
@@ -489,17 +490,10 @@ namespace ezmk::cli
             add_verbose_spec(spec);
             auto p = parse_options(argc, argv, 3, spec, "ezmk repo info");
 
-            if (p.positionals.empty())
-                util::fatal(ezmk::i18n::I18nKey::cli_arg_required,
-                            {{"cmd", "ezmk repo info"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_name)}});
-            if (p.positionals.size() > 1)
-                util::fatal(ezmk::i18n::I18nKey::cli_too_many_args,
-                            {{"cmd", "ezmk repo info"},
-                             {"what", ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_name)}});
-
             RepoOptions opts;
-            opts.name = p.positionals[0];
+            opts.name = require_positional(
+                p, "ezmk repo info",
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_repo_name));
             opts.scopes = collect_scopes(p);
             if (opts.scopes.empty())
                 opts.scopes = {Scope::Project, Scope::User, Scope::Global};

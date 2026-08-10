@@ -70,8 +70,8 @@
 
 - [x] **3.1 JSON 解析器替换**（Q1）：`load_links_json` 改 `nlohmann/json` + 畸形 JSON catch；`test_config.cpp` round-trip/畸形/Unicode 用例
 - [x] **3.2 大函数拆分**（Q2，P2）：`parse_config` 拆 9 个 section helper；`compile_one_source` 拆 `fill_record_entry`/`parse_compile_dependencies`；零行为漂移
-- [ ] **3.3 cli 去重**（Q3，P2）：提取「选项规范」「positional 校验」「scope 收集」共享 helper；`test_cli.cpp` 全量通过
-- [ ] 阶段三自测：`bash build.sh test` 相关用例通过（重构零行为漂移）
+- [x] **3.3 cli 去重**（Q3，P2）：新增 `require_positional`/`optional_positional`/`reject_positionals` 共享 helper，替换 9 处重复 positional 校验；`test_cli.cpp` 全量通过
+- [x] 阶段三自测：`bash build.sh test` 相关用例通过（重构零行为漂移，603 用例）
 
 ### 阶段四：测试质量 + 回归与发布准备
 
