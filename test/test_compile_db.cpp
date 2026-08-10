@@ -111,6 +111,32 @@ TEST_CASE("join_shell_args: quoting behavior", "[cache][compile_db]") {
     REQUIRE(join_shell_args({"a\"b"}) == "\"a\\\"b\"");
 }
 
+// 1.1.3 S4: expanded shell metacharacter blacklist — these must be quoted so a
+// malicious flag (e.g. "-lfoo; echo pwned") cannot be executed by `sh -c`.
+TEST_CASE("join_shell_args: quotes shell metacharacters", "[cache][compile_db][1.1.3]") {
+    // Command-injection separators / operators
+    REQUIRE(join_shell_args({"-lfoo; echo pwned"}) == "\"-lfoo; echo pwned\"");
+    REQUIRE(join_shell_args({"a|b"}) == "\"a|b\"");
+    REQUIRE(join_shell_args({"a&b"}) == "\"a&b\"");
+    REQUIRE(join_shell_args({"a#b"}) == "\"a#b\"");
+    REQUIRE(join_shell_args({"a(b)c"}) == "\"a(b)c\"");
+    REQUIRE(join_shell_args({"a<b>c"}) == "\"a<b>c\"");
+    // Globbing / expansion characters
+    REQUIRE(join_shell_args({"a*b"}) == "\"a*b\"");
+    REQUIRE(join_shell_args({"a?b"}) == "\"a?b\"");
+    REQUIRE(join_shell_args({"a[b]"}) == "\"a[b]\"");
+    REQUIRE(join_shell_args({"a{b}"}) == "\"a{b}\"");
+    REQUIRE(join_shell_args({"a~b"}) == "\"a~b\"");
+    REQUIRE(join_shell_args({"a!b"}) == "\"a!b\"");
+    REQUIRE(join_shell_args({"a'b"}) == "\"a'b\"");
+    // $ and backtick must be backslash-escaped inside the double quotes
+    REQUIRE(join_shell_args({"a$b"}) == "\"a\\$b\"");
+    REQUIRE(join_shell_args({"a`b"}) == "\"a\\`b\"");
+    // Regression: whitespace / plain-arg quoting unchanged
+    REQUIRE(join_shell_args({"a b", "c"}) == "\"a b\" c");
+    REQUIRE(join_shell_args({"g++", "-c", "src/main.cpp"}) == "g++ -c src/main.cpp");
+}
+
 // ===================================================================
 // compile_db::generate_compile_db() — compile_commands.json output
 // ===================================================================

@@ -412,12 +412,15 @@ std::string join_shell_args(const std::vector<std::string>& args) {
         // paths with spaces survive run_command() intact (escape_shell_arg does
         // not escape spaces). Args without special chars are emitted bare —
         // behaviorally equivalent to the historical always-quoted form.
+        // 1.1.3 S4: 黑名单补全为 POSIX `/bin/sh` 解析涉及的全部字符（含 `;|&#()<>`、
+        // glob 通配 `*?[]{}`、波浪号展开 `~`、历史展开 `!`、换行等）。漏掉任何一个，
+        // 恶意 flags（如 `-lfoo; echo pwned`）都会在 `sh -c` 下被执行。
         bool need_quote = false;
         for (char c : a) {
-            if (c == ' ' || c == '\t' || c == '"' || c == '\\' || c == '`' || c == '$') {
-                need_quote = true;
-                break;
-            }
+            if (c==' '||c=='\t'||c=='"'||c=='\''||c=='\\'||c=='`'||c=='$'||
+                c==';'||c=='|'||c=='&'||c=='#'||c=='('||c==')'||c=='<'||c=='>'||
+                c=='~'||c=='*'||c=='?'||c=='['||c==']'||c=='{'||c=='}'||c=='!'||
+                c=='\n'||c=='\r') { need_quote = true; break; }
         }
         if (need_quote) {
             r += '"';

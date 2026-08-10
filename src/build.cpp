@@ -273,7 +273,10 @@ static std::string make_gcc_link_cmd(const std::vector<fs::path>& objs,
     }
 
     for (auto& f : link.flags) {
-        cmd << " " << util::escape_shell_arg(f);
+        // 1.1.3 S4: 与 link_dirs 一致双引号包裹 — 含 `;|&` 等的 flags 在 POSIX
+        // `sh -c` 下会被当 shell 语法执行（命令注入）；Windows 走 CreateProcessA
+        // 不解释这些字符，但一致转义无害。
+        cmd << " \"" << util::escape_shell_arg(f) << "\"";
     }
     for (auto& d : link.link_dirs) {
         cmd << " -L\"" << util::escape_shell_arg(d) << "\"";
@@ -304,12 +307,13 @@ static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
     for (auto& f : translated.translated) {
-        cmd << util::escape_shell_arg(f) << " ";
+        // 1.1.3 S4: 双引号包裹（CreateProcessA 无 shell，但与 GCC 侧统一转义无害）
+        cmd << "\"" << util::escape_shell_arg(f) << "\" ";
     }
 
     // MSVC-specific link flags
     for (auto& f : link.msvc_flags) {
-        cmd << util::escape_shell_arg(f) << " ";
+        cmd << "\"" << util::escape_shell_arg(f) << "\" ";
     }
 
     // Link dirs 鈫?/LIBPATH
