@@ -1,12 +1,6 @@
 ---
 name: ezmk-user-build
 description: How to compile a C/C++ project managed by EazyMake — ezmk project build, profiles, and parallel compilation.
-trigger:
-  - glob: ezmk.toml
-  - glob: src/**/*.cpp
-  - glob: src/**/*.c
-  - glob: include/**/*.hpp
-  - glob: include/**/*.h
 ---
 
 # EazyMake Project Build (User)

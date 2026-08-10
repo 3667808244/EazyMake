@@ -1,12 +1,6 @@
 ---
 name: ezmk-test
 description: How to run EazyMake tests — Catch2 framework, test organization, and writing new tests.
-trigger:
-  - glob: test/**/*.cpp
-  - glob: test/**/*.hpp
-  - glob: src/vendor/catch2_impl.cpp
-  - glob: include/vendor/catch2.hpp
-  - glob: build.sh
 ---
 
 # EazyMake Test

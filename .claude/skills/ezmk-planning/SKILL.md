@@ -1,9 +1,6 @@
 ---
 name: ezmk-planning
 description: How to work with EazyMake version plans — plans/ directory structure, plan document format, and updating execution status.
-trigger:
-  - glob: plans/**/*.md
-  - glob: plan.md
 ---
 
 # EazyMake Planning
@@ -13,36 +10,34 @@ trigger:
 ```
 plans/
 ├── README.md              # Version index + roadmap + dependency graph (series-level)
-├── 0.x.x/                 # Early development version plans (0.1.6 ~ 0.2.6)
+├── 0.x.x/                 # Early development version plans (0.1.6 ~ 0.2.6) — flat
 │   ├── README.md          #   series version index
-│   ├── 0.1.6.md
-│   ├── 0.1.7.md
-│   └── ...
-├── 1.0.0/                 # Plans leading to 1.0.0 (0.9.0 ~ 1.0.0)
+│   └── 0.1.6.md ~ 0.2.6.md
+├── 1.0.0/                 # Plans leading to 1.0.0 (0.9.0 ~ 1.0.0) — flat
 │   ├── README.md          #   series version index
-│   ├── 0.9.0.md
-│   ├── 0.9.1.md
-│   └── 1.0.0.md
-├── 1.1.x/                 # 1.1.x series docs (1.1.0 formal + 1.1.1/1.1.2 patches) — flat, no subfolders
+│   └── 0.9.0.md ~ 0.9.10.md, 1.0.0.md
+├── 1.1.x/                 # 1.1.x series docs (1.1.0 formal + 1.1.1/1.1.2/1.1.3 patches) — flat
 │   ├── README.md          #   series version index (merged)
 │   ├── 1.1.0-dev.1.md ~ 1.1.0-pre.3.md, 1.1.0.md
-│   ├── 1.1.1.md
-│   └── 1.1.2.md
-└── (root)
-    └── plan.md             # Current execution plan — mirrors the active version's design doc
+│   └── 1.1.1.md / 1.1.2.md / 1.1.3.md
+├── 1.2.0/                 # 1.2.0 series (dev.1 ~ dev.4 + 1.2.0) — flat
+│   ├── README.md          #   series version index
+│   └── 1.2.0-dev.1.md ~ 1.2.0-dev.4.md, 1.2.0.md
+└── plan.md                # (repo root) Current execution plan — mirrors the active version's design doc
 ```
 
-- **`plans/README.md`** — top-level index: brief description + link for each major series (0.x.x / 1.0.0 / 1.1.0), roadmap, dependency graph, and cross-version concerns.
+- **`plans/README.md`** — top-level index: brief description + link for each major series (0.x.x / 1.0.0 / 1.1.x / 1.2.0), roadmap, dependency graph, and cross-version concerns.
 - **`0.x.x/`** — plans for early development versions (0.1.x ~ 0.2.x). All completed.
 - **`1.0.0/`** — plans for release versions leading up to 1.0.0 (0.9.0 ~ 1.0.0).
-- **`1.1.x/`** — plans for the 1.1.x series: 1.1.0 release series (dev sub-versions `1.1.0-dev.N`, pre-releases `1.1.0-pre.N`, final `1.1.0` plan) plus the 1.1.1/1.1.2 patch plans. All files are flat in this folder (no subfolders).
+- **`1.1.x/`** — plans for the 1.1.x series: 1.1.0 release series (dev sub-versions `1.1.0-dev.N`, pre-releases `1.1.0-pre.N`, final `1.1.0` plan) plus the 1.1.1/1.1.2/1.1.3 patch plans. All files are flat in this folder (no subfolders).
+- **`1.2.0/`** — plans for the 1.2.0 series: dev sub-versions `1.2.0-dev.N` plus the final `1.2.0` plan. Flat.
 - **`<series>/README.md`** — per-series version index: overview + version table (theme / deliverables / dependency) with links to each plan file.
 - **`plans/README.md`** — master index with version summaries, dependency graph (Mermaid), and cross-version concerns.
 - **`plan.md`** (repo root) — the **current execution plan**, derived from the active version's design doc. Contains checkboxes `[ ]` / `[x]` tracking per-phase progress.
 
 ## Plan document format
 
-Each version plan in `plans/0.x.x/`, `plans/1.0.0/`, or `plans/1.1.x/` follows this convention:
+Each version plan in `plans/0.x.x/`, `plans/1.0.0/`, `plans/1.1.x/`, or `plans/1.2.0/` follows this convention:
 
 ```markdown
 # EazyMake <version> — <short title>
@@ -91,7 +86,7 @@ The root-level `plan.md` is the executable version of the design doc. It follows
 
 ## Workflow for adding a new version plan
 
-1. **Create the design doc**: `plans/<series>/<version>.md` — `0.x.x/` for early dev, `1.0.0/` for the 1.0.0 series, `1.1.x/` for the 1.1.x series
+1. **Create the design doc**: `plans/<series>/<version>.md` — `0.x.x/` for early dev, `1.0.0/` for the 1.0.0 series, `1.1.x/` for the 1.1.x patch series, `1.2.0/` for the 1.2.0 series
    - Follow the standard format above
    - Include §1~§6 sections
 2. **Create the execution plan**: `plan.md` in repo root

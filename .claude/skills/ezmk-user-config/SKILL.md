@@ -1,8 +1,6 @@
 ---
 name: ezmk-user-config
 description: How to configure an EazyMake project — ezmk.toml structure, sections, and common configuration patterns.
-trigger:
-  - glob: ezmk.toml
 ---
 
 # EazyMake Project Configuration (User)

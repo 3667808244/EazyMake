@@ -1,11 +1,6 @@
 ---
 name: ezmk-i18n
 description: How to add or modify translations in EazyMake — X-macro i18n_keys.def mechanism, en.json/zh.json bilingual maintenance.
-trigger:
-  - glob: include/ezmk/i18n_keys.def
-  - glob: locale/*.json
-  - glob: src/i18n.cpp
-  - glob: scripts/embed_locale.py
 ---
 
 # EazyMake Internationalization (i18n)

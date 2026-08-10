@@ -1,12 +1,6 @@
 ---
 name: ezmk-build
 description: How to compile EazyMake from source — build.sh, manual g++ commands, and platform differences.
-trigger:
-  - glob: build.sh
-  - glob: src/**/*.cpp
-  - glob: include/**/*.hpp
-  - glob: scripts/embed_locale.py
-  - glob: scripts/embed_logo.py
 ---
 
 # EazyMake Build
