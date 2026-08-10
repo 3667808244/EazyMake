@@ -468,6 +468,56 @@ std::string join_shell_args(const std::vector<std::string>& args) {
 // updating record.files after all threads complete.
 // ===================================================================
 
+// 1.1.3 Q2: 填充缓存记录条目（source hash / 编译选项）。
+static void fill_record_entry(FileEntry& entry, const CompileInput& in,
+                              const fs::path& src, const fs::path& cache_obj,
+                              bool is_msvc) {
+    entry.source_hash = crypto::sha256_file(src);
+    entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
+    entry.compiler = is_msvc ? "cl.exe" : in.lang.compiler;
+    if (is_msvc) {
+        auto flag_trans = toolchain::translate_compile_flags(
+            in.compile.flags, toolchain::CompilerFamily::Msvc);
+        entry.compile_opts = flag_trans.translated;
+        for (auto& f : in.compile.msvc_flags) entry.compile_opts.push_back(f);
+    } else {
+        entry.compile_opts = in.compile.flags;
+    }
+}
+
+// 1.1.3 Q2: 解析编译依赖（MSVC /showIncludes 或 GCC .d 文件）并归一化相对路径。
+static std::vector<DepEntry> parse_compile_dependencies(
+        const CompileInput& in, const fs::path& rel,
+        const util::ProcResult& res, bool is_msvc) {
+    std::vector<DepEntry> deps;
+    if (is_msvc) {
+        auto includes = toolchain::parse_show_includes(res.err);
+        for (auto& inc_path : includes) {
+            DepEntry dep;
+            dep.path = inc_path.string();
+            if (util::file_exists(inc_path)) {
+                dep.hash = crypto::sha256_file(inc_path);
+            }
+            deps.push_back(std::move(dep));
+        }
+    } else {
+        fs::path dep = in.dep_dir / rel;
+        dep.replace_extension(".d");
+        deps = parse_depfile_and_hash(dep);
+    }
+    // Normalize dep paths: absolute under proj_root become relative
+    for (auto& d : deps) {
+        fs::path dp(d.path);
+        if (dp.is_absolute()) {
+            auto r = fs::relative(dp, in.proj_root);
+            if (!r.empty() && r.string().find("..") == std::string::npos) {
+                d.path = r.generic_string();
+            }
+        }
+    }
+    return deps;
+}
+
 SingleCompileResult compile_one_source(const fs::path& src,
                                        const CompileInput& in,
                                        const CacheRecord& record) {
@@ -640,47 +690,12 @@ SingleCompileResult compile_one_source(const fs::path& src,
         }
     }
 
-    // Build record entry
+    // Build record entry（1.1.3 Q2: 提取到 fill_record_entry）
     auto& entry = result.record_entry;
-    entry.source_hash = crypto::sha256_file(src);
-    entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
-    entry.compiler = is_msvc ? "cl.exe" : in.lang.compiler;
-    if (is_msvc) {
-        auto flag_trans = toolchain::translate_compile_flags(
-            in.compile.flags, toolchain::CompilerFamily::Msvc);
-        entry.compile_opts = flag_trans.translated;
-        for (auto& f : in.compile.msvc_flags) entry.compile_opts.push_back(f);
-    } else {
-        entry.compile_opts = in.compile.flags;
-    }
+    fill_record_entry(entry, in, src, cache_obj, is_msvc);
 
-    // Parse dependencies
-    if (is_msvc) {
-        auto includes = toolchain::parse_show_includes(res.err);
-        for (auto& inc_path : includes) {
-            DepEntry dep;
-            dep.path = inc_path.string();
-            if (util::file_exists(inc_path)) {
-                dep.hash = crypto::sha256_file(inc_path);
-            }
-            result.new_deps.push_back(std::move(dep));
-        }
-    } else {
-        fs::path dep = in.dep_dir / rel;
-        dep.replace_extension(".d");
-        result.new_deps = parse_depfile_and_hash(dep);
-    }
-
-    // Normalize dep paths
-    for (auto& d : result.new_deps) {
-        fs::path dp(d.path);
-        if (dp.is_absolute()) {
-            auto r = fs::relative(dp, in.proj_root);
-            if (!r.empty() && r.string().find("..") == std::string::npos) {
-                d.path = r.generic_string();
-            }
-        }
-    }
+    // Parse dependencies（1.1.3 Q2: 提取到 parse_compile_dependencies）
+    result.new_deps = parse_compile_dependencies(in, rel, res, is_msvc);
 
     entry.dependencies = result.new_deps;
     entry.last_build_time = iso_time();

@@ -342,23 +342,10 @@ fs::path resolve_link_path(std::string_view name,
     return resolved;
 }
 
-EzConfig parse_config(const fs::path& toml_path) {
-    EzConfig cfg;
+// 1.1.3 Q2: parse_config 按 TOML 节拆分为私有 helper（纯提取，不改行为）。
+// 每个 helper 只读 root 对应子表并写入 cfg；parse_config 只做编排。
 
-    if (!util::file_exists(toml_path)) {
-        throw std::runtime_error("config file not found: " + toml_path.string());
-    }
-
-    // toml++ with exceptions: throws on parse error, returns table on success
-    toml::table root;
-    try {
-        root = toml::parse_file(toml_path.string());
-    } catch (const toml::parse_error& e) {
-        // e.what() includes file path, line, and column info
-        throw std::runtime_error(
-            std::string("failed to parse ") + toml_path.string() + ":\n  " + e.what());
-    }
-
+static void parse_project(const toml::table& root, EzConfig& cfg) {
     // [project]
     if (auto proj = root["project"].as_table()) {
         if (auto name = (*proj)["name"].value<std::string>()) {
@@ -393,13 +380,9 @@ EzConfig parse_config(const fs::path& toml_path) {
             cfg.project.precompiled = pc->get();
         }
     }
+}
 
-    // project.version is required
-    if (cfg.project.version.empty()) {
-        throw std::runtime_error(
-            ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_missing_ver));
-    }
-
+static void parse_compile(const toml::table& root, EzConfig& cfg) {
     // [compile]
     if (auto comp = root["compile"].as_table()) {
         cfg.compile.flags = extract_string_array(comp->get("flags"));
@@ -488,7 +471,9 @@ EzConfig parse_config(const fs::path& toml_path) {
             cfg.compile.macros[macro_key] = macro_val;
         }
     }
+}
 
+static void parse_link(const toml::table& root, EzConfig& cfg) {
     // [link]
     if (auto link = root["link"].as_table()) {
         cfg.link.flags = extract_string_array(link->get("flags"));
@@ -496,14 +481,18 @@ EzConfig parse_config(const fs::path& toml_path) {
         cfg.link.link_dirs = extract_string_array(link->get("link_dirs"));
         cfg.link.system_targets = extract_string_array(link->get("system_target"));
     }
+}
 
+static void parse_depends(const toml::table& root, EzConfig& cfg) {
     // [depends]
     if (auto deps = root["depends"].as_table()) {
         cfg.depends.libs = extract_depends_array(deps->get("lib"));
         // 0.2.2+: optional dependencies
         cfg.depends.want = extract_depends_array(deps->get("want"));
     }
+}
 
+static void parse_profiles(const toml::table& root, EzConfig& cfg) {
     // 0.2.3+: [compile.profile.<name>] — build configuration profiles
     if (auto comp = root["compile"].as_table()) {
         if (auto profiles = (*comp)["profile"].as_table()) {
@@ -575,7 +564,9 @@ EzConfig parse_config(const fs::path& toml_path) {
             }
         }
     }
+}
 
+static void parse_hooks(const toml::table& root, EzConfig& cfg) {
     // 0.2.3+: [hooks] — pre/post-build Lua hook scripts
     if (auto hooks = root["hooks"].as_table()) {
         if (auto pre = (*hooks)["pre_build"].value<std::string>()) {
@@ -588,7 +579,9 @@ EzConfig parse_config(const fs::path& toml_path) {
             cfg.hooks.on_failure = *fail;
         }
     }
+}
 
+static void parse_install(const toml::table& root, EzConfig& cfg) {
     // 1.1.0: [install] — project install configuration
     if (auto inst = root["install"].as_table()) {
         if (auto v = (*inst)["prefix"].value<std::string>())
@@ -624,7 +617,9 @@ EzConfig parse_config(const fs::path& toml_path) {
     } else if (prefix == "~") {
         cfg.install.prefix = util::get_home_dir().string();
     }
+}
 
+static void parse_test(const toml::table& root, EzConfig& cfg) {
     // 1.1.0-dev.6: [test] — test configuration
     if (auto test = root["test"].as_table()) {
         cfg.test.dirs = extract_string_array(test->get("dirs"));
@@ -636,7 +631,9 @@ EzConfig parse_config(const fs::path& toml_path) {
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
+}
 
+static void parse_utils(const toml::table& root, EzConfig& cfg) {
     // [utils] (only relevant for type = "utils")
     if (auto utils = root["utils"].as_table()) {
         cfg.utils.tools = extract_string_array(utils->get("tools"));
@@ -660,6 +657,51 @@ EzConfig parse_config(const fs::path& toml_path) {
             cfg.utils.permissions = std::move(up);
         }
     }
+}
+
+EzConfig parse_config(const fs::path& toml_path) {
+    EzConfig cfg;
+
+    if (!util::file_exists(toml_path)) {
+        throw std::runtime_error("config file not found: " + toml_path.string());
+    }
+
+    // toml++ with exceptions: throws on parse error, returns table on success
+    toml::table root;
+    try {
+        root = toml::parse_file(toml_path.string());
+    } catch (const toml::parse_error& e) {
+        // e.what() includes file path, line, and column info
+        throw std::runtime_error(
+            std::string("failed to parse ") + toml_path.string() + ":\n  " + e.what());
+    }
+
+    // [project] + required version
+    parse_project(root, cfg);
+    if (cfg.project.version.empty()) {
+        throw std::runtime_error(
+            ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_missing_ver));
+    }
+
+    // [compile] / [link] / [depends]
+    parse_compile(root, cfg);
+    parse_link(root, cfg);
+    parse_depends(root, cfg);
+
+    // [compile.profile.*] / [link.profile.*]
+    parse_profiles(root, cfg);
+
+    // [hooks]
+    parse_hooks(root, cfg);
+
+    // [install]
+    parse_install(root, cfg);
+
+    // [test]
+    parse_test(root, cfg);
+
+    // [utils]
+    parse_utils(root, cfg);
 
     // 1.1.0-dev.5: Resolve @link: references in path arrays
     {
