@@ -99,6 +99,8 @@ EZMK_I18N_KEY(want_prompt_options)        // 1.1.0-dev.7
 EZMK_I18N_KEY(want_auto_installing)       // 1.1.0-dev.7
 EZMK_I18N_KEY(not_found)
 EZMK_I18N_KEY(overwrite_confirm)
+EZMK_I18N_KEY(url_no_sha256_confirm)      // 1.1.3 S3
+EZMK_I18N_KEY(url_http_confirm)           // 1.1.3 S3
 EZMK_I18N_KEY(removed)
 EZMK_I18N_KEY(removing)
 EZMK_I18N_KEY(resolving_deps)

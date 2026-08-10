@@ -75,6 +75,8 @@
     "missing_dep_no_repo": "这些包在已注册仓库中不存在。请添加提供这些包的仓库，或手动安装。",
     "global_confirm": "将安装到全局作用域。继续? (y/N)",
     "overwrite_confirm": "包 '{pkg}' 已存在于 {path}。覆盖?",
+    "url_no_sha256_confirm": "此 URL 安装未提供 sha256，无法校验包完整性。仍要继续吗？",
+    "url_http_confirm": "该 URL 使用明文 http://，下载未加密、易遭中间人攻击，建议改用 https://。仍要继续吗？",
     "repo_added": "仓库 '{name}' 已添加。",
     "repo_removed": "仓库 '{name}' 已移除。",
     "repo_updated": "仓库 '{name}' 已更新。",

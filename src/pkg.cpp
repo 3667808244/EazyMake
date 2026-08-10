@@ -122,6 +122,28 @@ static bool confirm(std::string_view msg, bool assume_yes = false) {
     return line == "y" || line == "Y" || line == "yes";
 }
 
+// 1.1.3 S3: URL 安装完整性前置确认（下载前调用）。
+//  - 无 sha256：无法校验包完整性 → 警告 + 确认；
+//  - 显式 http://：明文下载、易遭 MITM → 警告 + 确认（建议 https://）。
+// 返回 false 表示用户取消，install 应中止且不发起下载。
+bool url_integrity_confirm(const std::string& url, bool has_sha256, bool assume_yes) {
+    if (!has_sha256) {
+        util::warn(ezmk::i18n::get(ezmk::i18n::I18nKey::url_no_sha256_confirm));
+        if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::url_no_sha256_confirm), assume_yes)) {
+            return false;
+        }
+    }
+    std::string lower_url = url;
+    for (auto& c : lower_url) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (lower_url.rfind("http://", 0) == 0) {
+        util::warn(ezmk::i18n::get(ezmk::i18n::I18nKey::url_http_confirm));
+        if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::url_http_confirm), assume_yes)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 fs::path detect_install_script(const fs::path& pkg_root,
                                 std::string_view basename) {
     auto script_dir = pkg_root / "script";
@@ -603,6 +625,11 @@ void install(const std::string& pkg_file, cli::Scope scope,
     fs::path archive_path;
 
     if (is_url) {
+        // 1.1.3 S3: URL 完整性前置确认（无 sha256 / 明文 http://），下载前中止
+        if (!url_integrity_confirm(url, !expected_sha256.empty(), assume_yes)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled);
+            return;
+        }
         // Download to temp
         fs::path tmp_dir = fs::temp_directory_path();
         // Extract filename from URL

@@ -52,7 +52,7 @@
 - [x] **1.1 钩子沙箱统一**（S1a）：提取 `push_restricted_globals()` + `run_lua_script_with_ctx` 接入 + `pkg.cpp` 注释/确认文案诚实化；`test_lua.cpp` 逃逸面用例；`docs/en|zh/build_hooks.md` / `docs/en|zh/pkg.md` 补沙箱限制说明
 - [x] **1.2 安装钩子权限门控**（S1b，可选）：**决策（1.1.3）：收口为仅 S1a**。S1b 语义变更最大，补丁线保守处理——安装钩子权限门控（`g_in_script_context` + 从包 `ezmk.toml` 加载权限 + legacy 兼容）延到 1.2.0，见 §6 延后项
 - [x] **1.3 包名校验**（S2）：`validate_pkg_name()` + 安装/lockfile 恢复调用点接入；`test_pkg.cpp` 恶意名用例
-- [ ] **1.4 URL 完整性**（S3）：无 sha256 的 URL 安装确认流程 + 显式 `http://` MITM 警告；`test_pkg.cpp` 用例
+- [x] **1.4 URL 完整性**（S3）：无 sha256 的 URL 安装确认流程 + 显式 `http://` MITM 警告；`test_pkg.cpp` 用例
 - [ ] **1.5 flags 元字符引号**（S4）：`join_shell_args` 元字符集补全 + `build.cpp` GCC/MSVC 链接 flags 双引号包裹；`test_cache.cpp`/`test_util.cpp` 用例
 - [ ] **1.6 编辑器/vcvars 转义**（S5）：`open_in_editor`/`find_editor` 转义 + 移除全库唯一 `system()`；vcvars 路径转义；`test_util.cpp` 用例
 - [ ] 阶段一自测：`bash build.sh test` 相关用例通过

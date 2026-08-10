@@ -75,6 +75,8 @@
     "missing_dep_no_repo": "These packages are not available in registered repos. Add a repo that provides them, or install them manually.",
     "global_confirm": "This will install globally. Continue? (y/N)",
     "overwrite_confirm": "Package '{pkg}' already exists at {path}. Overwrite?",
+    "url_no_sha256_confirm": "No sha256 was provided for this URL install, so the package integrity cannot be verified. Continue anyway?",
+    "url_http_confirm": "This URL uses plain http:// — the download is unencrypted and vulnerable to MITM. Prefer https://. Continue anyway?",
     "repo_added": "Repository '{name}' added.",
     "repo_removed": "Repository '{name}' removed.",
     "repo_updated": "Repository '{name}' updated.",

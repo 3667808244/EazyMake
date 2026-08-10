@@ -8,6 +8,8 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -473,4 +475,30 @@ TEST_CASE("validate_pkg_name: accepts ordinary package names", "[pkg][1.1.3]") {
         INFO("should accept: " << n);
         REQUIRE_NOTHROW(validate_pkg_name(n));
     }
+}
+
+// 1.1.3 S3: URL 安装完整性前置确认
+TEST_CASE("url_integrity_confirm: no sha256 without -y cancels URL install", "[pkg][1.1.3]") {
+    // Non-interactive stdin → confirm() reads EOF → returns false (cancel)
+    std::istringstream empty("");
+    auto old = std::cin.rdbuf(empty.rdbuf());
+    auto result = url_integrity_confirm("https://example.com/pkg.tar.gz", false, false);
+    std::cin.rdbuf(old);
+    REQUIRE_FALSE(result);
+}
+
+TEST_CASE("url_integrity_confirm: no sha256 but -y proceeds", "[pkg][1.1.3]") {
+    REQUIRE(url_integrity_confirm("https://example.com/pkg.tar.gz", false, true));
+}
+
+TEST_CASE("url_integrity_confirm: explicit http:// without -y cancels", "[pkg][1.1.3]") {
+    std::istringstream empty("");
+    auto old = std::cin.rdbuf(empty.rdbuf());
+    auto result = url_integrity_confirm("http://example.com/pkg.tar.gz", true, false);
+    std::cin.rdbuf(old);
+    REQUIRE_FALSE(result);
+}
+
+TEST_CASE("url_integrity_confirm: https with sha256 needs no prompt", "[pkg][1.1.3]") {
+    REQUIRE(url_integrity_confirm("https://example.com/pkg.tar.gz", true, false));
 }

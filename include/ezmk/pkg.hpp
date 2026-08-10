@@ -68,6 +68,12 @@ std::string build_archive_command(bool is_msvc,
                                   const fs::path& lib_out,
                                   const std::vector<fs::path>& objects);
 
+// 1.1.3 S3: URL 安装完整性前置确认。返回 false 表示用户取消（install 应中止）。
+//  - 无 sha256 → 无法校验包完整性，警告 + 确认；
+//  - 显式 http:// → 明文下载有 MITM 风险，警告 + 确认（建议 https://）。
+// assume_yes 为 true 时（-y）全部跳过，行为与现有确认逻辑一致。
+bool url_integrity_confirm(const std::string& url, bool has_sha256, bool assume_yes);
+
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.
 bool satisfies_version_constraint(std::string_view version,
