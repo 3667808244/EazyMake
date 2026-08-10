@@ -149,6 +149,8 @@ std::vector<std::string> verify(const fs::path& proj_root,
     std::vector<std::string> mismatches;
 
     for (auto& pkg : lf.packages) {
+        // 1.1.3 S2: lockfile 不可信，包名先校验再拼路径（防路径穿越）
+        util::validate_pkg_name(pkg.name);
         // Determine package install path based on scope
         fs::path pkg_path;
         if (pkg.scope == "project") {

@@ -561,6 +561,23 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
 // tar.gz 路径先把整个解压结果读进内存，故必须有界。
 constexpr size_t kMaxDecompressedSize = size_t(1) << 30; // 1 GiB
 
+// 1.1.3 S2: 校验包/项目名可作为单一路径段使用。拒绝规则与 safe_extract_path 同口径
+// （路径分隔符、盘符、绝对路径、`.`/`..`、隐藏前缀），非法即抛 runtime_error。
+void validate_pkg_name(const std::string& name) {
+    if (name.empty() || name == "." || name == "..") {
+        throw std::runtime_error("invalid package name: " + name);
+    }
+    if (name.find('/') != std::string::npos || name.find('\\') != std::string::npos) {
+        throw std::runtime_error("invalid package name: " + name);  // 路径分隔符
+    }
+    if (name.find(':') != std::string::npos) {
+        throw std::runtime_error("invalid package name: " + name);  // 盘符
+    }
+    if (name[0] == '/' || name[0] == '\\' || name[0] == '.') {
+        throw std::runtime_error("invalid package name: " + name);  // 绝对 / 隐藏
+    }
+}
+
 // 1.1.2 S1: 把归档条目名解析为 dest 内的安全目标路径。
 // 归档条目名是不可信输入，须同时防三种逃逸：
 //   - `..` 分量（`../evil`、`..\evil`）——`\` 与 `/` 一律视为分隔符处理；

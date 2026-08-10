@@ -455,3 +455,22 @@ TEST_CASE("build_archive_command: escapes paths for ar/lib", "[pkg][1.1.2]") {
         REQUIRE(cmd.find("\"build/obj\\\\sub.o\"") != std::string::npos);
     }
 }
+
+// 1.1.3 S2: package name validation — path-traversal defense for names that get
+// interpolated into install paths (dest_dir / name).
+TEST_CASE("validate_pkg_name: rejects path traversal / unsafe names", "[pkg][1.1.3]") {
+    const char* bad[] = {"", ".", "..", "../evil", "a/b", "a\\b", "C:x",
+                         "/abs", "\\abs", ".hidden", "foo:bar", "..\\up"};
+    for (auto n : bad) {
+        INFO("should reject: " << n);
+        REQUIRE_THROWS_AS(validate_pkg_name(n), std::runtime_error);
+    }
+}
+
+TEST_CASE("validate_pkg_name: accepts ordinary package names", "[pkg][1.1.3]") {
+    const char* good[] = {"fmt", "zlib", "my-pkg", "libx_1", "pkg123"};
+    for (auto n : good) {
+        INFO("should accept: " << n);
+        REQUIRE_NOTHROW(validate_pkg_name(n));
+    }
+}

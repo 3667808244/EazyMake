@@ -691,6 +691,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
         auto pkg_cfg = config::parse_config(pkg_root / "ezmk.toml");
         std::string pkg_name = pkg_cfg.project.name;
+        util::validate_pkg_name(pkg_name);  // 1.1.3 S2: 恶意包名 → 中止安装
 
         // Preinstall hook
         fs::path preinstall_script = detect_install_script(pkg_root, "preinstall");
@@ -1065,6 +1066,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
 // ===================================================================
 
 void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
+    util::validate_pkg_name(pkg_name);  // 1.1.3 S2: 用户输入名防自伤
     for (auto scope : scopes) {
         fs::path dir = pkg_install_dir(scope);
         fs::path pkg_path = dir / pkg_name;
@@ -1083,6 +1085,7 @@ void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
 
 std::vector<fs::path> search(const std::string& pkg_name,
                              const std::vector<cli::Scope>& scopes) {
+    util::validate_pkg_name(pkg_name);  // 1.1.3 S2
     std::vector<fs::path> results;
     for (auto scope : scopes) {
         fs::path dir = pkg_install_dir(scope);

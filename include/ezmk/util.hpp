@@ -107,6 +107,11 @@ void atomic_rename(const fs::path& from, const fs::path& to);
 // invalid or injected TOML (e.g. a name containing a quote or newline).
 std::string toml_quote(std::string_view s);
 
+// 1.1.3 S2: 校验包/项目名可作为单一路径段使用。拒绝空、`.`、`..`、路径分隔符、
+// 盘符、以及绝对/隐藏前缀 —— 任何此类名字拼进安装路径（dest_dir / name）都会
+// 造成路径穿越。非法即抛 std::runtime_error。
+void validate_pkg_name(const std::string& name);
+
 // Collect files matching extensions in a directory (non-recursive)
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);
