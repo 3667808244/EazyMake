@@ -76,7 +76,7 @@
 ### 阶段四：测试质量 + 回归与发布准备
 
 - [x] **4.1 永真断言清理**（T1）：`test_file_watcher.cpp` 三个 `>= 0` 永真断言改为「轮询等待 + 精确路径集合 + 不支持时 SKIP」；本地 test-all 通过
-- [ ] **4.2 argparse/main 单测**（T2）：新建 `test_argparse.cpp`（tokenizer 直接测）；main 顶层别名展开 + 未知命令用例
+- [x] **4.2 argparse/main 单测**（T2）：新建 `test_argparse.cpp`（15 用例：长短选项/分组/`--` 透传/缺值报错/`has`/`value`）；main 别名展开 + 未知命令已由 test_cli.cpp 覆盖
 - [ ] 全量回归：`bash build.sh test` + `test-all` 零回归（基线 1.1.2 发布值 592 用例 / 2813 断言，2026-08-08）
 - [ ] `CHANGES.md` 新增 1.1.3 条目（口径：安全收敛二轮 + 健壮性收口；命令/配置/CLI 不变）
 - [ ] 版本号预置：`include/ezmk/version.hpp` / `build.sh` 默认版本 `1.1.3`（在 1.1.2 发布后执行）
