@@ -448,6 +448,26 @@ TEST_CASE("find_editor: returns something or empty", "[util]") {
     REQUIRE(ok);
 }
 
+// 1.1.3 S5: editor command must quote both editor and file so a malicious
+// EDITOR ("vim; evil") cannot be executed as shell syntax.
+TEST_CASE("build_editor_command: quotes editor to prevent injection", "[util][1.1.3]") {
+    std::string cmd = build_editor_command("vim; touch /tmp/x", fs::path("/tmp/y.txt"));
+    // Editor must be double-quoted at the start of the command
+    REQUIRE(cmd.rfind("\"vim; touch /tmp/x\"", 0) == 0);
+    // File must be present (quoted)
+    REQUIRE(cmd.find("/tmp/y.txt") != std::string::npos);
+}
+
+TEST_CASE("build_editor_command: quotes editor and file with spaces", "[util][1.1.3]") {
+    std::string cmd = build_editor_command("C:\\Program Files\\Editor\\code.exe",
+                                           fs::path("a b.txt"));
+    // Command starts with a quoted editor; backslashes escaped by escape_shell_arg
+    REQUIRE(cmd.find('"') == 0);
+    REQUIRE(cmd.find("C:\\\\Program Files\\\\Editor\\\\code.exe") != std::string::npos);
+    // File is quoted too
+    REQUIRE(cmd.find("\"a b.txt\"") != std::string::npos);
+}
+
 // ===================================================================
 // copy_recursive()
 // ===================================================================

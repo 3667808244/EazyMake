@@ -296,7 +296,8 @@ std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path) {
     // Strategy: run "vcvars64.bat > NUL && set" to capture the modified environment.
     // The `set` command prints all env vars as KEY=VALUE lines.
     std::ostringstream cmd;
-    cmd << "cmd /c \"call \\\"" << vcvars_path.string() << "\\\" > NUL && set\"";
+    // 1.1.3 S5: vcvars 路径经 escape_shell_arg 再拼入 cmd /c
+    cmd << "cmd /c \"call \\\"" << util::escape_shell_arg(vcvars_path.string()) << "\\\" > NUL && set\"";
 
     auto res = util::run_command(cmd.str());
     if (res.exit_code != 0) return env;
@@ -450,7 +451,7 @@ Toolchain detect_toolchain() {
             // Build a command that runs cl within the vcvars environment
             // We check if cl.exe works by running it in the vcvars context
             std::ostringstream test_cmd;
-            test_cmd << "cmd /c \"call \\\"" << vcvars.string() << "\\\" > NUL && cl 2>&1\"";
+            test_cmd << "cmd /c \"call \\\"" << util::escape_shell_arg(vcvars.string()) << "\\\" > NUL && cl 2>&1\"";
             auto res = util::run_command(test_cmd.str());
             if (res.exit_code == 0) {
                 // MSVC is available

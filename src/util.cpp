@@ -1245,12 +1245,21 @@ std::string find_editor() {
 #else
     // Try editors in order: vim, nano, emacs
     for (const char* editor : {"vim", "nano", "emacs"}) {
-        std::string cmd = std::string("command -v ") + editor + " > /dev/null 2>&1";
-        if (std::system(cmd.c_str()) == 0) {
+        // 1.1.3 S5: run_command + escape_shell_arg，顺带移除全库唯一 std::system()
+        auto res = run_command(std::string("command -v ") + escape_shell_arg(editor));
+        if (res.exit_code == 0) {
             return editor;
         }
     }
     return {}; // none found
+#endif
+}
+
+std::string build_editor_command(const std::string& editor, const fs::path& file) {
+#ifdef EZMK_WIN
+    return "\"" + escape_shell_arg(editor) + "\" \"" + escape_shell_arg(file.string()) + "\"";
+#else
+    return "\"" + escape_shell_arg(editor) + "\" \"" + escape_shell_arg(file.string()) + "\" < /dev/tty > /dev/tty 2>&1";
 #endif
 }
 
@@ -1262,12 +1271,7 @@ void open_in_editor(const fs::path& file) {
     }
     info(ezmk::i18n::I18nKey::opening_editor,
          {{"file", file.string()}, {"editor", editor}});
-#ifdef EZMK_WIN
-    std::string cmd = editor + " \"" + escape_shell_arg(file.string()) + "\"";
-#else
-    std::string cmd = editor + " \"" + escape_shell_arg(file.string()) + "\" < /dev/tty > /dev/tty 2>&1";
-#endif
-    auto res = run_command(cmd);
+    auto res = run_command(build_editor_command(editor, file));
     if (res.exit_code != 0 && !res.err.empty()) {
         warn(ezmk::i18n::I18nKey::editor_error, {{"msg", res.err}});
     }

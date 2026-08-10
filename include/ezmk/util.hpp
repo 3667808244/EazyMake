@@ -210,6 +210,11 @@ int compare_version(std::string_view a, std::string_view b);
 // This prevents command injection when constructing shell commands with paths/URLs.
 std::string escape_shell_arg(std::string_view s);
 
+// 1.1.3 S5: 构造「打开文件的编辑器」命令串。editor 与 file 都经 escape_shell_arg +
+// 双引号包裹，防止 POSIX shell 注入（EDITOR="vim; evil"）与含空格路径拆分。
+// POSIX 侧附加 stdin/stdout 重定向到 /dev/tty。返回可直接执行的命令串。
+std::string build_editor_command(const std::string& editor, const fs::path& file);
+
 // ---- Link syntax (1.1.0-dev.5) ----
 
 // Parse "@link:<name>/sub/path" into {link_name, sub_path}.
