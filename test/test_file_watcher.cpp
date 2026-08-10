@@ -9,6 +9,8 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
+#include <set>
 #include <thread>
 
 namespace fs = std::filesystem;
@@ -23,6 +25,17 @@ static fs::path create_temp_dir() {
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::create_directories(tmp);
     return tmp;
+}
+
+// 1.1.3 T1: 轮询等待计数器达到目标值（带超时）。替换原永真断言（call_count >= 0）
+// —— 事件未触发时不再假通过，由调用方决定 SKIP 还是失败。
+static bool wait_for_event(std::atomic<int>& count, int target, int timeout_ms) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (count.load() >= target) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    return count.load() >= target;
 }
 
 // ===================================================================
@@ -119,11 +132,14 @@ TEST_CASE("FileWatcher: run with no directories warns and returns", "[file_watch
 TEST_CASE("FileWatcher: detects file creation", "[file_watcher][0.2.3][integration]") {
     auto tmp = create_temp_dir();
     std::atomic<int> call_count{0};
-    fs::path last_changed;
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+    fs::path created = tmp / "test.cpp";
 
-    FileWatcher watcher([&call_count, &last_changed](const fs::path& p) {
+    FileWatcher watcher([&](const fs::path& p) {
         call_count.fetch_add(1);
-        last_changed = p;
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
     }, 100); // short debounce for testing
     watcher.add_directory(tmp);
 
@@ -135,20 +151,23 @@ TEST_CASE("FileWatcher: detects file creation", "[file_watcher][0.2.3][integrati
 
     // Create a file
     {
-        std::ofstream f(tmp / "test.cpp");
+        std::ofstream f(created);
         f << "int main() { return 0; }\n";
     }
 
-    // Wait for debounce + detection
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // 1.1.3 T1: 轮询等待事件（带超时）→ 断言收到精确路径集合；
+    // 事件无法送达的环境显式 SKIP，而非 >=0 假通过。
+    bool delivered = wait_for_event(call_count, 1, 3000);
 
     watcher.stop();
     if (watcher_thread.joinable()) watcher_thread.join();
-
     fs::remove_all(tmp);
-    // On some platforms (CI), file events may not fire reliably
-    // So we just check no crash occurred — call_count may be 0 on slow systems
-    REQUIRE(call_count.load() >= 0);
+
+    if (!delivered) {
+        SKIP("file watcher events not delivered in this environment");
+    }
+    std::lock_guard<std::mutex> lock(paths_mutex);
+    REQUIRE(changed.count(fs::absolute(created).generic_string()) == 1);
 }
 
 TEST_CASE("FileWatcher: detects file modification", "[file_watcher][0.2.3][integration]") {
@@ -162,8 +181,12 @@ TEST_CASE("FileWatcher: detects file modification", "[file_watcher][0.2.3][integ
     }
 
     std::atomic<int> call_count{0};
-    FileWatcher watcher([&call_count](const fs::path&) {
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+    FileWatcher watcher([&](const fs::path& p) {
         call_count.fetch_add(1);
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
     }, 100);
     watcher.add_directory(tmp);
 
@@ -179,13 +202,18 @@ TEST_CASE("FileWatcher: detects file modification", "[file_watcher][0.2.3][integ
         f << "// modified\n";
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // 1.1.3 T1: 轮询等待 + 精确路径断言；环境不支持则显式 SKIP
+    bool delivered = wait_for_event(call_count, 1, 3000);
 
     watcher.stop();
     if (watcher_thread.joinable()) watcher_thread.join();
 
     fs::remove_all(tmp);
-    REQUIRE(call_count.load() >= 0);
+    if (!delivered) {
+        SKIP("file watcher events not delivered in this environment");
+    }
+    std::lock_guard<std::mutex> lock(paths_mutex);
+    REQUIRE(changed.count(fs::absolute(test_file).generic_string()) == 1);
 }
 
 // ===================================================================
@@ -196,8 +224,16 @@ TEST_CASE("FileWatcher: watches multiple directories", "[file_watcher][0.2.3]") 
     auto tmp1 = create_temp_dir();
     auto tmp2 = create_temp_dir();
     std::atomic<int> call_count{0};
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+    fs::path f1_path = tmp1 / "a.cpp";
+    fs::path f2_path = tmp2 / "b.cpp";
 
-    FileWatcher watcher([&call_count](const fs::path&) { call_count++; }, 100);
+    FileWatcher watcher([&](const fs::path& p) {
+        call_count.fetch_add(1);
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
+    }, 100);
     watcher.add_directory(tmp1);
     watcher.add_directory(tmp2);
 
@@ -209,22 +245,28 @@ TEST_CASE("FileWatcher: watches multiple directories", "[file_watcher][0.2.3]") 
 
     // Create files in both directories
     {
-        std::ofstream f1(tmp1 / "a.cpp");
+        std::ofstream f1(f1_path);
         f1 << "// a\n";
     }
     {
-        std::ofstream f2(tmp2 / "b.cpp");
+        std::ofstream f2(f2_path);
         f2 << "// b\n";
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // 1.1.3 T1: 轮询等待两个事件 + 精确路径集合；环境不支持则显式 SKIP
+    bool delivered = wait_for_event(call_count, 2, 3000);
 
     watcher.stop();
     if (watcher_thread.joinable()) watcher_thread.join();
 
     fs::remove_all(tmp1);
     fs::remove_all(tmp2);
-    REQUIRE(call_count.load() >= 0);
+    if (!delivered) {
+        SKIP("file watcher events not delivered in this environment");
+    }
+    std::lock_guard<std::mutex> lock(paths_mutex);
+    REQUIRE(changed.count(fs::absolute(f1_path).generic_string()) == 1);
+    REQUIRE(changed.count(fs::absolute(f2_path).generic_string()) == 1);
 }
 
 // 1.1.3 C3: overlapping watcher instances each own their OVERLAPPED pool.
