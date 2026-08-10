@@ -80,7 +80,8 @@ void FileWatcher::flush_pending() {
         auto ext = fp.extension().string();
         auto name = fp.filename().string();
         if (!name.empty() && name[0] == '.') continue;  // hidden files
-        if (name.back() == '~') continue;                 // vim backup files
+        // 1.1.3 C5: 根目录（如 C:\）上 fp.filename() 可能为空，name.back() 是 UB
+        if (!name.empty() && name.back() == '~') continue;  // vim backup files
         if (ext == ".swp" || ext == ".swx" || ext == ".tmp") continue;
 
         callback_(fp);

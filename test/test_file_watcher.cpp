@@ -258,6 +258,18 @@ TEST_CASE("FileWatcher: overlapping instances clean up independently", "[file_wa
     fs::remove_all(tmp);
 }
 
+// 1.1.3 C5: smoke test — watcher must handle paths containing spaces without
+// crashing (name.back() guard: filename() may be empty for root paths).
+TEST_CASE("FileWatcher: watch directory path with spaces", "[file_watcher][1.1.3]") {
+    auto tmp = create_temp_dir() / "dir with spaces";
+    fs::create_directories(tmp);
+    std::atomic<int> call_count{0};
+    FileWatcher watcher([&call_count](const fs::path&) { call_count.fetch_add(1); });
+    REQUIRE_NOTHROW(watcher.add_directory(tmp));
+    REQUIRE_NOTHROW(watcher.add_directory(tmp));
+    fs::remove_all(tmp);
+}
+
 // ===================================================================
 // Debounce behavior
 // ===================================================================

@@ -12,6 +12,12 @@
 
 namespace ezmk::cache {
 
+// 1.1.3 C5: 对象文件后缀常量（消除散落魔法串）
+constexpr const char* kObjExt        = ".o";      // GCC/Clang
+constexpr const char* kObjExtMsvc    = ".obj";    // MSVC
+constexpr const char* kTempObjSuffix     = ".tmp.o";   // GCC/Clang 中间对象
+constexpr const char* kTempObjSuffixMsvc = ".tmp.obj"; // MSVC 中间对象
+
 // ===================================================================
 // Helpers
 // ===================================================================
@@ -470,8 +476,8 @@ SingleCompileResult compile_one_source(const fs::path& src,
     result.success = false;
 
     bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
-    const char* obj_suffix = is_msvc ? ".obj" : ".o";
-    const char* tmp_suffix = is_msvc ? ".tmp.obj" : ".tmp.o";
+    const char* obj_suffix = is_msvc ? kObjExtMsvc : kObjExt;
+    const char* tmp_suffix = is_msvc ? kTempObjSuffixMsvc : kTempObjSuffix;
 
     auto rel = fs::relative(src, in.proj_root);
     result.rel_src = rel.generic_string();

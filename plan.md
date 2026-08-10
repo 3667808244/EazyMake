@@ -63,8 +63,8 @@
 - [x] **2.2 `~` 前缀边界**（C2）：仅 `~/` 或单独 `~` 展开，`"~abc"` 字面保留；`test_config.cpp` 用例
 - [x] **2.3 OVERLAPPED 池实例化**（C3）：`g_overlapped_pool` 改为 `FileWatcher` 实例成员；新增重叠实例清理测试
 - [x] **2.4 `recursive_` 收口**（C4）：删死字段 + 头文件注明递归行为（Windows 递归 / Linux·macOS 非递归）；行为不变
-- [ ] **2.5 边缘批处理**（C5）：`name.back()` 空串防御 + `.o`/`.obj` 魔法串常量 + CLI NUL 注释（TODO 归 1.2.0）
-- [ ] 阶段二自测：`bash build.sh test` 相关用例通过
+- [x] **2.5 边缘批处理**（C5）：`name.back()` 空串防御 + `.o`/`.obj` 魔法串常量 + CLI NUL 注释（TODO 归 1.2.0）
+- [x] 阶段二自测：`bash build.sh test` 相关用例通过（598 用例 / 2817 断言）
 
 ### 阶段三：代码质量收敛（Q1–Q3）
 
