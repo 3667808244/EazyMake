@@ -10,6 +10,9 @@
 // toml++ header-only (exceptions enabled by default: parse_file returns table directly)
 #include "toml.hpp"
 
+// 1.1.3 Q1: .ezmk/links.json 改用 nlohmann/json（项目已依赖，见 cache.cpp）
+#include "nlohmann_json.hpp"
+
 namespace ezmk::config {
 
 namespace {
@@ -275,72 +278,24 @@ std::map<std::string, std::string> load_links_json(const fs::path& project_root)
     std::string content = util::file_read(links_file);
     if (content.empty()) return links;
 
-    // Simple JSON parse (hand-written for the minimal links.json format)
-    // We avoid pulling in a full JSON library for this small use case.
-    // Format: { "name": "path", ... }
-    // This parser handles strings, colons, commas, and nested braces.
-
-    // Workaround: use ezmk's JSON decode utility via a temp approach.
-    // Since we don't have a public JSON API in config.cpp, we parse manually.
-    auto trimmed = [](std::string_view s) -> std::string_view {
-        auto b = s.find_first_not_of(" \t\n\r");
-        auto e = s.find_last_not_of(" \t\n\r");
-        if (b == std::string_view::npos) return {};
-        return s.substr(b, e - b + 1);
-    };
-
-    // Simple JSON object parser: expects {"key":"value", ...}
-    std::string_view c(content);
-    c = trimmed(c);
-    if (c.empty() || c[0] != '{') {
-        throw std::runtime_error(".ezmk/links.json: expected JSON object starting with '{'");
+    // 1.1.3 Q1: 改用项目已依赖的 nlohmann/json。原手写解析器不支持 Unicode 与
+    // 标准反斜杠转义（\uXXXX / \n 等）、无递归，且遇畸形输入易误判。
+    // 格式：{ "name": "path", ... }；返回结构与调用点签名不变。
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(content);
+    } catch (const std::exception&) {
+        throw std::runtime_error(".ezmk/links.json: invalid JSON");
     }
-    c = c.substr(1); // skip '{'
-    c = trimmed(c);
+    if (!j.is_object()) {
+        throw std::runtime_error(".ezmk/links.json: expected JSON object");
+    }
 
-    while (!c.empty() && c[0] != '}') {
-        // Parse key (quoted string)
-        c = trimmed(c);
-        if (c.empty() || c[0] != '"') break;
-        c = c.substr(1); // skip opening '"'
-        std::string key;
-        while (!c.empty() && c[0] != '"') {
-            if (c[0] == '\\' && c.size() > 1) {
-                c = c.substr(1);
-                key += c[0];
-            } else {
-                key += c[0];
-            }
-            c = c.substr(1);
-        }
-        if (!c.empty()) c = c.substr(1); // skip closing '"'
-        key = std::string(trimmed(key));
-
-        // Parse ':'
-        c = trimmed(c);
-        if (c.empty() || c[0] != ':') {
-            throw std::runtime_error(".ezmk/links.json: expected ':' after key \"" + key + "\"");
-        }
-        c = c.substr(1); // skip ':'
-
-        // Parse value (quoted string)
-        c = trimmed(c);
-        if (c.empty() || c[0] != '"') {
+    for (auto& [key, val] : j.items()) {
+        if (!val.is_string()) {
             throw std::runtime_error(".ezmk/links.json: expected string value for key \"" + key + "\"");
         }
-        c = c.substr(1);
-        std::string value;
-        while (!c.empty() && c[0] != '"') {
-            if (c[0] == '\\' && c.size() > 1) {
-                c = c.substr(1);
-                value += c[0];
-            } else {
-                value += c[0];
-            }
-            c = c.substr(1);
-        }
-        if (!c.empty()) c = c.substr(1);
-        value = std::string(trimmed(value));
+        std::string value = val.get<std::string>();
 
         // Validate key: [A-Za-z0-9_-]+
         if (key.empty()) {
@@ -358,13 +313,6 @@ std::map<std::string, std::string> load_links_json(const fs::path& project_root)
         }
 
         links[key] = value;
-
-        // Skip optional comma
-        c = trimmed(c);
-        if (!c.empty() && c[0] == ',') {
-            c = c.substr(1);
-            c = trimmed(c);
-        }
     }
 
     return links;

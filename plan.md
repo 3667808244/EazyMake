@@ -68,7 +68,7 @@
 
 ### 阶段三：代码质量收敛（Q1–Q3）
 
-- [ ] **3.1 JSON 解析器替换**（Q1）：`load_links_json` 改 `nlohmann/json` + 畸形 JSON catch；`test_config.cpp` round-trip/畸形/Unicode 用例
+- [x] **3.1 JSON 解析器替换**（Q1）：`load_links_json` 改 `nlohmann/json` + 畸形 JSON catch；`test_config.cpp` round-trip/畸形/Unicode 用例
 - [ ] **3.2 大函数拆分**（Q2，P2）：`parse_config`/`compile_one_source` 纯提取拆分，逐步跑单测（零行为漂移）
 - [ ] **3.3 cli 去重**（Q3，P2）：提取「选项规范」「positional 校验」「scope 收集」共享 helper；`test_cli.cpp` 全量通过
 - [ ] 阶段三自测：`bash build.sh test` 相关用例通过（重构零行为漂移）

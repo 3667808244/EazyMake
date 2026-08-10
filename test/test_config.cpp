@@ -1535,3 +1535,54 @@ prefix = "~\\x"
         REQUIRE(cfg.install.prefix == (ezmk::util::get_home_dir() / "x").string());
     }
 }
+
+// 1.1.3 Q1: .ezmk/links.json parsed via nlohmann/json — malformed JSON errors
+// cleanly as runtime_error (not a raw parse_error), and standard escapes /
+// Unicode are now handled (the old hand-written parser didn't).
+TEST_CASE("load_links_json: parses valid links", "[config][1.1.3]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_links_q1";
+    fs::create_directories(tmp / ".ezmk");
+    std::ofstream(tmp / ".ezmk/links.json")
+        << R"({"libs": "vendor/libs", "util": "tools"})";
+    auto links = ezmk::config::load_links_json(tmp);
+    fs::remove_all(tmp);
+    REQUIRE(links.size() == 2);
+    REQUIRE(links["libs"] == "vendor/libs");
+    REQUIRE(links["util"] == "tools");
+}
+
+TEST_CASE("load_links_json: handles escapes and unicode", "[config][1.1.3]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_links_uni";
+    fs::create_directories(tmp / ".ezmk");
+    std::ofstream(tmp / ".ezmk/links.json")
+        << R"({"esc": "a\"b\\c", "uni": "中文"})";
+    auto links = ezmk::config::load_links_json(tmp);
+    fs::remove_all(tmp);
+    REQUIRE(links.size() == 2);
+    REQUIRE(links["esc"] == "a\"b\\c");
+    REQUIRE(links["uni"] == "中文");
+}
+
+TEST_CASE("load_links_json: malformed JSON throws runtime_error", "[config][1.1.3]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_links_bad";
+    fs::create_directories(tmp / ".ezmk");
+    std::ofstream(tmp / ".ezmk/links.json") << "{ not valid json ]";
+    REQUIRE_THROWS_AS(ezmk::config::load_links_json(tmp), std::runtime_error);
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("load_links_json: non-object JSON throws runtime_error", "[config][1.1.3]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_links_arr";
+    fs::create_directories(tmp / ".ezmk");
+    std::ofstream(tmp / ".ezmk/links.json") << "[1,2,3]";
+    REQUIRE_THROWS_AS(ezmk::config::load_links_json(tmp), std::runtime_error);
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("load_links_json: absolute path value rejected", "[config][1.1.3]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_links_abs";
+    fs::create_directories(tmp / ".ezmk");
+    std::ofstream(tmp / ".ezmk/links.json") << R"({"bad": "/etc/passwd"})";
+    REQUIRE_THROWS_AS(ezmk::config::load_links_json(tmp), std::runtime_error);
+    fs::remove_all(tmp);
+}
