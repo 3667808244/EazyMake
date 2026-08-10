@@ -9,6 +9,7 @@ extern "C" {
 #include "miniz.h"
 }
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -367,8 +368,8 @@ TEST_CASE("run_script: executes script in the given working directory", "[util][
     ProcResult r = run_script(script, tmp);
     if (r.exit_code != 0) {
         // Diagnostic for CI (MSYS2 Windows): bash runs but exits non-zero.
-        std::cerr << "[run_script cwd test] exit=" << r.exit_code
-                  << " out=[" << r.out << "] err=[" << r.err << "]\n";
+        std::fprintf(stderr, "[run_script cwd test] exit=%d out=[%s] err=[%s]\n",
+                     r.exit_code, r.out.c_str(), r.err.c_str());
     }
     REQUIRE(r.exit_code == 0);
     // pwd output must reflect the requested cwd (not the test's process cwd)
