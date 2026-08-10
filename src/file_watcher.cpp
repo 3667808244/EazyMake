@@ -110,9 +110,6 @@ void FileWatcher::check_and_flush() {
 // ===================================================================
 #ifdef EZMK_FILEWATCHER_WIN
 
-// RAII ownership for OVERLAPPED structs (raw pointers stored in WatchEntry).
-static std::vector<std::unique_ptr<OVERLAPPED>> g_overlapped_pool;
-
 void FileWatcher::win32_add_watch(const fs::path& dir) {
     if (!util::file_exists(dir)) {
         util::warn(std::string("watch directory not found, skipping: ") + dir.string());
@@ -150,10 +147,10 @@ void FileWatcher::win32_add_watch(const fs::path& dir) {
     entry.dir_handle = hDir;
     entry.buffer.resize(64 * 1024); // 64KB buffer
 
-    // Allocate OVERLAPPED with RAII ownership
-    auto ov = std::make_unique<OVERLAPPED>();
-    entry.overlapped = ov.get();
-    g_overlapped_pool.push_back(std::move(ov));
+    // 1.1.3 C3: OVERLAPPED 生命周期归本实例（overlapped_pool_），不再共享文件级全局池
+    auto* ov = new OVERLAPPED();
+    entry.overlapped = ov;
+    overlapped_pool_.push_back(ov);
 
     watches_.push_back(std::move(entry));
 }
@@ -260,7 +257,9 @@ void FileWatcher::win32_cleanup() {
         }
     }
     watches_.clear();
-    g_overlapped_pool.clear();  // RAII cleanup of OVERLAPPED allocations
+    // 1.1.3 C3: 释放本实例持有的 OVERLAPPED（仅清理自己的，不影响其他实例）
+    for (void* p : overlapped_pool_) delete static_cast<OVERLAPPED*>(p);
+    overlapped_pool_.clear();
     if (iocp_) {
         CloseHandle(iocp_);
         iocp_ = nullptr;

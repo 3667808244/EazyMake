@@ -87,9 +87,12 @@ private:
         std::string dir_path;
         void* dir_handle;  // HANDLE
         std::vector<uint8_t> buffer;
-        void* overlapped;  // OVERLAPPED* — lifetime managed via unique_ptr in .cpp
+        void* overlapped;  // OVERLAPPED* — lifetime owned by overlapped_pool_
     };
     std::vector<WatchEntry> watches_;
+    // 1.1.3 C3: OVERLAPPED 池实例化——每个 FileWatcher 自持生命周期。旧实现是文件级
+    // 全局，多实例时第二个的 win32_cleanup() 会令第一个的 OVERLAPPED 悬垂。
+    std::vector<void*> overlapped_pool_;  // OVERLAPPED* (raw; deleted in win32_cleanup)
 
     void win32_worker();
     void win32_add_watch(const fs::path& dir);

@@ -227,6 +227,37 @@ TEST_CASE("FileWatcher: watches multiple directories", "[file_watcher][0.2.3]") 
     REQUIRE(call_count.load() >= 0);
 }
 
+// 1.1.3 C3: overlapping watcher instances each own their OVERLAPPED pool.
+// The old file-global pool was cleared by ANY instance's cleanup, leaving the
+// other instance's OVERLAPPED dangling. This test runs two overlapping watchers
+// and destroys the second while the first is still live — a crash here means the
+// pools are not instance-isolated.
+TEST_CASE("FileWatcher: overlapping instances clean up independently", "[file_watcher][1.1.3]") {
+    auto tmp = create_temp_dir();
+    std::atomic<int> call_count{0};
+
+    FileWatcher w1([&call_count](const fs::path&) { call_count.fetch_add(1); });
+    w1.add_directory(tmp);
+    std::thread t1([&w1]() { w1.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    {
+        // Second watcher overlaps the first's lifetime
+        FileWatcher w2([&call_count](const fs::path&) { call_count.fetch_add(1); });
+        w2.add_directory(tmp);
+        std::thread t2([&w2]() { w2.run(); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        w2.stop();
+        t2.join();
+        // w2 destructor runs here — must only release w2's own OVERLAPPEDs
+    }
+
+    w1.stop();
+    t1.join();
+
+    fs::remove_all(tmp);
+}
+
 // ===================================================================
 // Debounce behavior
 // ===================================================================
