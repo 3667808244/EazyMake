@@ -668,9 +668,13 @@ EzConfig parse_config(const fs::path& toml_path) {
         cfg.install.prefix = (util::get_home_dir() / ".local").string();
 #endif
     }
-    // Expand ~ in prefix
-    if (!cfg.install.prefix.empty() && cfg.install.prefix[0] == '~') {
-        cfg.install.prefix = (util::get_home_dir() / cfg.install.prefix.substr(2)).string();
+    // 1.1.3 C2: 仅 `~/`（或 `~\`）与单独 `~` 展开；`"~abc"` 这类非 `~/` 前缀
+    // 不再被误截断（原逻辑把 `"~abc"` 截成 `"c"`）。
+    const std::string& prefix = cfg.install.prefix;
+    if (prefix.size() > 1 && prefix[0] == '~' && (prefix[1] == '/' || prefix[1] == '\\')) {
+        cfg.install.prefix = (util::get_home_dir() / prefix.substr(2)).string();
+    } else if (prefix == "~") {
+        cfg.install.prefix = util::get_home_dir().string();
     }
 
     // 1.1.0-dev.6: [test] — test configuration

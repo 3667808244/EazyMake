@@ -1473,3 +1473,65 @@ TEST_CASE("write_default_config: no profile or hooks sections", "[config][0.2.3]
     REQUIRE(cfg.hooks.post_build.empty());
     REQUIRE(cfg.hooks.on_failure.empty());
 }
+
+// 1.1.3 C2: install prefix `~` expansion must be bounded — only `~/`, `~\` or a
+// bare `~` expand; `"~abc"` must not be truncated to `"c"`.
+TEST_CASE("parse_config: install prefix ~ expansion is bounded", "[config][1.1.3]") {
+    using namespace ezmk::config;
+
+    SECTION("bare ~ expands to home dir") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "t"
+version = "0.1.0"
+
+[install]
+prefix = "~"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.install.prefix == ezmk::util::get_home_dir().string());
+    }
+
+    SECTION("~/x expands to home/x") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "t"
+version = "0.1.0"
+
+[install]
+prefix = "~/x"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.install.prefix == (ezmk::util::get_home_dir() / "x").string());
+    }
+
+    SECTION("~abc is left as-is, not truncated") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "t"
+version = "0.1.0"
+
+[install]
+prefix = "~abc"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.install.prefix == "~abc");
+    }
+
+    SECTION("~\\x expands to home/x (Windows separator)") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "t"
+version = "0.1.0"
+
+[install]
+prefix = "~\\x"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.install.prefix == (ezmk::util::get_home_dir() / "x").string());
+    }
+}
