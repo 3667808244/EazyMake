@@ -365,11 +365,10 @@ TEST_CASE("run_script: executes script in the given working directory", "[util][
     { std::ofstream f(script); f << "pwd\n"; }
 
     ProcResult r = run_script(script, tmp);
-    // 1.1.3: 某些 CI Windows runner 上原生 exe 经 CreateProcessA 找不到 msys2 的
-    // bash（exit 1 且无输出/无 stderr）。这类环境无法 spawn bash 子进程，显式
-    // SKIP 而非假失败；本地/可 spawn 环境仍完整验证 cwd 行为。
-    if (r.exit_code != 0 && r.out.empty() && r.err.empty()) {
-        SKIP("bash subprocess not spawnable from native exe in this environment");
+    if (r.exit_code != 0) {
+        // Diagnostic for CI (MSYS2 Windows): bash runs but exits non-zero.
+        std::cerr << "[run_script cwd test] exit=" << r.exit_code
+                  << " out=[" << r.out << "] err=[" << r.err << "]\n";
     }
     REQUIRE(r.exit_code == 0);
     // pwd output must reflect the requested cwd (not the test's process cwd)
