@@ -39,8 +39,7 @@ static std::string path_key(const fs::path& p) {
 
 FileWatcher::FileWatcher(Callback cb, int debounce_ms)
     : callback_(std::move(cb))
-    , debounce_ms_(debounce_ms)
-    , recursive_(true) {
+    , debounce_ms_(debounce_ms) {
 }
 
 FileWatcher::~FileWatcher() {
@@ -52,7 +51,10 @@ void FileWatcher::add_directory(const fs::path& dir, bool recursive) {
         util::warn("FileWatcher: skipping empty directory path");
         return;
     }
-    recursive_ = recursive;
+    // 1.1.3 C4: 原 recursive_ 字段是死代码（三平台实现都不读），已删除。递归行为
+    // 取决于平台实现（Windows bWatchSubtree=TRUE；Linux/macOS 仅监听目录本身）。
+    // 参数保留以兼容 API，当前不生效——未来按平台实现真正的递归。
+    (void)recursive;
     dirs_.push_back(fs::absolute(dir));
 }
 

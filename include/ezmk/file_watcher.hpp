@@ -29,6 +29,13 @@ namespace fs = std::filesystem;
 // Monitors directories for file changes and invokes a callback after
 // a debounce window (300ms by default) to coalesce rapid edits.
 //
+// Recursion (1.1.3 C4): platform-dependent and NOT configurable.
+//   - Windows: watches the directory subtree (ReadDirectoryChangesW bWatchSubtree=TRUE).
+//   - Linux/macOS: watches the directory itself only (non-recursive).
+// The old recursive_ field was dead code (never read) and has been removed;
+// the add_directory(recursive) parameter is kept for API compatibility but
+// is currently not honored.
+//
 // Usage:
 //   FileWatcher watcher([](const fs::path& p) { ... });
 //   watcher.add_directory("/path/to/src");
@@ -71,7 +78,6 @@ private:
 
     // Directories to watch
     std::vector<fs::path> dirs_;
-    bool recursive_;
 
     // Debounce state
     std::mutex pending_mutex_;
