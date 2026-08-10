@@ -112,7 +112,7 @@
     "running_script": "Running {label}...",
     "script_completed": "{label} script completed successfully",
     "script_failed": "{label} script failed (exit {code})",
-    "exec_question": "Execute {label}?",
+    "exec_question": "Execute {label}? The install script runs with your current user permissions — confirm the source is trusted.",
     "found_script": "Found {label}",
     "confirm_script": "Execute {label}?",
     "confirm_continue": "{msg}. Continue installation?",

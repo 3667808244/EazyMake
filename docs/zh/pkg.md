@@ -165,7 +165,7 @@ end
 | `ctx.pkg_version` | string | 包版本号（来自 `ezmk.toml` `[project].version`） |
 | `ctx.pkg_type` | string | 包类型：`"executable"` / `"static"` / `"shared"` / `"utils"` |
 
-**安全性**：Lua 钩子在沙箱环境中运行（无 `os.execute`、无 `io.open`）。所有系统访问必须通过 `ezmk.*` API。与 Shell 脚本不同，Lua 钩子无需打开编辑器审查——沙箱边界已限定了脚本的能力范围。
+**安全性**：Lua 钩子在沙箱环境中运行（无 `os.execute`、无 `io.open`，且禁用了 `dofile`/`loadfile`/`load`/`require`/`debug`/`package` 等文件加载与内省函数）。所有系统访问必须通过 `ezmk.*` API。与 Shell 脚本不同，Lua 钩子无需打开编辑器审查——沙箱边界已限定了脚本的能力范围。
 
 **注意**：若未定义 `run()` 函数，ezmk 打印警告并跳过该钩子（继续安装流程）。
 

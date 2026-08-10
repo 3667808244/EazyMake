@@ -165,7 +165,9 @@ static bool run_install_script(const fs::path& script, const fs::path& cwd,
     util::info(ezmk::i18n::I18nKey::found_script, {{"label", desc}});
 
     if (is_lua) {
-        // 0.9.9: Lua scripts run in sandbox — no editor review needed
+        // 0.9.9: Lua scripts run in a restricted sandbox (file-loading and
+        // introspection functions unavailable), but the ezmk.* API still runs
+        // with the current user's permissions — hence the confirmation below.
         if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::exec_question,
                                       {{"label", desc}}), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::skipping, {{"label", desc}});

@@ -945,6 +945,38 @@ void register_api(lua_State* L, const fs::path& project_root) {
 // Script execution (with sandbox)
 // ===================================================================
 
+// Build a restricted globals table: copy every key of _G except the escape
+// vectors (file-loading + introspection functions). It is used as the __index
+// target for script sandboxes so lookups fall through to it while writes land
+// in the sandbox itself. All stack indices are RELATIVE — callers may have
+// residue on the stack. On return the restricted table is on top of the stack.
+static void push_restricted_globals(lua_State* L) {
+    lua_newtable(L);                        // [restricted]
+    lua_getglobal(L, "_G");                 // [restricted][_G]
+    lua_pushnil(L);                         // first key
+    while (lua_next(L, -2) != 0) {
+        // stack: [restricted][_G][key][value]
+        lua_pushvalue(L, -2);               // key copy
+        const char* key = lua_tostring(L, -1);
+        bool blocked = key && (strcmp(key, "dofile") == 0 ||
+                               strcmp(key, "loadfile") == 0 ||
+                               strcmp(key, "load") == 0 ||
+                               strcmp(key, "require") == 0 ||
+                               strcmp(key, "debug") == 0 ||
+                               strcmp(key, "package") == 0 ||
+                               strcmp(key, "collectgarbage") == 0 ||
+                               strcmp(key, "_G") == 0);
+        lua_pop(L, 1);                      // pop key copy
+        if (!blocked) {
+            lua_pushvalue(L, -2);           // key
+            lua_pushvalue(L, -2);           // value
+            lua_rawset(L, -6);              // restricted[key] = value
+        }
+        lua_pop(L, 1);                      // pop value
+    }
+    lua_pop(L, 1);                          // pop _G
+}
+
 int run_script(lua_State* L, const fs::path& script_path,
                const std::vector<std::string>& args) {
     if (!L) return 1;
@@ -1000,33 +1032,8 @@ int run_script(lua_State* L, const fs::path& script_path,
     // 裸 _G 暴露 dofile/loadfile/load/require/debug/package 等文件加载与内省函数，
     // utils 脚本可读盘上任意文件、执行磁盘上 Lua，完全绕过 [utils.permissions]。
     // 受限表从 _G 拷贝除逃逸面外的全部键；沙箱读回退到它，写仍落在沙箱自身。
-    {
-        lua_newtable(L);                        // [3] restricted globals
-        lua_getglobal(L, "_G");
-        lua_pushnil(L);                         // first key
-        while (lua_next(L, -2) != 0) {
-            // stack: [sandbox][meta][restricted][_G][key][value]
-            lua_pushvalue(L, -2);               // key copy
-            const char* key = lua_tostring(L, -1);
-            bool blocked = key && (strcmp(key, "dofile") == 0 ||
-                                   strcmp(key, "loadfile") == 0 ||
-                                   strcmp(key, "load") == 0 ||
-                                   strcmp(key, "require") == 0 ||
-                                   strcmp(key, "debug") == 0 ||
-                                   strcmp(key, "package") == 0 ||
-                                   strcmp(key, "collectgarbage") == 0 ||
-                                   strcmp(key, "_G") == 0);
-            lua_pop(L, 1);                      // pop key copy
-            if (!blocked) {
-                lua_pushvalue(L, -2);           // key
-                lua_pushvalue(L, -2);           // value
-                lua_rawset(L, -6);              // restricted[key] = value
-            }
-            lua_pop(L, 1);                      // pop value
-        }
-        lua_pop(L, 1);                          // pop _G
-        lua_setfield(L, -2, "__index");         // meta.__index = restricted; pop restricted
-    }
+    push_restricted_globals(L);                 // [restricted]
+    lua_setfield(L, -2, "__index");             // meta.__index = restricted; pop restricted
 
     // metatable.__newindex = function() error("read-only global") end
     // Actually, we want to allow writing to sandbox globals but not pollute _G.
@@ -1186,10 +1193,18 @@ static int run_lua_script_with_ctx(lua_State* L,
     // Build sandbox environment
     lua_newtable(L);                          // sandbox
     lua_newtable(L);                          // sandbox mt
-    lua_getglobal(L, "_G");
-    lua_setfield(L, -2, "__index");
+    // 1.1.3 S1a: __index 指向受限全局表（与 run_script 一致），而非裸 _G。
+    // 裸 _G 暴露 dofile/loadfile/load/require/debug/package 等文件加载与内省函数，
+    // 构建/安装钩子脚本可借此读盘上任意文件或执行磁盘上 Lua。
+    push_restricted_globals(L);               // restricted
+    lua_setfield(L, -2, "__index");           // meta.__index = restricted; pop restricted
     lua_setmetatable(L, -2);
     int sandbox_idx = lua_gettop(L);
+
+    // _G resolves to the sandbox itself so `_G.dofile` cannot reach the real
+    // global table (which still contains the escape vectors).
+    lua_pushvalue(L, sandbox_idx);
+    lua_setfield(L, sandbox_idx, "_G");
 
     // Inject ezmk table into sandbox
     lua_getglobal(L, "ezmk");

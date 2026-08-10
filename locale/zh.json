@@ -112,7 +112,7 @@
     "running_script": "正在运行 {label}...",
     "script_completed": "{label} 脚本执行成功",
     "script_failed": "{label} 脚本失败 (退出码 {code})",
-    "exec_question": "执行 {label}?",
+    "exec_question": "执行 {label}？安装脚本以当前用户权限运行，请确认来源可信。",
     "found_script": "发现 {label}",
     "confirm_script": "执行 {label}?",
     "confirm_continue": "{msg}。继续安装?",

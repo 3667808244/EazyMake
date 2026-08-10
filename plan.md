@@ -49,7 +49,7 @@
 
 ### 阶段一：安全收敛（S1–S5）
 
-- [ ] **1.1 钩子沙箱统一**（S1a）：提取 `push_restricted_globals()` + `run_lua_script_with_ctx` 接入 + `pkg.cpp` 注释/确认文案诚实化；`test_lua.cpp` 逃逸面用例；`docs/en|zh/build_hooks.md` / `docs/en|zh/pkg.md` 补沙箱限制说明
+- [x] **1.1 钩子沙箱统一**（S1a）：提取 `push_restricted_globals()` + `run_lua_script_with_ctx` 接入 + `pkg.cpp` 注释/确认文案诚实化；`test_lua.cpp` 逃逸面用例；`docs/en|zh/build_hooks.md` / `docs/en|zh/pkg.md` 补沙箱限制说明
 - [ ] **1.2 安装钩子权限门控**（S1b，可选）：`g_in_script_context` + 从包 `ezmk.toml` 加载权限 + 0.2.5 legacy 兼容（未声明 → 全权限 + deprecation 警告）；`test_lua.cpp` 用例。**决策点**：若回归风险影响发布门槛 → 收口为仅 S1a，S1b 记入延后项
 - [ ] **1.3 包名校验**（S2）：`validate_pkg_name()` + 安装/lockfile 恢复调用点接入；`test_pkg.cpp` 恶意名用例
 - [ ] **1.4 URL 完整性**（S3）：无 sha256 的 URL 安装确认流程 + 显式 `http://` MITM 警告；`test_pkg.cpp` 用例

@@ -51,6 +51,7 @@ See [`cache.md`](cache.md) for details.
 ## Lua Sandbox (`lua_api.cpp` / `linit.c`, 0.2.0+)
 
 - The `os` and `io` libraries are removed from Lua at **compile time** (`linit.c`); external commands can only be executed via `ezmk.run()`.
+- The file-loading and introspection functions (`dofile`/`loadfile`/`load`/`require`/`debug`/`package`) are absent from the sandbox globals (1.1.3+); scripts cannot read arbitrary files or load other Lua files.
 - `ezmk.file_write()` refuses writes to absolute paths outside the project root directory (hard limit, cannot be bypassed).
 - Does not expose `require` for loading C extensions (pure Lua modules only).
 - Each invocation receives an independent sandbox environment table; global variables do not leak between scripts.

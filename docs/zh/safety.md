@@ -42,6 +42,7 @@ EazyMake 的安全模型集中说明。本文件为**单一权威**;其他文档
 ## Lua sandbox(`lua_api.cpp` / `linit.c`,0.2.0+)
 
 - `os` 与 `io` 库在**编译期**从 Lua 中移除(`linit.c`);外部命令只能经 `ezmk.run()` 执行。
+- `dofile`/`loadfile`/`load`/`require`/`debug`/`package` 等文件加载与内省函数已从沙箱全局表中移除（1.1.3+）；脚本无法读取盘上任意文件或加载其他 Lua 文件。
 - `ezmk.file_write()` 拒绝写入项目根目录之外的绝对路径(硬限制,不可绕过)。
 - 不暴露 `require` 加载 C 扩展(仅纯 Lua 模块)。
 - 每次调用获得独立 sandbox 环境表,脚本间全局变量互不污染。

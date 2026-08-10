@@ -1362,3 +1362,71 @@ end
                                       tmp.path / "install", "project");
     REQUIRE(rc == 0);
 }
+
+// 1.1.3 S1a: hook sandbox must block the same escape surfaces as run_script
+// (previously run_lua_script_with_ctx's __index pointed at bare _G).
+TEST_CASE("run_hook_script: sandbox blocks file-loading / introspection escapes", "[lua][hook][sandbox][1.1.3]") {
+    TempDir tmp;
+
+    // All escape vectors must resolve to nil — directly and via _G (which now
+    // points at the sandbox, not the real global table).
+    auto script = write_lua_script(tmp.path, "hook_escape", R"(
+function run(ctx)
+    local blocked = {"dofile", "loadfile", "load", "require", "debug", "package", "collectgarbage"}
+    for _, name in ipairs(blocked) do
+        if _G[name] ~= nil then
+            error("escape vector not blocked: " .. name)
+        end
+    end
+    -- benign globals must still be reachable (directly and via _G)
+    if print == nil then error("print missing") end
+    if _G.tostring == nil then error("tostring missing via _G") end
+    return 0
+end
+)");
+    REQUIRE(run_hook_script(state(), script,
+                            tmp.path / "build" / "output",
+                            tmp.path, "") == 0);
+
+    // Attempting to CALL an escape vector must fail (dofile is nil → run() error → exit 1).
+    auto evil = write_lua_script(tmp.path, "hook_evil", R"(
+function run(ctx)
+    dofile("/etc/passwd")
+    return 0
+end
+)");
+    REQUIRE(run_hook_script(state(), evil,
+                            tmp.path / "build" / "output",
+                            tmp.path, "") == 1);
+}
+
+TEST_CASE("run_install_hook_script: sandbox blocks file-loading / introspection escapes", "[lua][hook][sandbox][1.1.3]") {
+    TempDir tmp;
+
+    auto script = write_lua_script(tmp.path, "install_hook_escape", R"(
+function run(ctx)
+    local blocked = {"dofile", "loadfile", "load", "require", "debug", "package", "collectgarbage"}
+    for _, name in ipairs(blocked) do
+        if _G[name] ~= nil then
+            error("escape vector not blocked: " .. name)
+        end
+    end
+    if print == nil then error("print missing") end
+    if _G.tostring == nil then error("tostring missing via _G") end
+    return 0
+end
+)");
+    REQUIRE(run_install_hook_script(state(), script,
+                                    "testpkg", tmp.path,
+                                    tmp.path / "install", "project") == 0);
+
+    auto evil = write_lua_script(tmp.path, "install_hook_evil", R"(
+function run(ctx)
+    require("some_module")
+    return 0
+end
+)");
+    REQUIRE(run_install_hook_script(state(), evil,
+                                    "testpkg", tmp.path,
+                                    tmp.path / "install", "project") == 1);
+}
