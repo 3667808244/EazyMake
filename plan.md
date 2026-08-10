@@ -59,7 +59,7 @@
 
 ### 阶段二：健壮性收口（C1–C5）
 
-- [ ] **2.1 SDE 安全解析**（C1）：`stoull` try/catch → 警告 + 视为未设置；`test_cache.cpp` 用例
+- [x] **2.1 SDE 安全解析**（C1）：`resolve_source_date_epoch()` 提取 + 非数字 env 警告按 0 处理；`test_cache.cpp` 用例
 - [ ] **2.2 `~` 前缀边界**（C2）：仅 `~/` 或单独 `~` 展开，`"~abc"` 字面保留；`test_config.cpp` 用例
 - [ ] **2.3 OVERLAPPED 池实例化**（C3）：`g_overlapped_pool` 成员化（或注释 + 单实例断言收口，归 1.2.0）
 - [ ] **2.4 `recursive_` 收口**（C4）：删字段 + 头文件/文档注明「仅监听目录本身，非递归」；行为不变

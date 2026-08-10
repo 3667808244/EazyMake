@@ -5,6 +5,7 @@
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/util.hpp"
+#include "test_helpers.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -443,4 +444,39 @@ TEST_CASE("parse_depfile_and_hash: basic parsing", "[cache]") {
     REQUIRE_NOTHROW(parse_depfile_and_hash(depfile));
 
     fs::remove_all(tmp_dir);
+}
+
+// 1.1.3 C1: SOURCE_DATE_EPOCH resolution must not throw on non-numeric input
+// (it runs on worker threads under -jN — a throw crashes the thread).
+TEST_CASE("resolve_source_date_epoch: invalid env SDE returns 0 without throwing", "[cache][1.1.3]") {
+    CompileSection cfg;
+    cfg.deterministic = true;
+    cfg.source_date_epoch = 0;
+    EnvGuard env("SOURCE_DATE_EPOCH", "abc");
+    REQUIRE_NOTHROW(resolve_source_date_epoch(cfg));
+    REQUIRE(resolve_source_date_epoch(cfg) == 0);
+}
+
+TEST_CASE("resolve_source_date_epoch: valid env SDE is parsed", "[cache][1.1.3]") {
+    CompileSection cfg;
+    cfg.deterministic = true;
+    cfg.source_date_epoch = 0;
+    EnvGuard env("SOURCE_DATE_EPOCH", "1700000000");
+    REQUIRE(resolve_source_date_epoch(cfg) == 1700000000ull);
+}
+
+TEST_CASE("resolve_source_date_epoch: config value wins over env", "[cache][1.1.3]") {
+    CompileSection cfg;
+    cfg.deterministic = true;
+    cfg.source_date_epoch = 42;
+    EnvGuard env("SOURCE_DATE_EPOCH", "999");
+    REQUIRE(resolve_source_date_epoch(cfg) == 42);
+}
+
+TEST_CASE("resolve_source_date_epoch: non-deterministic ignores env", "[cache][1.1.3]") {
+    CompileSection cfg;
+    cfg.deterministic = false;
+    cfg.source_date_epoch = 0;
+    EnvGuard env("SOURCE_DATE_EPOCH", "123");
+    REQUIRE(resolve_source_date_epoch(cfg) == 0);
 }

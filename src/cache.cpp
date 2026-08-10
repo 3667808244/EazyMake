@@ -323,6 +323,26 @@ void clear_cache() {
 // compile_commands.json — so the index can never drift from the real build.
 // ===================================================================
 
+// 1.1.3 C1: 解析 SOURCE_DATE_EPOCH。优先级：config 值 > 环境变量（非数字警告并按 0
+// 处理，不抛异常）。在 -jN 下于 worker 线程调用，旧的裸 stoull 遇非数字 SDE 抛异常
+// 直接崩线程。
+uint64_t resolve_source_date_epoch(const config::CompileSection& compile) {
+    if (compile.deterministic && compile.source_date_epoch > 0) {
+        return compile.source_date_epoch;
+    }
+    if (!compile.deterministic) return 0;
+    const char* env_sde = std::getenv("SOURCE_DATE_EPOCH");
+    if (env_sde && env_sde[0]) {
+        try {
+            return std::stoull(env_sde);
+        } catch (...) {
+            util::warn("invalid SOURCE_DATE_EPOCH: " + std::string(env_sde));
+            return 0;
+        }
+    }
+    return 0;
+}
+
 std::vector<std::string> build_compile_args(const CompileInput& in,
                                             const fs::path& src,
                                             const fs::path& obj) {
@@ -554,16 +574,8 @@ SingleCompileResult compile_one_source(const fs::path& src,
     }
 
     // 1.1.0: deterministic build — resolve SOURCE_DATE_EPOCH and inject flags
-    uint64_t sde = 0;
-    if (in.compile.deterministic && in.compile.source_date_epoch > 0) {
-        sde = in.compile.source_date_epoch;
-    } else if (in.compile.deterministic) {
-        // Fallback resolution: env → git → filesystem
-        const char* env_sde = std::getenv("SOURCE_DATE_EPOCH");
-        if (env_sde && env_sde[0]) {
-            sde = std::stoull(env_sde);
-        }
-    }
+    // 1.1.3 C1: 解析逻辑集中在 resolve_source_date_epoch()（可单测、worker 线程安全）
+    uint64_t sde = resolve_source_date_epoch(in.compile);
     std::string sde_str = sde > 0 ? std::to_string(sde) : "";
 
     // 1.1.1: single-source command construction — shared with compile_db

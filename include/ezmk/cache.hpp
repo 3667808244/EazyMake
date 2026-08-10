@@ -97,6 +97,11 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
                                             const fs::path& src,
                                             const fs::path& obj);
 
+// 1.1.3 C1: 解析 SOURCE_DATE_EPOCH。优先级：config[compile].source_date_epoch > 0 用
+// 配置值；否则 deterministic 时读环境变量（非数字则警告并按 0 处理，不抛异常——
+// -jN 下在 worker 线程调用，抛异常会崩线程）。
+uint64_t resolve_source_date_epoch(const config::CompileSection& compile);
+
 // 1.1.1: Join an arg vector into a shell command string (escaping + quoting).
 // Args containing whitespace or shell metacharacters are double-quoted so
 // run_command() parses them intact (paths with spaces); others are emitted bare.
