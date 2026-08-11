@@ -140,10 +140,10 @@
 
 **设计说明：**
 - **向后兼容**：不带运算符的条目（`"fmt"`）行为与之前版本完全一致。
-- **无锁定文件**：版本解析在安装时执行；锁定文件（`ezmk.lock`）留待后续版本。
+- **锁定文件（`ezmk.lock`，1.1.0+）**：版本解析在安装时执行，随后 `ezmk.lock` 钉扎实际安装的精确版本。详见下文 Lockfile 小节。
 - **约束无法满足**：若无可满足约束的版本，安装失败并列出所有可用版本。
 
-> **为什么向后兼容且暂不引入锁文件？** 不带运算符的条目（`"fmt"`）保持旧的"取最新"语义，已有配置行为不变。锁文件（`ezmk.lock`）刻意延后——在真正需要可复现的版本钉扎之前，安装时解析已经足够简单。
+> **为什么向后兼容？** 不带运算符的条目（`"fmt"`）保持旧的"取最新"语义，已有配置行为不变。锁文件（1.1.0+）在此基础上叠加：安装解析仍遵循 `[depends]` 约束，但写入 `ezmk.lock` 后，记录的是实际安装的精确内容，用于可复现构建。
 
 **示例：**
 ```toml
@@ -167,6 +167,34 @@ want = [
 - `-` / `.` / 空格 → `_`
 - 去除其他特殊字符
 - 示例：`sqlite3` → `EZMK_LIB_MISS_SQLITE3`，`boost-filesystem` → `EZMK_LIB_MISS_BOOST_FILESYSTEM`
+
+### Lockfile（`ezmk.lock`）（1.1.0+）
+
+`ezmk pkg install` 在项目根目录写入 `ezmk.lock`（TOML 格式），钉扎每个已安装包的**精确版本**、`sha256`、平台与依赖图，实现可复现构建。
+
+- **生成**：每次 `ezmk pkg install` 自动写入/更新。
+- **校验**：`ezmk build` 启动时校验：
+  - `[compile] deterministic = true` 时——lockfile 缺失或校验失败 → **报错**；lockfile 内容哈希纳入编译缓存签名。
+  - 非 deterministic——依赖变化 / sha256 不匹配仅 **警告**。
+- **相关 flag**：`ezmk pkg install --locked`（仅按 lockfile 安装，不一致则报错）；`--no-lock`（跳过 lockfile 生成）。
+- **请勿手改**：`ezmk.lock` 为自动生成文件——如需变更依赖，编辑 `ezmk.toml` 的 `[depends]` 后重新安装。
+
+```toml
+[metadata]
+version = 1
+generated_by = "ezmk 1.1.0"
+toolchain = "gcc"
+direct_deps = ["fmt", "spdlog@^1.14.0"]
+
+[[packages]]
+name = "spdlog"
+version = "1.14.1"
+sha256 = "..."
+type = "static"
+scope = "user"
+platform = "windows_x86_64_msvc"
+dependencies = []
+```
 
 ---
 

@@ -160,13 +160,14 @@ Each dependency entry can optionally include a version constraint using one of t
 
 **Design notes:**
 - **Backward compatible**: entries without operators (`"fmt"`) behave exactly as in previous versions (take latest).
-- **No lockfile**: version resolution is performed at install time; a lockfile (`ezmk.lock`) is deferred to a future version.
+- **Lockfile (`ezmk.lock`, 1.1.0+)**: version resolution happens at install time, then `ezmk.lock` pins the exact versions that were actually installed. See the Lockfile subsection below.
 - **Constraint unsatisfied**: if no available version satisfies the constraint, installation fails with an error listing all available versions.
 
-> **Why backward compatible and no lockfile?** Bare entries (`"fmt"`) keep their old
-> "latest wins" meaning so existing configs don't change behavior. A lockfile is
-> deliberately deferred — resolution happens at install time to keep the model
-> simple until reproducible pinning is actually needed.
+> **Why backward compatible?** Bare entries (`"fmt"`) keep their old
+> "latest wins" meaning so existing configs don't change behavior. The lockfile
+> (1.1.0+) sits on top of that: install resolution still honors `[depends]`
+> constraints, but once written, `ezmk.lock` records exactly what was installed
+> for reproducible builds.
 
 **Example:**
 ```toml
@@ -190,6 +191,34 @@ Conversion rules from `want` package name to macro name:
 - `-` / `.` / space → `_`
 - Remove other special characters
 - Examples: `sqlite3` → `EZMK_LIB_MISS_SQLITE3`, `boost-filesystem` → `EZMK_LIB_MISS_BOOST_FILESYSTEM`
+
+### Lockfile (`ezmk.lock`) (1.1.0+)
+
+`ezmk pkg install` writes `ezmk.lock` (TOML) in the project root, pinning each installed package's **exact version**, `sha256`, platform, and dependency graph for reproducible builds.
+
+- **Written**: automatically on every `ezmk pkg install`.
+- **Verified**: `ezmk build` checks it at startup:
+  - `[compile] deterministic = true` → a missing or failing lockfile is an **error**; the lockfile hash is part of the compile-cache signature.
+  - otherwise → changed dependencies / sha256 mismatch are just **warnings**.
+- **Flags**: `ezmk pkg install --locked` (install only against the lockfile, error on mismatch); `--no-lock` (skip lockfile generation).
+- **Do not hand-edit**: `ezmk.lock` is auto-generated — edit `[depends]` in `ezmk.toml` and reinstall instead.
+
+```toml
+[metadata]
+version = 1
+generated_by = "ezmk 1.1.0"
+toolchain = "gcc"
+direct_deps = ["fmt", "spdlog@^1.14.0"]
+
+[[packages]]
+name = "spdlog"
+version = "1.14.1"
+sha256 = "..."
+type = "static"
+scope = "user"
+platform = "windows_x86_64_msvc"
+dependencies = []
+```
 
 ---
 

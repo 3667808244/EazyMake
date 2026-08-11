@@ -136,6 +136,8 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 |---|---|
 | `--sha256 <hash>` | 安装前校验归档文件完整性 |
 | `-y` / `--yes` | 跳过确认提示（非交互模式） |
+| `--locked` | 仅按现有 `ezmk.lock` 安装，不一致则报错（1.1.0+） |
+| `--no-lock` | 跳过 `ezmk.lock` 生成（1.1.0+） |
 
 包格式和依赖解析参见 [`pkg.md`](pkg.md)。
 

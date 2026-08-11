@@ -147,6 +147,8 @@ scripting and muscle memory.
 |---|---|
 | `--sha256 <hash>` | Verify archive integrity before installing |
 | `-y` / `--yes` | Skip confirmation prompts (non-interactive) |
+| `--locked` | Install only against the existing `ezmk.lock` — error on mismatch (1.1.0+) |
+| `--no-lock` | Skip `ezmk.lock` generation (1.1.0+) |
 
 See [`pkg.md`](pkg.md) for the package format and dependency resolution.
 
