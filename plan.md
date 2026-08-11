@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.1 执行计划
 
-> **状态：待执行**（前置 1.1.1 已发布；1.1.3 已于 2026-08-10 发布）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.2~dev.4 独立并行。
+> **状态：已完成**（2026-08-11）。下一版本：**1.2.0-dev.2**（CMakeLists.txt 导出，`plans/1.2.0/`）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.2~dev.4 独立并行。
 >
 > 详细设计：[`1.2.0-dev.1.md`](plans/1.2.0/1.2.0-dev.1.md)。本计划为 1.2.0 系列首个开发子版本：**`ezmk project cc` 命令 + `ezmk utils cc` 弃用**，基于 1.1.1 已交付的 `build_compile_args()` + `compile_db` 单一事实源。
 >
@@ -56,9 +56,9 @@
 
 ### 阶段四：文档与收口
 
-- [ ] **4.1 文档**（4.5）：`docs/en|zh/cli.md` 命令表（`project cc` + `-o`/`--profile`）、`docs/en|zh/utils.md` cc 工具弃用说明、README、CHANGES.md（弃用口径：仅弃用不删除）
-- [ ] **4.2 发布门槛预检**：① 清单全部完成或明确收口；② 公共 API 无破坏性变更（新增命令纯增量、`utils cc` 仅弃用提示仍可用）；③ 全量测试零回归
-- [ ] **4.3 交接推进**：dev.1 收口 → `plans/1.2.0/README.md` 状态更新（dev.1 完成）；接续 dev.2（CMakeLists.txt 导出）或与 dev.3 协同验证 `--profile`
+- [x] **4.1 文档**（4.5）：`docs/en|zh/cli.md` 命令表（`project cc` + `-o`/`--profile`）、`docs/en|zh/utils.md` cc 工具弃用说明、README、CHANGES.md（弃用口径：仅弃用不删除）
+- [x] **4.2 发布门槛预检**：① 清单全部完成或明确收口（阶段一~四）；② 公共 API 无破坏性变更（新增命令纯增量、`utils cc` 仅弃用提示仍可用）；③ 全量测试零回归（642 用例 / 2970 断言）
+- [x] **4.3 交接推进**：dev.1 收口 → `plans/1.2.0/README.md` 状态更新（dev.1 **已完成**）；接续 dev.2（CMakeLists.txt 导出）或与 dev.3 协同验证 `--profile`
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

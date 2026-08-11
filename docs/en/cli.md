@@ -77,6 +77,7 @@ scripting and muscle memory.
 | `ezmk pack [--output <dir>]` | Pack static library project as `.tar.gz`, 1.1.0+ (full: `ezmk project pack`) |
 | `ezmk watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild (full: `ezmk project watch`) |
 | `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
+| `ezmk project cc [-o <path>] [--profile <p>]` | Generate `compile_commands.json` for clangd/LSP, 1.2.0+ |
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
 
@@ -202,7 +203,7 @@ provides the following tools:
 
 | Command | Description |
 |---|---|
-| `ezmk utils cc [--output <path>]` | Generate `compile_commands.json` (clangd-compatible) |
+| `ezmk utils cc [--output <path>]` | Generate `compile_commands.json` (clangd-compatible) — **deprecated since 1.2.0**, use `ezmk project cc` (removed in 2.0.0) |
 | `ezmk utils link add <name> <path>` | Add a `.ezmk/links.json` link |
 | `ezmk utils link remove <name>` | Remove a link |
 | `ezmk utils link list` | List all links |

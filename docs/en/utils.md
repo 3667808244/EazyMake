@@ -6,6 +6,10 @@
 > new tool never requires recompiling or re-releasing `ezmk` — anyone can
 > distribute a tool, and it is discovered at runtime via the scope chain.
 
+> **Deprecated tool:** `ezmk utils cc` is deprecated since 1.2.0 — use the
+> built-in `ezmk project cc` command instead. The tool stays functional until
+> 2.0.0; running `ezmk utils cc` prints a deprecation notice.
+
 ---
 
 ## Design motivation

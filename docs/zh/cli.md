@@ -69,6 +69,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk pack [--output <dir>]` | 打包静态库项目为 `.tar.gz`，1.1.0+（完整形式：`ezmk project pack`） |
 | `ezmk watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建（完整形式：`ezmk project watch`） |
 | `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
+| `ezmk project cc [-o <path>] [--profile <p>]` | 生成 `compile_commands.json`（clangd/LSP），1.2.0+ |
 
 **`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
 
@@ -185,7 +186,7 @@ ezmk repo update -u official
 
 | 命令 | 描述 |
 |---|---|
-| `ezmk utils cc [--output <path>]` | 生成 `compile_commands.json`（clangd 兼容） |
+| `ezmk utils cc [--output <path>]` | 生成 `compile_commands.json`（clangd 兼容）——**自 1.2.0 起弃用**，请用 `ezmk project cc`（2.0.0 移除） |
 | `ezmk utils link add <name> <path>` | 添加 `.ezmk/links.json` 链接 |
 | `ezmk utils link remove <name>` | 删除链接 |
 | `ezmk utils link list` | 列出所有链接 |

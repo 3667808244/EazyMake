@@ -96,6 +96,7 @@ ezmk pack [flags]               # create distributable .tar.gz (full: ezmk proje
 
 # Project
 ezmk project new <name>         # scaffold new project
+ezmk project cc [flags]         # generate compile_commands.json for clangd
 
 # Packages
 ezmk pkg install <pkg>          # install a package
@@ -108,7 +109,7 @@ ezmk repo add <url>             # register a repo
 ezmk repo update                # refresh repo indices
 
 # Utilities
-ezmk utils cc                   # generate compile_commands.json
+ezmk utils cc                   # generate compile_commands.json (deprecated since 1.2.0 → ezmk project cc)
 ```
 
 Full reference: [`docs/en/cli.md`](docs/en/cli.md)

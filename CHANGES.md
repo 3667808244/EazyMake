@@ -12,6 +12,20 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.1 (2026-08-11) — `ezmk project cc` 命令
+
+1.2.0 系列首个开发子版本：基于 1.1.1 的编译命令单一事实源（`build_compile_args()` + `compile_db`）新增**正式命令** `ezmk project cc`，并把 `ezmk utils cc` 从「拦截」过渡为「弃用提示」。**不破坏任何公共 API**（见文首 API Stability）。
+
+### 新增
+
+- **`ezmk project cc`**：内置 CLI 入口生成 `compile_commands.json`（`arguments` 数组，clangd 推荐格式），零外部包依赖、不再需要 `ezmk-official-utils`。支持 `-o/--output <path>`（默认 `<proj_root>/compile_commands.json`）与 `--profile <name>`；与 1.1.1 的 `utils cc` 拦截 / `[compile].compile_commands` 自动生成共用 `generate_compile_db()`，三个入口输出永远一致
+
+### 弃用
+
+- **`ezmk utils cc`**：自 1.2.0 起正式弃用（1.1.1 仅拦截、未声明）。运行输出 `[ezmk warn] ... use \`ezmk project cc\` instead` 提示并转调新命令，工具保留可用；`ezmk-official-utils` 包内 `cc.lua`/README 标注 `@deprecated since 1.2.0`（包版本 1.1.0 → 1.2.0）；**2.0.0 移除**
+
+---
+
 ## 1.1.3 (2026-08-10) — 补丁发布
 
 1.1.x 稳定线补丁。基于第二轮多模块安全与质量审计，修复 **5 处安全缺口**与 **5 处健壮性问题**，并收敛代码质量与测试质量问题。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
