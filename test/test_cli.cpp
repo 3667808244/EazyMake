@@ -823,3 +823,51 @@ TEST_CASE("cli parse: project cc missing -o value throws", "[cli][1.2.0][gnu]") 
         ezmk::fatal_error
     );
 }
+
+// ===================================================================
+// 1.2.0 — project export <target>
+// ===================================================================
+
+TEST_CASE("cli parse: project export cmake basic", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "export", "cmake"}).parse();
+    REQUIRE(args.cmd == Command::ProjectExport);
+    REQUIRE(args.project_export_opts.has_value());
+    REQUIRE(args.project_export_opts->target == "cmake");
+    REQUIRE(args.project_export_opts->output.empty());
+    REQUIRE(args.project_export_opts->overwrite == false);
+    REQUIRE(args.project_export_opts->use_glob == true);
+}
+
+TEST_CASE("cli parse: project export cmake flags", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "export", "cmake",
+                          "-o", "build/CMakeLists.txt",
+                          "--overwrite", "--resolve", "--no-glob",
+                          "--profile", "debug"}).parse();
+    REQUIRE(args.cmd == Command::ProjectExport);
+    auto& o = *args.project_export_opts;
+    REQUIRE(o.target == "cmake");
+    REQUIRE(o.output == "build/CMakeLists.txt");
+    REQUIRE(o.overwrite == true);
+    REQUIRE(o.resolve == true);
+    REQUIRE(o.use_glob == false);
+    REQUIRE(o.profile == "debug");
+}
+
+TEST_CASE("cli parse: project export --glob explicit", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "export", "cmake", "--glob"}).parse();
+    REQUIRE(args.project_export_opts->use_glob == true);
+}
+
+TEST_CASE("cli parse: project export unknown target throws", "[cli][1.2.0]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "export", "make"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: project export with no target throws", "[cli][1.2.0]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "export"}).parse(),
+        ezmk::fatal_error
+    );
+}

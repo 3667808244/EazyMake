@@ -936,3 +936,55 @@ TEST_CASE("integration: utils cc prints deprecation warning", "[integration][1.2
     REQUIRE(r.exit_code == 0);
     REQUIRE(fs::exists(proj_dir / "compile_commands.json"));
 }
+
+// 1.2.0: ezmk project export cmake — generate CMakeLists.txt from ezmk.toml.
+TEST_CASE("integration: project export cmake generates CMakeLists.txt", "[integration][1.2.0]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "exp_cmake";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    SECTION("default export") {
+        ProcResult r = run_ezmk("project export cmake", proj_dir);
+        INFO("stderr: " << r.err);
+        INFO("stdout: " << r.out);
+        REQUIRE(r.exit_code == 0);
+
+        fs::path out = proj_dir / "CMakeLists.txt";
+        REQUIRE(fs::exists(out));
+        std::string content = file_read(out);
+        REQUIRE(content.find("project(" + proj_name) != std::string::npos);
+        REQUIRE(content.find("add_executable") != std::string::npos);
+        REQUIRE(content.find("file(GLOB_RECURSE") != std::string::npos);
+    }
+
+    SECTION("refuses overwrite without --overwrite") {
+        ProcResult first = run_ezmk("project export cmake", proj_dir);
+        REQUIRE(first.exit_code == 0);
+
+        ProcResult second = run_ezmk("project export cmake", proj_dir);
+        INFO("stderr: " << second.err);
+        REQUIRE(second.exit_code != 0);
+        std::string combined = second.out + second.err;
+        REQUIRE(combined.find("overwrite") != std::string::npos);
+
+        ProcResult third = run_ezmk("project export cmake --overwrite", proj_dir);
+        REQUIRE(third.exit_code == 0);
+    }
+
+    SECTION("-o custom output path") {
+        ProcResult r = run_ezmk("project export cmake -o build/CMakeLists.txt", proj_dir);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+        REQUIRE(fs::exists(proj_dir / "build" / "CMakeLists.txt"));
+        REQUIRE(!fs::exists(proj_dir / "CMakeLists.txt"));
+    }
+}

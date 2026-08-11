@@ -65,10 +65,10 @@
 
 ### 阶段五：i18n + 测试
 
-- [ ] **5.1 i18n**（4.7）：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `export_*` / `help_*` key；`check_i18n.py` 三向一致通过
-- [ ] **5.2 单测**（4.8）：新建 `test/test_export.cpp`——各 project.type 输出 / 标志拆分 / 宏注入 / `@link:` 解析 / 覆盖拒绝 / `--no-glob` / `--resolve` / utils 类型跳过 / hooks 注释 + WARNING
-- [ ] **5.3 集成测试**（4.8）：`test/test_integration.cpp` 新增——建项目 → `project export cmake` → 校验产物内容；覆盖拒绝
-- [ ] **5.4 全量回归**（4.8）：`bash build.sh test-all` 零回归（基线 642 用例 / 2970 断言，dev.1 后）
+- [x] **5.1 i18n**（4.7）：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `export_*` / `help_*` key；`check_i18n.py` 三向一致通过（285 keys）
+- [x] **5.2 单测**（4.8）：新建 `test/test_export.cpp`（20 用例）——各 project.type 输出 / 标志拆分 / 宏注入 / `@link:` 解析 / 覆盖拒绝 / `--no-glob` / `--resolve` / utils 类型跳过 / hooks 注释 + WARNING / `--profile`
+- [x] **5.3 集成测试**（4.8）：`test/test_integration.cpp` 新增——建项目 → `project export cmake` → 校验产物内容；覆盖拒绝 / `--overwrite` / `-o`
+- [x] **5.4 全量回归**（4.8）：`bash build.sh test-all` 零回归（668 用例 / 3074 断言，基线 642 用例 / 2970 断言，净增 26 用例）
 
 ### 阶段六：文档 + 进阶按需 + 收口
 
