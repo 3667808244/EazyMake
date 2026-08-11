@@ -54,6 +54,9 @@ EZMK_I18N_KEY(compile_db_no_sources)    // 1.1.1
 EZMK_I18N_KEY(compile_db_generate_failed) // 1.1.1
 EZMK_I18N_KEY(cc_help)                  // 1.1.1
 EZMK_I18N_KEY(utils_cc_deprecated)      // 1.2.0
+EZMK_I18N_KEY(export_unknown_target)    // 1.2.0
+EZMK_I18N_KEY(export_exists_refuse)     // 1.2.0
+EZMK_I18N_KEY(export_written)           // 1.2.0
 
 // ---- cache (verbose) ----
 EZMK_I18N_KEY(cache_hit)
@@ -200,6 +203,7 @@ EZMK_I18N_KEY(arg_package_name)
 EZMK_I18N_KEY(arg_package_arg)
 EZMK_I18N_KEY(arg_repo_name)
 EZMK_I18N_KEY(arg_repo_url)
+EZMK_I18N_KEY(arg_export_target)          // 1.2.0
 
 // ---- repo ----
 EZMK_I18N_KEY(cloning)
@@ -281,6 +285,7 @@ EZMK_I18N_KEY(help_project_watch)
 EZMK_I18N_KEY(help_project_test)           // 1.1.0-dev.6
 EZMK_I18N_KEY(help_project_pack)           // 1.1.0-pre.1
 EZMK_I18N_KEY(help_project_cc)             // 1.2.0
+EZMK_I18N_KEY(help_project_export)         // 1.2.0
 EZMK_I18N_KEY(help_section_daily)          // 1.1.0-pre.1
 EZMK_I18N_KEY(help_section_init)           // 1.1.0-pre.1
 EZMK_I18N_KEY(help_section_advanced)       // 1.1.0-pre.1

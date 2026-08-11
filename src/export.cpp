@@ -1,0 +1,452 @@
+#include "ezmk/export.hpp"
+#include "ezmk/build.hpp"     // build::generate_ezmk_macros
+#include "ezmk/util.hpp"
+#include "ezmk/pkg.hpp"
+#include "ezmk/i18n.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace ezmk::export_gen {
+namespace fs = std::filesystem;
+
+namespace {
+
+// Mirror build.cpp::escape_macro_value — string macro values are quoted (and
+// backslash-escaped), integer/empty values are bare. This keeps the generated
+// definitions byte-identical to what `ezmk build` injects.
+std::string escape_macro_value(const std::string& val) {
+    if (val.empty()) return val;
+    bool plain_int = std::all_of(val.begin(), val.end(),
+                                 [](char c) { return c >= '0' && c <= '9'; });
+    if (plain_int) return val;
+    std::string escaped;
+    for (char c : val) {
+        if (c == '"' || c == '\\') escaped += '\\';
+        escaped += c;
+    }
+    return "\"" + escaped + "\"";
+}
+
+// CMake expression for a path: relative dirs / paths under the project root
+// become `${CMAKE_CURRENT_SOURCE_DIR}/<rel>` (portable); paths outside the
+// project root (e.g. via `@link:` to an external dir) stay absolute.
+// Returns "in_root=false" in `outside` for those external paths.
+std::string cmake_path(const fs::path& p, const fs::path& root, bool& outside) {
+    outside = false;
+    fs::path abs = p.is_absolute() ? p : (root / p);
+    abs = abs.lexically_normal();
+    fs::path root_abs = fs::absolute(root).lexically_normal();
+    std::error_code ec;
+    auto rel = fs::relative(abs, root_abs, ec);
+    if (!ec && !rel.empty() && rel.generic_string().find("..") == std::string::npos) {
+        return "${CMAKE_CURRENT_SOURCE_DIR}/" + rel.generic_string();
+    }
+    outside = true;
+    return abs.generic_string();
+}
+
+// Apply a build profile's flags/macros on top of the base compile section.
+config::CompileSection effective_compile(const config::EzConfig& cfg,
+                                         const std::string& profile) {
+    config::CompileSection c = cfg.compile;
+    if (profile.empty()) return c;
+    auto it = cfg.compile_profiles.find(profile);
+    if (it == cfg.compile_profiles.end()) {
+        util::fatal(std::string("unknown profile: '") + profile +
+                    "'. No such compile profile in ezmk.toml.");
+    }
+    c.flags.insert(c.flags.end(), it->second.flags.begin(), it->second.flags.end());
+    c.msvc_flags.insert(c.msvc_flags.end(),
+                        it->second.msvc_flags.begin(), it->second.msvc_flags.end());
+    for (const auto& [k, v] : it->second.macros) c.macros[k] = v;
+    return c;
+}
+
+config::LinkSection effective_link(const config::EzConfig& cfg,
+                                   const std::string& profile) {
+    config::LinkSection l = cfg.link;
+    if (profile.empty()) return l;
+    auto it = cfg.link_profiles.find(profile);
+    if (it == cfg.link_profiles.end()) return l;  // compile profile matched; link may be absent
+    l.flags.insert(l.flags.end(), it->second.flags.begin(), it->second.flags.end());
+    l.msvc_flags.insert(l.msvc_flags.end(),
+                        it->second.msvc_flags.begin(), it->second.msvc_flags.end());
+    return l;
+}
+
+// Common package name → CMake find_package / imported-target mapping (best-effort).
+struct PkgAlias {
+    const char* pkg;    // [depends] entry name
+    const char* find;   // find_package(<find> QUIET)
+    const char* target; // linked target
+};
+const PkgAlias kPkgAliases[] = {
+    {"catch2",          "Catch2",             "Catch2::Catch2"},
+    {"openssl",         "OpenSSL",            "OpenSSL::SSL"},
+    {"libcurl",         "CURL",               "CURL::libcurl"},
+    {"protobuf",        "protobuf",           "protobuf::libprotobuf"},
+    {"eigen",           "Eigen3",             "Eigen3::Eigen"},
+    {"googletest",      "GTest",              "GTest::gtest"},
+    {"fmt",             "fmt",                "fmt::fmt"},
+    {"spdlog",          "spdlog",             "spdlog::spdlog"},
+    {"nlohmann_json",   "nlohmann_json",      "nlohmann_json::nlohmann_json"},
+    {"sqlite3",         "SQLite3",            "SQLite3::SQLite3"},
+    {"zlib",            "ZLIB",               "ZLIB::ZLIB"},
+    {"lua",             "Lua",                "Lua::Lua"},
+    {"tomlplusplus",    "tomlplusplus",       "tomlplusplus::tomlplusplus"},
+};
+
+// Locate an installed package dir across project → user → global scopes.
+// Returns empty if not installed. Used by `--resolve`.
+fs::path find_installed_pkg(const std::string& name) {
+    for (const auto& base : pkg::pkg_search_dirs(
+             {cli::Scope::Project, cli::Scope::User, cli::Scope::Global})) {
+        fs::path cand = base / name;
+        if (fs::exists(cand / "include") || fs::exists(cand / "lib")) {
+            return cand;
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+std::string build_cmake_text(const config::EzConfig& cfg,
+                             const fs::path& project_root,
+                             const ExportOptions& opts) {
+    auto lang = config::parse_language(cfg.project.language);
+    const bool is_cpp = (lang.compiler != "gcc");  // "g++" → C++
+    const std::string cmake_lang = is_cpp ? "CXX" : "C";
+    const std::string target = cfg.project.name;
+
+    // CMake variable name for the source list — sanitize to [A-Za-z0-9_].
+    std::string src_var = target + "_SOURCES";
+    for (auto& c : src_var) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+    }
+
+    auto compile = effective_compile(cfg, opts.profile);
+    auto link = effective_link(cfg, opts.profile);
+
+    std::ostringstream os;
+    os << "cmake_minimum_required(VERSION 3.16)\n";
+    os << "# Generated by `ezmk project export cmake` from ezmk.toml — "
+          "do not hand-edit; regenerate.\n";
+    os << "project(" << target;
+    if (!cfg.project.version.empty()) os << " VERSION " << cfg.project.version;
+    os << " LANGUAGES " << cmake_lang << ")\n";
+
+    // `utils` is a package format with no C++ target — nothing to export.
+    if (cfg.project.type == "utils") {
+        os << "\nmessage(WARNING \"project type 'utils' has no C++ target — "
+              "nothing exported\")\n";
+        return os.str();
+    }
+
+    const std::vector<std::string> extensions = is_cpp
+        ? std::vector<std::string>{"cpp", "cc", "cxx", "c++"}
+        : std::vector<std::string>{"c"};
+
+    // ---- Sources ----
+    os << "\n# --- Sources ---\n";
+    if (opts.use_glob) {
+        os << "file(GLOB_RECURSE " << src_var << " CONFIGURE_DEPENDS\n";
+        std::vector<std::string> src_dirs = compile.src_dirs;
+        if (src_dirs.empty()) src_dirs.push_back("src");
+        for (const auto& d : src_dirs) {
+            bool outside = false;
+            std::string expr = cmake_path(d, project_root, outside);
+            for (const auto& ext : extensions) {
+                os << "    " << expr << "/*." << ext << "\n";
+            }
+        }
+        os << ")\n";
+    } else {
+        // --no-glob: explicit, deterministic file list.
+        std::vector<std::string> src_dirs = compile.src_dirs;
+        if (src_dirs.empty()) src_dirs.push_back("src");
+        os << "set(" << src_var << "\n";
+        for (const auto& d : src_dirs) {
+            fs::path dir = fs::path(d).is_relative() ? (project_root / d) : fs::path(d);
+            std::error_code ec;
+            for (auto it = fs::recursive_directory_iterator(dir, ec);
+                 !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+                if (!it->is_regular_file()) continue;
+                std::string ext = it->path().extension().string();
+                if (ext.size() > 1) ext = ext.substr(1);  // strip leading '.'
+                if (std::find(extensions.begin(), extensions.end(), ext) == extensions.end())
+                    continue;
+                bool outside = false;
+                os << "    " << cmake_path(it->path(), project_root, outside) << "\n";
+            }
+        }
+        os << ")\n";
+    }
+
+    // ---- Target ----
+    if (cfg.project.header_only) {
+        os << "\n# header-only package — interface library, no compile/link steps.\n";
+        os << "add_library(" << target << " INTERFACE)\n";
+        if (!compile.include_dirs.empty()) {
+            os << "target_include_directories(" << target << " INTERFACE";
+            for (const auto& d : compile.include_dirs) {
+                bool outside = false;
+                os << " " << cmake_path(d, project_root, outside);
+            }
+            os << ")\n";
+        }
+        return os.str();
+    }
+    if (cfg.project.precompiled) {
+        os << "\n# precompiled package — imported static library.\n";
+        os << "add_library(" << target << " IMPORTED)\n";
+        os << "set_target_properties(" << target << " PROPERTIES\n";
+        os << "    IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/lib/lib"
+           << target << ".a\n";
+        os << "    INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/include\n";
+        os << ")\n";
+        return os.str();
+    }
+    if (cfg.project.type == "static") {
+        os << "\nadd_library(" << target << " STATIC ${" << src_var << "})\n";
+    } else if (cfg.project.type == "shared") {
+        os << "\nadd_library(" << target << " SHARED ${" << src_var << "})\n";
+    } else {
+        os << "\nadd_executable(" << target << " ${" << src_var << "})\n";
+    }
+
+    // ---- Compile ----
+    // Split `[compile].flags` into their semantic buckets so CMake manages each
+    // concern in the idiomatic place (same split the design doc specifies).
+    std::vector<std::string> include_dirs = compile.include_dirs;
+    std::vector<std::string> defs;
+    std::vector<std::string> opt_flags;
+    int std_num = 0;
+    bool gnu_ext = lang.gnu_extensions;
+
+    auto digest_std = [&](const std::string& s) {
+        std::string st = s;
+        if (st.rfind("gnu", 0) == 0) { gnu_ext = true; st = st.substr(3); }
+        std::string digits;
+        for (char c : st) if (c >= '0' && c <= '9') digits += c;
+        if (!digits.empty()) std_num = std::stoi(digits);
+    };
+
+    for (const auto& f : compile.flags) {
+        if (f.rfind("-std=", 0) == 0) {
+            digest_std(f.substr(5));
+        } else if (f.rfind("-I", 0) == 0 && f.size() > 2) {
+            include_dirs.push_back(f.substr(2));
+        } else if (f.rfind("-D", 0) == 0 && f.size() > 2) {
+            defs.push_back(f.substr(2));
+        } else {
+            opt_flags.push_back(f);
+        }
+    }
+    if (std_num == 0) {
+        for (char c : lang.normalized_lang)
+            if (c >= '0' && c <= '9') std_num = std_num * 10 + (c - '0');
+    }
+
+    // ezmk standard macros + [compile].macros + -D flags.
+    if (compile.ezmk_macros) {
+        for (const auto& m : build::generate_ezmk_macros(cfg)) {
+            if (m.rfind("-D", 0) == 0) defs.push_back(m.substr(2));
+        }
+    }
+    for (const auto& [k, v] : compile.macros) {
+        defs.push_back(v.empty() ? k : k + "=" + escape_macro_value(v));
+    }
+
+    os << "\n# --- Compile ---\n";
+    if (!include_dirs.empty()) {
+        std::vector<std::string> external;
+        os << "target_include_directories(" << target << " PRIVATE";
+        for (const auto& d : include_dirs) {
+            bool outside = false;
+            std::string expr = cmake_path(d, project_root, outside);
+            if (outside) external.push_back(expr);
+            os << " " << expr;
+        }
+        os << ")\n";
+        if (!external.empty()) {
+            os << "# include dirs outside the project root (e.g. @link:):";
+            for (const auto& e : external) os << " " << e;
+            os << "\n";
+        }
+    }
+    if (!defs.empty()) {
+        os << "target_compile_definitions(" << target << " PRIVATE";
+        for (const auto& d : defs) os << " " << d;
+        os << ")\n";
+    }
+    if (std_num > 0) {
+        os << "set_target_properties(" << target << " PROPERTIES "
+           << (is_cpp ? "CXX_STANDARD " : "C_STANDARD ") << std_num
+           << " " << (is_cpp ? "CXX_STANDARD_REQUIRED" : "C_STANDARD_REQUIRED")
+           << " ON)\n";
+        os << "set_target_properties(" << target << " PROPERTIES "
+           << (is_cpp ? "CXX_EXTENSIONS " : "C_EXTENSIONS ")
+           << (gnu_ext ? "ON" : "OFF") << ")\n";
+    }
+    if (!opt_flags.empty()) {
+        os << "target_compile_options(" << target << " PRIVATE";
+        for (const auto& f : opt_flags) os << " " << f;
+        os << ")\n";
+    }
+    if (!compile.msvc_flags.empty()) {
+        os << "target_compile_options(" << target << " PRIVATE "
+           << "$<$<COMPILE_LANG_AND_ID:" << cmake_lang << ",MSVC>:";
+        for (const auto& f : compile.msvc_flags) os << " " << f;
+        os << ">)\n";
+    }
+    if (!cfg.project.stdlib.empty() && cfg.project.stdlib != "libstdc++") {
+        os << "target_compile_options(" << target << " PRIVATE "
+           << "$<$<COMPILE_LANG_AND_ID:" << cmake_lang
+           << ",Clang>:-stdlib=" << cfg.project.stdlib << ">)\n";
+    }
+
+    // ---- Link ----
+    std::vector<std::string> link_dirs = link.link_dirs;
+    std::vector<std::string> link_libs = link.system_targets;
+    std::vector<std::string> link_opts;
+    for (const auto& f : link.flags) {
+        if (f.rfind("-l", 0) == 0 && f.size() > 2) {
+            link_libs.push_back(f.substr(2));
+        } else if (f.rfind("-L", 0) == 0 && f.size() > 2) {
+            link_dirs.push_back(f.substr(2));
+        } else {
+            link_opts.push_back(f);
+        }
+    }
+
+    os << "\n# --- Link ---\n";
+    if (!link_dirs.empty()) {
+        os << "target_link_directories(" << target << " PRIVATE";
+        for (const auto& d : link_dirs) {
+            bool outside = false;
+            os << " " << cmake_path(d, project_root, outside);
+        }
+        os << ")\n";
+    }
+    if (!link_libs.empty()) {
+        os << "target_link_libraries(" << target << " PRIVATE";
+        for (const auto& l : link_libs) os << " " << l;
+        os << ")\n";
+    }
+    if (!link_opts.empty()) {
+        os << "target_link_options(" << target << " PRIVATE";
+        for (const auto& f : link_opts) os << " " << f;
+        os << ")\n";
+    }
+    if (!link.msvc_flags.empty()) {
+        os << "target_link_options(" << target << " PRIVATE "
+           << "$<$<COMPILE_LANG_AND_ID:" << cmake_lang << ",MSVC>:";
+        for (const auto& f : link.msvc_flags) os << " " << f;
+        os << ">)\n";
+    }
+
+    // ---- Dependencies (best-effort) ----
+    auto emit_deps = [&](const std::vector<config::DependsEntry>& deps) {
+        for (const auto& dep : deps) {
+            const std::string& name = dep.name;
+            os << "\n# --- dependency: " << name << " ---\n";
+            if (opts.resolve) {
+                fs::path pkg_dir = find_installed_pkg(name);
+                if (pkg_dir.empty()) {
+                    os << "# package '" << name << "' not found installed — add manually\n";
+                    continue;
+                }
+                // Concrete paths (this machine only — not portable).
+                os << "# resolved from installed package (--resolve; machine-specific)\n";
+                os << "target_include_directories(" << target << " PRIVATE "
+                   << (pkg_dir / "include").generic_string() << ")\n";
+                os << "target_link_libraries(" << target << " PRIVATE "
+                   << (pkg_dir / "lib" / ("lib" + name + ".a")).generic_string()
+                   << ")\n";
+                continue;
+            }
+            auto it = std::find_if(std::begin(kPkgAliases), std::end(kPkgAliases),
+                                   [&](const PkgAlias& a) { return name == a.pkg; });
+            if (it != std::end(kPkgAliases)) {
+                os << "find_package(" << it->find << " QUIET)\n";
+                os << "if(TARGET " << it->target << ")\n";
+                os << "    target_link_libraries(" << target << " PRIVATE "
+                   << it->target << ")\n";
+                os << "else()\n";
+                os << "    message(STATUS \"dependency '" << name
+                   << "': CMake target unknown — add manually\")\n";
+                os << "endif()\n";
+            } else {
+                std::string pkg_upper = name;
+                for (auto& c : pkg_upper)
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                os << "find_package(" << pkg_upper << " QUIET)\n";
+                os << "if(TARGET " << pkg_upper << ")\n";
+                os << "    target_link_libraries(" << target << " PRIVATE "
+                   << pkg_upper << ")\n";
+                os << "else()\n";
+                os << "    message(STATUS \"dependency '" << name
+                   << "': CMake target unknown — add manually\")\n";
+                os << "endif()\n";
+            }
+        }
+    };
+    emit_deps(cfg.depends.libs);
+    emit_deps(cfg.depends.want);
+
+    // ---- hooks (EazyMake-only, not portable to CMake) ----
+    const auto& hooks = cfg.hooks;
+    if (!hooks.pre_build.empty() || !hooks.post_build.empty() ||
+        !hooks.on_failure.empty()) {
+        os << "\n# --- hooks (EazyMake-only, NOT exported) ---\n";
+        if (!hooks.pre_build.empty())
+            os << "# pre_build  = \"" << hooks.pre_build << "\"\n";
+        if (!hooks.post_build.empty())
+            os << "# post_build = \"" << hooks.post_build << "\"\n";
+        if (!hooks.on_failure.empty())
+            os << "# on_failure = \"" << hooks.on_failure << "\"\n";
+        os << "# Hooks run in EazyMake's sandboxed Lua runtime (ezmk.* API) and have\n";
+        os << "# no CMake equivalent — CMake builds will NOT run hook post-processing.\n";
+        os << "message(WARNING \"[hooks] are not exported to CMake — hook "
+              "post-processing will not run.\")\n";
+    }
+
+    return os.str();
+}
+
+int export_cmake(const config::EzConfig& cfg,
+                 const fs::path& project_root,
+                 const ExportOptions& opts) {
+    fs::path out = opts.output.empty()
+        ? (project_root / "CMakeLists.txt")
+        : (fs::path(opts.output).is_relative()
+               ? (project_root / fs::path(opts.output))
+               : fs::path(opts.output));
+
+    // Overwrite safety: refuse unless --overwrite was given.
+    if (fs::exists(out) && !opts.overwrite) {
+        util::fatal(ezmk::i18n::I18nKey::export_exists_refuse,
+                    {{"path", out.string()}});
+    }
+
+    std::string text = build_cmake_text(cfg, project_root, opts);
+
+    // Atomic write (temp → rename), mirroring cache/compile_db writers.
+    auto tmp = out;
+    tmp += ".tmp";
+    util::file_write(tmp, text);
+    std::error_code ec;
+    fs::rename(tmp, out, ec);
+    if (ec) util::file_write(out, text);
+
+    util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
+    return 0;
+}
+
+} // namespace ezmk::export_gen

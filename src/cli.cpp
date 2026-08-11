@@ -274,6 +274,40 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.2.0: project export <target> — generate CMakeLists.txt (cmake first)
+        if (action == "export")
+        {
+            args.cmd = Command::ProjectExport;
+            ProjectExportOptions opts;
+            std::vector<OptionSpec> spec = {
+                {'o', "output", true},
+                {'\0', "overwrite", false},
+                {'\0', "profile", true},
+                {'\0', "resolve", false},
+                {'\0', "glob", false},
+                {'\0', "no-glob", false},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project export");
+            opts.target = require_positional(
+                p, "ezmk project export",
+                ezmk::i18n::get(ezmk::i18n::I18nKey::arg_export_target));
+            if (opts.target != "cmake")
+                util::fatal(ezmk::i18n::I18nKey::export_unknown_target,
+                            {{"target", opts.target}});
+            if (auto v = p.value("output"))
+                opts.output = *v;
+            if (p.has("overwrite"))
+                opts.overwrite = true;
+            if (auto v = p.value("profile"))
+                opts.profile = *v;
+            if (p.has("resolve"))
+                opts.resolve = true;
+            if (p.has("no-glob"))
+                opts.use_glob = false;
+            args.project_export_opts = opts;
+            return args;
+        }
+
         // 1.1.0-dev.6: project test
         if (action == "test")
         {
@@ -821,6 +855,7 @@ namespace ezmk::cli
         row("ezmk project new  <name> [--type <t>]", I18nKey::help_project_new);
         row("ezmk project pack [--output <dir>]", I18nKey::help_project_pack);
         row("ezmk project cc   [-o <path>] [--profile <p>]", I18nKey::help_project_cc);
+        row("ezmk project export cmake [flags]", I18nKey::help_project_export);
         std::cout << "\n";
 
         // ── §3: Package & repo management (advanced) ──────────────

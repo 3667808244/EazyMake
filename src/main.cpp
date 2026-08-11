@@ -4,6 +4,7 @@
 #include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
 #include "ezmk/compile_db.hpp"
+#include "ezmk/export.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
@@ -198,6 +199,21 @@ int main(int argc, char** argv) {
         case ezmk::cli::Command::ProjectCc: {
             const auto& opts = *args.project_cc_opts;
             generate_compile_db_entry(opts.output, opts.profile);
+            break;
+        }
+
+        // 1.2.0: project export cmake — one-shot CMakeLists.txt generation
+        case ezmk::cli::Command::ProjectExport: {
+            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            auto proj_root = std::filesystem::current_path();
+            const auto& eo = *args.project_export_opts;
+            ezmk::export_gen::ExportOptions eo2;
+            eo2.output = eo.output;
+            eo2.overwrite = eo.overwrite;
+            eo2.profile = eo.profile;
+            eo2.resolve = eo.resolve;
+            eo2.use_glob = eo.use_glob;
+            ezmk::export_gen::export_cmake(cfg, proj_root, eo2);
             break;
         }
 

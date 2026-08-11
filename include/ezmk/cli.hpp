@@ -26,6 +26,7 @@ enum class Command {
     ProjectWatch,    // 0.2.3+
     ProjectTest,     // 1.1.0-dev.6
     ProjectCc,       // 1.2.0
+    ProjectExport,   // 1.2.0
     PkgList,         // 0.2.3+
     PkgUpdate,       // 0.2.3+
     Version,
@@ -66,6 +67,16 @@ struct ProjectPackOptions {
 struct ProjectCcOptions {
     std::string output;    // -o/--output <path> (default: <proj_root>/compile_commands.json)
     std::string profile;   // --profile <name>
+};
+
+// 1.2.0: project export options — generate CMakeLists.txt from ezmk.toml
+struct ProjectExportOptions {
+    std::string target;    // export target ("cmake" first; make/meson reserved)
+    std::string output;    // -o/--output (default: <proj_root>/CMakeLists.txt)
+    bool overwrite = false;// --overwrite: replace an existing target file
+    std::string profile;   // --profile <name>
+    bool resolve = false;  // --resolve: concrete installed dep paths (non-portable)
+    bool use_glob = true;  // --glob (default) / --no-glob: explicit source list
 };
 
 struct InstallOptions {
@@ -110,6 +121,9 @@ struct CliArgs {
 
     // Only valid for ProjectCc (1.2.0)
     std::optional<ProjectCcOptions> project_cc_opts;
+
+    // Only valid for ProjectExport (1.2.0)
+    std::optional<ProjectExportOptions> project_export_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;
