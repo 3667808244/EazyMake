@@ -31,7 +31,7 @@ DEBUG_MODE = false          # bool false → skipped
 flags = ["-lpthread"]
 msvc_flags = []
 link_dirs = []
-system_target = ""          # Target triple for cross-compilation
+system_target = []          # System libraries to link (e.g. "pthread" → -lpthread)
 
 [depends]
 lib = ["fmt", "zlib"]       # Hard dependencies (missing → error)

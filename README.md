@@ -139,6 +139,7 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 | [FAQ / Troubleshooting](docs/en/faq.md) | Common questions and fixes |
 | [Technical Details](docs/en/technical.md) | Dependencies, build from source, compiler support |
 | [Glossary](docs/en/glossary.md) | Terminology reference |
+| [Non-Goals](docs/en/non-goals.md) | Features EazyMake deliberately won't design |
 | [Changelog](CHANGES.md) | Version history |
 
 ## Related links

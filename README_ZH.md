@@ -139,6 +139,7 @@ ezmk utils cc                   # 生成 compile_commands.json（自 1.2.0 起�
 | [FAQ / 故障排除](docs/zh/faq.md) | 常见问题与修复 |
 | [技术细节](docs/en/technical.md) | 依赖、源码构建、编译器支持 |
 | [术语表](docs/zh/glossary.md) | 术语参考 |
+| [不会设计的功能](docs/zh/non-goals.md) | 刻意不做、也不会做的功能 |
 | [更新日志](CHANGES.md) | 版本历史 |
 
 ## 相关链接
