@@ -7,7 +7,7 @@ Official utility tools for EazyMake — distributed as a `type = "utils"` packag
 | Tool | Command | Description |
 |------|---------|-------------|
 | **link** | `ezmk utils link` | Manage `.ezmk/links.json` for cross-directory source sharing |
-| **cc** | `ezmk utils cc` | Generate `compile_commands.json` for clangd/LSP integration |
+| **cc** | `ezmk utils cc` | Generate `compile_commands.json` for clangd/LSP integration — **deprecated since 1.2.0**, use `ezmk project cc` |
 | **gen-build-package** | `ezmk utils gen-build-package` | Package project source + build script into `.tar.gz` |
 
 ## Installation
@@ -45,6 +45,10 @@ include_dirs = ["include", "@link:shared/include"]
 ```
 
 ## CC Tool (`ezmk utils cc`)
+
+> **Deprecated since 1.2.0** — use `ezmk project cc` instead. This tool stays
+> functional until 2.0.0; running `ezmk utils cc` prints a deprecation notice
+> and redirects to the built-in `ezmk project cc` implementation.
 
 Generates a clangd-compatible JSON Compilation Database:
 

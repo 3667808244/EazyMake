@@ -25,6 +25,7 @@ enum class Command {
     Utils,
     ProjectWatch,    // 0.2.3+
     ProjectTest,     // 1.1.0-dev.6
+    ProjectCc,       // 1.2.0
     PkgList,         // 0.2.3+
     PkgUpdate,       // 0.2.3+
     Version,
@@ -59,6 +60,12 @@ struct ProjectInstallOptions {
 struct ProjectPackOptions {
     std::string output_dir;    // --output <dir> (default: ".")
     bool verbose = false;      // -v: show index.toml snippet
+};
+
+// 1.2.0: project cc options — generate compile_commands.json
+struct ProjectCcOptions {
+    std::string output;    // -o/--output <path> (default: <proj_root>/compile_commands.json)
+    std::string profile;   // --profile <name>
 };
 
 struct InstallOptions {
@@ -100,6 +107,9 @@ struct CliArgs {
 
     // Only valid for ProjectPack (1.1.0-dev.2)
     std::optional<ProjectPackOptions> project_pack_opts;
+
+    // Only valid for ProjectCc (1.2.0)
+    std::optional<ProjectCcOptions> project_cc_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;

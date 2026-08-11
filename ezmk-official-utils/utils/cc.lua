@@ -1,6 +1,10 @@
 -- ezmk-official-utils: cc — compile_commands.json generator
 -- Generates a clangd-compatible JSON Compilation Database for the current project.
 --
+-- @deprecated since 1.2.0 — use `ezmk project cc` instead. This tool is kept
+-- functional until 2.0.0; new invocations of `ezmk utils cc` are intercepted by
+-- the built-in `ezmk project cc` implementation and print a deprecation notice.
+--
 -- Usage:
 --   ezmk utils cc                  # output to <project_root>/compile_commands.json
 --   ezmk utils cc -o <path>        # output to custom path
@@ -13,6 +17,8 @@ function help()
 usage: ezmk utils cc [options]
 
 Generate compile_commands.json for the current project.
+
+DEPRECATED since 1.2.0 — use `ezmk project cc` instead.
 
 The output follows the clangd JSON Compilation Database specification:
   https://clang.llvm.org/docs/JSONCompilationDatabase.html

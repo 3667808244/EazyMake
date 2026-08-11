@@ -255,6 +255,25 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.2.0: project cc — generate compile_commands.json
+        if (action == "cc")
+        {
+            args.cmd = Command::ProjectCc;
+            ProjectCcOptions opts;
+            std::vector<OptionSpec> spec = {
+                {'o', "output", true},
+                {'\0', "profile", true},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project cc");
+            if (auto v = p.value("output"))
+                opts.output = *v;
+            if (auto v = p.value("profile"))
+                opts.profile = *v;
+            reject_positionals(p, "ezmk project cc");
+            args.project_cc_opts = opts;
+            return args;
+        }
+
         // 1.1.0-dev.6: project test
         if (action == "test")
         {
@@ -801,6 +820,7 @@ namespace ezmk::cli
         std::cout << get(I18nKey::help_section_init) << "\n";
         row("ezmk project new  <name> [--type <t>]", I18nKey::help_project_new);
         row("ezmk project pack [--output <dir>]", I18nKey::help_project_pack);
+        row("ezmk project cc   [-o <path>] [--profile <p>]", I18nKey::help_project_cc);
         std::cout << "\n";
 
         // ── §3: Package & repo management (advanced) ──────────────

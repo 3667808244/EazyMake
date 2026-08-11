@@ -30,10 +30,33 @@ static void auto_update_repos(const ezmk::cli::BuildOptions& opts) {
     }
 }
 
+// 1.2.0: shared compile_commands generation entry — used by both the
+// `ezmk project cc` command and the (deprecated) `ezmk utils cc` redirect,
+// so the two entry points always produce identical output.
+static void generate_compile_db_entry(const std::string& output_path,
+                                      const std::string& profile) {
+    auto cfg = ezmk::config::parse_config("ezmk.toml");
+    ezmk::cli::BuildOptions opts;
+    opts.profile = profile;
+    auto proj_root = std::filesystem::current_path();
+
+    std::filesystem::path out;
+    if (!output_path.empty()) {
+        out = output_path;
+        if (out.is_relative()) out = proj_root / out;
+    }
+
+    ezmk::compile_db::generate_compile_db(cfg, opts, proj_root, out);
+}
+
 // 1.1.1: Built-in `cc` tool — generates compile_commands.json via the C++
 // compile_db generator (drift-free). Intercepts `ezmk utils cc` before the
-// Lua script lookup; the Lua cc.lua is no longer executed (deprecated in 1.2.0).
+// Lua script lookup; the Lua cc.lua is no longer executed.
+// 1.2.0: `ezmk utils cc` is deprecated — emits a warning, then redirects to
+// the shared project-cc entry. The tool stays functional until 2.0.0.
 static int run_builtin_cc(const std::vector<std::string>& utils_args) {
+    ezmk::util::warn(ezmk::i18n::I18nKey::utils_cc_deprecated);
+
     std::string output_path;
     std::string profile;
     bool show_help = false;
@@ -68,18 +91,7 @@ static int run_builtin_cc(const std::vector<std::string>& utils_args) {
         return 0;
     }
 
-    auto cfg = ezmk::config::parse_config("ezmk.toml");
-    ezmk::cli::BuildOptions opts;
-    opts.profile = profile;
-    auto proj_root = std::filesystem::current_path();
-
-    std::filesystem::path out;
-    if (!output_path.empty()) {
-        out = output_path;
-        if (out.is_relative()) out = proj_root / out;
-    }
-
-    ezmk::compile_db::generate_compile_db(cfg, opts, proj_root, out);
+    generate_compile_db_entry(output_path, profile);
     return 0;
 }
 
@@ -179,6 +191,13 @@ int main(int argc, char** argv) {
             auto proj_root = std::filesystem::current_path();
 
             ezmk::build::pack_project(cfg, *args.project_pack_opts, proj_root);
+            break;
+        }
+
+        // 1.2.0: project cc — formal compile_commands generation command
+        case ezmk::cli::Command::ProjectCc: {
+            const auto& opts = *args.project_cc_opts;
+            generate_compile_db_entry(opts.output, opts.profile);
             break;
         }
 
