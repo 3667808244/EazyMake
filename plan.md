@@ -1,22 +1,20 @@
-# EazyMake 1.2.0-dev.1 执行计划
+# EazyMake 1.2.0-dev.2 执行计划
 
-> **状态：已完成**（2026-08-11）。下一版本：**1.2.0-dev.2**（CMakeLists.txt 导出，`plans/1.2.0/`）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.2~dev.4 独立并行。
+> **状态：待执行**（承接 dev.1 已完成，2026-08-11）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.2~dev.4 独立并行。
 >
-> 详细设计：[`1.2.0-dev.1.md`](plans/1.2.0/1.2.0-dev.1.md)。本计划为 1.2.0 系列首个开发子版本：**`ezmk project cc` 命令 + `ezmk utils cc` 弃用**，基于 1.1.1 已交付的 `build_compile_args()` + `compile_db` 单一事实源。
+> 详细设计：[`1.2.0-dev.2.md`](plans/1.2.0/1.2.0-dev.2.md)。本计划为 1.2.0 系列第二个开发子版本：**`ezmk project export cmake`（CMakeLists.txt 导出）**——`ezmk.toml` 为事实源，单向生成 CMake 生态可构建/索引的文件。
 >
-> **范围边界**：仅新增正式命令 `ezmk project cc`（零外部包依赖）并过渡 `ezmk utils cc` 为弃用提示（工具保留可用，2.0.0 移除）。核心重构 / `utils cc` 拦截 / `[compile].compile_commands` 自动生成已由 1.1.1 交付，本版生成器核心**零改动**。
+> **范围边界**：新增 `Command::ProjectExport` + `project export <target>` 子命令（首个 target `cmake`），新建 `src/export.cpp` 模块。项目级/编译/链接映射为 P0，依赖映射（`find_package` 别名表 + `--resolve`）为 P1，profiles/test/install/deterministic 为 P2（可选/延后）。纯新增命令，不触碰既有 API。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯新增 + 弃用不删）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口（含 P1/P2 决策）；② 公共 API 无破坏性变更（纯新增命令）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
 
 ---
 
 ## 1 背景
 
-1.1.1 已把编译命令构造收敛为**单一事实源**（`build_compile_args()` / `join_shell_args()` 重构 + `compile_db` 模块），并**拦截** `ezmk utils cc` 改由内置 C++ 生成器服务，修复了原有 Lua 工具的 compile_commands.json 命令 drift。
+`ezmk.toml` 是 EazyMake 项目的唯一配置源。但大量 IDE（CLion / VS Code 扩展）、工具链、CI 与第三方库（`CMakeLists.txt` + `find_package` 生态）以 CMake 为事实标准。目前 EazyMake 项目**无法导出**到 CMake，用户想用 CMake 生态构建/索引 EazyMake 项目只能手写 `CMakeLists.txt`，既重复又易与 `ezmk.toml` 漂移。
 
-1.2.0 在其上补齐最后一步：新增**正式命令** `ezmk project cc`——内置 CLI 入口、零外部包依赖，不再需要 `ezmk-official-utils`。同时把 `ezmk utils cc` 从「拦截」过渡到「弃用提示」（2.0.0 移除）。
-
-> 自动生成（`[compile].compile_commands`）已在 **1.1.1** 交付，本版不重复。
+本计划新增 `ezmk project export cmake`：从当前项目 `ezmk.toml` **一键生成** `CMakeLists.txt`。**单向生成**（快照、勿手改）、**互操作**（`ezmk build` 与 CMake 生态可并行）、**命名可扩展**（`project export <target>` 为未来 make/meson 预留）。
 
 ---
 
@@ -24,41 +22,59 @@
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | 新增内置命令 `ezmk project cc`（基于 1.1.1 的 `build_compile_args()` + `compile_db`），`arguments` 数组输出，零外部包依赖 | P0 |
-| 2 | `ezmk utils cc` 从 1.1.1 的拦截过渡为弃用提示（`use ezmk project cc instead`），工具保留可用，2.0.0 移除 | P1 |
-| 3 | 全量测试零回归 + 新增单测/集成测试覆盖新命令与弃用 | P0 |
+| 1 | 新增命令 `ezmk project export cmake`（`project export <target>` 首个 target 为 `cmake`） | P0 |
+| 2 | 项目级映射：`name/type/language/version` → `project()` + `add_executable`/`add_library(STATIC\|SHARED)` | P0 |
+| 3 | 编译映射：src_dirs、include_dirs（含 `@link:`）、flags（拆 `-std`/`-I`/`-D`）、macros、`ezmk_macros`、`msvc_flags`、stdlib | P0 |
+| 4 | 链接映射：link_dirs、system_targets、link flags（拆 `-L`/`-l`）、`link.msvc_flags` | P0 |
+| 5 | 安全：默认拒绝覆盖既有 `CMakeLists.txt`，`--overwrite` 才允许；文件头标注生成来源 | P0 |
+| 6 | 依赖映射（`[depends].lib`/`want`）best-effort：内置常见包别名映射 + `--resolve` 具体路径模式 | P1 |
+| 7 | 进阶映射：profiles / `[test]` / `[install]` / deterministic | P2（可选/延后） |
+| 8 | 全量测试零回归 + 单测/集成测试覆盖导出逻辑 | P0 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：前置确认 + 命令交付
+### 阶段一：骨架与命令面
 
-- [x] **1.1 前置确认**（4.0）：1.1.1 已发布——`build_compile_args()` / `compile_db` / `utils cc` 拦截 / `[compile].compile_commands` 自动生成均已落地
-- [x] **1.2 命令实现**（4.1）：`Command::ProjectCc` 枚举 + `project cc` 子命令（与 `build`/`run`/`clean` 同级）+ `-o/--output`（默认 `<proj_root>/compile_commands.json`）+ `--profile <name>` 解析（`cli.hpp` / `cli.cpp`）
-- [x] **1.3 命令分发**（4.1）：`main.cpp` 新增 `Command::ProjectCc` 分支，转调 `compile_db::generate_compile_db()`（与 1.1.1 拦截共用同一实现）
-- [x] 阶段一自测：`bash build.sh` 编译通过 + 冒烟（`project cc` 输出 JSON / `-o` 自定义路径 / `--profile` 应用 `-g -DDEBUG=1` / help 新增行）
+- [ ] **1.1 命令解析**（4.1）：`Command::ProjectExport` + `project export <target>` 子命令解析；flags `-o/--output`、`--overwrite`、`--profile`、`--resolve`、`--glob`/`--no-glob`（`cli.hpp` / `cli.cpp`）
+- [ ] **1.2 模块骨架**（4.1）：新建 `include/ezmk/export.hpp` + `src/export.cpp`——`export_cmake()` 入口 + 输出路径/覆盖检查；`main.cpp` 分发；`build.sh` 的 `SRC`/`TEST_SRC` 同步加入 `export.cpp`
+- [ ] **1.3 项目定位**（4.1）：无 `ezmk.toml` → 复用项目定位逻辑报错；`--glob`（默认）`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 镜像 ezmk 运行时源收集语义
+- [ ] 阶段一自测：`bash build.sh` 编译通过；`project export cmake` 可调用（骨架输出）
 
-### 阶段二：弃用过渡 + i18n
+### 阶段二：项目级 + 编译映射
 
-- [x] **2.1 弃用提示**（4.2）：`Command::Utils` 对 `cc` 的分支改为输出弃用提示并转调 `project cc` 逻辑：
+- [ ] **2.1 项目级映射**（4.2）：`project()` / `add_executable` / `add_library(STATIC\|SHARED)`；utils 类型跳过 + `message(WARNING)`；`header_only` → INTERFACE；`precompiled` → IMPORTED（§3.2/§3.6）
+- [ ] **2.2 源收集**（4.3）：按 `project.language` 选扩展名（C++: `*.cpp *.cc *.cxx *.c++`；C: `*.c`），多 `src_dirs` 逐目录 glob 行；`--no-glob` → `target_sources` 显式列表（确定性）
+- [ ] **2.3 编译映射**（4.3）：include_dirs（`@link:` 解析后项目内 `${CMAKE_CURRENT_SOURCE_DIR}/` 前缀、项目外绝对路径+注释）、宏 + `ezmk_macros`（复用 `generate_ezmk_macros()` 与构建注入一致）、`-std` → `CXX_STANDARD`/`CXX_EXTENSIONS`、flags 拆分（`-I`/`-D`/其余）、`msvc_flags` genex、stdlib best-effort genex
+- [ ] 阶段二自测：`test_export.cpp` 各 project.type 输出 + 标志拆分/宏注入用例通过
 
-      [ezmk warn] `ezmk utils cc` is deprecated since 1.2.0 — use `ezmk project cc` instead.
+### 阶段三：链接映射 + 覆盖安全
 
-- [x] **2.2 包侧标注**（4.2）：`ezmk-official-utils/utils/cc.lua` 的 `help()` 标注 `@deprecated since 1.2.0`；包 README 同步；包版本随声明提升（1.1.0 → 1.2.0）
-- [x] **2.3 i18n**（4.3）：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `compile_db_*` / `help_*` / 弃用提示 key；`check_i18n.py` 三向一致通过（280 keys）
+- [ ] **3.1 链接映射**（4.4）：link_dirs → `target_link_directories`（`@link:` 解析）；system_targets → `target_link_libraries`（去 `-l`）；link.flags 去 `-L`/`-l` → `target_link_options`；`link.msvc_flags` genex
+- [ ] **3.2 覆盖安全**（4.5）：目标已存在且无 `--overwrite` → 拒绝（exit 1）+ 现有文件摘要；文件头标注 `Generated by ezmk project export cmake ... do not hand-edit`
+- [ ] 阶段三自测：覆盖拒绝/`--overwrite`/`@link:` 解析用例通过
 
-### 阶段三：测试
+### 阶段四：依赖映射（P1）
 
-- [x] **3.1 单测**（4.4）：`test/test_cli.cpp` 解析用例（`project cc` 命令 / `-o` / `--output[=]` / `--profile[=]` / 拒绝 positional / 缺值报错）；`test/test_compile_db.cpp` 新增 `--profile` 生效（profile flags 追加）+ 未知 profile 拒绝（`fatal_error`）
-- [x] **3.2 集成测试**（4.4）：`test/test_integration.cpp` 新增——建项目 → `project cc` → 校验 JSON / `-o custom.json` / `--profile` 与 `--profile=` 应用 / `utils cc` 弃用提示且仍生成 JSON
-- [x] **3.3 全量回归**（4.4）：`bash build.sh test-all` 零回归（642 用例 / 2970 断言，基线 630 用例 / 2918 断言，净增 12 用例）
+- [ ] **4.1 别名映射表**（4.6）：内置常见包映射（catch2/openssl/libcurl/protobuf/eigen/googletest/fmt/spdlog/nlohmann_json/sqlite3/zlib/lua/tomlplusplus…）
+- [ ] **4.2 便携模式**（4.6）：`find_package(<Pkg> QUIET)` + `if(TARGET ...)` 链接 + `message(STATUS)` 提示；`[depends].want` 非 REQUIRED；未覆盖 → 占位 + 提示
+- [ ] **4.3 `--resolve` 模式**（4.6）：解析已安装依赖（project → user → global），输出具体 include/lib 路径；文件内注明不可移植
+- [ ] 阶段四自测：便携模式 / `--resolve` 用例通过
 
-### 阶段四：文档与收口
+### 阶段五：i18n + 测试
 
-- [x] **4.1 文档**（4.5）：`docs/en|zh/cli.md` 命令表（`project cc` + `-o`/`--profile`）、`docs/en|zh/utils.md` cc 工具弃用说明、README、CHANGES.md（弃用口径：仅弃用不删除）
-- [x] **4.2 发布门槛预检**：① 清单全部完成或明确收口（阶段一~四）；② 公共 API 无破坏性变更（新增命令纯增量、`utils cc` 仅弃用提示仍可用）；③ 全量测试零回归（642 用例 / 2970 断言）
-- [x] **4.3 交接推进**：dev.1 收口 → `plans/1.2.0/README.md` 状态更新（dev.1 **已完成**）；接续 dev.2（CMakeLists.txt 导出）或与 dev.3 协同验证 `--profile`
+- [ ] **5.1 i18n**（4.7）：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `export_*` / `help_*` key；`check_i18n.py` 三向一致通过
+- [ ] **5.2 单测**（4.8）：新建 `test/test_export.cpp`——各 project.type 输出 / 标志拆分 / 宏注入 / `@link:` 解析 / 覆盖拒绝 / `--no-glob` / `--resolve` / utils 类型跳过
+- [ ] **5.3 集成测试**（4.8）：`test/test_integration.cpp` 新增——建项目 → `project export cmake` → 校验产物内容；覆盖拒绝
+- [ ] **5.4 全量回归**（4.8）：`bash build.sh test-all` 零回归（基线 642 用例 / 2970 断言，dev.1 后）
+
+### 阶段六：文档 + 进阶按需 + 收口
+
+- [ ] **6.1 文档**（4.9）：`docs/en|zh/cli.md` 命令表（`project export cmake` + flags）、README、README_ZH、CHANGES.md（1.2.0-dev.2 条目）
+- [ ] **6.2 进阶映射（P2，按需）**（4.10）：profiles genex / `[test]` / `[install]` / deterministic best-effort——按需实现或明确延后
+- [ ] **6.3 发布门槛预检**：① 清单全部完成或明确收口（含 P1/P2 决策）；② 公共 API 无破坏性变更（纯新增）；③ 全量测试零回归
+- [ ] **6.4 交接推进**：dev.2 收口 → `plans/1.2.0/README.md` 状态更新（dev.2 完成）；接续 dev.3（默认模板 Profile）或与 dev.1 协同验证 `project cc --profile` 对照
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
@@ -68,12 +84,16 @@
 
 | 决策 | 说明 |
 |------|------|
-| **命令形态** | `Command::ProjectCc`，`project` 子命令与 `build`/`run`/`clean` 同级；不新增顶层别名/简写（避免 `ezmk cc` 与 C 编译器歧义，保持与用户指定命名一致） |
-| **flags** | `-o/--output <path>`（相对项目根解析，默认 `<proj_root>/compile_commands.json`）、`--profile <name>` |
-| **输出格式** | 沿用 1.1.1 `compile_db` 输出：`arguments` 数组（clangd 推荐，免 shell 双重转义）；`file` 相对项目根、`directory` 项目根绝对路径；按 `rel_src` 字典序；temp → rename 原子写。生成器核心**零改动** |
-| **三个入口同一实现** | 拦截（1.1.1）/ 自动生成（1.1.1）/ `project cc` 命令（本版）共用 `generate_compile_db()`，输出永远一致 |
-| **弃用声明时机** | 1.1.1 未声明废弃（拦截是内部实现）；**1.2.0 才正式声明**：输出弃用提示 + 转调，工具保留可用，2.0.0 移除 |
-| **`--profile` 一致性** | `project cc --profile` 应用逻辑须与 `build.cpp` 一致，避免「构建用 profile、索引不用」 |
+| **命令形态** | `Command::ProjectExport`，`export` 为 `project` 子命令，`<target>` 参数区分格式（首个 `cmake`，预留 make/meson）；与 `project cc` 一致不新增顶层别名 |
+| **单向快照语义** | `ezmk.toml` 是事实源，`CMakeLists.txt` 是一次性快照；文件头明确「重新生成、勿手改」；不读回同步 |
+| **flags** | `-o/--output`（默认 `<proj_root>/CMakeLists.txt`）、`--overwrite`、`--profile`、`--resolve`、`--glob`/`--no-glob` |
+| **源收集** | `--glob`（默认）`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 镜像 ezmk 运行时目录收集（新增文件不需重新导出）；`--no-glob` 显式列表（确定性、可审阅） |
+| **编译标志拆分** | `-std` → `CXX_STANDARD`/`CXX_EXTENSIONS`；`-I` → include；`-D` → definitions；其余 → compile_options；`msvc_flags` genex 包裹 |
+| **宏一致性** | `ezmk_macros` + `[compile].macros` 复用 `generate_ezmk_macros()`，与 `ezmk build` 注入完全一致，防止条件编译漂移 |
+| **`@link:` 一致性** | 导出路径解析复用 `config.cpp::resolve_link_path()`，与构建目录解析完全一致 |
+| **覆盖安全** | 无 `--overwrite` 且目标存在 → 拒绝（exit 1）+ 现有文件摘要 |
+| **依赖映射默认不 `--resolve`** | 安装路径（`~/.local` / `%LOCALAPPDATA%`）不可移植，默认便携 `find_package` + `if(TARGET)`；需立即可构建时 `--resolve` |
+| **header_only/precompiled** | `header_only` → `add_library(INTERFACE)`；`precompiled` → `add_library(IMPORTED)`（`IMPORTED_LOCATION` 指向 `lib/lib<name>.a`，`--resolve` 到安装路径） |
 
 ---
 
@@ -81,15 +101,16 @@
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 新增 `ezmk project cc` 命令 | 纯新增 | 不影响既有命令 |
-| `ezmk utils cc` 弃用提示 | 工具仍可用 | 仅输出弃用提示 + 转调；2.0.0 移除 |
-| 前置 1.1.1（重构/拦截/自动生成） | 本版基础 | 1.1.1 已发布；`arguments` 格式 clangd 兼容 |
-| i18n 新增 key | 纯增量 | X-macro（`i18n_keys.def` + 两份 JSON）三向一致 |
+| 新增 `ezmk project export cmake` | 纯新增 | 不影响既有命令 |
+| 生成 `CMakeLists.txt` | 可能已存在手写文件 | 默认拒绝覆盖，`--overwrite` 显式覆盖 |
+| 依赖 best-effort 映射 | 生成的 CMake 可能需要手动调整 deps | 文件内注释 + `message(STATUS)` 提示 |
+| 导出为快照 | 与 `ezmk.toml` 可能漂移 | 文件头明确「重新生成、勿手改」；`--no-glob` 可选确定性输出 |
+| 新增模块 `src/export.cpp` | 纯新增 | 编译进 ezmk；`build.sh` `SRC`/`TEST_SRC` 同步加入 |
 
 ---
 
 ## 6 延后项
 
-- **`ezmk utils cc` 移除**：2.0.0 破坏性窗口执行，本版只弃用不删。
-- **dev.2 CMakeLists.txt 导出 / dev.3 默认模板 Profile / dev.4 CMake 项目导入**：1.2.0 系列后续子版本，与本版独立并行；dev.2/dev.4 互为反向互补（导出/导入），dev.3 完成后 `project cc --profile release` 可开箱对照验证。
-- **承接 1.1.3 延后项**（归 1.2.0）：安装钩子权限门控（S1b）、watcher 静默死亡 / kqueue 缺口、宽窄字符路径 / i18n 二次替换、CLI 参数嵌入 NUL 完整防御、OVERLAPPED 池实例化重构——均不在 dev.1 范围，归后续子版本或正式版。
+- **P2 进阶映射**：profiles genex / `[test]` / `[install]` / deterministic——阶段六按需实现或明确延后（并入正式版或后续）。
+- **dev.3 默认模板 Profile / dev.4 CMake 项目导入**：1.2.0 系列后续子版本，独立并行；dev.2/dev.4 互为反向互补（导出/导入），共享包名别名表。
+- **承接 1.1.3 延后项**（归 1.2.0）：安装钩子权限门控（S1b）、watcher 静默死亡 / kqueue 缺口、宽窄字符路径 / i18n 二次替换、CLI 参数嵌入 NUL 完整防御、OVERLAPPED 池实例化重构——均不在 dev.2 范围。
