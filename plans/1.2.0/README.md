@@ -12,7 +12,8 @@
 | [1.2.0-dev.2](1.2.0-dev.2.md) | CMakeLists.txt 导出 | `ezmk project export cmake` 命令；project/compile/link/deps 全映射；默认拒绝覆盖；`--resolve` 具体路径模式 | **已完成**（2026-08-11） |
 | [1.2.0-dev.3](1.2.0-dev.3.md) | 默认模板内建 Debug/Release Profile | `ezmk project new` 模板内置 `[compile.profile.debug/release]`；基准收敛为警告-only | 待实现 |
 | [1.2.0-dev.4](1.2.0-dev.4.md) | CMake 项目导入（实验性） | `ezmk project import --from cmake`；标准命令映射 + `find_package` best-effort + 非标准写法拒绝 | 待实现 |
-| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.4；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
+| [1.2.0-dev.5](1.2.0-dev.5.md) | catch2 v3 测试主程序兼容 | `ezmk test` test_main 生成改 v3 兼容（显式 `main` + `Catch::Session().run()`）；v2 vendor 路径不回归 | 待实现 |
+| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.5；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
 
 > **执行计划**：根 `plan.md` 为 1.2.0 聚合执行计划（1.1.1 前置补丁发布后恢复）。
 
@@ -24,7 +25,8 @@
 1.2.0-dev.1 (`ezmk project cc` 命令) ───┤
 1.2.0-dev.2 (CMakeLists.txt 导出) ──────┤
 1.2.0-dev.3 (默认模板内建 Profile) ──────┤
-1.2.0-dev.4 (CMake 项目导入, 实验性) ────┘
+1.2.0-dev.4 (CMake 项目导入, 实验性) ────┤
+1.2.0-dev.5 (catch2 v3 测试主程序兼容) ──┘
 ```
 
 - **1.1.1 先行**：dev.1 的 `ezmk project cc` 命令依赖 1.1.1 的 `build_compile_args()`/`compile_db`/拦截/自动生成基础。

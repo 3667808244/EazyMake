@@ -1,20 +1,20 @@
-# EazyMake 1.2.0-dev.2 执行计划
+# EazyMake 1.2.0-dev.5 执行计划
 
-> **状态：已完成**（2026-08-11）。下一版本：**1.2.0-dev.3**（默认模板 Profile，`plans/1.2.0/`）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.3~dev.4 独立并行。
+> **状态：待执行**（承接 dev.2 已完成，2026-08-11；前置 catch2 包修复已推送 ezmk-repo）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
-> 详细设计：[`1.2.0-dev.2.md`](plans/1.2.0/1.2.0-dev.2.md)。本计划为 1.2.0 系列第二个开发子版本：**`ezmk project export cmake`（CMakeLists.txt 导出）**——`ezmk.toml` 为事实源，单向生成 CMake 生态可构建/索引的文件。
+> 详细设计：[`1.2.0-dev.5.md`](plans/1.2.0/1.2.0-dev.5.md)。本计划为 1.2.0 系列第五个开发子版本：**`ezmk test` catch2 v3 测试主程序兼容**——修复 `run_tests` 生成的 test_main 依赖 v2 的 `CATCH_CONFIG_MAIN`（v3 已移除）导致链接无入口的缺陷。
 >
-> **范围边界**：新增 `Command::ProjectExport` + `project export <target>` 子命令（首个 target `cmake`），新建 `src/export.cpp` 模块。项目级/编译/链接映射为 P0，依赖映射（`find_package` 别名表 + `--resolve`）为 P1，profiles/test/install/deterministic 为 P2（可选/延后）。纯新增命令，不触碰既有 API。
+> **范围边界**：只改 `src/build.cpp` `run_tests` 的 test_main 生成（v3 分支改显式 `main` + `Catch::Session().run()`，v2 vendor 分支保留原逻辑）。不新增命令、不弃用、不触碰公共 API。catch2 包内容修复（`ezmk-repo` `3b74cc1`）为前置、已交付。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口（含 P1/P2 决策）；② 公共 API 无破坏性变更（纯新增命令）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯内部生成逻辑）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
 
 ---
 
 ## 1 背景
 
-`ezmk.toml` 是 EazyMake 项目的唯一配置源。但大量 IDE（CLion / VS Code 扩展）、工具链、CI 与第三方库（`CMakeLists.txt` + `find_package` 生态）以 CMake 为事实标准。目前 EazyMake 项目**无法导出**到 CMake，用户想用 CMake 生态构建/索引 EazyMake 项目只能手写 `CMakeLists.txt`，既重复又易与 `ezmk.toml` 漂移。
+官方仓库 catch2 3.6.0 是 **v3**，而 v3 **已移除 `CATCH_CONFIG_MAIN`**（v2 机制），`main` 由库的 `catch_main.cpp` 提供或必须显式定义。`ezmk test`（`run_tests`）生成的 test_main 固定为 `#define CATCH_CONFIG_MAIN` + `#include <catch2/catch_all.hpp>`，在 v3 下**不产生任何 `main`** → 测试链接无入口（mingw 报 `undefined reference to WinMain`）。即使 catch2 包内容已修复，`ezmk test` 链路仍断。
 
-本计划新增 `ezmk project export cmake`：从当前项目 `ezmk.toml` **一键生成** `CMakeLists.txt`。**单向生成**（快照、勿手改）、**互操作**（`ezmk build` 与 CMake 生态可并行）、**命名可扩展**（`project export <target>` 为未来 make/meson 预留）。
+> **前置（已交付）**：catch2 3.6.0 包内容修复（`ezmk-repo` `3b74cc1`：107 实现 .cpp 平铺进 `src/`，`libcatch2.a` 含 106 成员 / 24939 实现符号）。本计划只修 EazyMake 侧 CLI。
 
 ---
 
@@ -22,60 +22,32 @@
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | 新增命令 `ezmk project export cmake`（`project export <target>` 首个 target 为 `cmake`） | P0 |
-| 2 | 项目级映射：`name/type/language/version` → `project()` + `add_executable`/`add_library(STATIC\|SHARED)` | P0 |
-| 3 | 编译映射：src_dirs、include_dirs（含 `@link:`）、flags（拆 `-std`/`-I`/`-D`）、macros、`ezmk_macros`、`msvc_flags`、stdlib | P0 |
-| 4 | 链接映射：link_dirs、system_targets、link flags（拆 `-L`/`-l`）、`link.msvc_flags` | P0 |
-| 5 | 安全：默认拒绝覆盖既有 `CMakeLists.txt`，`--overwrite` 才允许；文件头标注生成来源 | P0 |
-| 6 | 依赖映射（`[depends].lib`/`want`）best-effort：内置常见包别名映射 + `--resolve` 具体路径模式 | P1 |
-| 7 | 进阶映射：profiles / `[test]` / `[install]` / deterministic | P2（可选/延后） |
-| 8 | 全量测试零回归 + 单测/集成测试覆盖导出逻辑 | P0 |
+| 1 | v3 多头路径生成 **v3 兼容 main**：`#include <catch2/catch_session.hpp>` + 显式 `int main` 调 `Catch::Session().run(argc, argv)` | P0 |
+| 2 | v2 vendor 单头路径（`include/vendor/catch2.hpp`）**保持原逻辑**（`CATCH_CONFIG_MAIN`），不回归 | P0 |
+| 3 | 集成测试：建项目 + `[depends] lib=["catch2"]` + test 源 → `ezmk test` 端到端跑通（链接 + 运行 + 断言） | P0 |
+| 4 | 全量测试零回归 | P0 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：骨架与命令面
+### 阶段一：test_main 生成改造
 
-- [x] **1.1 命令解析**（4.1）：`Command::ProjectExport` + `project export <target>` 子命令解析；flags `-o/--output`、`--overwrite`、`--profile`、`--resolve`、`--glob`/`--no-glob`（`cli.hpp` / `cli.cpp`）
-- [x] **1.2 模块骨架**（4.1）：新建 `include/ezmk/export.hpp` + `src/export.cpp`——`export_cmake()` 入口 + 输出路径/覆盖检查；`main.cpp` 分发；`build.sh` 的 `SRC`/`TEST_SRC` 同步加入 `export.cpp`
-- [x] **1.3 项目定位**（4.1）：无 `ezmk.toml` → 复用项目定位逻辑报错；`--glob`（默认）`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 镜像 ezmk 运行时源收集语义
-- [x] 阶段一自测：`bash build.sh` 编译通过；`project export cmake` 可调用（含 `--overwrite` 拒绝/未知 target 报错）
+- [x] **1.1 方案验证**：显式 `int main` + `Catch::Session().run(argc, argv)` 链接 `libcatch2.a` 运行通过（`All tests passed`，1 断言）——v3 兼容方案可行
+- [ ] **1.2 代码改造**（4.1）：`src/build.cpp` `run_tests` test_main 生成——v3 多头分支 → `#include <catch2/catch_session.hpp>` + 显式 `int main`；v2 vendor 分支保留 `CATCH_CONFIG_MAIN`
+- [ ] **1.3 回归确认**（4.1）：`has_user_main` / 项目 `main.o` 排除逻辑不变；`write_needed` 内容比对逻辑适配新内容
 
-### 阶段二：项目级 + 编译映射
+### 阶段二：端到端验证
 
-- [x] **2.1 项目级映射**（4.2）：`project()` / `add_executable` / `add_library(STATIC\|SHARED)`；utils 类型跳过 + `message(WARNING)`；`header_only` → INTERFACE；`precompiled` → IMPORTED（§3.2/§3.6）
-- [x] **2.2 源收集**（4.3）：按 `project.language` 选扩展名（C++: `*.cpp *.cc *.cxx *.c++`；C: `*.c`），多 `src_dirs` 逐目录 glob 行；`--no-glob` → `target_sources` 显式列表（确定性）
-- [x] **2.3 编译映射**（4.3）：include_dirs（`@link:` 解析后项目内 `${CMAKE_CURRENT_SOURCE_DIR}/` 前缀、项目外绝对路径+注释）、宏 + `ezmk_macros`（复用 `generate_ezmk_macros()` 与构建注入一致）、`-std` → `CXX_STANDARD`/`CXX_EXTENSIONS`、flags 拆分（`-I`/`-D`/其余）、`msvc_flags` genex、stdlib best-effort genex
-- [x] 阶段二自测：`test_export.cpp` 各 project.type 输出 + 标志拆分/宏注入用例通过
+- [ ] **2.1 本地验证**（4.2）：建项目 + `[depends] lib=["catch2"]` + test 源 → `ezmk test` 链接/运行/断言通过（用修复后的 catch2 包，local-test 或 gitee 同步后 official）
+- [ ] **2.2 集成测试**（4.3）：`test/test_integration.cpp` 新增用例（依赖已装 catch2；离线 SKIP）
+- [ ] **2.3 全量回归**（4.4）：`bash build.sh test-all` 零回归（基线 668 用例 / 3074 断言）
 
-### 阶段三：链接映射 + 覆盖安全
+### 阶段三：文档与收口
 
-- [x] **3.1 链接映射**（4.4）：link_dirs → `target_link_directories`（`@link:` 解析）；system_targets → `target_link_libraries`（去 `-l`）；link.flags 去 `-L`/`-l` → `target_link_options`；`link.msvc_flags` genex
-- [x] **3.2 覆盖安全**（4.5）：目标已存在且无 `--overwrite` → 拒绝（exit 1）+ 现有文件摘要；文件头标注 `Generated by ezmk project export cmake ... do not hand-edit`
-- [x] **3.3 钩子处理**（设计 §3.1 行为约束）：`[hooks]` 不映射——生成注释块列出 `pre_build`/`post_build`/`on_failure` 并说明「EazyMake 沙箱 Lua，CMake 无等价物」；配置了钩子则 `message(WARNING)` 提示 CMake 构建不执行钩子后处理
-- [x] 阶段三自测：覆盖拒绝/`--overwrite`/`@link:` 解析/hooks 注释 + WARNING 用例通过
-
-### 阶段四：依赖映射（P1）
-
-- [x] **4.1 别名映射表**（4.6）：内置常见包映射（catch2/openssl/libcurl/protobuf/eigen/googletest/fmt/spdlog/nlohmann_json/sqlite3/zlib/lua/tomlplusplus…）
-- [x] **4.2 便携模式**（4.6）：`find_package(<Pkg> QUIET)` + `if(TARGET ...)` 链接 + `message(STATUS)` 提示；`[depends].want` 非 REQUIRED；未覆盖 → 占位 + 提示
-- [x] **4.3 `--resolve` 模式**（4.6）：解析已安装依赖（project → user → global），输出具体 include/lib 路径；文件内注明不可移植
-- [x] 阶段四自测：便携模式 / `--resolve` 用例通过（假装依赖定位 `.ezmk/pkg/fmt` → 具体路径）
-
-### 阶段五：i18n + 测试
-
-- [x] **5.1 i18n**（4.7）：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `export_*` / `help_*` key；`check_i18n.py` 三向一致通过（285 keys）
-- [x] **5.2 单测**（4.8）：新建 `test/test_export.cpp`（20 用例）——各 project.type 输出 / 标志拆分 / 宏注入 / `@link:` 解析 / 覆盖拒绝 / `--no-glob` / `--resolve` / utils 类型跳过 / hooks 注释 + WARNING / `--profile`
-- [x] **5.3 集成测试**（4.8）：`test/test_integration.cpp` 新增——建项目 → `project export cmake` → 校验产物内容；覆盖拒绝 / `--overwrite` / `-o`
-- [x] **5.4 全量回归**（4.8）：`bash build.sh test-all` 零回归（668 用例 / 3074 断言，基线 642 用例 / 2970 断言，净增 26 用例）
-
-### 阶段六：文档 + 进阶按需 + 收口
-
-- [x] **6.1 文档**（4.9）：`docs/en|zh/cli.md` 命令表（`project export cmake` + flags）、README、README_ZH、CHANGES.md（1.2.0-dev.2 条目）
-- [x] **6.2 进阶映射（P2，按需）**（4.10）：**决策：延后**——`--profile` 内联已覆盖 profiles 主路径；`[test]`/`[install]`/deterministic genex 并入正式版考虑，不阻塞 dev.2
-- [x] **6.3 发布门槛预检**：① 清单全部完成或明确收口（P1 依赖映射已实现；P2 明确延后）；② 公共 API 无破坏性变更（纯新增命令）；③ 全量测试零回归（668 用例 / 3074 断言）
-- [x] **6.4 交接推进**：dev.2 收口 → `plans/1.2.0/README.md` 状态更新（dev.2 **已完成**）；接续 dev.3（默认模板 Profile）或与 dev.1 协同验证 `project cc --profile` 对照
+- [ ] **3.1 文档**（4.5）：`CHANGES.md` 1.2.0-dev.5 条目（口径：`ezmk test` catch2 v3 兼容）
+- [ ] **3.2 发布门槛预检**：① 清单全部完成或明确收口；② 公共 API 无破坏性变更（纯内部生成逻辑）；③ 全量测试零回归
+- [ ] **3.3 交接推进**：dev.5 收口 → `plans/1.2.0/README.md` 状态更新（dev.5 完成）；esvm 侧回退 vendor + `[depends] lib=["catch2^3.6.0"]` 验证整条 `ezmk test` 链路（由 esvm 项目执行）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
@@ -85,17 +57,11 @@
 
 | 决策 | 说明 |
 |------|------|
-| **命令形态** | `Command::ProjectExport`，`export` 为 `project` 子命令，`<target>` 参数区分格式（首个 `cmake`，预留 make/meson）；与 `project cc` 一致不新增顶层别名 |
-| **单向快照语义** | `ezmk.toml` 是事实源，`CMakeLists.txt` 是一次性快照；文件头明确「重新生成、勿手改」；不读回同步 |
-| **flags** | `-o/--output`（默认 `<proj_root>/CMakeLists.txt`）、`--overwrite`、`--profile`、`--resolve`、`--glob`/`--no-glob` |
-| **源收集** | `--glob`（默认）`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 镜像 ezmk 运行时目录收集（新增文件不需重新导出）；`--no-glob` 显式列表（确定性、可审阅） |
-| **编译标志拆分** | `-std` → `CXX_STANDARD`/`CXX_EXTENSIONS`；`-I` → include；`-D` → definitions；其余 → compile_options；`msvc_flags` genex 包裹 |
-| **宏一致性** | `ezmk_macros` + `[compile].macros` 复用 `generate_ezmk_macros()`，与 `ezmk build` 注入完全一致，防止条件编译漂移 |
-| **`@link:` 一致性** | 导出路径解析复用 `config.cpp::resolve_link_path()`，与构建目录解析完全一致 |
-| **覆盖安全** | 无 `--overwrite` 且目标存在 → 拒绝（exit 1）+ 现有文件摘要 |
-| **依赖映射默认不 `--resolve`** | 安装路径（`~/.local` / `%LOCALAPPDATA%`）不可移植，默认便携 `find_package` + `if(TARGET)`；需立即可构建时 `--resolve` |
-| **header_only/precompiled** | `header_only` → `add_library(INTERFACE)`；`precompiled` → `add_library(IMPORTED)`（`IMPORTED_LOCATION` 指向 `lib/lib<name>.a`，`--resolve` 到安装路径） |
-| **hooks 不映射** | `[hooks]`（`pre_build`/`post_build`/`on_failure`）是 EazyMake 沙箱 Lua（`ezmk.*` API），CMake 无等价运行时；生成注释 + 配置了钩子则 `message(WARNING)`——与 `[utils]` 类型「跳过 + WARNING」同模式，避免静默丢失钩子后处理 |
+| **v3 显式 main** | v3 多头路径生成 `#include <catch2/catch_session.hpp>` + `int main(...){ return Catch::Session().run(argc, argv); }`——不再依赖已移除的 `CATCH_CONFIG_MAIN` |
+| **v2 路径不回归** | vendor 单头（`include/vendor/catch2.hpp`）保留 `#define CATCH_CONFIG_MAIN`，v2 行为不变 |
+| **项目 main 已排除** | `run_tests` 收集 `project_objs` 时跳过 `main.o`/`main.obj`（line 1651-1654），测试链接只有一个入口——无需改动 |
+| **`has_user_main` 不变** | 用户测试源自带 `int main(` / `CATCH_CONFIG_MAIN` 则跳过 test_main 生成 |
+| **无 i18n 变更** | 纯内部生成逻辑，无新用户可见文案 |
 
 ---
 
@@ -103,16 +69,16 @@
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 新增 `ezmk project export cmake` | 纯新增 | 不影响既有命令 |
-| 生成 `CMakeLists.txt` | 可能已存在手写文件 | 默认拒绝覆盖，`--overwrite` 显式覆盖 |
-| 依赖 best-effort 映射 | 生成的 CMake 可能需要手动调整 deps | 文件内注释 + `message(STATUS)` 提示 |
-| 导出为快照 | 与 `ezmk.toml` 可能漂移 | 文件头明确「重新生成、勿手改」；`--no-glob` 可选确定性输出 |
-| 新增模块 `src/export.cpp` | 纯新增 | 编译进 ezmk；`build.sh` `SRC`/`TEST_SRC` 同步加入 |
+| v3 多头 test_main 生成改显式 main | 修复前无 main 链接失败；修复后正常 | 显式 `main` + `Catch::Session().run()`，v2/v3 均有的稳定 API |
+| v2 vendor 单头路径 | 无 | 保留 `CATCH_CONFIG_MAIN`，行为不变 |
+| 用户测试源自带 main（`user_has_main`） | 无 | 跳过 test_main 生成，不变 |
+| 项目 `src/main.cpp` | 无 | 已在 `project_objs` 排除 `main.o`，不变 |
+| 公共 API / CLI | 无 | 纯内部生成逻辑，无接口变更 |
 
 ---
 
 ## 6 延后项
 
-- **P2 进阶映射**：profiles genex / `[test]` / `[install]` / deterministic——阶段六按需实现或明确延后（并入正式版或后续）。
-- **dev.3 默认模板 Profile / dev.4 CMake 项目导入**：1.2.0 系列后续子版本，独立并行；dev.2/dev.4 互为反向互补（导出/导入），共享包名别名表。
-- **承接 1.1.3 延后项**（归 1.2.0）：安装钩子权限门控（S1b）、watcher 静默死亡 / kqueue 缺口、宽窄字符路径 / i18n 二次替换、CLI 参数嵌入 NUL 完整防御、OVERLAPPED 池实例化重构——均不在 dev.2 范围。
+- **esvm 全链路验证**：dev.5 落地后，esvm 回退 vendor catch2、改回 `[depends] lib=["catch2^3.6.0"]` 验证整条 `ezmk test` 链路——由 esvm 项目执行，不在本计划范围。
+- **dev.3 默认模板 Profile / dev.4 CMake 导入**：1.2.0 系列后续子版本，独立并行。
+- **承接 1.1.3 延后项**（归 1.2.0）：安装钩子权限门控（S1b）、watcher 静默死亡 / kqueue 缺口、宽窄字符路径 / i18n 二次替换、CLI 参数嵌入 NUL 完整防御、OVERLAPPED 池实例化重构——均不在 dev.5 范围。
