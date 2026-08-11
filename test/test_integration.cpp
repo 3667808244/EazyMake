@@ -842,3 +842,97 @@ TEST_CASE("integration: deterministic build is reproducible with parallel jobs",
 
     REQUIRE(first == second);  // reproducible under -j
 }
+
+// 1.2.0: ezmk project cc — formal compile_commands generation command.
+TEST_CASE("integration: project cc generates compile_commands.json", "[integration][1.2.0]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "projcc_test";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    SECTION("default output path") {
+        ProcResult r = run_ezmk("project cc", proj_dir);
+        INFO("stderr: " << r.err);
+        INFO("stdout: " << r.out);
+        REQUIRE(r.exit_code == 0);
+
+        fs::path cc_file = proj_dir / "compile_commands.json";
+        REQUIRE(fs::exists(cc_file));
+        auto j = nlohmann::json::parse(file_read(cc_file));
+        REQUIRE(j.is_array());
+        REQUIRE(j.size() >= 1);
+        REQUIRE(j[0]["file"] == "src/main.cpp");
+    }
+
+    SECTION("-o custom path") {
+        ProcResult r = run_ezmk("project cc -o custom.json", proj_dir);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+        REQUIRE(fs::exists(proj_dir / "custom.json"));
+        REQUIRE(!fs::exists(proj_dir / "compile_commands.json"));
+    }
+
+    SECTION("--profile applies profile flags") {
+        {
+            std::ofstream of(proj_dir / "ezmk.toml", std::ios::app);
+            of << "\n[compile.profile.debug]\nflags = [\"-g\", \"-DDEBUG=1\"]\n";
+        }
+        ProcResult r = run_ezmk("project cc --profile debug", proj_dir);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+
+        auto j = nlohmann::json::parse(file_read(proj_dir / "compile_commands.json"));
+        std::vector<std::string> args = j[0]["arguments"].get<std::vector<std::string>>();
+        REQUIRE(std::find(args.begin(), args.end(), "-g") != args.end());
+        REQUIRE(std::find(args.begin(), args.end(), "-DDEBUG=1") != args.end());
+    }
+
+    SECTION("--profile=value form") {
+        {
+            std::ofstream of(proj_dir / "ezmk.toml", std::ios::app);
+            of << "\n[compile.profile.rel]\nflags = [\"-O3\"]\n";
+        }
+        ProcResult r = run_ezmk("project cc --profile=rel", proj_dir);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+
+        auto j = nlohmann::json::parse(file_read(proj_dir / "compile_commands.json"));
+        std::vector<std::string> args = j[0]["arguments"].get<std::vector<std::string>>();
+        REQUIRE(std::find(args.begin(), args.end(), "-O3") != args.end());
+    }
+}
+
+// 1.2.0: ezmk utils cc is deprecated — emits a warning, still redirects.
+TEST_CASE("integration: utils cc prints deprecation warning", "[integration][1.2.0]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "cc_deprec";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    ProcResult r = run_ezmk("utils cc", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+
+    // Deprecation notice + still functional.
+    std::string combined = r.out + r.err;
+    REQUIRE(combined.find("deprecated") != std::string::npos);
+    REQUIRE(combined.find("ezmk project cc") != std::string::npos);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(fs::exists(proj_dir / "compile_commands.json"));
+}

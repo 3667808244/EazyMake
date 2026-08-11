@@ -767,3 +767,59 @@ TEST_CASE("cli parse: project watch --auto-update", "[cli][gnu]") {
     REQUIRE(args.cmd == Command::ProjectWatch);
     REQUIRE(args.build_opts.auto_update == true);
 }
+
+// ===================================================================
+// 1.2.0 — project cc (generate compile_commands.json)
+// ===================================================================
+
+TEST_CASE("cli parse: project cc basic", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "cc"}).parse();
+    REQUIRE(args.cmd == Command::ProjectCc);
+    REQUIRE(args.project_cc_opts.has_value());
+    REQUIRE(args.project_cc_opts->output.empty());
+    REQUIRE(args.project_cc_opts->profile.empty());
+}
+
+TEST_CASE("cli parse: project cc -o custom.json", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "cc", "-o", "custom.json"}).parse();
+    REQUIRE(args.cmd == Command::ProjectCc);
+    REQUIRE(args.project_cc_opts->output == "custom.json");
+}
+
+TEST_CASE("cli parse: project cc --output custom.json", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "cc", "--output", "custom.json"}).parse();
+    REQUIRE(args.cmd == Command::ProjectCc);
+    REQUIRE(args.project_cc_opts->output == "custom.json");
+}
+
+TEST_CASE("cli parse: project cc --output=custom.json", "[cli][1.2.0][gnu]") {
+    auto args = TestArgs({"project", "cc", "--output=custom.json"}).parse();
+    REQUIRE(args.cmd == Command::ProjectCc);
+    REQUIRE(args.project_cc_opts->output == "custom.json");
+}
+
+TEST_CASE("cli parse: project cc --profile debug", "[cli][1.2.0]") {
+    auto args = TestArgs({"project", "cc", "--profile", "debug"}).parse();
+    REQUIRE(args.cmd == Command::ProjectCc);
+    REQUIRE(args.project_cc_opts->profile == "debug");
+}
+
+TEST_CASE("cli parse: project cc --profile=debug", "[cli][1.2.0][gnu]") {
+    auto args = TestArgs({"project", "cc", "--profile=debug"}).parse();
+    REQUIRE(args.cmd == Command::ProjectCc);
+    REQUIRE(args.project_cc_opts->profile == "debug");
+}
+
+TEST_CASE("cli parse: project cc rejects positionals", "[cli][1.2.0]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "cc", "foo.json"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: project cc missing -o value throws", "[cli][1.2.0][gnu]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "cc", "-o"}).parse(),
+        ezmk::fatal_error
+    );
+}

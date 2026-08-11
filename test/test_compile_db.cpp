@@ -223,3 +223,64 @@ TEST_CASE("generate_compile_db: no sources → warning, no output file", "[compi
     generate_compile_db(cin, tmp.path, out);
     REQUIRE(!fs::exists(out));
 }
+
+// ===================================================================
+// 1.2.0 — ezmk project cc: --profile applied via the config overload
+// (mirrors the `project cc --profile` CLI path: prepare_compile_input →
+// merge_compile_profile → build_compile_args).
+// ===================================================================
+
+TEST_CASE("generate_compile_db: --profile applies profile flags", "[compile_db][1.2.0]") {
+    CwdGuard guard;   // prepare_compile_input() collects sources under cwd
+    fs::path proj = fs::current_path();
+    fs::create_directories(proj / "src");
+    fs::create_directories(proj / "include");
+    { std::ofstream(proj / "src" / "main.cpp") << "int main() {}\n"; }
+
+    EzConfig cfg;
+    cfg.project.name = "profile_test";
+    cfg.project.type = "executable";
+    cfg.project.version = "0.1.0";
+    cfg.project.language = "C++17";
+    cfg.compile.flags = {"-Wall"};
+    cfg.compile.include_dirs = {"include"};
+    cfg.compile.src_dirs = {"src"};
+    cfg.compile_profiles["debug"] = ProfileConfig{{"-g", "-DDEBUG=1"}, {}, {}};
+
+    ezmk::cli::BuildOptions opts;
+    opts.profile = "debug";
+    fs::path out = proj / "compile_commands.json";
+    generate_compile_db(cfg, opts, proj, out);
+    REQUIRE(fs::exists(out));
+
+    auto j = nlohmann::json::parse(file_read(out));
+    REQUIRE(j.size() == 1);
+    std::vector<std::string> args = j[0]["arguments"].get<std::vector<std::string>>();
+    // Base flags kept + profile flags appended.
+    REQUIRE(std::find(args.begin(), args.end(), "-Wall") != args.end());
+    REQUIRE(std::find(args.begin(), args.end(), "-g") != args.end());
+    REQUIRE(std::find(args.begin(), args.end(), "-DDEBUG=1") != args.end());
+}
+
+TEST_CASE("generate_compile_db: unknown profile is rejected", "[compile_db][1.2.0]") {
+    CwdGuard guard;
+    fs::path proj = fs::current_path();
+    fs::create_directories(proj / "src");
+    fs::create_directories(proj / "include");
+    { std::ofstream(proj / "src" / "main.cpp") << "int main() {}\n"; }
+
+    EzConfig cfg;
+    cfg.project.name = "profile_test";
+    cfg.project.type = "executable";
+    cfg.project.version = "0.1.0";
+    cfg.project.language = "C++17";
+    cfg.compile.flags = {"-Wall"};
+    cfg.compile.include_dirs = {"include"};
+    cfg.compile.src_dirs = {"src"};
+
+    ezmk::cli::BuildOptions opts;
+    opts.profile = "nope";
+    fs::path out = proj / "compile_commands.json";
+    REQUIRE_THROWS_AS(generate_compile_db(cfg, opts, proj, out), ezmk::fatal_error);
+    REQUIRE(!fs::exists(out));
+}

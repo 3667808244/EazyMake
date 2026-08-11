@@ -50,9 +50,9 @@
 
 ### 阶段三：测试
 
-- [ ] **3.1 单测**（4.4）：`test/test_compile_db.cpp` 新增——`ezmk project cc` 输出 / `-o` 自定义路径 / `--profile` / 弃用提示
-- [ ] **3.2 集成测试**（4.4）：`test/test_integration.cpp` 新增——建项目 → `ezmk project cc` → 校验 JSON；`ezmk utils cc` 弃用提示
-- [ ] **3.3 全量回归**（4.4）：`bash build.sh test` + `test-all` 零回归（基线 630 用例 / 2918 断言，1.1.3 后）
+- [x] **3.1 单测**（4.4）：`test/test_cli.cpp` 解析用例（`project cc` 命令 / `-o` / `--output[=]` / `--profile[=]` / 拒绝 positional / 缺值报错）；`test/test_compile_db.cpp` 新增 `--profile` 生效（profile flags 追加）+ 未知 profile 拒绝（`fatal_error`）
+- [x] **3.2 集成测试**（4.4）：`test/test_integration.cpp` 新增——建项目 → `project cc` → 校验 JSON / `-o custom.json` / `--profile` 与 `--profile=` 应用 / `utils cc` 弃用提示且仍生成 JSON
+- [x] **3.3 全量回归**（4.4）：`bash build.sh test-all` 零回归（642 用例 / 2970 断言，基线 630 用例 / 2918 断言，净增 12 用例）
 
 ### 阶段四：文档与收口
 
