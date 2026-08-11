@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.2 执行计划
 
-> **状态：待执行**（承接 dev.1 已完成，2026-08-11）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.2~dev.4 独立并行。
+> **状态：已完成**（2026-08-11）。下一版本：**1.2.0-dev.3**（默认模板 Profile，`plans/1.2.0/`）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)，dev.3~dev.4 独立并行。
 >
 > 详细设计：[`1.2.0-dev.2.md`](plans/1.2.0/1.2.0-dev.2.md)。本计划为 1.2.0 系列第二个开发子版本：**`ezmk project export cmake`（CMakeLists.txt 导出）**——`ezmk.toml` 为事实源，单向生成 CMake 生态可构建/索引的文件。
 >
@@ -72,10 +72,10 @@
 
 ### 阶段六：文档 + 进阶按需 + 收口
 
-- [ ] **6.1 文档**（4.9）：`docs/en|zh/cli.md` 命令表（`project export cmake` + flags）、README、README_ZH、CHANGES.md（1.2.0-dev.2 条目）
-- [ ] **6.2 进阶映射（P2，按需）**（4.10）：profiles genex / `[test]` / `[install]` / deterministic best-effort——按需实现或明确延后
-- [ ] **6.3 发布门槛预检**：① 清单全部完成或明确收口（含 P1/P2 决策）；② 公共 API 无破坏性变更（纯新增）；③ 全量测试零回归
-- [ ] **6.4 交接推进**：dev.2 收口 → `plans/1.2.0/README.md` 状态更新（dev.2 完成）；接续 dev.3（默认模板 Profile）或与 dev.1 协同验证 `project cc --profile` 对照
+- [x] **6.1 文档**（4.9）：`docs/en|zh/cli.md` 命令表（`project export cmake` + flags）、README、README_ZH、CHANGES.md（1.2.0-dev.2 条目）
+- [x] **6.2 进阶映射（P2，按需）**（4.10）：**决策：延后**——`--profile` 内联已覆盖 profiles 主路径；`[test]`/`[install]`/deterministic genex 并入正式版考虑，不阻塞 dev.2
+- [x] **6.3 发布门槛预检**：① 清单全部完成或明确收口（P1 依赖映射已实现；P2 明确延后）；② 公共 API 无破坏性变更（纯新增命令）；③ 全量测试零回归（668 用例 / 3074 断言）
+- [x] **6.4 交接推进**：dev.2 收口 → `plans/1.2.0/README.md` 状态更新（dev.2 **已完成**）；接续 dev.3（默认模板 Profile）或与 dev.1 协同验证 `project cc --profile` 对照
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

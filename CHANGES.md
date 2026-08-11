@@ -12,6 +12,23 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.2 (2026-08-11) — CMakeLists.txt 导出
+
+1.2.0 系列第二个开发子版本：新增 **`ezmk project export cmake`**，从 `ezmk.toml` 一键生成 `CMakeLists.txt`（单向快照——`ezmk.toml` 为事实源，重新生成勿手改），让同一项目既可用 `ezmk build` 也可被 CMake 生态构建/索引。**不破坏任何公共 API**（纯新增命令，见文首 API Stability）。
+
+### 新增
+
+- **`ezmk project export cmake`**：命令挂在 `project` 命名空间下，`<target>` 参数区分导出格式（首个 `cmake`，为未来 `make`/`meson` 预留）
+  - **项目级映射**：`project()` / `add_executable` / `add_library(STATIC|SHARED)`；`utils` 类型跳过 + `message(WARNING)`；`header_only` → `INTERFACE`；`precompiled` → `IMPORTED`
+  - **编译映射**：`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 源收集（`--no-glob` 显式列表）；`include_dirs` 项目内 `${CMAKE_CURRENT_SOURCE_DIR}/` 前缀、`@link:` 外部路径绝对+注释；宏与 `ezmk build` 注入一致（复用 `generate_ezmk_macros()`）；`-std` → `CXX_STANDARD`/`CXX_EXTENSIONS`；flags 拆 `-I`/`-D`；`msvc_flags`/stdlib genex
+  - **链接映射**：`link_dirs` → `target_link_directories`；`system_targets` 与 `-l` → `target_link_libraries`；`link.flags` 去 `-L`/`-l` → `target_link_options`；`link.msvc_flags` genex
+  - **覆盖安全**：目标已存在且无 `--overwrite` → 拒绝（exit 1）；文件头标注生成来源
+  - **依赖映射（P1 best-effort）**：内置常见包别名表 + `find_package` 便携模式（`if(TARGET)` + `message(STATUS)` 提示）；`--resolve` 输出已安装依赖具体路径（不可移植）
+  - **`[hooks]` 不映射**：`pre_build`/`post_build`/`on_failure` 是 EazyMake 沙箱 Lua（`ezmk.*` API），CMake 无等价运行时——生成注释块 + `message(WARNING)`，避免 CMake 构建静默丢失钩子后处理
+  - flags：`-o/--output`、`--overwrite`、`--profile`、`--resolve`、`--glob`/`--no-glob`
+
+---
+
 ## 1.2.0-dev.1 (2026-08-11) — `ezmk project cc` 命令
 
 1.2.0 系列首个开发子版本：基于 1.1.1 的编译命令单一事实源（`build_compile_args()` + `compile_db`）新增**正式命令** `ezmk project cc`，并把 `ezmk utils cc` 从「拦截」过渡为「弃用提示」。**不破坏任何公共 API**（见文首 API Stability）。

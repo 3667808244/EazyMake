@@ -78,6 +78,7 @@ scripting and muscle memory.
 | `ezmk watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild (full: `ezmk project watch`) |
 | `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
 | `ezmk project cc [-o <path>] [--profile <p>]` | Generate `compile_commands.json` for clangd/LSP, 1.2.0+ |
+| `ezmk project export cmake [flags]` | Generate `CMakeLists.txt` from `ezmk.toml` (single-direction snapshot), 1.2.0+ |
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
 
