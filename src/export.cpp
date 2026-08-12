@@ -130,8 +130,11 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
     }
 
-    auto compile = effective_compile(cfg, opts.profile);
-    auto link = effective_link(cfg, opts.profile);
+    // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
+    const std::string profile =
+        opts.profile.empty() ? cfg.compile.default_profile : opts.profile;
+    auto compile = effective_compile(cfg, profile);
+    auto link = effective_link(cfg, profile);
 
     std::ostringstream os;
     os << "cmake_minimum_required(VERSION 3.16)\n";

@@ -39,6 +39,8 @@ static void generate_compile_db_entry(const std::string& output_path,
     auto cfg = ezmk::config::parse_config("ezmk.toml");
     ezmk::cli::BuildOptions opts;
     opts.profile = profile;
+    // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
+    if (opts.profile.empty()) opts.profile = cfg.compile.default_profile;
     auto proj_root = std::filesystem::current_path();
 
     std::filesystem::path out;
@@ -235,14 +237,17 @@ int main(int argc, char** argv) {
             auto proj_root = std::filesystem::current_path();
 
             // Build effective config (profile merge)
+            // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
+            std::string watch_profile = args.build_opts.profile;
+            if (watch_profile.empty()) watch_profile = cfg.compile.default_profile;
             ezmk::config::CompileSection compile_cfg = cfg.compile;
             ezmk::config::LinkSection link_cfg = cfg.link;
-            if (!args.build_opts.profile.empty()) {
-                auto it = cfg.compile_profiles.find(args.build_opts.profile);
+            if (!watch_profile.empty()) {
+                auto it = cfg.compile_profiles.find(watch_profile);
                 if (it != cfg.compile_profiles.end()) {
                     compile_cfg = ezmk::build::merge_compile_profile(compile_cfg, it->second);
                 }
-                auto lit = cfg.link_profiles.find(args.build_opts.profile);
+                auto lit = cfg.link_profiles.find(watch_profile);
                 if (lit != cfg.link_profiles.end()) {
                     link_cfg = ezmk::build::merge_link_profile(link_cfg, lit->second);
                 }

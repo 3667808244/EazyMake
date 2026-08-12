@@ -491,8 +491,11 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     // Apply build profile
     st.compile_cfg = cfg.compile;
     st.link_cfg = cfg.link;
-    if (!opts.profile.empty()) {
-        auto it = cfg.compile_profiles.find(opts.profile);
+    // 1.2.0-dev.3: no explicit --profile → fall back to [compile].default_profile (if set)
+    std::string active_profile = opts.profile;
+    if (active_profile.empty()) active_profile = cfg.compile.default_profile;
+    if (!active_profile.empty()) {
+        auto it = cfg.compile_profiles.find(active_profile);
         if (it != cfg.compile_profiles.end()) {
             st.compile_cfg = merge_compile_profile(st.compile_cfg, it->second);
         } else {
@@ -504,17 +507,17 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                     profile_names.push_back(name);
             std::sort(profile_names.begin(), profile_names.end());
 
-            auto matches = util::closest_match(opts.profile, profile_names, 2);
+            auto matches = util::closest_match(active_profile, profile_names, 2);
             if (!matches.empty()) {
                 std::string suggestion = matches[0];
                 for (size_t i = 1; i < matches.size() && i < 3; ++i)
                     suggestion += ", " + matches[i];
-                util::fatal(std::string("unknown profile: '") + opts.profile +
+                util::fatal(std::string("unknown profile: '") + active_profile +
                             "'. Did you mean: " + suggestion + "?");
             }
 
             if (profile_names.empty()) {
-                util::fatal(std::string("unknown profile: '") + opts.profile +
+                util::fatal(std::string("unknown profile: '") + active_profile +
                             "'. No profiles defined in ezmk.toml.");
             } else {
                 std::string avail;
@@ -522,11 +525,11 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                     if (i > 0) avail += ", ";
                     avail += profile_names[i];
                 }
-                util::fatal(std::string("unknown profile: '") + opts.profile +
+                util::fatal(std::string("unknown profile: '") + active_profile +
                             "'. Available: " + avail);
             }
         }
-        auto lit = cfg.link_profiles.find(opts.profile);
+        auto lit = cfg.link_profiles.find(active_profile);
         if (lit != cfg.link_profiles.end()) {
             st.link_cfg = merge_link_profile(st.link_cfg, lit->second);
         }
