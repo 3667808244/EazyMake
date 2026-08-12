@@ -46,6 +46,7 @@ struct CompileSection {
     bool deterministic = false;                // 1.1.0: reproducible builds
     uint64_t source_date_epoch = 0;            // 1.1.0: SOURCE_DATE_EPOCH override (0 = auto)
     bool compile_commands = false;             // 1.1.1: auto-generate compile_commands.json after build
+    std::string default_profile;               // 1.2.0-dev.3: profile used when no --profile given (may be empty)
 };
 
 struct LinkSection {

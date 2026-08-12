@@ -423,6 +423,11 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         if (auto cc = (*comp)["compile_commands"].as_boolean()) {
             cfg.compile.compile_commands = cc->get();
         }
+
+        // 1.2.0-dev.3: default_profile — default profile when no --profile given
+        if (auto dp = (*comp)["default_profile"].value<std::string>()) {
+            cfg.compile.default_profile = *dp;
+        }
     }
 
     // Apply default for include_dirs if empty
@@ -751,8 +756,17 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     content += "language = \"C++17\"\n";
     content += "\n";
     content += "[compile]\n";
-    content += "flags = [\"-Wall\", \"-Wextra\", \"-O2\"]\n";
+    content += "flags = [\"-Wall\", \"-Wextra\"]\n";
+    content += "default_profile = \"debug\"\n";
     content += "include_dirs = [\"include\"]\n";
+    content += "\n";
+    content += "[compile.profile.debug]\n";
+    content += "flags = [\"-g\", \"-O0\"]\n";
+    content += "msvc_flags = [\"/Zi\", \"/Od\"]\n";
+    content += "\n";
+    content += "[compile.profile.release]\n";
+    content += "flags = [\"-O2\", \"-DNDEBUG\"]\n";
+    content += "msvc_flags = [\"/O2\", \"/DNDEBUG\"]\n";
     content += "\n";
     content += "[link]\n";
     content += "flags = []\n";
