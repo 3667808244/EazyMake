@@ -93,6 +93,8 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `--disable-git-init` | 跳过 `git init` |
 | `--disable-gitignore` | 跳过 `.gitignore` 生成 |
 
+**生成的模板（1.2.0+）：** `project new` 生成的模板内建 `[compile.profile.debug]`（`-g -O0` / `/Zi /Od`）与 `[compile.profile.release]`（`-O2 -DNDEBUG` / `/O2 /DNDEBUG`）两个 profile，并设置 `default_profile = "debug"`——裸 `ezmk build` 开箱即可调试，`ezmk build --profile release` 切换到优化构建。基准 `[compile].flags` 仅为警告标志（`-Wall -Wextra`）。
+
 **`watch` 专属标志：** `--no-build-on-start` — 跳过初始构建，等待文件首次变更。
 
 **`install` 专属标志：**

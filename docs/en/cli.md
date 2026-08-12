@@ -104,6 +104,12 @@ scripting and muscle memory.
 | `--disable-git-init` | Skip `git init` |
 | `--disable-gitignore` | Skip `.gitignore` generation |
 
+**Generated template (1.2.0+):** `project new` scaffolds a template with built-in
+`[compile.profile.debug]` (`-g -O0` / `/Zi /Od`) and `[compile.profile.release]`
+(`-O2 -DNDEBUG` / `/O2 /DNDEBUG`) profiles and sets `default_profile = "debug"` — so a
+plain `ezmk build` is debuggable out of the box, and `ezmk build --profile release`
+switches to the optimized build. Base `[compile].flags` are warnings-only (`-Wall -Wextra`).
+
 **`watch`-only flag:** `--no-build-on-start` — skip the initial build; wait for the first change.
 
 **`install`-only flags:**

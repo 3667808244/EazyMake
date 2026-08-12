@@ -72,6 +72,7 @@ Prefix `GNU` before the language to enable GNU compiler extensions:
 | `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error |
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
 | `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
+| `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
 
@@ -251,11 +252,19 @@ flags = ["-O3", "-DNDEBUG"]
 msvc_flags = ["/O2", "/DNDEBUG"]
 ```
 
-Profiles do **not** auto-apply — the user must explicitly pass `--profile <name>`.
+Profiles do **not** auto-apply by default — without a `default_profile`, the user must explicitly pass `--profile <name>`.
 
-> **Why not auto-apply profiles?** A config file can't know which profile you want;
-> auto-applying would make builds depend on hidden state. Requiring `--profile`
-> keeps each invocation explicit and deterministic.
+**`default_profile` (1.2.0+) is the one exception.** If `[compile].default_profile` is set (e.g. `default_profile = "debug"`), a plain `ezmk build` **does** apply that profile automatically. Resolution priority:
+
+1. explicit `--profile <name>` — always wins
+2. `[compile].default_profile` — applied when non-empty and no `--profile` is given
+3. base-only — neither set
+
+> **Why the exception?** `default_profile` is *declared state*, not hidden state — the
+> project author chooses the default build shape explicitly, so users get a sensible
+> out-of-the-box build (e.g. debuggable) while still being able to override with
+> `--profile release`. When the field is absent, the old explicit-only rule still holds:
+> profiles never auto-apply and each invocation stays deterministic.
 
 ---
 

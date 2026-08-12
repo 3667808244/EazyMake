@@ -12,6 +12,26 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.3 (2026-08-12) — 默认模板内建 Debug/Release Profile
+
+1.2.0 系列第三个开发子版本：把 Debug/Release profile 固化进 `ezmk project new` 的默认模板，基准 `[compile].flags` 收敛为警告-only（优化归 profile），并新增 `[compile].default_profile` 配置项（模板内建 `"debug"`）——无 `--profile` 的默认构建开箱即可调试（`-g -O0`、断言开启），需优化时显式 `--profile release`。**不破坏任何公共 API**（纯模板变更 + 可选字段，见文首 API Stability）。
+
+### 新增
+
+- **`[compile].default_profile` 配置项**：声明"未显式 `--profile` 时默认使用哪个 profile"。非空时，`ezmk build` / `ezmk project watch` / `ezmk project cc` / `ezmk project export cmake` 四处消费点在无 `--profile` 时统一回退到该 profile（复用同一 profile 合并/unknown 报错路径）——compile_commands.json 与 CMake 导出和默认构建一致，避免"构建用 debug、索引/导出用基准"的分叉
+- **默认模板内建 profile**：`ezmk project new` 生成的 `ezmk.toml` 现包含 `[compile.profile.debug]`（`-g -O0` / `/Zi /Od`）与 `[compile.profile.release]`（`-O2 -DNDEBUG` / `/O2 /DNDEBUG`），跨 GCC/Clang/MSVC 一致
+
+### 行为变更
+
+| 变更 | 影响范围 | 说明 |
+|------|----------|------|
+| 基准 `-O2` 移除，改为警告-only（`-Wall -Wextra`） | **仅新建项目** | 旧项目 `ezmk.toml` 不被改写，行为不变 |
+| 模板内建 `default_profile = "debug"` | 新建项目 | 无 `--profile` 的默认构建 = debug（`-g -O0`、断言开启、无优化）；需优化时显式 `--profile release`——"优化属于 profile"的明确语义 |
+| 新增 debug/release profile | 新建项目 | 开箱可用 `--profile debug` / `--profile release`；默认构建即 debug |
+| 旧配置无 `default_profile` | 不受影响 | 无 `--profile` 时仍基准-only，行为不变 |
+
+---
+
 ## 1.2.0-dev.2 (2026-08-11) — CMakeLists.txt 导出
 
 1.2.0 系列第二个开发子版本：新增 **`ezmk project export cmake`**，从 `ezmk.toml` 一键生成 `CMakeLists.txt`（单向快照——`ezmk.toml` 为事实源，重新生成勿手改），让同一项目既可用 `ezmk build` 也可被 CMake 生态构建/索引。**不破坏任何公共 API**（纯新增命令，见文首 API Stability）。

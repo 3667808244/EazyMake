@@ -65,6 +65,7 @@
 | `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错 |
 | `ezmk_macros` | bool | 否 | `true` | **0.2.2+** 是否自动注入 `EZMK_*` 标准预处理器宏（`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`） |
 | `compile_commands` | bool | 否 | `false` | **1.1.1+** 构建成功后自动生成 `compile_commands.json`（clangd 索引） |
+| `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
 
@@ -227,9 +228,15 @@ flags = ["-O3", "-DNDEBUG"]
 msvc_flags = ["/O2", "/DNDEBUG"]
 ```
 
-Profile **不会**自动应用——用户必须显式传 `--profile <name>`。
+Profile 默认**不会**自动应用——没有 `default_profile` 时，用户必须显式传 `--profile <name>`。
 
-> **为什么 profile 不会自动应用？** 配置文件无法知道你此刻想要哪个 profile；自动应用会让构建结果取决于隐藏状态。显式传 `--profile` 使每次调用意图明确、结果可预测。
+**`default_profile`（1.2.0+）是唯一的例外。** 若设置了 `[compile].default_profile`（如 `default_profile = "debug"`），裸 `ezmk build` **会**自动应用该 profile。生效优先级：
+
+1. 显式 `--profile <name>`——始终优先
+2. `[compile].default_profile`——非空且未传 `--profile` 时应用
+3. 基准-only——两者皆无
+
+> **为什么允许例外？** `default_profile` 是**声明的状态**而非隐藏状态——由项目作者显式选定默认构建形态，用户开箱即得合理构建（如可调试），同时仍可用 `--profile release` 覆盖。字段缺省时，旧有的"仅显式"规则依旧成立：profile 永不自动应用，每次调用保持确定可预测。
 
 ---
 

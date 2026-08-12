@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.3 执行计划
 
-> **状态：待执行**（承接 dev.1/dev.2 已完成，2026-08-11）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-12，全量回归零失败）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.3.md`](plans/1.2.0/1.2.0-dev.3.md)。本计划为 1.2.0 系列第三个开发子版本：**默认模板内建 Debug/Release Profile + 默认 Profile 配置项**——`write_default_config()` 模板内置 `[compile.profile.debug/release]`，基准去 `-O2`、优化归 profile，新增 `[compile].default_profile`（模板内建 `"debug"`），无 `--profile` 时回退到该 profile。
 >
@@ -36,20 +36,20 @@
 
 ### 阶段一：模板与配置项
 
-- [ ] **1.1 模板**（4.1）：`write_default_config()` 更新——base 去 `-O2`、新增 `[compile.profile.debug/release]` 段、`[compile]` 增 `default_profile = "debug"`
-- [ ] **1.2 配置项**（4.2）：`CompileSection` 增 `std::string default_profile;`（`include/ezmk/config.hpp:39-49`）+ `parse_compile()`（`src/config.cpp:385-473`）读取 `[compile].default_profile`
+- [x] **1.1 模板**（4.1）：`write_default_config()` 更新——base 去 `-O2`、新增 `[compile.profile.debug/release]` 段、`[compile]` 增 `default_profile = "debug"`
+- [x] **1.2 配置项**（4.2）：`CompileSection` 增 `std::string default_profile;`（`include/ezmk/config.hpp`）+ `parse_compile()`（`src/config.cpp`）读取 `[compile].default_profile`
 
 ### 阶段二：回退逻辑（4 处消费点）
 
-- [ ] **2.1 主构建回退**（4.3）：`prepare_build_state()`（`src/build.cpp:494-533`）`opts.profile` 为空时回退 `cfg.compile.default_profile`，复用 profile 合并 / unknown 报错路径（含 did-you-mean）
-- [ ] **2.2 其他消费点**（4.3）：`project watch`（`src/main.cpp:240-249`）、`project cc`（`src/main.cpp:201`）、`export cmake`（`src/export.cpp:133-134`）无 `--profile` 时同款回退——保证 compile_commands.json / CMake 导出与默认构建一致
+- [x] **2.1 主构建回退**（4.3）：`prepare_build_state()`（`src/build.cpp`）`opts.profile` 为空时回退 `cfg.compile.default_profile`，复用 profile 合并 / unknown 报错路径（含 did-you-mean）
+- [x] **2.2 其他消费点**（4.3）：`project watch`（`src/main.cpp`）、`project cc`（`src/main.cpp`，`generate_compile_db_entry()` 统一覆盖 `utils cc` 弃用入口）、`export cmake`（`src/export.cpp`）无 `--profile` 时同款回退——保证 compile_commands.json / CMake 导出与默认构建一致
 
 ### 阶段三：测试与文档
 
-- [ ] **3.1 单测**（4.4）：`test_config.cpp`——`write_default_config()` 输出含两个 profile 段 + `default_profile = "debug"`、base 不含 `-O2`；parse `default_profile`（合法名/缺省为空）；`parse_config()` round-trip；既有 `write_default_config: no profile or hooks sections`（:1459）断言更新
-- [ ] **3.2 集成**（4.5）：`test_integration.cpp`——`ezmk project new` → 校验模板含 profile 段 + `default_profile = "debug"`；无 `--profile` `ezmk build` 默认 debug flags（`-g -O0`）；`--profile debug` / `--profile release` 构建成功
-- [ ] **3.3 文档**（4.6）：`docs/en|zh/config_file.md`（`[compile]` 段补 `default_profile`；改写 "Profiles do not auto-apply" → default_profile 例外 + 优先级）、`docs/en|zh/cli.md`（`project new` 提及新模板）、CHANGES.md
-- [ ] **3.4 回归**（4.7）：全量测试零回归（基线 546 用例 / 2617 断言）
+- [x] **3.1 单测**（4.4）：`test_config.cpp`——`write_default_config()` 输出含两个 profile 段 + `default_profile = "debug"`、base 不含 `-O2`；parse `default_profile`（合法名/缺省为空）；`parse_config()` round-trip；既有 `write_default_config: no profile or hooks sections` 断言更新；`test_project.cpp` `compile section defaults` 同步更新
+- [x] **3.2 集成**（4.5）：`test_integration.cpp`——`ezmk project new` → 校验模板含 profile 段 + `default_profile = "debug"`；无 `--profile` `ezmk build` 默认 debug flags（`-g -O0`）；`--profile debug` / `--profile release` 构建成功；既有 `project cc --profile debug` 用例改自定义 profile 名（模板已内建 debug）
+- [x] **3.3 文档**（4.6）：`docs/en|zh/config_file.md`（`[compile]` 段补 `default_profile`；改写 "Profiles do not auto-apply" → default_profile 例外 + 优先级）、`docs/en|zh/cli.md`（`project new` 提及新模板）、CHANGES.md
+- [x] **3.4 回归**（4.7）：全量测试零回归（`bash build.sh test-all`：670 用例 / 3109 断言，全通过）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

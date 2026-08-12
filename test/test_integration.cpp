@@ -881,11 +881,13 @@ TEST_CASE("integration: project cc generates compile_commands.json", "[integrati
     }
 
     SECTION("--profile applies profile flags") {
+        // 1.2.0-dev.3: the default template now ships [compile.profile.debug],
+        // so a custom profile must use a distinct name to avoid redefinition.
         {
             std::ofstream of(proj_dir / "ezmk.toml", std::ios::app);
-            of << "\n[compile.profile.debug]\nflags = [\"-g\", \"-DDEBUG=1\"]\n";
+            of << "\n[compile.profile.custom]\nflags = [\"-g\", \"-DDEBUG=1\"]\n";
         }
-        ProcResult r = run_ezmk("project cc --profile debug", proj_dir);
+        ProcResult r = run_ezmk("project cc --profile custom", proj_dir);
         INFO("stderr: " << r.err);
         REQUIRE(r.exit_code == 0);
 
@@ -986,5 +988,55 @@ TEST_CASE("integration: project export cmake generates CMakeLists.txt", "[integr
         REQUIRE(r.exit_code == 0);
         REQUIRE(fs::exists(proj_dir / "build" / "CMakeLists.txt"));
         REQUIRE(!fs::exists(proj_dir / "CMakeLists.txt"));
+    }
+}
+
+// 1.2.0-dev.3: default template embeds debug/release profiles + default_profile = "debug";
+// no --profile build falls back to the default profile.
+TEST_CASE("integration: default template profiles + default_profile fallback", "[integration][1.2.0-dev.3]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "dev3_tpl";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    SECTION("generated ezmk.toml embeds profiles + default_profile") {
+        std::string toml = file_read(proj_dir / "ezmk.toml");
+        REQUIRE(toml.find("default_profile = \"debug\"") != std::string::npos);
+        REQUIRE(toml.find("[compile.profile.debug]") != std::string::npos);
+        REQUIRE(toml.find("[compile.profile.release]") != std::string::npos);
+        // base [compile].flags is warnings-only — no -O* in the base line
+        REQUIRE(toml.find("flags = [\"-Wall\", \"-Wextra\"]") != std::string::npos);
+    }
+
+    SECTION("default build (no --profile) applies debug flags") {
+        ProcResult r = run_ezmk("build -v", proj_dir);
+        INFO("stderr: " << r.err);
+        INFO("stdout: " << r.out);
+        REQUIRE(r.exit_code == 0);
+        std::string combined = r.out + r.err;
+        REQUIRE(combined.find("-g") != std::string::npos);
+        REQUIRE(combined.find("-O0") != std::string::npos);
+    }
+
+    SECTION("--profile debug and --profile release both succeed") {
+        ProcResult dbg = run_ezmk("build --profile debug -v", proj_dir);
+        INFO("stderr: " << dbg.err);
+        REQUIRE(dbg.exit_code == 0);
+        REQUIRE((dbg.out + dbg.err).find("-O0") != std::string::npos);
+
+        ProcResult rel = run_ezmk("build --profile release -v", proj_dir);
+        INFO("stderr: " << rel.err);
+        REQUIRE(rel.exit_code == 0);
+        std::string rel_out = rel.out + rel.err;
+        REQUIRE(rel_out.find("-O2") != std::string::npos);
+        REQUIRE(rel_out.find("-DNDEBUG") != std::string::npos);
     }
 }

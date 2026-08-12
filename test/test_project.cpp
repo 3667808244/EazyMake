@@ -167,10 +167,13 @@ TEST_CASE("create_project: compile section defaults", "[project]") {
     create_project("def_cfg", "executable");
 
     auto cfg = parse_config(guard.temp_dir / "def_cfg/ezmk.toml");
-    REQUIRE(cfg.compile.flags.size() == 3);
+    // 1.2.0-dev.3: base flags are warnings-only; debug/release profiles + default_profile embedded
+    REQUIRE(cfg.compile.flags.size() == 2);
     REQUIRE(cfg.compile.flags[0] == "-Wall");
     REQUIRE(cfg.compile.flags[1] == "-Wextra");
-    REQUIRE(cfg.compile.flags[2] == "-O2");
+    REQUIRE(cfg.compile.default_profile == "debug");
+    REQUIRE(cfg.compile_profiles.count("debug") == 1);
+    REQUIRE(cfg.compile_profiles.count("release") == 1);
     REQUIRE(cfg.compile.include_dirs.size() == 1);
     REQUIRE(cfg.compile.include_dirs[0] == "include");
 }

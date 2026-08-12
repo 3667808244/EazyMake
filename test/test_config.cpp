@@ -592,7 +592,13 @@ TEST_CASE("write_default_config: round-trip executable", "[config]") {
     REQUIRE(cfg.project.type == "executable");
     REQUIRE(cfg.project.version == "0.1.0");
     REQUIRE(cfg.project.language == "C++17");
-    REQUIRE(cfg.compile.flags.size() == 3);
+    // 1.2.0-dev.3: base flags are warnings-only (no -O*); optimization belongs to profiles
+    REQUIRE(cfg.compile.flags.size() == 2);
+    REQUIRE(cfg.compile.flags[0] == "-Wall");
+    REQUIRE(cfg.compile.flags[1] == "-Wextra");
+    REQUIRE(cfg.compile.default_profile == "debug");
+    REQUIRE(cfg.compile_profiles.count("debug") == 1);
+    REQUIRE(cfg.compile_profiles.count("release") == 1);
     REQUIRE(cfg.compile.include_dirs.size() == 1);
     REQUIRE(cfg.compile.include_dirs[0] == "include");
     REQUIRE(cfg.depends.libs.empty());
@@ -1280,6 +1286,52 @@ LOG_LEVEL = "2"
     REQUIRE(debug.macros["LOG_LEVEL"] == "2");
 }
 
+// 1.2.0-dev.3: [compile].default_profile — default profile when no --profile given
+TEST_CASE("parse_config: [compile].default_profile parsing", "[config][1.2.0-dev.3]") {
+    using namespace ezmk::config;
+
+    SECTION("valid profile name is parsed") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+default_profile = "release"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.compile.default_profile == "release");
+    }
+
+    SECTION("absent field defaults to empty") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.compile.default_profile.empty());
+    }
+
+    SECTION("round-trip: empty default_profile stays empty") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+flags = ["-Wall"]
+)");
+        auto cfg = parse_config(toml);
+        fs::remove(toml);
+        REQUIRE(cfg.compile.default_profile.empty());
+        REQUIRE(cfg.compile.flags.size() == 1);
+        REQUIRE(cfg.compile.flags[0] == "-Wall");
+    }
+}
+
 TEST_CASE("parse_config: compile profile name must be alphanumeric", "[config][0.2.3]") {
     using namespace ezmk::config;
 
@@ -1453,10 +1505,12 @@ version = "0.1.0"
 }
 
 // ===================================================================
-// 0.2.3+: write_default_config does NOT include profiles or hooks
+// 1.2.0-dev.3: write_default_config embeds debug/release profiles + default_profile
+// (supersedes 0.2.3 "no profile or hooks sections": the default template now
+// ships compile profiles, but still no link profiles and no hooks)
 // ===================================================================
 
-TEST_CASE("write_default_config: no profile or hooks sections", "[config][0.2.3]") {
+TEST_CASE("write_default_config: built-in profiles + default_profile", "[config][1.2.0-dev.3]") {
     using namespace ezmk::config;
 
     auto tmp = fs::temp_directory_path() / "ezmk_test_nodefaults.toml";
@@ -1466,8 +1520,21 @@ TEST_CASE("write_default_config: no profile or hooks sections", "[config][0.2.3]
     auto cfg = parse_config(tmp);
     fs::remove(tmp);
 
-    // Verify no profiles or hooks are present in the default template
-    REQUIRE(cfg.compile_profiles.empty());
+    // Template embeds debug/release compile profiles + default_profile = "debug";
+    // base flags are warnings-only (no -O*); still no link profiles or hooks.
+    REQUIRE(cfg.compile.default_profile == "debug");
+    REQUIRE(cfg.compile.flags == std::vector<std::string>{"-Wall", "-Wextra"});
+    REQUIRE(cfg.compile_profiles.size() == 2);
+    REQUIRE(cfg.compile_profiles.count("debug") == 1);
+    REQUIRE(cfg.compile_profiles.count("release") == 1);
+    REQUIRE(cfg.compile_profiles["debug"].flags ==
+            std::vector<std::string>{"-g", "-O0"});
+    REQUIRE(cfg.compile_profiles["debug"].msvc_flags ==
+            std::vector<std::string>{"/Zi", "/Od"});
+    REQUIRE(cfg.compile_profiles["release"].flags ==
+            std::vector<std::string>{"-O2", "-DNDEBUG"});
+    REQUIRE(cfg.compile_profiles["release"].msvc_flags ==
+            std::vector<std::string>{"/O2", "/DNDEBUG"});
     REQUIRE(cfg.link_profiles.empty());
     REQUIRE(cfg.hooks.pre_build.empty());
     REQUIRE(cfg.hooks.post_build.empty());
