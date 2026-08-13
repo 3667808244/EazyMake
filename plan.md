@@ -42,9 +42,9 @@
 
 ### 阶段二：核心映射 + best-effort
 
-- [ ] **2.1 核心映射**（4.3）：§3.2 表格实现（project / executable / library / sources / includes / definitions / options / link）
-- [ ] **2.2 依赖 best-effort**（4.4）：`find_package` 包名映射（共享别名表）→ `[depends]` 注释条目 + i18n TODO
-- [ ] **2.3 条件编译 best-effort**（4.5）：平台条件求值 / 跳过未求值块 + TODO 注释
+- [x] **2.1 核心映射**（4.3）：§3.2 表格实现（project / executable / library / sources / includes / definitions / options / link）
+- [x] **2.2 依赖 best-effort**（4.4）：`find_package` 包名映射（共享别名表）→ `[depends]` 注释条目 + i18n TODO
+- [x] **2.3 条件编译 best-effort**（4.5）：平台条件求值 / 跳过未求值块 + TODO 注释
 
 ### 阶段三：拒绝逻辑 + 生成物
 

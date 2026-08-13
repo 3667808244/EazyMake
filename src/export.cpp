@@ -3,6 +3,7 @@
 #include "ezmk/util.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/i18n.hpp"
+#include "pkg_alias.hpp"      // 共享包别名表（dev.2 export / dev.4 import）
 
 #include <algorithm>
 #include <cctype>
@@ -79,27 +80,7 @@ config::LinkSection effective_link(const config::EzConfig& cfg,
     return l;
 }
 
-// Common package name → CMake find_package / imported-target mapping (best-effort).
-struct PkgAlias {
-    const char* pkg;    // [depends] entry name
-    const char* find;   // find_package(<find> QUIET)
-    const char* target; // linked target
-};
-const PkgAlias kPkgAliases[] = {
-    {"catch2",          "Catch2",             "Catch2::Catch2"},
-    {"openssl",         "OpenSSL",            "OpenSSL::SSL"},
-    {"libcurl",         "CURL",               "CURL::libcurl"},
-    {"protobuf",        "protobuf",           "protobuf::libprotobuf"},
-    {"eigen",           "Eigen3",             "Eigen3::Eigen"},
-    {"googletest",      "GTest",              "GTest::gtest"},
-    {"fmt",             "fmt",                "fmt::fmt"},
-    {"spdlog",          "spdlog",             "spdlog::spdlog"},
-    {"nlohmann_json",   "nlohmann_json",      "nlohmann_json::nlohmann_json"},
-    {"sqlite3",         "SQLite3",            "SQLite3::SQLite3"},
-    {"zlib",            "ZLIB",               "ZLIB::ZLIB"},
-    {"lua",             "Lua",                "Lua::Lua"},
-    {"tomlplusplus",    "tomlplusplus",       "tomlplusplus::tomlplusplus"},
-};
+// （包别名表已抽至 pkg_alias.hpp，见文件顶部 include）
 
 // Locate an installed package dir across project → user → global scopes.
 // Returns empty if not installed. Used by `--resolve`.
