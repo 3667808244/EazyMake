@@ -14,6 +14,7 @@ This project provides the following skills for AI coding agents. Load the releva
 | i18n | `.claude/skills/ezmk-i18n/SKILL.md` | Modifying translations or `i18n_keys.def` |
 | Planning | `.claude/skills/ezmk-planning/SKILL.md` | Working on version plans (`plans/`, `plan.md`) |
 | Repo | `.claude/skills/ezmk-repo/SKILL.md` | Managing packages in the official EazyMake repository |
+| Publish | `.claude/skills/ezmk-publish/SKILL.md` | Distributing a release to winget / Homebrew (manifests, formula, submission, pitfalls) |
 
 ## Quick reference
 
