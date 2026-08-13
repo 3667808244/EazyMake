@@ -56,11 +56,12 @@
 "复杂构建请使用 CMake" 不是推诿：
 
 - `ezmk project export cmake`（1.2.0）一条命令把你的 `ezmk.toml` 生成 `CMakeLists.txt`——项目变大需要离开时，是带走配置，而不是从零重写。
-- `ezmk project import --from cmake`（计划中，1.2.0）反向把标准 CMake 项目迁入 EazyMake。
+- `ezmk project import --from cmake`（1.2.0-dev.4）反向把标准 CMake 项目迁入 EazyMake。
 
 ## 相关
 
 - 设计理念 — [README](../../README_ZH.md)
+- 什么算"复杂"（用户视角）— [complex-builds.md](complex-builds.md)
 - 配置参考 — [config_file.md](config_file.md)
 - `utils` 多工具包 — [utils.md](utils.md)
 - Lua hooks — [config_file.md](config_file.md)

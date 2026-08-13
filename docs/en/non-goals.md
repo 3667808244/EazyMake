@@ -56,11 +56,12 @@ When a requirement hits one of these, the recommended move is to grow into CMake
 "Use CMake for complex builds" is not a dead end:
 
 - `ezmk project export cmake` (1.2.0) generates a `CMakeLists.txt` from your `ezmk.toml` in one command — when you outgrow EazyMake, you leave with your configuration, not from scratch.
-- `ezmk project import --from cmake` (planned, 1.2.0) is the reverse: bring a standard CMake project into EazyMake.
+- `ezmk project import --from cmake` (1.2.0-dev.4) is the reverse: bring a standard CMake project into EazyMake.
 
 ## Related
 
 - Design philosophy — [README](../../README.md)
+- What counts as "complex" (user-facing) — [complex-builds.md](complex-builds.md)
 - Configuration reference — [config_file.md](config_file.md)
 - `utils` multi-tool packages — [utils.md](utils.md)
 - Lua hooks — [config_file.md](config_file.md)

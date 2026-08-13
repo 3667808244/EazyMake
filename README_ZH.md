@@ -6,7 +6,7 @@
 
 简单的 C/C++ 构建工具 —— `ezmk`。支持 GCC、Clang 和 MSVC。
 
-**设计理念：** 易用优先，功能从简。复杂构建请使用 CMake。
+**设计理念：** 易用优先，功能从简。[复杂构建](docs/zh/complex-builds.md)请使用 CMake。
 
 > **v1.1.0 起公共 API 永久稳定。** 破坏性变更仅在 `2.0.0` 引入，并提前至少一个次版本发出弃用警告。详见 [CHANGES.md](CHANGES.md#api-stability)。
 

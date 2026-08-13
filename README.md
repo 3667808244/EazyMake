@@ -6,7 +6,7 @@
 
 A simple C/C++ build tool — `ezmk`. Supports GCC, Clang, and MSVC.
 
-**Design philosophy:** ease of use over feature richness. For complex builds, use CMake.
+**Design philosophy:** ease of use over feature richness. For [complex builds](docs/en/complex-builds.md), use CMake.
 
 > **Stable public API as of v1.1.0.** Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version. See [CHANGES.md](CHANGES.md#api-stability).
 
