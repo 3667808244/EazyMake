@@ -333,64 +333,6 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.1.0 (2026-07-28) — MSVC 包编译、确定性构建与产物安装
-
-首个次版本升级。补齐 MSVC 工具链在包管理中的完整支持，引入确定性构建与 lockfile 机制，新增 `project install` 命令。
-
-### MSVC 包编译
-
-- **`compile_package()` MSVC 感知**：归档阶段根据工具链选择 `lib.exe` → `.lib`（MSVC）或 `ar rcs` → `.a`（GCC/Clang），原子写入不变
-- **`Toolchain::version`**：`detect_toolchain()` 捕获编译器版本字符串（`g++ --version` / `cl` 首行输出），用于缓存失效判定
-- **`index.toml` `[platform]` 三元组**：平台键格式 `{os}_{arch}_{toolchain}`（如 `windows_x86_64_msvc`），解析时 fallback 到旧二元格式（映射到 GCC），向后兼容
-
-### Header-Only 包支持
-
-- **`pkg.toml` `header_only = true`**：0.9.8 遗留字段完成收尾 — 安装时跳过编译+归档，仅复制 `include/`；`ezmk pkg info` 显示 `Type: header-only`
-
-### 确定性构建
-
-- **`[compile]` 新增 `deterministic` + `source_date_epoch`**：GCC/Clang 注入 `-ffile-prefix-map` + `-frandom-seed`；MSVC 注入 `/Brepro`；自动设置 `SOURCE_DATE_EPOCH` 环境变量
-- **`SOURCE_DATE_EPOCH` 自动解析**：优先级：环境变量 → `ezmk.toml` 配置 → git HEAD commit 时间戳 → `ezmk.toml` mtime（fallback）
-- **`record.json` v1 → v2**：新增 `compiler` / `compiler_version` / `deterministic` 字段；编译器版本变化 → 自动清空缓存；`deterministic` 标志纳入编译选项签名
-
-### Lockfile（`ezmk.lock`）
-
-- **依赖版本与内容锁定**：TOML 格式，记录每个包的精确版本、`sha256`、平台、依赖图
-- **API**：`load()` / `save()` / `verify()` / `depends_changed()`
-- **集成点**：`ezmk pkg install` 自动生成/更新；`ezmk project build` 启动时校验完整性
-- **`--locked` / `--no-lock` CLI flags**：锁模式仅使用 lockfile 安装（不一致则报错）；`--no-lock` 跳过 lockfile 生成
-- **确定性构建联动**：`deterministic = true` 时 — lockfile 缺失或校验失败 → error；lockfile 内容哈希纳入编译缓存签名
-
-### `ezmk project install`
-
-- **`[install]` 配置节**：`prefix` / `bindir` / `libdir` / `includedir` / `sharedir`，支持 `~` 展开
-- **CLI**：`ezmk project install [--prefix <path>] [--dry-run] [--no-headers] [--no-data] [-v]`，简写 `pi`
-- **安装布局**：`executable` → `<bindir>/`；`static` → `<libdir>/`；`shared` → `<bindir>/`（DLL）+ `<libdir>/`（导入库）；头文件 → `<includedir>/<name>/`
-
-### 测试
-
-- 全量测试：**538 用例 / 2504 断言**，零回归
-- `record.json` v1→v2 测试更新（version 字段 1→2）
-
-### 多平台共包支持（dev.2）
-
-- **`util::detect_platform_tag()`**：新增简化平台标签（`win-x64` / `linux-x64` / `mac-arm64`），用于文件名匹配和索引过滤
-- **`select_precompiled_archive()`**：预编译包 `lib/` 下按 `lib<name>.<tag>.a` 自动选择当前平台产物；fallback 到无后缀文件（向后兼容）
-- **`index.toml` `platform` 字段**：`[[packages]]` 条目新增可选 `platform` 字段（`os-arch` 格式），`read_pkg_from_index()` 搜索时自动按平台过滤；缺失字段的旧条目视为全平台可用
-
-### `ezmk project pack`（dev.2）
-
-- **`util::create_targz()`**：新增 tar.gz 创建函数（ustar tar + raw deflate gzip），基于现有 miniz 库，零新依赖
-- **CLI**：`ezmk project pack [--output <dir>] [-v]`，简写 `pp`；将 `static` 项目一键打包为 `<name>-<version>.tar.gz`
-- **输出**：自动构建（如未构建）→ 收集 `include/` + `lib<name>.a` + `ezmk.toml` → 打包 → 打印 SHA-256；`-v` 模式额外输出 `index.toml` 条目模板
-
-### 其他（dev.2）
-
-- **`build.cpp`**：依赖包预编译归档收集改为平台感知（`select_precompiled_archive()`），避免多平台文件冲突
-- **i18n**：新增 5 个 key（`pack_*`），中英双语翻译
-
----
-
 ## 1.1.0-dev.6 (2026-08-01) — 测试系统
 
 新增 `ezmk project test`（`pt`）命令，支持 Catch2 和 ezmk 内置框架两种测试模式。
@@ -538,6 +480,70 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 ### 测试
 
 - 纯文档变更（skill 文件为 Markdown），不影响编译或测试；全量测试通过
+
+---
+
+## 1.1.0-dev.2 (2026-07-28) — 多平台共包与 project pack
+
+1.1.0 系列第二个开发子版本：多平台共包支持、`index.toml` 平台映射，以及 `ezmk project pack` 一键打包命令。
+
+### 多平台共包支持
+
+- **`util::detect_platform_tag()`**：新增简化平台标签（`win-x64` / `linux-x64` / `mac-arm64`），用于文件名匹配和索引过滤
+- **`select_precompiled_archive()`**：预编译包 `lib/` 下按 `lib<name>.<tag>.a` 自动选择当前平台产物；fallback 到无后缀文件（向后兼容）
+- **`index.toml` `platform` 字段**：`[[packages]]` 条目新增可选 `platform` 字段（`os-arch` 格式），`read_pkg_from_index()` 搜索时自动按平台过滤；缺失字段的旧条目视为全平台可用
+
+### `ezmk project pack`
+
+- **`util::create_targz()`**：新增 tar.gz 创建函数（ustar tar + raw deflate gzip），基于现有 miniz 库，零新依赖
+- **CLI**：`ezmk project pack [--output <dir>] [-v]`，简写 `pp`；将 `static` 项目一键打包为 `<name>-<version>.tar.gz`
+- **输出**：自动构建（如未构建）→ 收集 `include/` + `lib<name>.a` + `ezmk.toml` → 打包 → 打印 SHA-256；`-v` 模式额外输出 `index.toml` 条目模板
+
+### 其他
+
+- **`build.cpp`**：依赖包预编译归档收集改为平台感知（`select_precompiled_archive()`），避免多平台文件冲突
+- **i18n**：新增 5 个 key（`pack_*`），中英双语翻译
+
+---
+
+## 1.1.0-dev.1 (2026-07-28) — MSVC 包编译、确定性构建与产物安装
+
+1.1.0 系列首个开发子版本。补齐 MSVC 工具链在包管理中的完整支持，引入确定性构建与 lockfile 机制，新增 `project install` 命令。
+
+### MSVC 包编译
+
+- **`compile_package()` MSVC 感知**：归档阶段根据工具链选择 `lib.exe` → `.lib`（MSVC）或 `ar rcs` → `.a`（GCC/Clang），原子写入不变
+- **`Toolchain::version`**：`detect_toolchain()` 捕获编译器版本字符串（`g++ --version` / `cl` 首行输出），用于缓存失效判定
+- **`index.toml` `[platform]` 三元组**：平台键格式 `{os}_{arch}_{toolchain}`（如 `windows_x86_64_msvc`），解析时 fallback 到旧二元格式（映射到 GCC），向后兼容
+
+### Header-Only 包支持
+
+- **`pkg.toml` `header_only = true`**：0.9.8 遗留字段完成收尾 — 安装时跳过编译+归档，仅复制 `include/`；`ezmk pkg info` 显示 `Type: header-only`
+
+### 确定性构建
+
+- **`[compile]` 新增 `deterministic` + `source_date_epoch`**：GCC/Clang 注入 `-ffile-prefix-map` + `-frandom-seed`；MSVC 注入 `/Brepro`；自动设置 `SOURCE_DATE_EPOCH` 环境变量
+- **`SOURCE_DATE_EPOCH` 自动解析**：优先级：环境变量 → `ezmk.toml` 配置 → git HEAD commit 时间戳 → `ezmk.toml` mtime（fallback）
+- **`record.json` v1 → v2**：新增 `compiler` / `compiler_version` / `deterministic` 字段；编译器版本变化 → 自动清空缓存；`deterministic` 标志纳入编译选项签名
+
+### Lockfile（`ezmk.lock`）
+
+- **依赖版本与内容锁定**：TOML 格式，记录每个包的精确版本、`sha256`、平台、依赖图
+- **API**：`load()` / `save()` / `verify()` / `depends_changed()`
+- **集成点**：`ezmk pkg install` 自动生成/更新；`ezmk project build` 启动时校验完整性
+- **`--locked` / `--no-lock` CLI flags**：锁模式仅使用 lockfile 安装（不一致则报错）；`--no-lock` 跳过 lockfile 生成
+- **确定性构建联动**：`deterministic = true` 时 — lockfile 缺失或校验失败 → error；lockfile 内容哈希纳入编译缓存签名
+
+### `ezmk project install`
+
+- **`[install]` 配置节**：`prefix` / `bindir` / `libdir` / `includedir` / `sharedir`，支持 `~` 展开
+- **CLI**：`ezmk project install [--prefix <path>] [--dry-run] [--no-headers] [--no-data] [-v]`，简写 `pi`
+- **安装布局**：`executable` → `<bindir>/`；`static` → `<libdir>/`；`shared` → `<bindir>/`（DLL）+ `<libdir>/`（导入库）；头文件 → `<includedir>/<name>/`
+
+### 测试
+
+- 全量测试：**538 用例 / 2504 断言**，零回归
+- `record.json` v1→v2 测试更新（version 字段 1→2）
 
 ---
 
@@ -1011,3 +1017,20 @@ Windows 原生安装体验、端到端集成测试、三平台冒烟测试准备
 ### 测试
 - 测试套件：**192 个测试用例, 573 个断言全部通过**
 - i18n 专项测试：19 个 TEST_CASE, 118 个断言
+
+---
+
+## 0.1.6 (2026-06-20) — 测试基础设施与集成测试
+
+建立单元测试与端到端集成测试体系，为后续所有版本提供回归防线。
+
+### 新增
+- **Catch2 v3 单头集成**：`include/vendor/catch2.hpp`（header-only，无需额外编译）+ `test/test_main.cpp` 入口
+- **`build.sh test` 目标**：编译测试二进制（排除含自有 `main()` 的 `src/main.cpp`），`test -v` 编译并运行
+- **模块单元测试**：`test/test_config.cpp`、`test/test_crypto.cpp`（SHA-256 NIST 向量）、`test/test_util.cpp`、`test/test_cache.cpp`、`test/test_cli.cpp`、`test/test_build.cpp`、`test/test_project.cpp`、`test/test_pkg.cpp`、`test/test_repo.cpp` 覆盖各模块核心路径
+- **端到端集成测试**（`test/test_integration.cpp`）：项目生命周期（new/build/run/clean 各类型）、缓存正确性（命中/失效/损坏重建）、包生命周期（安装/校验/依赖链/钩子）、仓库生命周期（add/update/remove/scope 隔离）、CLI 集成
+
+### 注意事项
+- 测试独立于外部状态：文件系统测试用 `temp_directory_path()` + RAII 清理，不依赖特定项目结构
+- 编译器/git 相关测试先查工具可用性，不可用时 `SKIP`
+- 网络相关测试用本地文件/mock 绕过（URL 下载用本地 HTTP server、git 用临时 `git init` 仓库）
