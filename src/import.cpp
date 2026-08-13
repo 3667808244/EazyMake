@@ -604,8 +604,22 @@ std::string build_toml(const ImportedProject& p) {
 } // namespace
 
 // ===================================================================
-// 入口：import_project
+// 入口
 // ===================================================================
+
+std::string import_cmake_text(const std::string& cmakelists_src,
+                              const fs::path& project_root) {
+    auto calls = parse_cmake(cmakelists_src);
+
+    // 事务性中止：任何非声明式写法 → 报错退出，不产出半成品。
+    if (std::string rejected = find_rejection(calls); !rejected.empty())
+        util::fatal(i18n::I18nKey::import_reject_unsupported,
+                    {{"content", rejected}});
+
+    auto table = build_var_table(calls);
+    auto project = build_project(calls, table, project_root);
+    return build_toml(project);
+}
 
 int import_project(const cli::ProjectImportOptions& opts,
                    const fs::path& project_root) {
@@ -618,17 +632,7 @@ int import_project(const cli::ProjectImportOptions& opts,
         util::fatal(i18n::I18nKey::export_exists_refuse, {{"path", toml_file.string()}});
 
     std::string src = read_file(cmake_file);
-    auto calls = parse_cmake(src);
-
-    // 事务性中止：任何非声明式写法 → 报错退出，不产出半成品 ezmk.toml。
-    if (std::string rejected = find_rejection(calls); !rejected.empty())
-        util::fatal(i18n::I18nKey::import_reject_unsupported,
-                    {{"content", rejected}});
-
-    auto table = build_var_table(calls);
-    auto project = build_project(calls, table, project_root);
-
-    std::string text = build_toml(project);
+    std::string text = import_cmake_text(src, project_root);
 
     util::file_write(toml_file, text);
     util::info("wrote " + toml_file.string());

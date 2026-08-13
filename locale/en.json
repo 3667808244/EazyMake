@@ -252,6 +252,7 @@
     "help_project_pack": "Create distributable package (.tar.gz)",
     "help_project_cc": "Generate compile_commands.json for clangd",
     "help_project_export": "Generate CMakeLists.txt from ezmk.toml",
+    "help_project_import": "Import a CMake project into ezmk.toml (experimental)",
     "help_pkg_install": "Install a package (default scope: project)",
     "help_pkg_remove": "Remove a package (default: -pug)",
     "help_pkg_search": "Search for a package (default: -pug)",

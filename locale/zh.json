@@ -252,6 +252,7 @@
     "help_project_pack": "创建可分发的构建包 (.tar.gz)",
     "help_project_cc": "为 clangd 生成 compile_commands.json",
     "help_project_export": "从 ezmk.toml 生成 CMakeLists.txt",
+    "help_project_import": "导入 CMake 项目为 ezmk.toml（实验性）",
     "help_pkg_install": "安装包 (默认作用域: 项目)",
     "help_pkg_remove": "移除包 (默认: -pug)",
     "help_pkg_search": "搜索包 (默认: -pug)",

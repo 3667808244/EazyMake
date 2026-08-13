@@ -289,6 +289,7 @@ EZMK_I18N_KEY(help_project_test)           // 1.1.0-dev.6
 EZMK_I18N_KEY(help_project_pack)           // 1.1.0-pre.1
 EZMK_I18N_KEY(help_project_cc)             // 1.2.0
 EZMK_I18N_KEY(help_project_export)         // 1.2.0
+EZMK_I18N_KEY(help_project_import)         // 1.2.0
 EZMK_I18N_KEY(help_section_daily)          // 1.1.0-pre.1
 EZMK_I18N_KEY(help_section_init)           // 1.1.0-pre.1
 EZMK_I18N_KEY(help_section_advanced)       // 1.1.0-pre.1

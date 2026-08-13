@@ -885,6 +885,7 @@ namespace ezmk::cli
         row("ezmk project pack [--output <dir>]", I18nKey::help_project_pack);
         row("ezmk project cc   [-o <path>] [--profile <p>]", I18nKey::help_project_cc);
         row("ezmk project export cmake [flags]", I18nKey::help_project_export);
+        row("ezmk project import [--from <fmt>] [--overwrite]", I18nKey::help_project_import);
         std::cout << "\n";
 
         // ── §3: Package & repo management (advanced) ──────────────

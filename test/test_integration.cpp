@@ -991,6 +991,79 @@ TEST_CASE("integration: project export cmake generates CMakeLists.txt", "[integr
     }
 }
 
+// 1.2.0: ezmk project import — convert a CMake project into ezmk.toml.
+TEST_CASE("integration: project import converts CMake to ezmk.toml", "[integration][1.2.0]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    fs::create_directories(tmp.path / "src");
+    file_write(tmp.path / "CMakeLists.txt",
+        "cmake_minimum_required(VERSION 3.16)\n"
+        "project(imp_app VERSION 0.5.0 LANGUAGES CXX)\n"
+        "set(SRCS src/main.cpp)\n"
+        "add_executable(imp_app ${SRCS})\n"
+        "target_compile_definitions(imp_app PRIVATE FOO=1)\n");
+    file_write(tmp.path / "src" / "main.cpp",
+        "#include <cstdio>\nint main() { std::printf(\"%d\", FOO); return 0; }\n");
+
+    SECTION("basic import produces ezmk.toml") {
+        ProcResult r = run_ezmk("project import --from cmake", tmp.path);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+        fs::path out = tmp.path / "ezmk.toml";
+        REQUIRE(fs::exists(out));
+        std::string content = file_read(out);
+        REQUIRE(content.find("name = \"imp_app\"") != std::string::npos);
+        REQUIRE(content.find("version = \"0.5.0\"") != std::string::npos);
+        REQUIRE(content.find("src_dirs = [\"src\"]") != std::string::npos);
+        REQUIRE(content.find("\"FOO\" = \"1\"") != std::string::npos);
+    }
+
+    SECTION("case-insensitive --from") {
+        ProcResult r = run_ezmk("project import --from CMAKE", tmp.path);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code == 0);
+        REQUIRE(fs::exists(tmp.path / "ezmk.toml"));
+    }
+
+    SECTION("refuses overwrite without --overwrite") {
+        ProcResult first = run_ezmk("project import", tmp.path);
+        REQUIRE(first.exit_code == 0);
+
+        ProcResult second = run_ezmk("project import", tmp.path);
+        INFO("stderr: " << second.err);
+        REQUIRE(second.exit_code != 0);
+        std::string combined = second.out + second.err;
+        REQUIRE(combined.find("overwrite") != std::string::npos);
+
+        ProcResult third = run_ezmk("project import --overwrite", tmp.path);
+        REQUIRE(third.exit_code == 0);
+    }
+
+    SECTION("imported project builds and runs") {
+        REQUIRE(run_ezmk("project import", tmp.path).exit_code == 0);
+        ProcResult build = run_ezmk("build", tmp.path);
+        INFO("stderr: " << build.err);
+        REQUIRE(build.exit_code == 0);
+        std::string run_out = run_ezmk("run", tmp.path).out;
+        REQUIRE(run_out.find("1") != std::string::npos);
+    }
+
+    SECTION("rejects non-standard custom commands transactionally") {
+        file_write(tmp.path / "CMakeLists.txt",
+            "project(x LANGUAGES CXX)\n"
+            "add_executable(x main.cpp)\n"
+            "add_custom_command(TARGET x POST_BUILD COMMAND echo hi)\n");
+        ProcResult r = run_ezmk("project import", tmp.path);
+        INFO("stderr: " << r.err);
+        REQUIRE(r.exit_code != 0);
+        REQUIRE(!fs::exists(tmp.path / "ezmk.toml"));  // 不产出半成品
+    }
+}
+
 // 1.2.0-dev.3: default template embeds debug/release profiles + default_profile = "debug";
 // no --profile build falls back to the default profile.
 TEST_CASE("integration: default template profiles + default_profile fallback", "[integration][1.2.0-dev.3]") {
