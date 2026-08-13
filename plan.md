@@ -1,20 +1,20 @@
-# EazyMake 1.2.0-dev.3 执行计划
+# EazyMake 1.2.0-dev.4 执行计划
 
-> **状态：已完成**（2026-08-12，全量回归零失败）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：待实现**。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
-> 详细设计：[`1.2.0-dev.3.md`](plans/1.2.0/1.2.0-dev.3.md)。本计划为 1.2.0 系列第三个开发子版本：**默认模板内建 Debug/Release Profile + 默认 Profile 配置项**——`write_default_config()` 模板内置 `[compile.profile.debug/release]`，基准去 `-O2`、优化归 profile，新增 `[compile].default_profile`（模板内建 `"debug"`），无 `--profile` 时回退到该 profile。
+> 详细设计：[`1.2.0-dev.4.md`](plans/1.2.0/1.2.0-dev.4.md)。本计划为 1.2.0 系列第四个开发子版本：**CMake 项目导入（实验性）**——新增 `ezmk project import --from cmake`，把标准 CMake 项目**单向转换**为 `ezmk.toml`，与 dev.2 的 `export cmake` 构成反向互补。
 >
-> **范围边界**：只改 `write_default_config()` 模板、`CompileSection.default_profile` 字段与 `parse_compile()` 读取、以及 4 处 `--profile` 消费点（build / watch / `project cc` / `export cmake`）的回退逻辑。不新增命令、不弃用、不触碰公共 API。
+> **范围边界**：新增 `ezmk project import` 命令（`--from` 仅 cmake、大小写不敏感、`--overwrite`）。轻量 CMake 解析器 + 核心命令映射 + `find_package`/条件编译 best-effort + 非声明式写法事务性拒绝。不触碰既有命令、不弃用、不破坏公共 API。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯内部模板与可选字段）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯新增命令 + flag）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
 
 ---
 
 ## 1 背景
 
-`ezmk project new` 生成的默认 `ezmk.toml` 目前只有基准 `[compile].flags = ["-Wall", "-Wextra", "-O2"]`，无内建 profile——用户要 Debug/Release 需手写 `[compile.profile.*]`（新手不友好、易漏 `msvc_flags`）。同时基准 `-O2` 隐含"默认即优化"，与"优化级别属于 profile"的清晰语义相悖。
+使用 CMake 的项目无法直接导入 EazyMake，可能影响 CMake 用户转化。dev.2 的 `ezmk project export cmake` 提供 EazyMake → CMake 单向导出；本计划补齐反向通道：**CMake → EazyMake** 的 `ezmk project import`，让标准 CMake 项目无缝转化为 EazyMake 项目。
 
-本计划：把 Debug/Release profile 固化进默认模板，基准收敛为警告-only；并新增 `[compile].default_profile` 配置项（模板内建 `"debug"`），让无 `--profile` 的默认构建开箱即可调试、断言开启，需优化时显式 `--profile release`。
+定位：**实验性**（转换 best-effort，非标准写法明确拒绝并指引手动迁移）；**单向快照**（转换后 `ezmk.toml` 成为唯一事实源）；面向「最最标准」的 CMake 项目，覆盖大多数小型/单 target 项目。
 
 ---
 
@@ -22,34 +22,43 @@
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | 默认模板内建 `[compile.profile.debug]` 与 `[compile.profile.release]`（含 `flags` + `msvc_flags`），跨 GCC/Clang/MSVC 一致 | P0 |
-| 2 | 基准 `[compile].flags` 收敛为警告-only（`["-Wall", "-Wextra"]`），优化级别移入 profile | P0 |
-| 3 | 新增 `[compile].default_profile` 配置项：声明"无显式 `--profile` 时默认使用的 profile"；模板内建 `"debug"` | P0 |
-| 4 | 新项目开箱 `ezmk build` 默认即 debug 构建；`--profile debug` / `--profile release` 显式可用 | P0 |
-| 5 | 仅影响**新创建**项目；既有 `ezmk.toml` 不变 | P0 |
-| 6 | 单测 + 集成测试覆盖模板内容、default_profile 解析/回退与 profile 构建 | P0 |
-| 7 | 文档同步（config_file.md 改写 "not auto-apply" 表述 / project new 说明） | P1 |
+| 1 | 新增 `ezmk project import` 命令（`--from` 目前仅支持 `cmake`，大小写不敏感） | P0 |
+| 2 | 支持标准 CMake 命令的转换（§3.2 命令列表），核心目标场景零手工迁移 | P0 |
+| 3 | `find_package` 依赖 best-effort：生成注释掉的 `[depends]` 条目 + i18n TODO 提示 | P1 |
+| 4 | 非声明式写法（自定义命令/生成器表达式/函数宏/外部依赖查找）**明确拒绝**：事务性中止 + i18n 报错 + 迁移文档指引 | P0 |
+| 5 | 生成物 `ezmk.toml` 头部注释（来源/版本/时间戳/实验性警告） | P1 |
+| 6 | i18n key + en/zh 翻译，`check_i18n.py` 三向一致 | P0 |
+| 7 | 单测 + 集成测试覆盖解析/映射/拒绝/条件编译；全量测试零回归 | P0 |
+| 8 | 迁移文档与教程编写 | P1 |
 
 ---
 
 ## 3 执行阶段
 
-### 阶段一：模板与配置项
+### 阶段一：命令骨架 + 解析器
 
-- [x] **1.1 模板**（4.1）：`write_default_config()` 更新——base 去 `-O2`、新增 `[compile.profile.debug/release]` 段、`[compile]` 增 `default_profile = "debug"`
-- [x] **1.2 配置项**（4.2）：`CompileSection` 增 `std::string default_profile;`（`include/ezmk/config.hpp`）+ `parse_compile()`（`src/config.cpp`）读取 `[compile].default_profile`
+- [ ] **1.1 命令骨架**（4.1）：`Command::ProjectImport` + `--from`（默认 cmake、大小写不敏感）+ `--overwrite`；`main.cpp` 分发
+- [ ] **1.2 解析器**（4.2）：轻量 CMake 函数调用解析（命令名 + 参数，处理引号/括号嵌套/`#` 注释/`[[...]]`）+ 有限 `set()` 变量表 + 单层 `${VAR}` 展开（§3.2「变量展开策略」）
 
-### 阶段二：回退逻辑（4 处消费点）
+### 阶段二：核心映射 + best-effort
 
-- [x] **2.1 主构建回退**（4.3）：`prepare_build_state()`（`src/build.cpp`）`opts.profile` 为空时回退 `cfg.compile.default_profile`，复用 profile 合并 / unknown 报错路径（含 did-you-mean）
-- [x] **2.2 其他消费点**（4.3）：`project watch`（`src/main.cpp`）、`project cc`（`src/main.cpp`，`generate_compile_db_entry()` 统一覆盖 `utils cc` 弃用入口）、`export cmake`（`src/export.cpp`）无 `--profile` 时同款回退——保证 compile_commands.json / CMake 导出与默认构建一致
+- [ ] **2.1 核心映射**（4.3）：§3.2 表格实现（project / executable / library / sources / includes / definitions / options / link）
+- [ ] **2.2 依赖 best-effort**（4.4）：`find_package` 包名映射（共享别名表）→ `[depends]` 注释条目 + i18n TODO
+- [ ] **2.3 条件编译 best-effort**（4.5）：平台条件求值 / 跳过未求值块 + TODO 注释
 
-### 阶段三：测试与文档
+### 阶段三：拒绝逻辑 + 生成物
 
-- [x] **3.1 单测**（4.4）：`test_config.cpp`——`write_default_config()` 输出含两个 profile 段 + `default_profile = "debug"`、base 不含 `-O2`；parse `default_profile`（合法名/缺省为空）；`parse_config()` round-trip；既有 `write_default_config: no profile or hooks sections` 断言更新；`test_project.cpp` `compile section defaults` 同步更新
-- [x] **3.2 集成**（4.5）：`test_integration.cpp`——`ezmk project new` → 校验模板含 profile 段 + `default_profile = "debug"`；无 `--profile` `ezmk build` 默认 debug flags（`-g -O0`）；`--profile debug` / `--profile release` 构建成功；既有 `project cc --profile debug` 用例改自定义 profile 名（模板已内建 debug）
-- [x] **3.3 文档**（4.6）：`docs/en|zh/config_file.md`（`[compile]` 段补 `default_profile`；改写 "Profiles do not auto-apply" → default_profile 例外 + 优先级）、`docs/en|zh/cli.md`（`project new` 提及新模板）、CHANGES.md
-- [x] **3.4 回归**（4.7）：全量测试零回归（`bash build.sh test-all`：670 用例 / 3109 断言，全通过）
+- [ ] **3.1 拒绝逻辑**（4.6）：非声明式写法检测 + **事务性中止** + i18n 报错 + 迁移文档指引
+- [ ] **3.2 生成物**（4.7）：头部注释（来源/版本/时间戳/实验性警告）+ 覆盖拒绝
+
+### 阶段四：i18n + 测试
+
+- [ ] **4.1 i18n**（4.8）：`import_*`/`help_*` key（en/zh），`check_i18n.py` 通过
+- [ ] **4.2 测试**（4.9）：单测（解析器引号/嵌套/注释、核心映射、`find_package` 注释、拒绝中止、条件编译、覆盖拒绝）+ 集成（样例 CMake 项目导入校验）；全量零回归
+
+### 阶段五：文档/教程
+
+- [ ] **5.1 文档**（4.10）：迁移文档 `docs/en|zh/migrate-from-cmake.md`（新建）+ `cli.md`/`config_file.md` 补充 + 教程 11-import-cmake + README/CHANGES.md
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
@@ -59,12 +68,12 @@
 
 | 决策 | 说明 |
 |------|------|
-| **default_profile 解析顺序** | 显式 `--profile <name>` > `[compile].default_profile`（非空时）> 基准-only；旧配置无此字段 → 行为不变 |
-| **模板内建 `"debug"`** | 开箱 `ezmk build` 默认 = debug（`-Wall -Wextra -g -O0`，可调试、断言开启）；需优化时显式 `--profile release` |
-| **4 处消费点统一回退** | build / watch / `project cc` / `export cmake` 无 `--profile` 均回退 default_profile——compile_commands.json 与 CMake 导出和默认构建一致，避免"构建用 debug、索引/导出用基准"分叉 |
-| **unknown profile 复用现有报错** | default_profile 指向不存在的 profile → 走既有 `prepare_build_state()` unknown-profile fatal（含 did-you-mean），不新增错误路径 |
-| **不内建 `[link.profile.*]` / profile macros** | 模板保持最小；用户按需自行追加 |
-| **无新 i18n key** | 模板内容非用户消息，无需 i18n |
+| **有限单层变量展开** | 仅捕获顶层、条件块外的常量 `set()`（值不含 `${}`/`$<...>`/`$ENV{}`）；变量被任何命令修改即剔除；只在映射命令参数上单层 `${VAR}` 展开；结果仍含 `${}`/`$<...>` → 该参数不可解析 |
+| **best-effort vs 明确拒绝** | `${VAR}`/`find_package`/无法求值的条件块 → best-effort 跳过 + `# TODO` 注释，**不中止**；生成器表达式/自定义命令/函数宏/`pkg_check_modules`/`execute_process` → **事务性中止** + i18n 报错 |
+| **共享包名别名表** | dev.2 导出（CMake target ← ezmk 包）与 dev.4 导入（find_package 名 → ezmk 包）共用同一张常见包别名表（`src/pkg_alias.hpp`），避免两处漂移 |
+| **`--overwrite` 默认拒绝** | 项目根已存在 `ezmk.toml` 时默认拒绝（保护手写配置），显式传 flag 才覆盖 |
+| **事务性中止** | 拒绝时绝不产出半成品 `ezmk.toml`，报错 + 指向迁移文档（用 Lua `[hooks]` 复刻自定义步骤） |
+| **实验性定位** | `--from cmake` 稳定前语义可调整；破坏性调整集中于 2.0.0 窗口，不纳入 API 稳定性承诺 |
 
 ---
 
@@ -72,16 +81,18 @@
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 新增 profile 段（模板） | 纯新增 | 新项目开箱可用；旧项目不变 |
-| 新增 `[compile].default_profile`（可选字段） | 纯新增 | 旧配置无此字段 → 无 `--profile` 时仍基准-only，行为不变；模板内建 `"debug"` 仅影响新建项目 |
-| base 移除 `-O2`（模板） | 新建项目默认构建 = debug（`-g -O0`，无优化、断言开启） | 需要优化时显式 `--profile release`；CHANGES.md 明确 |
-| 无新 i18n key | 无 | 模板内容非用户消息 |
-| 无新命令 / 无既有字段语义变化 | 无 | 仅新增可选字段；`--profile` 显式优先级不变 |
+| 新增 `ezmk project import` | 纯新增命令 | 不影响既有命令 |
+| `--from` 仅支持 cmake | 新 flag | 未来扩展其他格式，向后兼容 |
+| 已存在 `ezmk.toml` | 默认拒绝 | `--overwrite` 显式覆盖 |
+| 拒绝非标准写法 | 转换中止 | 不产出半成品；报错 + 迁移文档指引 |
+| 生成物为快照 | 与 CMakeLists.txt 单向 | 转换后以 `ezmk.toml` 为准，头部注释说明 |
+| 实验性功能 | 输出提示 | 稳定前语义可调整，不纳入 API 稳定性承诺 |
 
 ---
 
 ## 6 延后项
 
-- **profile macros 内建**（如 debug 注入 `DEBUG=1`）：可选增强，本版不做——用户按需在 `[compile.profile.<name>.macros]` 追加，模板保持最小。
-- **`[link.profile.*]` 模板内建**：链接 profile 为空 `flags = []` 时与缺省等价，模板不加无意义空段；用户有链接专属 profile 标志（如 `-flto`）时自行追加。
-- **dev.4 CMake 导入 / dev.5 catch2 v3 / dev.6 构建耗时统计**：1.2.0 系列后续子版本，独立并行。
+- **完整 CMake 变量求值**：作用域（`function()`/`macro()` 局部变量）、`CACHE` 变量、`if` 条件求值、`$ENV{}`、嵌套递归求值——超出轻量解析器范围，本版不求值；不可解析处 best-effort + TODO。
+- **多 target 项目**：仅导入第一个/主 target，其余 warning + 注释说明；多 target 建议分项目。
+- **非标准写法支持**：生成器表达式、自定义命令、函数/宏、`pkg_check_modules`/`execute_process` 等本版明确拒绝，用 Lua `[hooks]` 手动迁移。
+- **dev.5 catch2 v3 / dev.6 构建耗时统计**：1.2.0 系列后续子版本，独立并行。
