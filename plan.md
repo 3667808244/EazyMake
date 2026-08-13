@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.4 执行计划
 
-> **状态：待实现**。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-13，全量测试零失败）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.4.md`](plans/1.2.0/1.2.0-dev.4.md)。本计划为 1.2.0 系列第四个开发子版本：**CMake 项目导入（实验性）**——新增 `ezmk project import --from cmake`，把标准 CMake 项目**单向转换**为 `ezmk.toml`，与 dev.2 的 `export cmake` 构成反向互补。
 >
@@ -58,7 +58,7 @@
 
 ### 阶段五：文档/教程
 
-- [ ] **5.1 文档**（4.10）：迁移文档 `docs/en|zh/migrate-from-cmake.md`（新建）+ `cli.md`/`config_file.md` 补充 + 教程 11-import-cmake + README/CHANGES.md
+- [x] **5.1 文档**（4.10）：迁移文档 `docs/en|zh/migrate-from-cmake.md`（新建）+ `cli.md`/`config_file.md` 补充 + 教程 11-import-cmake + README/CHANGES.md
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

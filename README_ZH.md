@@ -98,6 +98,7 @@ ezmk pack [flags]               # 创建可分发的 .tar.gz（完整形式：ez
 ezmk project new <name>         # 创建新项目
 ezmk project cc [flags]         # 为 clangd 生成 compile_commands.json
 ezmk project export cmake [flags]  # 从 ezmk.toml 生成 CMakeLists.txt
+ezmk project import [flags]     # 导入 CMake 项目为 ezmk.toml（实验性）
 
 # 包管理
 ezmk pkg install <pkg>          # 安装包

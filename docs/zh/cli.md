@@ -71,8 +71,16 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
 | `ezmk project cc [-o <path>] [--profile <p>]` | 生成 `compile_commands.json`（clangd/LSP），1.2.0+ |
 | `ezmk project export cmake [flags]` | 从 `ezmk.toml` 生成 `CMakeLists.txt`（单向快照），1.2.0+ |
+| `ezmk project import [--from <fmt>] [--overwrite]` | 把 CMake 项目导入为 `ezmk.toml`（实验性，单向快照），1.2.0+ |
 
 **`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
+
+**`project import`** 把当前目录的 `CMakeLists.txt` 转换为全新的 `ezmk.toml`
+（单向快照——导入后以 `ezmk.toml` 为唯一事实源）。`--from` 默认 `cmake` 且大小写不敏感。
+已存在 `ezmk.toml` 时默认拒绝，需显式 `--overwrite` 才覆盖；遇到不支持的非声明式写法
+（自定义命令、生成器表达式、`function()`/`macro()`、`pkg_check_modules`）会**事务性中止**，
+不产出半成品。**实验性**——导入后请手动校对库链接与平台宏。支持/不支持清单与手动迁移步骤
+见 [migrate-from-cmake.md](migrate-from-cmake.md)。
 
 **`build-opts`**（`build` / `run` / `watch` 共用）：
 

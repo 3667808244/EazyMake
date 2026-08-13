@@ -126,6 +126,11 @@
 
 > **为什么缺失时只警告而不是失败？** `want` 表达的是可选依赖。缺失时定义 `EZMK_LIB_MISS_<NAME>` 宏，代码可据此 `#ifdef` 绕过该特性、优雅降级，而不是中断构建。
 
+> **`ezmk project import` 生成的配置（1.2.0+）** —— CMake 导入器把 `find_package`
+> 命中的包写成**注释掉的** `[depends]` 条目（如 `# lib = ["boost@1.82"]`），并带
+> `# TODO:` 提示。取消注释并调整后，执行 `ezmk pkg install <name>`。生成文件头部还有
+> 说明其自动生成、属实验性的注释块。详见 [migrate-from-cmake.md](migrate-from-cmake.md)。
+
 ### 版本约束（0.9.6+）
 
 每个依赖项可以附加版本约束，使用以下运算符：

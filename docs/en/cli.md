@@ -79,8 +79,19 @@ scripting and muscle memory.
 | `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
 | `ezmk project cc [-o <path>] [--profile <p>]` | Generate `compile_commands.json` for clangd/LSP, 1.2.0+ |
 | `ezmk project export cmake [flags]` | Generate `CMakeLists.txt` from `ezmk.toml` (single-direction snapshot), 1.2.0+ |
+| `ezmk project import [--from <fmt>] [--overwrite]` | Import a CMake project into `ezmk.toml` (experimental, single-direction snapshot), 1.2.0+ |
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
+
+**`project import`** converts the current directory's `CMakeLists.txt` into a
+fresh `ezmk.toml` (single-direction snapshot — after import, `ezmk.toml` is the
+source of truth). `--from` defaults to `cmake` and is case-insensitive. It
+refuses to overwrite an existing `ezmk.toml` unless `--overwrite` is given, and
+aborts (without writing anything) on unsupported non-standard CMake constructs
+(custom commands, generator expressions, `function()`/`macro()`,
+`pkg_check_modules`). **Experimental** — verify library links and platform
+macros after import. See [migrate-from-cmake.md](migrate-from-cmake.md) for
+supported/unsupported constructs and manual migration steps.
 
 **`build-opts`** (shared by `build` / `run` / `watch`):
 

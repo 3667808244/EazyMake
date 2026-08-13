@@ -98,6 +98,7 @@ ezmk pack [flags]               # create distributable .tar.gz (full: ezmk proje
 ezmk project new <name>         # scaffold new project
 ezmk project cc [flags]         # generate compile_commands.json for clangd
 ezmk project export cmake [flags]  # generate CMakeLists.txt from ezmk.toml
+ezmk project import [flags]     # import a CMake project into ezmk.toml (experimental)
 
 # Packages
 ezmk pkg install <pkg>          # install a package

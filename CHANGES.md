@@ -12,6 +12,33 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.4 (2026-08-13) — CMake 项目导入（实验性）
+
+1.2.0 系列第四个开发子版本：新增 **`ezmk project import --from cmake`**，把标准 CMake 项目的 `CMakeLists.txt` **单向转换**为 `ezmk.toml`（与 dev.2 的 `export cmake` 反向互补）。**实验性**——转换 best-effort，非标准写法明确拒绝且事务性中止。**不破坏任何公共 API**（纯新增命令 + flag，见文首 API Stability）。
+
+### 新增
+
+- **`ezmk project import` 命令**：读取当前目录 `CMakeLists.txt` → 生成 `ezmk.toml`；`--from`（默认 cmake、大小写不敏感）、`--overwrite`（已存在 `ezmk.toml` 时默认拒绝，避免覆盖手写配置）
+- **轻量 CMake 解析器**：识别命令调用（双引号/括号嵌套/`#` 注释/`[[...]]` 长字符串）+ 有限 `set()` 变量表 + 单层 `${VAR}` 展开（§3.2 变量展开策略）
+- **核心命令映射**：`project` / `add_executable` / `add_library` / `target_sources` / `target_include_directories` / `target_compile_definitions` / `target_compile_options` / `target_link_libraries` → `[project]` / `[compile]` / `[link]` / `[compile.macros]`
+- **`find_package` best-effort**：常见包别名表（抽取至 `src/pkg_alias.hpp`，与 dev.2 导出共享单一事实源）→ 注释掉的 `[depends]` 条目 + `# TODO:` 提示
+- **条件编译 best-effort**：按当前平台取 `if(WIN32)` / `if(UNIX)` 等分支；无法求值的条件跳过 + `# TODO: 未求值的条件块`
+- **事务性拒绝**：`add_custom_command` / `add_custom_target` / `function()` / `macro()` / `pkg_check_modules` / `execute_process` / 生成器表达式 `$<...>` → 中止且**不产出半成品** `ezmk.toml`
+
+### 文档
+
+- 新增 `docs/en|zh/migrate-from-cmake.md`（支持/拒绝清单 + 手动迁移：用 Lua `[hooks]` 复刻自定义步骤）
+- `docs/en|zh/cli.md`、`docs/en|zh/config_file.md`、README/README_ZH 补充 `project import`
+- 新增 `tutorial/en|zh/11-import-cmake.md`（从零导入 → build → run）
+
+### 已知限制
+
+- 多 target 项目仅导入第一个/主 target
+- `${VAR}` 仅做有限单层展开（顶层常量 `set()`），不实现作用域/`CACHE`/递归
+- 非声明式写法（自定义命令/生成器表达式/函数宏/外部探测）不支持，事务性拒绝
+
+---
+
 ## 1.2.0-dev.3 (2026-08-12) — 默认模板内建 Debug/Release Profile
 
 1.2.0 系列第三个开发子版本：把 Debug/Release profile 固化进 `ezmk project new` 的默认模板，基准 `[compile].flags` 收敛为警告-only（优化归 profile），并新增 `[compile].default_profile` 配置项（模板内建 `"debug"`）——无 `--profile` 的默认构建开箱即可调试（`-g -O0`、断言开启），需优化时显式 `--profile release`。**不破坏任何公共 API**（纯模板变更 + 可选字段，见文首 API Stability）。
