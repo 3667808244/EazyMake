@@ -327,6 +327,57 @@ When the argument to `pkg install` is neither a local file path nor a URL contai
 
 ---
 
+## Private Repositories in CI/CD
+
+`ezmk repo add` / `repo update` run `git clone` / `git pull` as subprocesses. Those subprocesses **inherit the full environment of the ezmk process plus git's global configuration**, so private-repo authentication follows git's normal mechanisms — configure git the way your CI already does, and ezmk picks it up.
+
+> ezmk has no dedicated `--credential-helper` / `--git-config` flag. That is not a blocker: any git-level authentication (SSH keys, credential helpers, `http.extraHeader`) is inherited by the clone/pull subprocess.
+
+### SSH URLs (recommended)
+
+Use an SSH remote (`git@host:org/repo.git`) and give the runner an SSH key. `git` uses the SSH agent (or `~/.ssh/`) it finds in the environment:
+
+```yaml
+# GitHub Actions — a prior step loads the deploy key into ssh-agent
+- name: Set up SSH
+  uses: webfactory/ssh-agent@v0.9.0
+  with:
+    ssh-private-key: ${{ secrets.EZMK_REPO_DEPLOY_KEY }}
+
+- name: Register private repo
+  run: ezmk repo add -u git@github.com:your-org/ezmk-repo.git
+```
+
+### HTTPS URLs
+
+Use a credential helper or inject an auth header into git's global config. The clone subprocess reads the same config a manual `git clone` would:
+
+```bash
+# GitLab CI — authenticate with CI_JOB_TOKEN via an extra header
+git config --global http.https://gitlab.internal/.extraHeader "Authorization: Bearer ${CI_JOB_TOKEN}"
+ezmk repo add -u https://gitlab.internal/team/ezmk-repo.git
+```
+
+```yaml
+# GitHub Actions — a PAT (or GITHUB_TOKEN for same-org repos) via header
+- name: Register private repo
+  run: |
+    git config --global http.https://github.com/.extraHeader "Authorization: Bearer ${{ secrets.EZMK_REPO_TOKEN }}"
+    ezmk repo add -u https://github.com/your-org/ezmk-repo.git
+```
+
+> **Note**: `actions/checkout`'s credential helper only covers the repo being checked out — a *different* private repo (like your package repo) needs its own SSH key or header, as above.
+
+### Local path (no auth needed)
+
+A repo already on the runner's filesystem needs no clone and no auth — register it as `type = "local"`:
+
+```bash
+ezmk repo add -p ./vendor/ezmk-repo --name internal
+```
+
+---
+
 ## Security
 
 Repository-related security policies (no confirmation required for global registration, secondary confirmation for global install, `sha256` verification, `git clone`/`pull` failure handling) have been consolidated in [`safety.md`](safety.md).

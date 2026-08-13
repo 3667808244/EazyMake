@@ -315,6 +315,57 @@ ezmk pkg install -p foo
 
 ---
 
+## CI/CD 里的私有仓库
+
+`ezmk repo add` / `repo update` 通过 `git clone` / `git pull` 子进程执行。这些子进程**继承 ezmk 进程的完整环境变量 + git 的全局配置**，因此私有仓库的认证走 git 的标准机制——按你 CI 已经习惯的方式配置 git，ezmk 就能照常拉取。
+
+> ezmk 没有专门的 `--credential-helper` / `--git-config` 参数。这不是障碍：任何 git 层面的认证（SSH 密钥、credential helper、`http.extraHeader`）都会被 clone/pull 子进程继承。
+
+### SSH URL（推荐）
+
+用 SSH 远程地址（`git@host:org/repo.git`），并给 Runner 配置 SSH 密钥。`git` 会使用环境里的 SSH agent（或 `~/.ssh/`）：
+
+```yaml
+# GitHub Actions — 前一步把 deploy key 加载进 ssh-agent
+- name: Set up SSH
+  uses: webfactory/ssh-agent@v0.9.0
+  with:
+    ssh-private-key: ${{ secrets.EZMK_REPO_DEPLOY_KEY }}
+
+- name: Register private repo
+  run: ezmk repo add -u git@github.com:your-org/ezmk-repo.git
+```
+
+### HTTPS URL
+
+使用 credential helper，或把认证头注入 git 全局配置。clone 子进程读取的配置与手动 `git clone` 完全相同：
+
+```bash
+# GitLab CI — 用 CI_JOB_TOKEN 通过 extra header 认证
+git config --global http.https://gitlab.internal/.extraHeader "Authorization: Bearer ${CI_JOB_TOKEN}"
+ezmk repo add -u https://gitlab.internal/team/ezmk-repo.git
+```
+
+```yaml
+# GitHub Actions — 用 PAT（或同组织内用 GITHUB_TOKEN）通过 header 认证
+- name: Register private repo
+  run: |
+    git config --global http.https://github.com/.extraHeader "Authorization: Bearer ${{ secrets.EZMK_REPO_TOKEN }}"
+    ezmk repo add -u https://github.com/your-org/ezmk-repo.git
+```
+
+> **注意**：`actions/checkout` 的 credential helper 只覆盖被 checkout 的那个仓库——一个**不同**的私有仓库（比如你的包仓库）需要按上面单独配 SSH 密钥或 header。
+
+### 本地路径（无需认证）
+
+已经在 Runner 文件系统上的仓库不需要 clone、也不需要认证——直接注册为 `type = "local"`：
+
+```bash
+ezmk repo add -p ./vendor/ezmk-repo --name internal
+```
+
+---
+
 ## 安全
 
 仓库相关的安全条款(全局注册无需确认、全局安装二次确认、`sha256` 校验、`git clone`/`pull` 失败处理)已集中到 [`safety.md`](safety.md)。
