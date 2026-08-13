@@ -148,6 +148,7 @@
     "export_unknown_target": "未知导出目标: {target}（支持: cmake）",
     "import_unknown_format": "未知导入格式: {format}（支持: cmake）",
     "import_missing_cmakelists": "当前目录未找到 CMakeLists.txt——`ezmk project import` 需要一个 CMake 项目",
+    "import_reject_unsupported": "检测到不支持的 CMake 写法: {content}——EazyMake 导入器暂不支持非标准构建步骤，请参考迁移文档（docs/zh/migrate-from-cmake.md）手动添加 Lua 脚本",
     "export_exists_refuse": "拒绝覆盖已存在文件: {path} — 请使用 --overwrite 覆盖",
     "export_written": "已写出 {path}",
     "pkg_list_title": "已安装包 ({scope} 作用域):",

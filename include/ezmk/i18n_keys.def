@@ -57,6 +57,7 @@ EZMK_I18N_KEY(utils_cc_deprecated)      // 1.2.0
 EZMK_I18N_KEY(export_unknown_target)    // 1.2.0
 EZMK_I18N_KEY(import_unknown_format)    // 1.2.0
 EZMK_I18N_KEY(import_missing_cmakelists)// 1.2.0
+EZMK_I18N_KEY(import_reject_unsupported) // 1.2.0
 EZMK_I18N_KEY(export_exists_refuse)     // 1.2.0
 EZMK_I18N_KEY(export_written)           // 1.2.0
 

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <map>
 #include <optional>
@@ -302,6 +303,42 @@ std::string join(const std::vector<std::string>& v, const char* sep = " ") {
     return out;
 }
 
+// ISO 8601 时间戳（与 repo.cpp::now_iso 同格式，%Y-%m-%dT%H:%M:%SZ）。
+std::string now_iso() {
+    auto t = std::time(nullptr);
+    auto* tm = std::localtime(&t);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
+    return buf;
+}
+
+// ===================================================================
+// 拒绝检测（§3.4 非声明式写法 → 事务性中止）
+// ===================================================================
+
+// 返回首个拒绝原因（空串 = 无拒绝）。检测：
+//   自定义命令 add_custom_command / add_custom_target
+//   外部依赖查找 pkg_check_modules / execute_process
+//   函数/宏定义 function() / macro()
+//   生成器表达式 $<...>
+std::string find_rejection(const std::vector<CmakeCall>& calls) {
+    static const char* kRejectCmds[] = {
+        "add_custom_command", "add_custom_target",
+        "pkg_check_modules", "execute_process",
+    };
+    for (const auto& call : calls) {
+        for (auto c : kRejectCmds)
+            if (call.name == c)
+                return call.name + "(" + join(call.args) + ")";
+        if (call.name == "function" || call.name == "macro")
+            return call.name + "(" + join(call.args) + ")";
+        for (const auto& a : call.args)
+            if (a.find("$<") != std::string::npos)
+                return "generator expression " + a;
+    }
+    return "";
+}
+
 struct ImportedProject {
     std::string name;
     std::string type = "executable";
@@ -506,6 +543,7 @@ std::string build_toml(const ImportedProject& p) {
     t += "# ============================================\n";
     t += "# 此文件由 `ezmk project import --from cmake` 自动生成 (v1.2.0)\n";
     t += "# 基于: CMakeLists.txt\n";
+    t += "# 转换时间: " + now_iso() + "\n";
     t += "# 该命令为实验性功能，请手动校对库链接和平台宏定义\n";
     t += "# ============================================\n\n";
 
@@ -581,6 +619,12 @@ int import_project(const cli::ProjectImportOptions& opts,
 
     std::string src = read_file(cmake_file);
     auto calls = parse_cmake(src);
+
+    // 事务性中止：任何非声明式写法 → 报错退出，不产出半成品 ezmk.toml。
+    if (std::string rejected = find_rejection(calls); !rejected.empty())
+        util::fatal(i18n::I18nKey::import_reject_unsupported,
+                    {{"content", rejected}});
+
     auto table = build_var_table(calls);
     auto project = build_project(calls, table, project_root);
 

@@ -148,6 +148,7 @@
     "export_unknown_target": "unknown export target: {target} (supported: cmake)",
     "import_unknown_format": "unknown import format: {format} (supported: cmake)",
     "import_missing_cmakelists": "no CMakeLists.txt found in the current directory — `ezmk project import` requires a CMake project",
+    "import_reject_unsupported": "unsupported non-standard CMake construct: {content} — the EazyMake importer does not support custom build steps. See docs/migrate-from-cmake.md to migrate manually with Lua hooks",
     "export_exists_refuse": "refusing to overwrite existing file: {path} — use --overwrite to replace",
     "export_written": "wrote {path}",
     "pkg_list_title": "Installed packages ({scope} scope):",
