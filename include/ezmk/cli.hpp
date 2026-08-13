@@ -27,6 +27,7 @@ enum class Command {
     ProjectTest,     // 1.1.0-dev.6
     ProjectCc,       // 1.2.0
     ProjectExport,   // 1.2.0
+    ProjectImport,   // 1.2.0
     PkgList,         // 0.2.3+
     PkgUpdate,       // 0.2.3+
     Version,
@@ -79,6 +80,12 @@ struct ProjectExportOptions {
     bool use_glob = true;  // --glob (default) / --no-glob: explicit source list
 };
 
+// 1.2.0: project import options — import an existing project into ezmk.toml
+struct ProjectImportOptions {
+    std::string from = "cmake";  // --from <format> (only "cmake"; case-insensitive)
+    bool overwrite = false;      // --overwrite: replace an existing ezmk.toml
+};
+
 struct InstallOptions {
     Scope scope = Scope::Project;
     std::string pkg_file;    // local path or URL
@@ -124,6 +131,9 @@ struct CliArgs {
 
     // Only valid for ProjectExport (1.2.0)
     std::optional<ProjectExportOptions> project_export_opts;
+
+    // Only valid for ProjectImport (1.2.0)
+    std::optional<ProjectImportOptions> project_import_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;

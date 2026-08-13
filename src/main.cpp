@@ -5,6 +5,7 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/compile_db.hpp"
 #include "ezmk/export.hpp"
+#include "ezmk/import.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
@@ -216,6 +217,13 @@ int main(int argc, char** argv) {
             eo2.resolve = eo.resolve;
             eo2.use_glob = eo.use_glob;
             ezmk::export_gen::export_cmake(cfg, proj_root, eo2);
+            break;
+        }
+
+        // 1.2.0: project import — import a CMake project into ezmk.toml
+        case ezmk::cli::Command::ProjectImport: {
+            const auto& io = *args.project_import_opts;
+            ezmk::import::import_project(io, std::filesystem::current_path());
             break;
         }
 

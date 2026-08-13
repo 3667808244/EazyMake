@@ -146,6 +146,8 @@
     "cc_help": "Usage: ezmk utils cc [options]\nGenerate compile_commands.json from the current project.\n\nOptions:\n  -o, --output <path>   Output file (default: compile_commands.json)\n  --profile <name>      Apply a build profile (flags/macros)\n  -h, --help            Show this help",
     "utils_cc_deprecated": "`ezmk utils cc` is deprecated since 1.2.0 — use `ezmk project cc` instead.",
     "export_unknown_target": "unknown export target: {target} (supported: cmake)",
+    "import_unknown_format": "unknown import format: {format} (supported: cmake)",
+    "import_missing_cmakelists": "no CMakeLists.txt found in the current directory — `ezmk project import` requires a CMake project",
     "export_exists_refuse": "refusing to overwrite existing file: {path} — use --overwrite to replace",
     "export_written": "wrote {path}",
     "pkg_list_title": "Installed packages ({scope} scope):",

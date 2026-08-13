@@ -146,6 +146,8 @@
     "cc_help": "用法: ezmk utils cc [选项]\n从当前项目生成 compile_commands.json。\n\n选项:\n  -o, --output <路径>   输出文件（默认: compile_commands.json）\n  --profile <名称>      应用构建 profile（flags/宏）\n  -h, --help            显示此帮助",
     "utils_cc_deprecated": "`ezmk utils cc` 自 1.2.0 起弃用——请改用 `ezmk project cc`。",
     "export_unknown_target": "未知导出目标: {target}（支持: cmake）",
+    "import_unknown_format": "未知导入格式: {format}（支持: cmake）",
+    "import_missing_cmakelists": "当前目录未找到 CMakeLists.txt——`ezmk project import` 需要一个 CMake 项目",
     "export_exists_refuse": "拒绝覆盖已存在文件: {path} — 请使用 --overwrite 覆盖",
     "export_written": "已写出 {path}",
     "pkg_list_title": "已安装包 ({scope} 作用域):",

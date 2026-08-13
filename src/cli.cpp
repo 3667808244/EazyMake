@@ -308,6 +308,35 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.2.0: project import [--from <format>] [--overwrite] — import a
+        // CMake project into ezmk.toml (experimental, single-direction snapshot)
+        if (action == "import")
+        {
+            args.cmd = Command::ProjectImport;
+            ProjectImportOptions opts;
+            std::vector<OptionSpec> spec = {
+                {'\0', "from", true},
+                {'\0', "overwrite", false},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project import");
+            reject_positionals(p, "ezmk project import");
+            if (auto v = p.value("from"))
+            {
+                // 大小写不敏感：--from CMAKE / CMake / cmake 等价
+                std::string fmt = *v;
+                for (auto& c : fmt)
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (fmt != "cmake")
+                    util::fatal(ezmk::i18n::I18nKey::import_unknown_format,
+                                {{"format", *v}});
+                opts.from = fmt;
+            }
+            if (p.has("overwrite"))
+                opts.overwrite = true;
+            args.project_import_opts = opts;
+            return args;
+        }
+
         // 1.1.0-dev.6: project test
         if (action == "test")
         {
