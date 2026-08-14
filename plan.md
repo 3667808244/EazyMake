@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.6 执行计划
 
-> **状态：进行中**。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-14，全量测试 685 用例 / 3194 断言零失败）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.6.md`](plans/1.2.0/1.2.0-dev.6.md)。本计划为 1.2.0 系列第六个开发子版本：**各源文件构建耗时统计**——为 `ezmk build` 并行编译路径补上 per-file 编译耗时明细（`-v` 全量 / 慢构建自动 top-N），零配置、不新增 flag、不改变构建语义。
 >
@@ -30,23 +30,23 @@
 
 ### 阶段一：计时 + 汇总
 
-- [ ] **1.1 计时**（4.1）：`src/build.cpp` `compile_phase()` 并行任务 lambda 内 wrap `compile_one_source()`，本地收集 `compile_times[i]`（毫秒，按源文件索引，与 `single_results` 对应）
-- [ ] **1.2 汇总**（4.2）：过滤 cache_hit（只计非缓存实际编译），按耗时降序排序
-- [ ] **1.3 输出**（4.3）：扩展完成汇总块——`-v` 全量明细 / 总耗时 > `BUILD_TIME_SLOW_THRESHOLD`(5.0s) 时 top-`BUILD_TIME_TOP_N`(10) + 汇总行；`build_elapsed_time` 输出不变
+- [x] **1.1 计时**（4.1）：`src/build.cpp` `compile_phase()` 并行任务 lambda 内 wrap `compile_one_source()`，本地收集 `compile_times[i]`（毫秒，按源文件索引，与 `single_results` 对应）
+- [x] **1.2 汇总**（4.2）：过滤 cache_hit（只计非缓存实际编译），按耗时降序排序
+- [x] **1.3 输出**（4.3）：扩展完成汇总块——`-v` 全量明细 / 总耗时 > `BUILD_TIME_SLOW_THRESHOLD`(5.0s) 时 top-`BUILD_TIME_TOP_N`(10) + 汇总行；`build_elapsed_time` 输出不变
 
 ### 阶段二：i18n
 
-- [ ] **2.1 i18n**（4.4）：`include/ezmk/i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `build_time_header` / `build_time_entry` / `build_time_truncated`；`scripts/check_i18n.py` 三向一致
+- [x] **2.1 i18n**（4.4）：`include/ezmk/i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `build_time_header` / `build_time_entry` / `build_time_truncated`；`scripts/check_i18n.py` 三向一致
 
 ### 阶段三：测试
 
-- [ ] **3.1 集成测试**（4.5）：`test/test_integration.cpp` 新增用例——`-v` 构建输出明细行（不校验具体耗时——非确定性）；小项目默认构建不刷屏明细；`test/test_i18n.cpp` 新增 key 非空断言
-- [ ] **3.2 全量回归**（4.6）：`bash build.sh test-all` 零回归
+- [x] **3.1 集成测试**（4.5）：`test/test_integration.cpp` 新增用例——`-v` 构建输出明细行（不校验具体耗时——非确定性）；小项目默认构建不刷屏明细；`test/test_i18n.cpp` 新增 key 非空断言
+- [x] **3.2 全量回归**（4.6）：`bash build.sh test-all` 零回归
 
 ### 阶段四：文档收口
 
-- [ ] **4.1 文档**：`docs/en/cli.md` / `docs/zh/cli.md` 补充 build 耗时明细触发规则（`-v` 全量 / 慢构建自动 top-N）；`CHANGES.md` dev.6 条目
-- [ ] **4.2 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.6 状态「待实现 → 已完成」
+- [x] **4.1 文档**：`docs/en/cli.md` / `docs/zh/cli.md` 补充 build 耗时明细触发规则（`-v` 全量 / 慢构建自动 top-N）；`CHANGES.md` dev.6 条目
+- [x] **4.2 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.6 状态「待实现 → 已完成」
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

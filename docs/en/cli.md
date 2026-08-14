@@ -108,6 +108,12 @@ supported/unsupported constructs and manual migration steps.
 > *updates* the cache afterward — it forces one clean recompile, not a permanently
 > cold cache, so the next build is fast again.
 
+> **Build timing detail (1.2.0+):** `ezmk build -v` always prints a per-file
+> compile-time breakdown, slowest first. Without `-v`, a build that takes over
+> 5s automatically prints the 10 slowest units. No config, no extra flags — only
+> actually-compiled (non-cached) files are listed, and the single-threaded path
+> shows just the total time.
+
 **`new`-only flags:**
 
 | Flag | Purpose |

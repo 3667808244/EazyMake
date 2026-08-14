@@ -12,6 +12,29 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.6 (2026-08-14) — 各源文件构建耗时统计
+
+1.2.0 系列第六个开发子版本：为 `ezmk build` 并行编译路径补上 **per-file 编译耗时明细**，让"慢在哪一步"一目了然——`-v` 时始终按耗时降序打印本次实际编译（非缓存命中）的源文件，默认构建总耗时超过 5 秒时自动打印最慢的 10 个 + 汇总行。**纯诊断增强、零配置、不新增 flag**（见文首 API Stability）。
+
+### 新增
+
+- **per-file 编译耗时统计**（`src/build.cpp` `compile_phase()` 并行分支）：单次 `compile_one_source()` 粒度计时，只计入缓存未命中（实际编译）的文件；串行路径（`compile_sources`）仅总耗时、不输出明细
+- **明细输出**（完成汇总块扩展）：`-v/--verbose` 全量降序明细；默认总耗时 > `BUILD_TIME_SLOW_THRESHOLD`（5s）时自动 top-`BUILD_TIME_TOP_N`（10）+ 汇总行；`build_elapsed_time` 总耗时输出不变
+- **零配置**：阈值/条目数为命名常量，复用 `-v`，不新增 CLI flag 与配置字段
+
+### 文档
+
+- `docs/en|zh/cli.md` 补充 build 耗时明细触发规则（`-v` 全量 / 慢构建自动 top-N）
+- 新增 i18n key `build_time_header` / `build_time_entry` / `build_time_truncated`（en/zh），`check_i18n.py` 三向一致
+
+### 测试
+
+- 新增集成测试 `integration: build timing detail (dev.6)`（`-v` 明细存在 / 小项目默认不刷屏，不校验具体耗时——非确定性）
+- 新增 `test_i18n.cpp` `build_time_*` key 非空 + fmt 断言
+- 全量回归：685 用例 / 3194 断言零失败
+
+---
+
 ## 1.2.0-dev.4 (2026-08-13) — CMake 项目导入（实验性）
 
 1.2.0 系列第四个开发子版本：新增 **`ezmk project import --from cmake`**，把标准 CMake 项目的 `CMakeLists.txt` **单向转换**为 `ezmk.toml`（与 dev.2 的 `export cmake` 反向互补）。**实验性**——转换 best-effort，非标准写法明确拒绝且事务性中止。**不破坏任何公共 API**（纯新增命令 + flag，见文首 API Stability）。

@@ -13,13 +13,13 @@
 | [1.2.0-dev.3](1.2.0-dev.3.md) | 默认模板内建 Debug/Release Profile | `ezmk project new` 模板内置 `[compile.profile.debug/release]`；基准收敛为警告-only | **已完成**（2026-08-12） |
 | [1.2.0-dev.4](1.2.0-dev.4.md) | CMake 项目导入（实验性） | `ezmk project import --from cmake`；标准命令映射 + `find_package` best-effort + 非标准写法拒绝 | **已完成**（2026-08-13） |
 | [1.2.0-dev.5](1.2.0-dev.5.md) | catch2 v3 测试主程序兼容 | `ezmk test` test_main 生成改 v3 兼容（显式 `main` + `Catch::Session().run()`）；v2 vendor 路径不回归 | **已完成**（2026-08-14） |
-| [1.2.0-dev.6](1.2.0-dev.6.md) | 各源文件构建耗时统计 | `ezmk build` 并行编译路径 per-file 耗时明细（`-v` 全量 / 慢构建自动 top-N）；零配置、不新增 flag | 待实现 |
+| [1.2.0-dev.6](1.2.0-dev.6.md) | 各源文件构建耗时统计 | `ezmk build` 并行编译路径 per-file 耗时明细（`-v` 全量 / 慢构建自动 top-N）；零配置、不新增 flag | **已完成**（2026-08-14） |
 | [1.2.0-dev.7](1.2.0-dev.7.md) | 本地包源 + 项目定位 | `pkg install <dir>` 从文件夹安装；`ezmk.toml` 向上查找（5 层） | 待实现 |
 | [1.2.0-dev.8](1.2.0-dev.8.md) | CMake 导出钩子运行时（dev.2 延伸） | 独立无黑白名单运行时 `ezmk-lua`；export 对 `[hooks]` 生成 `add_custom_command`（pre/post） | 待实现 |
 | [1.2.0-pre.1](1.2.0-pre.1.md) | pacman 分发（发布流水线） | `publish/` 重组 + `publish/arch/PKGBUILD`；本机 MSYS2 + 远程 Arch Linux 验证 makepkg | 待发布 |
 | [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.8 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
 
-> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1/dev.2/dev.3/dev.4/dev.5 已完成，下一个子版本为 [1.2.0-dev.6](1.2.0-dev.6.md)）。
+> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1/dev.2/dev.3/dev.4/dev.5/dev.6 已完成，下一个子版本为 [1.2.0-dev.7](1.2.0-dev.7.md)）。
 
 ## 依赖关系
 
