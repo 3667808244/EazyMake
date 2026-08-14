@@ -21,6 +21,16 @@
 
 ### 安装
 
+**macOS / Linux —— 推荐（Homebrew）：**
+
+```bash
+brew tap 3667808244/eazymake && brew install ezmk
+```
+
+> Homebrew 覆盖 macOS（Apple Silicon）与 Linux x64。macOS Intel 暂无预编译产物 —— 请用下方的安装脚本。
+
+**备选 —— 安装脚本：**
+
 **Linux / macOS / MSYS2：**
 
 ```bash
@@ -44,10 +54,14 @@ ezmk build                # 编译 + 链接
 ezmk run                  # 构建 + 运行
 ```
 
+> **从子目录也能构建（1.2.0+）：** `ezmk build` / `ezmk test` 等命令会从当前目录
+> 向上查找最多 5 层父目录中的 `ezmk.toml` —— 进入 `src/` 等子目录直接运行即可，如同 `git`。
+
 ### 安装包
 
 ```bash
 ezmk pkg install fmt      # 按名称安装 — 官方仓库已预注册
+ezmk pkg install ./mylib  # 从源目录安装（1.2.0+，免打包）
 ```
 
 ## 与 CMake 对比

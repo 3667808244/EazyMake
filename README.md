@@ -21,6 +21,16 @@ A simple C/C++ build tool — `ezmk`. Supports GCC, Clang, and MSVC.
 
 ### Install
 
+**macOS / Linux — recommended (Homebrew):**
+
+```bash
+brew tap 3667808244/eazymake && brew install ezmk
+```
+
+> Homebrew covers macOS (Apple Silicon) and Linux x64. macOS Intel has no prebuilt binary yet — use the script below.
+
+**Alternative — install script:**
+
 **Linux / macOS / MSYS2:**
 
 ```bash
@@ -44,10 +54,15 @@ ezmk build                # compile + link
 ezmk run                  # build + run
 ```
 
+> **Build from a subdirectory too (1.2.0+):** `ezmk build` / `ezmk test` and
+> friends locate `ezmk.toml` by walking **up at most 5 parent directories** from
+> the current directory — drop into `src/` and run directly, just like `git`.
+
 ### Install a package
 
 ```bash
 ezmk pkg install fmt      # by name — official repo pre-registered
+ezmk pkg install ./mylib  # from a source directory (1.2.0+, no packing needed)
 ```
 
 ## vs CMake

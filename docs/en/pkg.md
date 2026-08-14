@@ -207,6 +207,26 @@ ezmk pkg install -p ./foo-0.1.0.zip
 ezmk pkg install -u ~/downloads/bar-1.2.0.tar.gz
 ```
 
+### Install from a Directory (1.2.0-dev.7+)
+
+If the argument is an **existing directory**, the package is installed straight
+from that source directory — the structure must follow the package spec
+(`include/` + `src/` + `ezmk.toml`, or precompiled `lib/` / header-only). Great
+for developing/debugging a local package without first packing an archive:
+
+```bash
+ezmk pkg install -p ./mylib          # ./mylib is the package source directory
+ezmk pkg install -u ~/dev/bar        # absolute paths work too
+```
+
+- Directory installs skip extraction and SHA-256 verification (there is no
+  archive to check); passing `--sha256` explicitly prints a notice that it is
+  skipped.
+- Install path, scope (`-p/-u/-g`), install hooks, and dependency resolution are
+  identical to archive installs.
+- Unpacked package directories under `packages/` in a local `ezmk-repo` checkout
+  can be installed this way too.
+
 ### URL Download
 
 ```bash
@@ -237,6 +257,7 @@ ezmk pkg install -p foo          # automatically searches for "foo" in registere
 ```
 
 Search order:
+0. Directory (if the argument is an existing directory) → install directly (1.2.0-dev.7+)
 1. Local file path / explicit URL (same as before)
 2. Search by name in local cache of registered repos (project → user → global)
 3. Still not found → error

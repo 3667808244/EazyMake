@@ -83,6 +83,16 @@ scripting and muscle memory.
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
 
+**`ezmk.toml` upward search (1.2.0-dev.7+):** every command that needs a project
+config (`build` / `run` / `clean` / `install` / `pack` / `watch` / `test` /
+`project cc` / `project export`, …) looks for `ezmk.toml` by walking **up at most
+5 parent directories** from the current directory — so `ezmk build` / `ezmk test`
+work straight from a subdirectory, just like `git`. The found directory is the
+project root; artifacts, caches and `.ezmk/*` (cache / pkg / repo) all live under
+it. If none is found within 5 levels, commands that require a config fail with a
+clear message (`clean` falls back to the current directory). Creation commands
+like `project new` / `project import` do not depend on an existing config.
+
 **`project import`** converts the current directory's `CMakeLists.txt` into a
 fresh `ezmk.toml` (single-direction snapshot — after import, `ezmk.toml` is the
 source of truth). `--from` defaults to `cmake` and is case-insensitive. It

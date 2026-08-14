@@ -198,6 +198,19 @@ ezmk pkg install -p ./foo-0.1.0.zip
 ezmk pkg install -u ~/downloads/bar-1.2.0.tar.gz
 ```
 
+### 从文件夹安装（1.2.0-dev.7+）
+
+参数为**已存在的目录**时，直接从该目录安装——目录结构须符合包规范（`include/` + `src/` + `ezmk.toml`，或预编译 `lib/` / header-only）。开发/调试本地包时无需先打包成归档：
+
+```bash
+ezmk pkg install -p ./mylib          # ./mylib 为包源目录
+ezmk pkg install -u ~/dev/bar        # 绝对路径亦可
+```
+
+- 目录安装跳过解压与 SHA-256 校验（无归档可校验）；显式传 `--sha256` 会提示跳过。
+- 安装路径、作用域（`-p/-u/-g`）、安装钩子、依赖解析与归档安装完全一致。
+- 本地 checkout 的 `ezmk-repo` 中 `packages/` 目录下**解包后的包目录**同样可直接安装。
+
 ### URL 下载
 
 ```bash
@@ -225,6 +238,7 @@ ezmk pkg install -p foo          # 自动在已注册仓库中搜索 "foo"
 ```
 
 查找顺序：
+0. 目录（参数为已存在的目录）→ 直接安装（1.2.0-dev.7+）
 1. 本地文件路径 / 显式 URL（和之前一样）
 2. 已注册仓库的本地缓存中按名称搜索（项目 → 用户 → 全局）
 3. 仍未找到 → 报错

@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.7 执行计划
 
-> **状态：执行中**。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-15，全量测试 695 用例 / 3234 断言零失败）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.7.md`](plans/1.2.0/1.2.0-dev.7.md)。本计划为 1.2.0 系列第七个开发子版本：**本地包源 + 项目向上查找**——聚合两个相互独立的改进：① `ezmk pkg install <dir>` 从文件夹（源目录）直接安装包；② `ezmk.toml` 自 CWD 向上查找（最多 5 层父目录）。
 >
@@ -31,28 +31,28 @@
 
 ### 阶段一：`pkg install <dir>` 目录安装
 
-- [ ] **1.1 入口分支**（2.1）：`install()` 在「URL → 本地文件 → 仓库名」判断前加 `fs::is_directory(input)` 分支，分流到 `install_from_directory`
-- [ ] **1.2 后处理抽取**（2.2）：`install_from_directory()` 先 `validate_package_dir(dir)`，再把解压后处理（钩子 → 依赖 → 编译 → 复制）抽为可复用段，目录分支复用（`pkg_root = dir`，不复制不打包）；作用域语义与归档一致
-- [ ] **1.3 SHA-256/确认**（2.3）：目录安装无归档，`--sha256` 忽略并提示（i18n 新 key）；全局安装确认保留
-- [ ] **1.4 i18n**（2.4）：`install_from_dir` / `sha256_skipped_dir` 等 key 三向一致（`.def` + en/zh JSON），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
+- [x] **1.1 入口分支**（2.1）：`install()` 在「URL → 本地文件 → 仓库名」判断前加 `fs::is_directory(input)` 分支，分流到 `install_from_directory`
+- [x] **1.2 后处理抽取**（2.2）：`install_from_directory()` 先 `validate_package_dir(dir)`，再把解压后处理（钩子 → 依赖 → 编译 → 复制）抽为可复用段，目录分支复用（`pkg_root = dir`，不复制不打包）；作用域语义与归档一致
+- [x] **1.3 SHA-256/确认**（2.3）：目录安装无归档，`--sha256` 忽略并提示（i18n 新 key）；全局安装确认保留
+- [x] **1.4 i18n**（2.4）：`install_from_dir` / `sha256_skipped_dir` 等 key 三向一致（`.def` + en/zh JSON），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
 
 ### 阶段二：`ezmk.toml` 向上查找
 
-- [ ] **2.1 工具函数**（3.1）：`util::locate_project_root(start, max_up=5)`（`src/util.hpp`/`util.cpp`）——start 为第 0 层，最多检查到第 5 层父目录；找到返回目录，否则 `nullopt`
-- [ ] **2.2 main.cpp 接入**（3.2）：各命令（build/run/test/watch/project/cc 等）统一 `auto root = locate_project_root(cwd).value_or(cwd)`，`parse_config((root/"ezmk.toml").string())`，`proj_root = root`
-- [ ] **2.3 pkg/cache/lockfile 接入**（3.3）：`fs::current_path()` 改定位根；`pkg_install_dir(Project)` 的 `.ezmk/pkg` 路径随根
-- [ ] **2.4 错误提示**（3.4）：找不到时提示「5 层内未找到 ezmk.toml」（i18n 新 key）；无配置场景回退 CWD 行为不变
+- [x] **2.1 工具函数**（3.1）：`util::locate_project_root(start, max_up=5)`（`src/util.hpp`/`util.cpp`）——start 为第 0 层，最多检查到第 5 层父目录；找到返回目录，否则 `nullopt`
+- [x] **2.2 main.cpp 接入**（3.2）：各命令（build/run/test/watch/project/cc 等）统一 `auto root = locate_project_root(cwd).value_or(cwd)`，`parse_config((root/"ezmk.toml").string())`，`proj_root = root`
+- [x] **2.3 pkg/cache/lockfile 接入**（3.3）：`fs::current_path()` 改定位根；`pkg_install_dir(Project)` 的 `.ezmk/pkg` 路径随根
+- [x] **2.4 错误提示**（3.4）：找不到时提示「5 层内未找到 ezmk.toml」（i18n 新 key）；无配置场景回退 CWD 行为不变
 
 ### 阶段三：测试
 
-- [ ] **3.1 单测**（2.5 + 3.5）：目录安装成功 / 非法结构拒绝；`locate_project_root` 0/1/5/6 层、无 toml
-- [ ] **3.2 集成测试**（2.5 + 3.5）：建临时包目录 → `ezmk pkg install <dir>` → `pkg list` 可见；子目录内 `ezmk build` 成功、5 层边界、回退
-- [ ] **3.3 全量回归**：`bash build.sh test-all` 零回归
+- [x] **3.1 单测**（2.5 + 3.5）：目录安装成功 / 非法结构拒绝；`locate_project_root` 0/1/5/6 层、无 toml
+- [x] **3.2 集成测试**（2.5 + 3.5）：建临时包目录 → `ezmk pkg install <dir>` → `pkg list` 可见；子目录内 `ezmk build` 成功、5 层边界、回退
+- [x] **3.3 全量回归**：`bash build.sh test-all` 零回归
 
 ### 阶段四：文档收口
 
-- [ ] **4.1 文档**（2.6 + 3.6）：`docs/en|zh/pkg.md` 补「从文件夹安装」小节；`docs/en|zh/cli.md` + README 说明向上查找行为；`CHANGES.md` dev.7 条目
-- [ ] **4.2 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.7 状态「待实现 → 已完成」；发布门槛复核
+- [x] **4.1 文档**（2.6 + 3.6）：`docs/en|zh/pkg.md` 补「从文件夹安装」小节；`docs/en|zh/cli.md` + README 说明向上查找行为；`CHANGES.md` dev.7 条目
+- [x] **4.2 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.7 状态「待实现 → 已完成」；发布门槛复核
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

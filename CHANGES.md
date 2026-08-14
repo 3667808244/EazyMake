@@ -12,6 +12,31 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.7 (2026-08-15) — 本地包源 + 项目向上查找
+
+1.2.0 系列第七个开发子版本：聚合两个相互独立的改进——① **`ezmk pkg install <dir>` 从文件夹安装包**（开发/调试本地包免打包归档）；② **`ezmk.toml` 向上查找**（进入项目子目录直接 `ezmk build` / `ezmk test`，如同 `git`）。**纯增量、不破坏任何公共 API**（新增目录入参形态 + 内部项目根定位，见文首 API Stability）。
+
+### 新增
+
+- **`pkg install <dir>` 目录安装**（`src/pkg.cpp`）：参数为已存在目录时直接从源目录安装——复用 `validate_pkg` 校验 + 与归档安装完全相同的后处理（钩子 → 依赖 → 编译 → 复制 → postinstall）；跳过解压与 SHA-256 校验（无归档，显式 `--sha256` 提示跳过）；作用域/钩子/依赖语义不变；本地 `ezmk-repo` checkout 解包后的 `packages/<name>/` 目录同样可安装
+- **`ezmk.toml` 向上查找**（`util::locate_project_root()`，`src/util.cpp`）：从 CWD 向上最多 5 层父目录查找含 `ezmk.toml` 的目录；`main.cpp` 各项目命令统一定位根并以绝对路径 `parse_config`；`pkg`/`cache`/`build`/`repo` 的 Project 作用域路径（`.ezmk/pkg`、cache、repo、lockfile）同步改定位根；5 层内未找到时给出明确报错（i18n `config_not_found_upward`），无配置场景（`project new` / `project import` / `clean` 回退）行为不变
+- **代码重构**：`install()` 解压后处理抽为 `process_installed_pkg()`（归档/目录共用），lockfile 生成抽为 `maybe_write_lockfile()`
+
+### 文档
+
+- `docs/en|zh/pkg.md` 新增「从文件夹安装」小节 + 查找顺序前置目录分支
+- `docs/en|zh/cli.md`、README/README_ZH 说明 `ezmk.toml` 向上查找行为（5 层边界）
+- 新增 i18n key `pkg_install_from_dir` / `pkg_sha256_skipped_dir` / `config_not_found_upward`（en/zh），`check_i18n.py` 三向一致
+
+### 测试
+
+- 新增 `locate_project_root` 单测（0/1/5/6 层、无 toml、`max_up` 覆盖）
+- 新增集成测试：目录安装成功（`pkg list` 可见）/ 非法目录拒绝；子目录内 `build` 成功、6 层超出边界失败、无配置回退报错
+- 新增 `test_i18n.cpp` dev.7 key 非空 + fmt 断言
+- 全量回归：695 用例 / 3234 断言零失败
+
+---
+
 ## 1.2.0-dev.6 (2026-08-14) — 各源文件构建耗时统计
 
 1.2.0 系列第六个开发子版本：为 `ezmk build` 并行编译路径补上 **per-file 编译耗时明细**，让"慢在哪一步"一目了然——`-v` 时始终按耗时降序打印本次实际编译（非缓存命中）的源文件，默认构建总耗时超过 5 秒时自动打印最慢的 10 个 + 汇总行。**纯诊断增强、零配置、不新增 flag**（见文首 API Stability）。

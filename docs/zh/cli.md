@@ -75,6 +75,8 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 **`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
 
+**`ezmk.toml` 向上查找（1.2.0-dev.7+）：** 所有需要项目配置的命令（`build` / `run` / `clean` / `install` / `pack` / `watch` / `test` / `project cc` / `project export` 等）会从当前目录**向上查找最多 5 层父目录**寻找 `ezmk.toml`——进入项目子目录后直接运行 `ezmk build` / `ezmk test` 即可，如同 `git` 的行为。找到的目录即项目根，产物、缓存与 `.ezmk/*`（cache / pkg / repo）都落在该根下；5 层内未找到时给出明确报错（`clean` 回退到当前目录）。`project new` / `project import` 这类创建命令不依赖已有配置。
+
 **`project import`** 把当前目录的 `CMakeLists.txt` 转换为全新的 `ezmk.toml`
 （单向快照——导入后以 `ezmk.toml` 为唯一事实源）。`--from` 默认 `cmake` 且大小写不敏感。
 已存在 `ezmk.toml` 时默认拒绝，需显式 `--overwrite` 才覆盖；遇到不支持的非声明式写法
