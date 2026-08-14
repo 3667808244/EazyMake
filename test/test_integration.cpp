@@ -1211,3 +1211,151 @@ TEST_CASE("integration: build timing detail (dev.6)", "[integration][1.2.0-dev.6
     REQUIRE(d.exit_code == 0);
     REQUIRE((d.out + d.err).find("slowest compile units") == std::string::npos);
 }
+
+// 1.2.0-dev.7: pkg install <dir> — install a package straight from a source
+// directory (no archive, no SHA-256). The installed package must be visible
+// to `pkg list -p`.
+TEST_CASE("integration: pkg install from a source directory (project scope)", "[integration][1.2.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "dirinstall_app";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // A source-directory package: include/ + src/ + ezmk.toml
+    fs::path pkg_dir = tmp.path / "greet_pkg";
+    fs::create_directories(pkg_dir / "include" / "greet");
+    fs::create_directories(pkg_dir / "src");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"greet\"\ntype = \"static\"\nversion = \"1.0.0\"\n");
+    file_write(pkg_dir / "include" / "greet" / "greet.hpp",
+        "#pragma once\nint greet();\n");
+    file_write(pkg_dir / "src" / "greet.cpp",
+        "#include \"greet/greet.hpp\"\nint greet() { return 42; }\n");
+
+    // Install from the directory into project scope
+    ProcResult r = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+
+    // The package must be installed under the project's .ezmk/pkg and listed
+    // (pkg list prints to stderr — inspect the combined output)
+    ProcResult l = run_ezmk("pkg list -p", proj_dir);
+    INFO("list stderr: " << l.err);
+    INFO("list stdout: " << l.out);
+    REQUIRE(l.exit_code == 0);
+    REQUIRE((l.out + l.err).find("greet") != std::string::npos);
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "greet" / "ezmk.toml"));
+}
+
+// 1.2.0-dev.7: a directory that is not a valid package (ezmk.toml but no
+// src/ and no include/) must be rejected.
+TEST_CASE("integration: pkg install from an invalid directory is rejected", "[integration][1.2.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "dirinstall_bad";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    fs::path bad_dir = tmp.path / "badpkg";
+    fs::create_directories(bad_dir);
+    file_write(bad_dir / "ezmk.toml",
+        "[project]\nname = \"badpkg\"\ntype = \"static\"\nversion = \"0.1.0\"\n");
+
+    ProcResult r = run_ezmk("pkg install \"" + bad_dir.string() + "\" -p", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code != 0);
+    std::string combined = r.out + r.err;
+    REQUIRE(combined.find("src/") != std::string::npos);
+}
+
+// 1.2.0-dev.7: upward project-root search — ezmk build works from a nested
+// subdirectory, and artifacts land in the located project root's build/.
+TEST_CASE("integration: build works from a subdirectory (upward search)", "[integration][1.2.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "upward_app";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Build from a subdirectory (2 levels below the project root)
+    fs::path subdir = proj_dir / "docs" / "guide";
+    fs::create_directories(subdir);
+    ProcResult r = run_ezmk("build", subdir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+
+    // Artifacts land in the project root's build/, not the subdirectory
+    fs::path exe = proj_dir / "build" / (proj_name + EZMK_EXE_SUFFIX);
+    REQUIRE(fs::exists(exe));
+}
+
+// 1.2.0-dev.7: beyond the 5-level upward-search boundary, the command must
+// fail rather than silently use a wrong directory.
+TEST_CASE("integration: build beyond the 5-level upward search fails", "[integration][1.2.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "deep_app";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // 6 levels deep → the project root is beyond the search limit
+    fs::path deep = proj_dir;
+    for (int i = 0; i < 6; ++i) deep = deep / "d";
+    fs::create_directories(deep);
+
+    ProcResult r = run_ezmk("build", deep);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code != 0);
+}
+
+// 1.2.0-dev.7: no ezmk.toml anywhere within the search boundary → a clear
+// fatal error (rather than the old generic "config file not found").
+TEST_CASE("integration: build with no ezmk.toml fails with clear message", "[integration][1.2.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    fs::path work = tmp.path / "work";
+    fs::create_directories(work);
+
+    ProcResult r = run_ezmk("build", work);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code != 0);
+    REQUIRE((r.out + r.err).find("ezmk.toml") != std::string::npos);
+}

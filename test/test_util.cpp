@@ -930,3 +930,66 @@ TEST_CASE("detect_platform_tag: consistent on repeated calls", "[util]") {
     std::string t2 = ezmk::util::detect_platform_tag();
     REQUIRE(t1 == t2);
 }
+
+// ===================================================================
+// locate_project_root() — 1.2.0-dev.7
+// ===================================================================
+
+TEST_CASE("locate_project_root: finds ezmk.toml at the start directory (level 0)", "[util][1.2.0-dev.7]") {
+    auto base = fs::temp_directory_path() / "ezmk_lpr_l0";
+    ezmk::util::remove_all(base);
+    ezmk::util::create_directories(base);
+    std::ofstream(base / "ezmk.toml") << "[project]\nname=\"x\"\ntype=\"executable\"\nversion=\"0.1.0\"\n";
+
+    auto found = locate_project_root(base);
+    REQUIRE(found.has_value());
+    REQUIRE(found.value() == base);
+
+    ezmk::util::remove_all(base);
+}
+
+TEST_CASE("locate_project_root: finds ezmk.toml up to 5 parent levels, not beyond", "[util][1.2.0-dev.7]") {
+    auto base = fs::temp_directory_path() / "ezmk_lpr_up";
+    ezmk::util::remove_all(base);
+    // base/ezmk.toml with 5 nested levels below it
+    fs::path deep = base;
+    for (int i = 0; i < 5; ++i) deep = deep / ("lvl" + std::to_string(i));
+    ezmk::util::create_directories(deep);
+    std::ofstream(base / "ezmk.toml") << "[project]\nname=\"x\"\ntype=\"executable\"\nversion=\"0.1.0\"\n";
+
+    // level 1 → found
+    REQUIRE(locate_project_root(base / "lvl0").value_or(fs::path()) == base);
+    // level 5 (deep) → still within the limit → found
+    REQUIRE(locate_project_root(deep).value_or(fs::path()) == base);
+    // level 6 (beyond) → beyond max_up → not found
+    fs::path beyond = deep / "lvl5";
+    ezmk::util::create_directories(beyond);
+    REQUIRE_FALSE(locate_project_root(beyond).has_value());
+
+    ezmk::util::remove_all(base);
+}
+
+TEST_CASE("locate_project_root: no ezmk.toml anywhere returns nullopt", "[util][1.2.0-dev.7]") {
+    auto base = fs::temp_directory_path() / "ezmk_lpr_none";
+    ezmk::util::remove_all(base);
+    fs::path nested = base / "a" / "b" / "c";
+    ezmk::util::create_directories(nested);
+
+    REQUIRE_FALSE(locate_project_root(nested).has_value());
+
+    ezmk::util::remove_all(base);
+}
+
+TEST_CASE("locate_project_root: max_up override controls the search depth", "[util][1.2.0-dev.7]") {
+    auto base = fs::temp_directory_path() / "ezmk_lpr_max";
+    ezmk::util::remove_all(base);
+    ezmk::util::create_directories(base / "sub");
+    std::ofstream(base / "ezmk.toml") << "[project]\nname=\"x\"\ntype=\"executable\"\nversion=\"0.1.0\"\n";
+
+    // max_up = 0 → only the start directory is checked
+    REQUIRE_FALSE(locate_project_root(base / "sub", 0).has_value());
+    // max_up = 1 → the parent is within range
+    REQUIRE(locate_project_root(base / "sub", 1).value_or(fs::path()) == base);
+
+    ezmk::util::remove_all(base);
+}

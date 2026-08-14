@@ -384,6 +384,19 @@ TEST_CASE("1.2.0-dev.6 i18n keys: build timing detail", "[i18n][1.2.0-dev.6]") {
     REQUIRE(entry.find("src/main.cpp") != std::string::npos);
 }
 
+// 1.2.0-dev.7: directory install + upward project-root keys.
+TEST_CASE("1.2.0-dev.7 i18n keys: dir install + upward root", "[i18n][1.2.0-dev.7]") {
+    init("en");
+    REQUIRE(!get(I18nKey::pkg_install_from_dir).empty());
+    REQUIRE(!get(I18nKey::pkg_sha256_skipped_dir).empty());
+    REQUIRE(!get(I18nKey::config_not_found_upward).empty());
+
+    std::string msg = fmt(I18nKey::pkg_install_from_dir, {{"dir", "/tmp/pkg"}});
+    REQUIRE(msg.find("/tmp/pkg") != std::string::npos);
+    // the not-found message names the 5-level upward search boundary
+    REQUIRE(get(I18nKey::config_not_found_upward).find("5") != std::string::npos);
+}
+
 // ===================================================================
 // 0.2.6+: exhaustive regression — EVERY I18nKey must resolve in both
 // languages (guards against the enum/key_name/JSON drift that produced
