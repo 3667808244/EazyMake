@@ -1731,15 +1731,18 @@ void run_tests(const config::EzConfig& cfg,
         if (!user_has_main) {
             test_main_cpp = cache_dir / "test_main.cpp";
             std::string main_content;
-            main_content += "#define CATCH_CONFIG_MAIN\n";
             // Use appropriate include depending on Catch2 version
             fs::path vendor_hpp = proj_root / "include/vendor/catch2.hpp";
             if (util::file_exists(vendor_hpp)) {
-                // Single-header Catch2 (v2 style)
+                // Single-header Catch2 (v2 style): CATCH_CONFIG_MAIN still generates main
+                main_content += "#define CATCH_CONFIG_MAIN\n";
                 main_content += "#include \"catch2.hpp\"\n";
             } else {
-                // Multi-header Catch2 v3
-                main_content += "#include <catch2/catch_all.hpp>\n";
+                // Multi-header Catch2 v3: CATCH_CONFIG_MAIN removed → explicit main + Session().run()
+                main_content += "#include <catch2/catch_session.hpp>\n";
+                main_content += "int main(int argc, char* argv[]) {\n";
+                main_content += "    return Catch::Session().run(argc, argv);\n";
+                main_content += "}\n";
             }
             // Only write if content changed (avoid unnecessary recompilation)
             bool write_needed = true;

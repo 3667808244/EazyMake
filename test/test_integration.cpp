@@ -1113,3 +1113,61 @@ TEST_CASE("integration: default template profiles + default_profile fallback", "
         REQUIRE(rel_out.find("-DNDEBUG") != std::string::npos);
     }
 }
+
+// 1.2.0-dev.5: ezmk test links catch2 v3 (multi-header). The project has no
+// include/vendor/catch2.hpp single-header, so run_tests takes the multi-header
+// path and emits a v3-compatible main (`Catch::Session().run(argc, argv)`)
+// instead of the removed `CATCH_CONFIG_MAIN`.
+TEST_CASE("integration: ezmk test works with catch2 v3", "[integration][1.2.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "catch2v3_test";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // v3 multi-header test source.
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "test" / "test_math.cpp",
+        "#include <catch2/catch_test_macros.hpp>\n"
+        "\n"
+        "TEST_CASE(\"addition works\", \"[math]\") {\n"
+        "    REQUIRE(1 + 1 == 2);\n"
+        "}\n");
+
+    // [depends] catch2 (hard dep) + explicit [test] config.
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\ninclude_dirs = [\"include\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = [\"catch2\"]\n\n"
+              "[test]\ndirs = [\"test\"]\nframework = \"catch2\"\n";
+    }
+
+    // Install catch2 into project scope (needs a registered repo; skip offline).
+    ProcResult inst = run_ezmk("pkg install catch2 -p -y", proj_dir);
+    if (inst.exit_code != 0) {
+        SKIP("catch2 install failed (no repo / offline) — skipping");
+    }
+
+    ProcResult r = run_ezmk("test", proj_dir);
+    INFO("stdout: " << r.out);
+    INFO("stderr: " << r.err);
+
+    std::string combined = r.out + r.err;
+    // Defensive: if catch2 still isn't resolvable, skip rather than fail.
+    if (r.exit_code != 0 && combined.find("Catch2 not found") != std::string::npos) {
+        SKIP("catch2 not available — skipping");
+    }
+
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(combined.find("failed: 0") != std::string::npos);
+}

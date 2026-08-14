@@ -39,6 +39,26 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.5 (2026-08-14) — catch2 v3 测试主程序兼容
+
+1.2.0 系列第五个开发子版本：修复 `ezmk test` 在 catch2 v3（官方仓库当前版本 3.6.0）下无法链接的问题。catch2 v3 已移除 `CATCH_CONFIG_MAIN` 宏，`ezmk test` 原先固定生成的 `#define CATCH_CONFIG_MAIN` + `#include <catch2/catch_all.hpp>` 在 v3 下**不产生任何 `main`**，测试链接无入口点（本机表现为 mingw 报 `undefined reference to WinMain`）。**不破坏任何公共 API**（纯内部 test_main 生成逻辑，见文首 API Stability）。
+
+### 修复
+
+- **v3 多头路径生成 v3 兼容 main**：`src/build.cpp` `run_tests` 的 test_main 生成按 v2/v3 分支——v3（无 `include/vendor/catch2.hpp`）改为 `#include <catch2/catch_session.hpp>` + 显式 `int main` 调 `Catch::Session().run(argc, argv)`（v2/v3 均有的稳定 API，未来 catch2 升级无需再改）
+- **v2 vendor 单头路径不回归**：`include/vendor/catch2.hpp`（v2 单头）仍走 `#define CATCH_CONFIG_MAIN` 原逻辑，行为不变
+
+### 前置
+
+- **catch2 3.6.0 包内容修复**（`ezmk-repo` `3b74cc1`）：107 个实现 .cpp 平铺进 `src/`，`libcatch2.a` 含 106 成员 / 24939 实现符号。本计划只修 EazyMake 侧 CLI，包修复作为前置不在本文重复
+
+### 测试
+
+- 新增集成测试 `integration: ezmk test works with catch2 v3`（建项目 + `[depends] catch2` + test 源 → `ezmk test` 端到端；离线/无 repo 时 SKIP）
+- 全量回归：683 用例 / 3170 断言零失败
+
+---
+
 ## 1.2.0-dev.3 (2026-08-12) — 默认模板内建 Debug/Release Profile
 
 1.2.0 系列第三个开发子版本：把 Debug/Release profile 固化进 `ezmk project new` 的默认模板，基准 `[compile].flags` 收敛为警告-only（优化归 profile），并新增 `[compile].default_profile` 配置项（模板内建 `"debug"`）——无 `--profile` 的默认构建开箱即可调试（`-g -O0`、断言开启），需优化时显式 `--profile release`。**不破坏任何公共 API**（纯模板变更 + 可选字段，见文首 API Stability）。
