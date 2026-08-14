@@ -1171,3 +1171,43 @@ TEST_CASE("integration: ezmk test works with catch2 v3", "[integration][1.2.0-de
     REQUIRE(r.exit_code == 0);
     REQUIRE(combined.find("failed: 0") != std::string::npos);
 }
+
+// 1.2.0-dev.6: per-file build timing detail.
+// `-v` build prints the "slowest compile units" breakdown; a small default
+// build (well under the 5s threshold) does not spam the detail. Timing values
+// are non-deterministic, so only the header's presence/absence is asserted.
+// `-j4` pins the parallel path so the timing logic (not the serial fallback)
+// is what gets exercised.
+TEST_CASE("integration: build timing detail (dev.6)", "[integration][1.2.0-dev.6]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "timing_test";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Add extra sources so the parallel path (num_jobs>1 && >1 source) runs.
+    for (int i = 0; i < 3; ++i) {
+        file_write(proj_dir / "src" / ("extra" + std::to_string(i) + ".cpp"),
+                   "int extra" + std::to_string(i) + "() { return " +
+                       std::to_string(i) + "; }\n");
+    }
+
+    // -v build → full detail header appears.
+    ProcResult v = run_ezmk("build -v -j4", proj_dir);
+    INFO("stderr: " << v.err);
+    REQUIRE(v.exit_code == 0);
+    REQUIRE((v.out + v.err).find("slowest compile units") != std::string::npos);
+
+    // default small build (forced recompile, but fast) → no detail spam.
+    ProcResult d = run_ezmk("build --disable-cache -j4", proj_dir);
+    INFO("stderr: " << d.err);
+    REQUIRE(d.exit_code == 0);
+    REQUIRE((d.out + d.err).find("slowest compile units") == std::string::npos);
+}

@@ -366,6 +366,24 @@ TEST_CASE("0.2.3 i18n keys: fmt works with new keys", "[i18n][0.2.3]") {
     REQUIRE(r3.find("/src/main.cpp") != std::string::npos);
 }
 
+// 1.2.0-dev.6: per-file build timing detail keys.
+TEST_CASE("1.2.0-dev.6 i18n keys: build timing detail", "[i18n][1.2.0-dev.6]") {
+    init("en");
+    REQUIRE(!get(I18nKey::build_time_header).empty());
+    REQUIRE(!get(I18nKey::build_time_entry).empty());
+    REQUIRE(!get(I18nKey::build_time_truncated).empty());
+
+    std::string hdr = fmt(I18nKey::build_time_header,
+                          {{"compiled", "8"}, {"time", "4.2s"}});
+    REQUIRE(hdr.find("8") != std::string::npos);
+    REQUIRE(hdr.find("4.2s") != std::string::npos);
+
+    std::string entry = fmt(I18nKey::build_time_entry,
+                            {{"time", "2.1s"}, {"file", "src/main.cpp"}});
+    REQUIRE(entry.find("2.1s") != std::string::npos);
+    REQUIRE(entry.find("src/main.cpp") != std::string::npos);
+}
+
 // ===================================================================
 // 0.2.6+: exhaustive regression — EVERY I18nKey must resolve in both
 // languages (guards against the enum/key_name/JSON drift that produced
