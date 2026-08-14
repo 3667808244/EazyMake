@@ -13,6 +13,7 @@ This project provides the following skills for AI coding agents. Load the releva
 | Codebase | `.claude/skills/ezmk-codebase/SKILL.md` | Understanding architecture, config, CLI flags, subsystems |
 | i18n | `.claude/skills/ezmk-i18n/SKILL.md` | Modifying translations or `i18n_keys.def` |
 | Planning | `.claude/skills/ezmk-planning/SKILL.md` | Working on version plans (`plans/`, `plan.md`) |
+| Workflow | `.claude/skills/ezmk-workflow/SKILL.md` | Executing a version lifecycle — dev / pre / formal-release stages, commit conventions, release gate |
 | Repo | `.claude/skills/ezmk-repo/SKILL.md` | Managing packages in the official EazyMake repository |
 | Publish | `.claude/skills/ezmk-publish/SKILL.md` | Distributing a release to winget / Homebrew (manifests, formula, submission, pitfalls) |
 
