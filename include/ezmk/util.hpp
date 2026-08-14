@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <map>
+#include <optional>
 
 #include "ezmk/i18n.hpp"
 
@@ -115,6 +116,18 @@ void validate_pkg_name(const std::string& name);
 // Collect files matching extensions in a directory (non-recursive)
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);
+
+// ---- Project root (1.2.0-dev.7) ----
+// Upward project-root search limit — prevents scanning up to the filesystem
+// root / user home when no ezmk.toml exists anywhere above the start point.
+inline constexpr int kProjectRootMaxUp = 5;
+
+// Starting from `start` (itself counted as level 0), walk up at most `max_up`
+// parent directories looking for one that contains an ezmk.toml. Returns that
+// directory if found, otherwise nullopt — callers fall back to `start` so the
+// no-config behavior is unchanged.
+std::optional<fs::path> locate_project_root(const fs::path& start,
+                                            int max_up = kProjectRootMaxUp);
 
 // ---- Platform detection ----
 // 1.1.0-dev.2: Returns a simplified platform tag in "os-arch" format.

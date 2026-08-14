@@ -473,7 +473,9 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                                const cli::BuildOptions& opts) {
     BuildState st;
 
-    st.proj_root = fs::current_path();
+    // 1.2.0-dev.7: proj_root is the located project root (upward search) so
+    // builds work from any subdirectory; falls back to CWD when no ezmk.toml.
+    st.proj_root = util::locate_project_root(fs::current_path()).value_or(fs::current_path());
     st.temp_dir = st.proj_root / ".ezmk/temp";
     st.build_dir = st.proj_root / "build";
     st.cache_obj_dir = st.proj_root / ".ezmk/cache/obj";
@@ -1649,7 +1651,8 @@ void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
                bool verbose) {
-    fs::path proj_root = fs::current_path();
+    // 1.2.0-dev.7: located project root (upward search); CWD fallback
+    fs::path proj_root = util::locate_project_root(fs::current_path()).value_or(fs::current_path());
     fs::path build_dir = proj_root / "build";
     fs::path cache_dir = proj_root / ".ezmk/cache";
 

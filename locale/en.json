@@ -205,6 +205,7 @@
     "config_err_invalid_profile": "invalid profile name '{name}': only [a-zA-Z0-9_-] allowed",
     "config_err_empty_depends_entry": "empty dependency entry in [depends]",
     "config_err_version_missing": "version constraint specified but version number is missing in '{entry}'",
+    "config_not_found_upward": "ezmk.toml not found in the current directory or any of its 5 parent directories. Run 'ezmk project new' to create a project.",
     "pkg_constraint_unsatisfied": "no version of '{pkg}' satisfies constraint '{constraint}' (available: {available})",
     "cli_usage_header": "EazyMake - A simple C/C++ build tool",
     "cli_usage_project": "Project management:",

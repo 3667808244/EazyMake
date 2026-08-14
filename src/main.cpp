@@ -32,17 +32,28 @@ static void auto_update_repos(const ezmk::cli::BuildOptions& opts) {
     }
 }
 
+// 1.2.0-dev.7: Locate the project root for commands that require an ezmk.toml
+// (upward search, max 5 levels). A missing config is a fatal error with a clear
+// message pointing at the search boundary.
+static std::filesystem::path require_project_root() {
+    auto root = ezmk::util::locate_project_root(std::filesystem::current_path());
+    if (!root.has_value()) {
+        ezmk::util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::config_not_found_upward));
+    }
+    return *root;
+}
+
 // 1.2.0: shared compile_commands generation entry — used by both the
 // `ezmk project cc` command and the (deprecated) `ezmk utils cc` redirect,
 // so the two entry points always produce identical output.
 static void generate_compile_db_entry(const std::string& output_path,
                                       const std::string& profile) {
-    auto cfg = ezmk::config::parse_config("ezmk.toml");
+    auto proj_root = require_project_root();
+    auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
     ezmk::cli::BuildOptions opts;
     opts.profile = profile;
     // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
     if (opts.profile.empty()) opts.profile = cfg.compile.default_profile;
-    auto proj_root = std::filesystem::current_path();
 
     std::filesystem::path out;
     if (!output_path.empty()) {
@@ -146,14 +157,16 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::ProjectBuild: {
             auto_update_repos(args.build_opts);
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
             ezmk::build::build_project(cfg, args.build_opts);
             break;
         }
 
         case ezmk::cli::Command::ProjectRun: {
             auto_update_repos(args.build_opts);
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
             auto exe = ezmk::build::build_project(cfg, args.build_opts);
             ezmk::util::info(ezmk::i18n::I18nKey::running,
                              {{"exe", exe.filename().string()}});
@@ -171,16 +184,21 @@ int main(int argc, char** argv) {
             break;
         }
 
-        case ezmk::cli::Command::ProjectClean:
+        case ezmk::cli::Command::ProjectClean: {
+            // 1.2.0-dev.7: clean operates on the located project root
+            // (fall back to CWD when no ezmk.toml — cleaning is safe regardless)
+            auto proj_root = ezmk::util::locate_project_root(fs::current_path())
+                                .value_or(fs::current_path());
             ezmk::cache::clear_cache();
-            { std::error_code ec; fs::remove_all(".ezmk/temp", ec); }  // best-effort
+            { std::error_code ec; fs::remove_all(proj_root / ".ezmk/temp", ec); }  // best-effort
             ezmk::util::info(ezmk::i18n::I18nKey::cleaned);
             break;
+        }
 
         // 1.1.0: project install
         case ezmk::cli::Command::ProjectInstall: {
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
-            auto proj_root = std::filesystem::current_path();
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
 
             // Build first
             ezmk::build::build_project(cfg, args.build_opts);
@@ -191,8 +209,8 @@ int main(int argc, char** argv) {
         }
 
         case ezmk::cli::Command::ProjectPack: {
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
-            auto proj_root = std::filesystem::current_path();
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
 
             ezmk::build::pack_project(cfg, *args.project_pack_opts, proj_root);
             break;
@@ -207,8 +225,8 @@ int main(int argc, char** argv) {
 
         // 1.2.0: project export cmake — one-shot CMakeLists.txt generation
         case ezmk::cli::Command::ProjectExport: {
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
-            auto proj_root = std::filesystem::current_path();
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
             const auto& eo = *args.project_export_opts;
             ezmk::export_gen::ExportOptions eo2;
             eo2.output = eo.output;
@@ -230,7 +248,8 @@ int main(int argc, char** argv) {
         // 1.1.0-dev.6: project test
         case ezmk::cli::Command::ProjectTest: {
             auto_update_repos(args.build_opts);
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
             ezmk::build::run_tests(cfg,
                                     args.test_framework,
                                     args.test_filter,
@@ -241,8 +260,8 @@ int main(int argc, char** argv) {
         case ezmk::cli::Command::ProjectWatch: {
             // 0.2.3+: Watch mode — file monitoring + auto rebuild
             auto_update_repos(args.build_opts);
-            auto cfg = ezmk::config::parse_config("ezmk.toml");
-            auto proj_root = std::filesystem::current_path();
+            auto proj_root = require_project_root();
+            auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
 
             // Build effective config (profile merge)
             // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
@@ -307,7 +326,7 @@ int main(int argc, char** argv) {
                         ezmk::util::info(ezmk::i18n::I18nKey::watch_config_changed);
                         ezmk::cache::clear_cache();
                         try {
-                            auto new_cfg = ezmk::config::parse_config("ezmk.toml");
+                            auto new_cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
                             ezmk::build::build_project(new_cfg, args.build_opts);
                             ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                         } catch (const std::exception& e) {
@@ -321,7 +340,7 @@ int main(int argc, char** argv) {
                     ezmk::util::info(ezmk::i18n::I18nKey::watch_detected_change,
                                      {{"path", changed_abs}});
                     try {
-                        auto cur_cfg = ezmk::config::parse_config("ezmk.toml");
+                        auto cur_cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
                         ezmk::build::build_project(cur_cfg, args.build_opts);
                         ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                     } catch (const std::exception& e) {
@@ -456,12 +475,18 @@ int main(int argc, char** argv) {
 
     } catch (const ezmk::fatal_error&) {
         // fatal() already printed the message; just clean up (best-effort)
-        { std::error_code ec; fs::remove_all(".ezmk/temp", ec); }
+        // 1.2.0-dev.7: temp dir lives under the located project root
+        { std::error_code ec;
+          fs::remove_all(ezmk::util::locate_project_root(fs::current_path())
+                             .value_or(fs::current_path()) / ".ezmk/temp", ec); }
         ezmk::lua::shutdown();
         return 1;
     } catch (const std::exception& e) {
         ezmk::util::error(e.what());
-        { std::error_code ec; fs::remove_all(".ezmk/temp", ec); }
+        // 1.2.0-dev.7: temp dir lives under the located project root
+        { std::error_code ec;
+          fs::remove_all(ezmk::util::locate_project_root(fs::current_path())
+                             .value_or(fs::current_path()) / ".ezmk/temp", ec); }
         ezmk::lua::shutdown();
         return 1;
     }

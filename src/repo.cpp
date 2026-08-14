@@ -25,8 +25,12 @@ namespace ezmk::repo {
 
 fs::path list_toml_path(cli::Scope scope) {
     switch (scope) {
-    case cli::Scope::Project:
-        return fs::current_path() / ".ezmk/repo/list.toml";
+    case cli::Scope::Project: {
+        // 1.2.0-dev.7: project scope lives under the located project root
+        // (upward search); falls back to CWD when no ezmk.toml is found.
+        auto root = util::locate_project_root(fs::current_path());
+        return (root.value_or(fs::current_path())) / ".ezmk/repo/list.toml";
+    }
     case cli::Scope::User: {
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");
@@ -44,8 +48,11 @@ fs::path list_toml_path(cli::Scope scope) {
 
 fs::path cache_dir(cli::Scope scope, std::string_view repo_name) {
     switch (scope) {
-    case cli::Scope::Project:
-        return fs::current_path() / ".ezmk/repo/.cache" / repo_name;
+    case cli::Scope::Project: {
+        // 1.2.0-dev.7: same located project root as list_toml_path(Project)
+        auto root = util::locate_project_root(fs::current_path());
+        return (root.value_or(fs::current_path())) / ".ezmk/repo/.cache" / repo_name;
+    }
     case cli::Scope::User: {
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");

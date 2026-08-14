@@ -76,8 +76,12 @@ bool satisfies_version_constraint(std::string_view version,
 
 fs::path pkg_install_dir(cli::Scope scope) {
     switch (scope) {
-    case cli::Scope::Project:
-        return fs::current_path() / ".ezmk/pkg";
+    case cli::Scope::Project: {
+        // 1.2.0-dev.7: project scope lives under the located project root
+        // (upward search); falls back to CWD when no ezmk.toml is found.
+        auto root = util::locate_project_root(fs::current_path());
+        return (root.value_or(fs::current_path())) / ".ezmk/pkg";
+    }
     case cli::Scope::User: {
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");
@@ -423,8 +427,10 @@ fs::path compile_package(const fs::path& pkg_dir,
     auto cur_sig = cache::compile_options_signature(cfg.compile, {}, "",
                                                     cfg.project.stdlib, false);
     // 1.1.0: deterministic build — include lockfile hash
+    // 1.2.0-dev.7: lockfile resolved against the located project root
     if (cfg.compile.deterministic) {
-        auto lock_path = fs::current_path() / "ezmk.lock";
+        auto root = util::locate_project_root(fs::current_path());
+        auto lock_path = (root.value_or(fs::current_path())) / "ezmk.lock";
         if (util::file_exists(lock_path)) {
             cur_sig += ":" + crypto::sha256_file(lock_path);
         }
@@ -899,6 +905,9 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
     if (scope != cli::Scope::Project || no_lock) return;
 
     try {
+        // 1.2.0-dev.7: lockfile lives under the located project root
+        auto proj_root = util::locate_project_root(fs::current_path())
+                            .value_or(fs::current_path());
         auto now_iso = []() -> std::string {
             auto t = std::time(nullptr);
             auto* tm = std::localtime(&t);
@@ -917,7 +926,7 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
         // 1.1.2 C3: record the root project's DIRECT deps so depends_changed
         // compares direct-vs-direct (packages[] includes transitive deps).
         try {
-            auto root_cfg = config::parse_config(fs::current_path() / "ezmk.toml");
+            auto root_cfg = config::parse_config(proj_root / "ezmk.toml");
             lf.direct_deps = lockfile::direct_dep_specs(root_cfg);
         } catch (...) {
             // Unparseable root config → leave direct_deps empty
@@ -961,7 +970,7 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
             }
         }
 
-        lockfile::save(fs::current_path(), lf);
+        lockfile::save(proj_root, lf);
     } catch (...) {
         // Lockfile generation failure is non-fatal
     }
@@ -1001,12 +1010,16 @@ void install(const std::string& pkg_file, cli::Scope scope,
              bool locked,
              bool no_lock) {
     // 1.1.0: --locked mode — install from lockfile only
+    // 1.2.0-dev.7: lockfile + config resolved against the located project root
     if (locked) {
-        auto lf = lockfile::load(fs::current_path());
+        auto proj_root = util::locate_project_root(fs::current_path())
+                            .value_or(fs::current_path());
+        auto lf = lockfile::load(proj_root);
         if (!lf.has_value()) {
             util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_locked_missing));
         }
-        if (lockfile::depends_changed(config::parse_config("ezmk.toml"), *lf)) {
+        if (lockfile::depends_changed(
+                config::parse_config((proj_root / "ezmk.toml").string()), *lf)) {
             util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_locked_depends_mismatch));
         }
         // Continue with install but verify against lockfile

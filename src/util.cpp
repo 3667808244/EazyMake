@@ -329,6 +329,19 @@ std::vector<fs::path> list_files(const fs::path& dir,
     return result;
 }
 
+// 1.2.0-dev.7: Upward project-root search. `start` is level 0; checks at most
+// `max_up` parent directories (max_up+1 candidates total) for an ezmk.toml.
+// Stops at the filesystem root to avoid looping forever.
+std::optional<fs::path> locate_project_root(const fs::path& start, int max_up) {
+    fs::path cur = start;
+    for (int i = 0; i <= max_up; ++i) {
+        if (util::file_exists(cur / "ezmk.toml")) return cur;
+        if (cur == cur.parent_path()) break;  // reached filesystem root
+        cur = cur.parent_path();
+    }
+    return std::nullopt;
+}
+
 // 1.1.0-dev.2: Returns a simplified platform tag (e.g. "win-x64", "linux-x64", "mac-arm64").
 // Used for precompiled package file matching and index.toml platform filtering.
 // Distinct from repo.cpp's build_platform_key() which uses "os_arch_toolchain" triplets.

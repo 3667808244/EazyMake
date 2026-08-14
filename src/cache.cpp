@@ -100,7 +100,10 @@ static CacheRecord json_to_record(std::string_view json) {
 // ===================================================================
 
 static fs::path cache_dir() {
-    return fs::current_path() / ".ezmk/cache";
+    // 1.2.0-dev.7: cache lives under the located project root (upward search);
+    // falls back to CWD when no ezmk.toml is found (unchanged behavior).
+    auto root = util::locate_project_root(fs::current_path());
+    return (root.value_or(fs::current_path())) / ".ezmk/cache";
 }
 
 static fs::path record_path() {
