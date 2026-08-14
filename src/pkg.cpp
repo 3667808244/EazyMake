@@ -586,6 +586,415 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
 // Install
 // ===================================================================
 
+// 1.2.0-dev.7: Shared post-validate install processing for BOTH archive and
+// directory installs: preinstall hook → dependency resolution → compilation →
+// transactional copy → postinstall hook. `pkg_root` is the validated package
+// directory (archive: extracted staging dir; directory: the source dir itself).
+// `stage` is the archive staging area to clean up on user-cancel (empty for
+// directory installs, where the source dir is never removed).
+static void process_installed_pkg(const fs::path& pkg_root,
+                                  const fs::path& dest_dir,
+                                  cli::Scope scope,
+                                  bool assume_yes,
+                                  const toolchain::Toolchain& tc,
+                                  const fs::path& stage) {
+    validate_pkg(pkg_root);
+
+    auto pkg_cfg = config::parse_config(pkg_root / "ezmk.toml");
+    std::string pkg_name = pkg_cfg.project.name;
+    util::validate_pkg_name(pkg_name);  // 1.1.3 S2: 恶意包名 → 中止安装
+
+    // Preinstall hook
+    fs::path preinstall_script = detect_install_script(pkg_root, "preinstall");
+    if (!preinstall_script.empty()) {
+        bool is_lua = (preinstall_script.extension() == ".lua");
+        InstallHookContext hook_ctx{pkg_name, pkg_root,
+                                    dest_dir / pkg_name, scope_to_string(scope)};
+        if (!run_install_script(preinstall_script, dest_dir / pkg_name,
+                                assume_yes, "preinstall", is_lua,
+                                hook_ctx)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled_user,
+                       {{"hook", "preinstall"}});
+            if (!stage.empty()) util::remove_all(stage);
+            return;
+        }
+    }
+
+    // Check for existing install
+    // 1.1.2 C6: do NOT delete the old install here — dependency resolution,
+    // compilation and hooks run below, and a failure would leave the package
+    // uninstalled. The old version is swapped out only once the new one is
+    // fully staged (see the transactional copy below).
+    fs::path install_path = dest_dir / pkg_name;
+    if (util::file_exists(install_path)) {
+        if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::overwrite_confirm,
+                     {{"pkg", pkg_name}, {"path", install_path.string()}}), assume_yes)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled);
+            if (!stage.empty()) util::remove_all(stage);
+            return;
+        }
+    }
+
+    // Collect all involved packages for dependency resolution
+    std::vector<fs::path> all_pkgs = { pkg_root };
+
+    // Check and resolve dependencies
+    {
+        // 1.1.0-dev.7: want interaction mode (reset per install call)
+        // 0=normal (prompt), 1=accept_all, 2=deny_all
+        int want_mode = 0;
+        bool want_header_printed = false;
+
+        std::set<std::string> seen = { pkg_name };
+        std::deque<std::string> to_check = { pkg_name };
+        while (!to_check.empty()) {
+            auto cur = to_check.front();
+            to_check.pop_front();
+
+            fs::path cur_dir = pkg_root;
+            if (cur != pkg_name) {
+                cur_dir = dest_dir / cur;
+                if (!util::file_exists(cur_dir)) {
+                    throw std::runtime_error(
+                        ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
+                                        {{"dep", cur}}));
+                }
+            }
+
+            auto cur_cfg = config::parse_config(cur_dir / "ezmk.toml");
+            for (auto& dep : cur_cfg.depends.libs) {
+                if (seen.insert(dep.name).second) {
+                    to_check.push_back(dep.name);
+                    fs::path dep_path = dest_dir / dep.name;
+                    if (util::file_exists(dep_path)) {
+                        // 0.9.6+: Validate installed version against constraint
+                        if (dep.constraint.op != config::VersionConstraint::None) {
+                            auto dep_cfg = config::parse_config(dep_path / "ezmk.toml");
+                            if (!satisfies_version_constraint(dep_cfg.project.version,
+                                                              dep.constraint)) {
+                                throw std::runtime_error(
+                                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                                                    {{"pkg", dep.name},
+                                                     {"constraint", dep.constraint.version},
+                                                     {"available", dep_cfg.project.version}}));
+                            }
+                        }
+                        all_pkgs.push_back(dep_path);
+                    } else {
+                        // 1.1.0-dev.7: Auto-install hard dependency from registered repos
+                        auto search = repo::search_package(dep.name, {
+                            cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+                        if (!search.archive_path.empty() &&
+                            util::file_exists(search.archive_path)) {
+                            util::info(std::string("auto-installing dependency: ") + dep.name);
+                            try {
+                                // Install to the same scope, skip lockfile for transitive deps
+                                install(dep.name, scope, search.sha256,
+                                        assume_yes, false, true);
+                                // After install, verify it now exists
+                                if (util::file_exists(dep_path)) {
+                                    all_pkgs.push_back(dep_path);
+                                    continue;
+                                }
+                            } catch (const std::exception& e) {
+                                throw std::runtime_error(
+                                    std::string("failed to install dependency '") +
+                                    dep.name + "': " + e.what());
+                            }
+                        }
+                        throw std::runtime_error(
+                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
+                                            {{"dep", dep.name}}));
+                    }
+                }
+            }
+            // 0.2.2+: want dependencies are optional — include if installed.
+            // 1.1.0-dev.7: interactive prompt for missing optional deps (Y/N/A/D).
+            for (auto& dep : cur_cfg.depends.want) {
+                if (seen.insert(dep.name).second) {
+                    fs::path dep_path = dest_dir / dep.name;
+                    if (util::file_exists(dep_path)) {
+                        // 0.9.6+: Validate installed version against constraint
+                        if (dep.constraint.op != config::VersionConstraint::None) {
+                            try {
+                                auto dep_cfg = config::parse_config(dep_path / "ezmk.toml");
+                                if (!satisfies_version_constraint(dep_cfg.project.version,
+                                                                  dep.constraint)) {
+                                    util::warn(ezmk::i18n::fmt(
+                                        ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                                        {{"pkg", dep.name},
+                                         {"constraint", dep.constraint.version},
+                                         {"available", dep_cfg.project.version}}));
+                                    continue; // skip this dep — constraint not satisfied
+                                }
+                            } catch (...) {
+                                util::warn(std::string("failed to parse config for dependency: ") + dep.name);
+                                continue;
+                            }
+                        }
+                        to_check.push_back(dep.name);
+                        all_pkgs.push_back(dep_path);
+                    } else {
+                        // 1.1.0-dev.7: Not installed — prompt user (interactive) or skip (-y)
+                        char choice = assume_yes ? 'd' : 0;
+
+                        // Check mode set by earlier A/D choices
+                        if (want_mode == 1) choice = 'a';
+                        else if (want_mode == 2) choice = 'd';
+
+                        // Prompt if in normal mode and interactive
+                        if (choice == 0) {
+                            // Print header on first prompt
+                            if (!want_header_printed) {
+                                util::info(ezmk::i18n::get(ezmk::i18n::I18nKey::want_prompt_title));
+                                want_header_printed = true;
+                            }
+                            util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::want_prompt_item,
+                                {{"pkg", cur}, {"dep", dep.name}}));
+                            std::cerr << ezmk::i18n::get(ezmk::i18n::I18nKey::want_prompt_options);
+                            std::string line;
+                            if (std::getline(std::cin, line)) {
+                                if (!line.empty()) choice = static_cast<char>(std::tolower(line[0]));
+                            }
+                            if (choice != 'y' && choice != 'n' &&
+                                choice != 'a' && choice != 'd') {
+                                choice = 'n'; // default: skip
+                            }
+                        }
+
+                        if (choice == 'a') want_mode = 1;      // accept all from now on
+                        else if (choice == 'd') want_mode = 2; // deny all from now on
+
+                        if (choice == 'y' || choice == 'a') {
+                            // Try to install from repos
+                            auto search = repo::search_package(dep.name, {
+                                cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+                            if (!search.archive_path.empty() &&
+                                util::file_exists(search.archive_path)) {
+                                util::info(ezmk::i18n::fmt(
+                                    ezmk::i18n::I18nKey::want_auto_installing,
+                                    {{"dep", dep.name}}));
+                                try {
+                                    install(dep.name, scope, search.sha256,
+                                            assume_yes, false, true);
+                                    if (util::file_exists(dep_path)) {
+                                        to_check.push_back(dep.name);
+                                        all_pkgs.push_back(dep_path);
+                                    }
+                                } catch (const std::exception& e) {
+                                    util::warn(std::string("failed to install optional dependency '") +
+                                               dep.name + "': " + e.what());
+                                }
+                            } else {
+                                util::warn(std::string("optional dependency not found in repos: ") + dep.name);
+                            }
+                        }
+                        // choice == 'n' or 'd': skip this want
+                    }
+                }
+            }
+        }
+    }
+
+    // Dependency ordering + compilation
+    util::info(ezmk::i18n::I18nKey::resolving_deps);
+    auto order = resolve_dependency_order(all_pkgs);
+
+    // Build name → dir map for resolving dependency include paths
+    std::map<std::string, fs::path> name_to_dir;
+    for (auto& d : all_pkgs) {
+        name_to_dir[config::parse_config(d / "ezmk.toml").project.name] = d;
+    }
+
+    for (auto& dir : order) {
+        auto cfg = config::parse_config(dir / "ezmk.toml");
+        // Skip compilation for utils packages without source files
+        if (cfg.project.type == "utils" && !util::file_exists(dir / "src")) {
+            continue;
+        }
+        // 0.9.7+: skip compilation for header-only packages
+        if (cfg.project.header_only) {
+            util::info(ezmk::i18n::I18nKey::installing_header_only,
+                       {{"name", cfg.project.name}});
+            continue;
+        }
+        // 0.9.7+: skip compilation for precompiled packages
+        if (cfg.project.precompiled) {
+            compile_package(dir, {}, tc);  // validates & returns lib/*.a path
+            util::info(ezmk::i18n::I18nKey::installing_precompiled,
+                       {{"name", cfg.project.name}});
+            continue;
+        }
+        std::vector<fs::path> dep_includes;
+        for (auto& dep : cfg.depends.libs) {
+            auto it = name_to_dir.find(dep.name);
+            if (it != name_to_dir.end()) {
+                dep_includes.push_back(it->second / "include");
+            }
+        }
+        // 0.2.2+: want deps also contribute include paths when installed
+        for (auto& dep : cfg.depends.want) {
+            auto it = name_to_dir.find(dep.name);
+            if (it != name_to_dir.end()) {
+                dep_includes.push_back(it->second / "include");
+            }
+        }
+        util::info(ezmk::i18n::I18nKey::compiling_pkg,
+                   {{"name", cfg.project.name}});
+        compile_package(dir, dep_includes, tc);
+    }
+
+    // Copy to install directory — transactionally (1.1.2 C6).
+    // Back up the old install, place the new one, and only then delete the
+    // backup. If the copy fails, roll the old version back. Previously the
+    // old install was deleted before staging, so any failure left the
+    // package uninstalled with no recovery.
+    fs::create_directories(dest_dir);
+    util::info(ezmk::i18n::I18nKey::installing_to, {{"path", install_path.string()}});
+    fs::path backup = install_path;
+    backup += ".old";
+    { std::error_code ec; fs::remove_all(backup, ec); }  // stale crash backup
+    bool had_old = util::file_exists(install_path);
+    if (had_old) {
+        std::error_code ec;
+        fs::rename(install_path, backup, ec);
+        if (ec) {
+            throw std::runtime_error("failed to back up existing install: " +
+                                     install_path.string() + " (" + ec.message() + ")");
+        }
+    }
+    try {
+        util::copy_recursive(pkg_root, install_path);
+    } catch (...) {
+        std::error_code ec;
+        fs::remove_all(install_path, ec);      // drop the partial new install
+        if (had_old) fs::rename(backup, install_path, ec);  // restore old
+        throw;
+    }
+    { std::error_code ec; fs::remove_all(backup, ec); }  // old version gone for good
+
+    // Postinstall hook
+    fs::path postinstall_script = detect_install_script(install_path, "postinstall");
+    if (!postinstall_script.empty()) {
+        bool is_lua = (postinstall_script.extension() == ".lua");
+        InstallHookContext hook_ctx{pkg_name, install_path,
+                                    install_path, scope_to_string(scope)};
+        if (!run_install_script(postinstall_script, install_path,
+                                assume_yes, "postinstall", is_lua,
+                                hook_ctx)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled_user,
+                       {{"hook", "postinstall"}});
+            // Installation files are already in place; leave them
+        }
+    }
+
+    util::info(ezmk::i18n::I18nKey::installed, {{"pkg", pkg_name}});
+}
+
+// 1.1.0: generate/update ezmk.lock with resolved dependency snapshot.
+// Shared by archive and directory installs (project scope only, unless --no-lock).
+static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
+                                 const toolchain::Toolchain& tc,
+                                 const fs::path& dest_dir) {
+    if (scope != cli::Scope::Project || no_lock) return;
+
+    try {
+        auto now_iso = []() -> std::string {
+            auto t = std::time(nullptr);
+            auto* tm = std::localtime(&t);
+            char buf[32];
+            std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
+            return buf;
+        };
+
+        config::Lockfile lf;
+        lf.version = 1;
+        lf.generated_by = "ezmk " EZMK_VERSION;
+        lf.generated_at = now_iso();
+        lf.toolchain = (tc.family == toolchain::CompilerFamily::Msvc) ? "msvc"
+                     : (tc.family == toolchain::CompilerFamily::Clang) ? "clang" : "gcc";
+        lf.toolchain_version = tc.version;
+        // 1.1.2 C3: record the root project's DIRECT deps so depends_changed
+        // compares direct-vs-direct (packages[] includes transitive deps).
+        try {
+            auto root_cfg = config::parse_config(fs::current_path() / "ezmk.toml");
+            lf.direct_deps = lockfile::direct_dep_specs(root_cfg);
+        } catch (...) {
+            // Unparseable root config → leave direct_deps empty
+        }
+
+        // Scan installed packages in project scope
+        fs::path pkg_dir = dest_dir;
+        if (util::file_exists(pkg_dir)) {
+            for (auto& entry : fs::directory_iterator(pkg_dir)) {
+                if (!entry.is_directory()) continue;
+                auto pkg_toml = entry.path() / "ezmk.toml";
+                if (!util::file_exists(pkg_toml)) continue;
+                try {
+                    auto pkg_cfg = config::parse_config(pkg_toml);
+                    config::LockedPackage lp;
+                    lp.name = pkg_cfg.project.name;
+                    lp.version = pkg_cfg.project.version;
+                    lp.type = pkg_cfg.project.header_only ? "header-only"
+                            : pkg_cfg.project.type;
+                    lp.scope = "project";
+                    lp.platform = (tc.family == toolchain::CompilerFamily::Msvc) ? "windows_x86_64_msvc"
+                                : "windows_x86_64_gcc";
+                    for (auto& d : pkg_cfg.depends.libs) lp.dependencies.push_back(d.name);
+                    for (auto& d : pkg_cfg.depends.want) lp.dependencies.push_back(d.name);
+
+                    // Hash the built library
+                    auto build_dir = entry.path() / "build";
+                    if (util::file_exists(build_dir)) {
+                        for (auto& f : fs::directory_iterator(build_dir)) {
+                            auto ext = f.path().extension().string();
+                            if (ext == ".a" || ext == ".lib") {
+                                lp.sha256 = crypto::sha256_file(f.path());
+                                break;
+                            }
+                        }
+                    }
+                    lf.packages.push_back(std::move(lp));
+                } catch (...) {
+                    // Skip packages with broken configs
+                }
+            }
+        }
+
+        lockfile::save(fs::current_path(), lf);
+    } catch (...) {
+        // Lockfile generation failure is non-fatal
+    }
+}
+
+// 1.2.0-dev.7: Install a package directly from a source directory (no archive).
+// The directory must be a valid package (ezmk.toml + include/ + src/ or
+// precompiled/header-only). SHA-256 does not apply (no archive) — the caller
+// emits a notice when --sha256 was requested. Shares the full post-validate
+// processing with archive installs.
+static void install_from_directory(const fs::path& dir, cli::Scope scope,
+                                   bool assume_yes, bool no_lock) {
+    util::info(ezmk::i18n::I18nKey::pkg_install_from_dir, {{"dir", dir.string()}});
+
+    auto tc = toolchain::detect_toolchain();
+    fs::path dest_dir = pkg_install_dir(scope);
+
+    // Safety: global install confirmation (same as archive installs)
+    if (scope == cli::Scope::Global) {
+        if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::global_confirm), assume_yes)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled);
+            return;
+        }
+    }
+
+    // No staging: the source directory IS the package root, so it is never
+    // removed. Shares validate → hooks → deps → compile → copy → postinstall.
+    process_installed_pkg(dir, dest_dir, scope, assume_yes, tc, {});
+
+    // Lockfile generation (project scope only, unless --no-lock)
+    maybe_write_lockfile(scope, no_lock, tc, dest_dir);
+}
+
 void install(const std::string& pkg_file, cli::Scope scope,
              std::string_view expected_sha256,
              bool assume_yes,
@@ -607,8 +1016,20 @@ void install(const std::string& pkg_file, cli::Scope scope,
     auto tc = toolchain::detect_toolchain();
     fs::path dest_dir = pkg_install_dir(scope);
 
-    // Determine if it's a URL or local file
     fs::path input(pkg_file);
+
+    // 1.2.0-dev.7: directory install — a source directory is a valid package
+    // source (include/ + src/ + ezmk.toml, or precompiled/header-only). No
+    // archive → no SHA-256 verification (emit a notice if --sha256 was given).
+    if (fs::is_directory(input)) {
+        if (!expected_sha256.empty()) {
+            util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
+        }
+        install_from_directory(input, scope, assume_yes, no_lock);
+        return;
+    }
+
+    // Determine if it's a URL or local file
     bool is_url = pkg_file.find("://") != std::string::npos
                || (pkg_file.find('.') != std::string::npos
                    && pkg_file.find('/') != std::string::npos
@@ -714,298 +1135,9 @@ void install(const std::string& pkg_file, cli::Scope scope,
             }
         }
 
-        validate_pkg(pkg_root);
-
-        auto pkg_cfg = config::parse_config(pkg_root / "ezmk.toml");
-        std::string pkg_name = pkg_cfg.project.name;
-        util::validate_pkg_name(pkg_name);  // 1.1.3 S2: 恶意包名 → 中止安装
-
-        // Preinstall hook
-        fs::path preinstall_script = detect_install_script(pkg_root, "preinstall");
-        if (!preinstall_script.empty()) {
-            bool is_lua = (preinstall_script.extension() == ".lua");
-            InstallHookContext hook_ctx{pkg_name, pkg_root,
-                                        dest_dir / pkg_name, scope_to_string(scope)};
-            if (!run_install_script(preinstall_script, dest_dir / pkg_name,
-                                    assume_yes, "preinstall", is_lua,
-                                    hook_ctx)) {
-                util::info(ezmk::i18n::I18nKey::install_cancelled_user,
-                           {{"hook", "preinstall"}});
-                util::remove_all(stage);
-                return;
-            }
-        }
-
-        // Check for existing install
-        // 1.1.2 C6: do NOT delete the old install here — dependency resolution,
-        // compilation and hooks run below, and a failure would leave the package
-        // uninstalled. The old version is swapped out only once the new one is
-        // fully staged (see the transactional copy below).
-        fs::path install_path = dest_dir / pkg_name;
-        if (util::file_exists(install_path)) {
-            if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::overwrite_confirm,
-                         {{"pkg", pkg_name}, {"path", install_path.string()}}), assume_yes)) {
-                util::info(ezmk::i18n::I18nKey::install_cancelled);
-                util::remove_all(stage);
-                return;
-            }
-        }
-
-        // Collect all involved packages for dependency resolution
-        std::vector<fs::path> all_pkgs = { pkg_root };
-
-        // Check and resolve dependencies
-        {
-            // 1.1.0-dev.7: want interaction mode (reset per install call)
-            // 0=normal (prompt), 1=accept_all, 2=deny_all
-            int want_mode = 0;
-            bool want_header_printed = false;
-
-            std::set<std::string> seen = { pkg_name };
-            std::deque<std::string> to_check = { pkg_name };
-            while (!to_check.empty()) {
-                auto cur = to_check.front();
-                to_check.pop_front();
-
-                fs::path cur_dir = pkg_root;
-                if (cur != pkg_name) {
-                    cur_dir = dest_dir / cur;
-                    if (!util::file_exists(cur_dir)) {
-                        throw std::runtime_error(
-                            ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
-                                            {{"dep", cur}}));
-                    }
-                }
-
-                auto cur_cfg = config::parse_config(cur_dir / "ezmk.toml");
-                for (auto& dep : cur_cfg.depends.libs) {
-                    if (seen.insert(dep.name).second) {
-                        to_check.push_back(dep.name);
-                        fs::path dep_path = dest_dir / dep.name;
-                        if (util::file_exists(dep_path)) {
-                            // 0.9.6+: Validate installed version against constraint
-                            if (dep.constraint.op != config::VersionConstraint::None) {
-                                auto dep_cfg = config::parse_config(dep_path / "ezmk.toml");
-                                if (!satisfies_version_constraint(dep_cfg.project.version,
-                                                                  dep.constraint)) {
-                                    throw std::runtime_error(
-                                        ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
-                                                        {{"pkg", dep.name},
-                                                         {"constraint", dep.constraint.version},
-                                                         {"available", dep_cfg.project.version}}));
-                                }
-                            }
-                            all_pkgs.push_back(dep_path);
-                        } else {
-                            // 1.1.0-dev.7: Auto-install hard dependency from registered repos
-                            auto search = repo::search_package(dep.name, {
-                                cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
-                            if (!search.archive_path.empty() &&
-                                util::file_exists(search.archive_path)) {
-                                util::info(std::string("auto-installing dependency: ") + dep.name);
-                                try {
-                                    // Install to the same scope, skip lockfile for transitive deps
-                                    install(dep.name, scope, search.sha256,
-                                            assume_yes, false, true);
-                                    // After install, verify it now exists
-                                    if (util::file_exists(dep_path)) {
-                                        all_pkgs.push_back(dep_path);
-                                        continue;
-                                    }
-                                } catch (const std::exception& e) {
-                                    throw std::runtime_error(
-                                        std::string("failed to install dependency '") +
-                                        dep.name + "': " + e.what());
-                                }
-                            }
-                            throw std::runtime_error(
-                                ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
-                                                {{"dep", dep.name}}));
-                        }
-                    }
-                }
-                // 0.2.2+: want dependencies are optional — include if installed.
-                // 1.1.0-dev.7: interactive prompt for missing optional deps (Y/N/A/D).
-                for (auto& dep : cur_cfg.depends.want) {
-                    if (seen.insert(dep.name).second) {
-                        fs::path dep_path = dest_dir / dep.name;
-                        if (util::file_exists(dep_path)) {
-                            // 0.9.6+: Validate installed version against constraint
-                            if (dep.constraint.op != config::VersionConstraint::None) {
-                                try {
-                                    auto dep_cfg = config::parse_config(dep_path / "ezmk.toml");
-                                    if (!satisfies_version_constraint(dep_cfg.project.version,
-                                                                      dep.constraint)) {
-                                        util::warn(ezmk::i18n::fmt(
-                                            ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
-                                            {{"pkg", dep.name},
-                                             {"constraint", dep.constraint.version},
-                                             {"available", dep_cfg.project.version}}));
-                                        continue; // skip this dep — constraint not satisfied
-                                    }
-                                } catch (...) {
-                                    util::warn(std::string("failed to parse config for dependency: ") + dep.name);
-                                    continue;
-                                }
-                            }
-                            to_check.push_back(dep.name);
-                            all_pkgs.push_back(dep_path);
-                        } else {
-                            // 1.1.0-dev.7: Not installed — prompt user (interactive) or skip (-y)
-                            char choice = assume_yes ? 'd' : 0;
-
-                            // Check mode set by earlier A/D choices
-                            if (want_mode == 1) choice = 'a';
-                            else if (want_mode == 2) choice = 'd';
-
-                            // Prompt if in normal mode and interactive
-                            if (choice == 0) {
-                                // Print header on first prompt
-                                if (!want_header_printed) {
-                                    util::info(ezmk::i18n::get(ezmk::i18n::I18nKey::want_prompt_title));
-                                    want_header_printed = true;
-                                }
-                                util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::want_prompt_item,
-                                    {{"pkg", cur}, {"dep", dep.name}}));
-                                std::cerr << ezmk::i18n::get(ezmk::i18n::I18nKey::want_prompt_options);
-                                std::string line;
-                                if (std::getline(std::cin, line)) {
-                                    if (!line.empty()) choice = static_cast<char>(std::tolower(line[0]));
-                                }
-                                if (choice != 'y' && choice != 'n' &&
-                                    choice != 'a' && choice != 'd') {
-                                    choice = 'n'; // default: skip
-                                }
-                            }
-
-                            if (choice == 'a') want_mode = 1;      // accept all from now on
-                            else if (choice == 'd') want_mode = 2; // deny all from now on
-
-                            if (choice == 'y' || choice == 'a') {
-                                // Try to install from repos
-                                auto search = repo::search_package(dep.name, {
-                                    cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
-                                if (!search.archive_path.empty() &&
-                                    util::file_exists(search.archive_path)) {
-                                    util::info(ezmk::i18n::fmt(
-                                        ezmk::i18n::I18nKey::want_auto_installing,
-                                        {{"dep", dep.name}}));
-                                    try {
-                                        install(dep.name, scope, search.sha256,
-                                                assume_yes, false, true);
-                                        if (util::file_exists(dep_path)) {
-                                            to_check.push_back(dep.name);
-                                            all_pkgs.push_back(dep_path);
-                                        }
-                                    } catch (const std::exception& e) {
-                                        util::warn(std::string("failed to install optional dependency '") +
-                                                   dep.name + "': " + e.what());
-                                    }
-                                } else {
-                                    util::warn(std::string("optional dependency not found in repos: ") + dep.name);
-                                }
-                            }
-                            // choice == 'n' or 'd': skip this want
-                        }
-                    }
-                }
-            }
-        }
-
-        // Dependency ordering + compilation
-        util::info(ezmk::i18n::I18nKey::resolving_deps);
-        auto order = resolve_dependency_order(all_pkgs);
-
-        // Build name → dir map for resolving dependency include paths
-        std::map<std::string, fs::path> name_to_dir;
-        for (auto& d : all_pkgs) {
-            name_to_dir[config::parse_config(d / "ezmk.toml").project.name] = d;
-        }
-
-        for (auto& dir : order) {
-            auto cfg = config::parse_config(dir / "ezmk.toml");
-            // Skip compilation for utils packages without source files
-            if (cfg.project.type == "utils" && !util::file_exists(dir / "src")) {
-                continue;
-            }
-            // 0.9.7+: skip compilation for header-only packages
-            if (cfg.project.header_only) {
-                util::info(ezmk::i18n::I18nKey::installing_header_only,
-                           {{"name", cfg.project.name}});
-                continue;
-            }
-            // 0.9.7+: skip compilation for precompiled packages
-            if (cfg.project.precompiled) {
-                compile_package(dir, {}, tc);  // validates & returns lib/*.a path
-                util::info(ezmk::i18n::I18nKey::installing_precompiled,
-                           {{"name", cfg.project.name}});
-                continue;
-            }
-            std::vector<fs::path> dep_includes;
-            for (auto& dep : cfg.depends.libs) {
-                auto it = name_to_dir.find(dep.name);
-                if (it != name_to_dir.end()) {
-                    dep_includes.push_back(it->second / "include");
-                }
-            }
-            // 0.2.2+: want deps also contribute include paths when installed
-            for (auto& dep : cfg.depends.want) {
-                auto it = name_to_dir.find(dep.name);
-                if (it != name_to_dir.end()) {
-                    dep_includes.push_back(it->second / "include");
-                }
-            }
-            util::info(ezmk::i18n::I18nKey::compiling_pkg,
-                       {{"name", cfg.project.name}});
-            compile_package(dir, dep_includes, tc);
-        }
-
-        // Copy to install directory — transactionally (1.1.2 C6).
-        // Back up the old install, place the new one, and only then delete the
-        // backup. If the copy fails, roll the old version back. Previously the
-        // old install was deleted before staging, so any failure left the
-        // package uninstalled with no recovery.
-        fs::create_directories(dest_dir);
-        util::info(ezmk::i18n::I18nKey::installing_to, {{"path", install_path.string()}});
-        fs::path backup = install_path;
-        backup += ".old";
-        { std::error_code ec; fs::remove_all(backup, ec); }  // stale crash backup
-        bool had_old = util::file_exists(install_path);
-        if (had_old) {
-            std::error_code ec;
-            fs::rename(install_path, backup, ec);
-            if (ec) {
-                throw std::runtime_error("failed to back up existing install: " +
-                                         install_path.string() + " (" + ec.message() + ")");
-            }
-        }
-        try {
-            util::copy_recursive(pkg_root, install_path);
-        } catch (...) {
-            std::error_code ec;
-            fs::remove_all(install_path, ec);      // drop the partial new install
-            if (had_old) fs::rename(backup, install_path, ec);  // restore old
-            throw;
-        }
-        { std::error_code ec; fs::remove_all(backup, ec); }  // old version gone for good
-
-        // Postinstall hook
-        fs::path postinstall_script = detect_install_script(install_path, "postinstall");
-        if (!postinstall_script.empty()) {
-            bool is_lua = (postinstall_script.extension() == ".lua");
-            InstallHookContext hook_ctx{pkg_name, install_path,
-                                        install_path, scope_to_string(scope)};
-            if (!run_install_script(postinstall_script, install_path,
-                                    assume_yes, "postinstall", is_lua,
-                                    hook_ctx)) {
-                util::info(ezmk::i18n::I18nKey::install_cancelled_user,
-                           {{"hook", "postinstall"}});
-                // Installation files are already in place; leave them
-            }
-        }
-
-        util::info(ezmk::i18n::I18nKey::installed, {{"pkg", pkg_name}});
-
+        // Shared post-validate processing: validate → hooks → deps → compile →
+        // copy → postinstall (1.2.0-dev.7). Also shared by directory installs.
+        process_installed_pkg(pkg_root, dest_dir, scope, assume_yes, tc, stage);
     } catch (...) {
         // Clean up staging on error (best-effort — a cleanup failure must not
         // mask the original error)
@@ -1016,76 +1148,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
     // Cleanup temp (best-effort)
     { std::error_code ec; fs::remove_all(stage, ec); }
 
-    auto now_iso = []() -> std::string {
-        auto t = std::time(nullptr);
-        auto* tm = std::localtime(&t);
-        char buf[32];
-        std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-        return buf;
-    };
-
     // 1.1.0: generate/update ezmk.lock with resolved dependency snapshot
-    if (scope == cli::Scope::Project && !no_lock) {
-        try {
-            config::Lockfile lf;
-            lf.version = 1;
-            lf.generated_by = "ezmk " EZMK_VERSION;
-            lf.generated_at = now_iso();
-            lf.toolchain = (tc.family == toolchain::CompilerFamily::Msvc) ? "msvc"
-                         : (tc.family == toolchain::CompilerFamily::Clang) ? "clang" : "gcc";
-            lf.toolchain_version = tc.version;
-            // 1.1.2 C3: record the root project's DIRECT deps so depends_changed
-            // compares direct-vs-direct (packages[] includes transitive deps).
-            try {
-                auto root_cfg = config::parse_config(fs::current_path() / "ezmk.toml");
-                lf.direct_deps = lockfile::direct_dep_specs(root_cfg);
-            } catch (...) {
-                // Unparseable root config → leave direct_deps empty
-            }
-
-            // Scan installed packages in project scope
-            fs::path pkg_dir = dest_dir;
-            if (util::file_exists(pkg_dir)) {
-                for (auto& entry : fs::directory_iterator(pkg_dir)) {
-                    if (!entry.is_directory()) continue;
-                    auto pkg_toml = entry.path() / "ezmk.toml";
-                    if (!util::file_exists(pkg_toml)) continue;
-                    try {
-                        auto pkg_cfg = config::parse_config(pkg_toml);
-                        config::LockedPackage lp;
-                        lp.name = pkg_cfg.project.name;
-                        lp.version = pkg_cfg.project.version;
-                        lp.type = pkg_cfg.project.header_only ? "header-only"
-                                : pkg_cfg.project.type;
-                        lp.scope = "project";
-                        lp.platform = (tc.family == toolchain::CompilerFamily::Msvc) ? "windows_x86_64_msvc"
-                                    : "windows_x86_64_gcc";
-                        for (auto& d : pkg_cfg.depends.libs) lp.dependencies.push_back(d.name);
-                        for (auto& d : pkg_cfg.depends.want) lp.dependencies.push_back(d.name);
-
-                        // Hash the built library
-                        auto build_dir = entry.path() / "build";
-                        if (util::file_exists(build_dir)) {
-                            for (auto& f : fs::directory_iterator(build_dir)) {
-                                auto ext = f.path().extension().string();
-                                if (ext == ".a" || ext == ".lib") {
-                                    lp.sha256 = crypto::sha256_file(f.path());
-                                    break;
-                                }
-                            }
-                        }
-                        lf.packages.push_back(std::move(lp));
-                    } catch (...) {
-                        // Skip packages with broken configs
-                    }
-                }
-            }
-
-            lockfile::save(fs::current_path(), lf);
-        } catch (...) {
-            // Lockfile generation failure is non-fatal
-        }
-    }
+    maybe_write_lockfile(scope, no_lock, tc, dest_dir);
 }
 
 // ===================================================================

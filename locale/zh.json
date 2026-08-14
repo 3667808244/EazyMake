@@ -51,6 +51,8 @@
     "pkg_header_only": "header-only",
 "installing_header_only": "    header-only 包 {name} — 跳过编译",
     "installing_precompiled": "    预编译包 {name} — 使用 lib/ 产物",
+    "pkg_install_from_dir": "从目录安装包 {dir}",
+    "pkg_sha256_skipped_dir": "SHA-256 校验已跳过 — 从目录安装的包无归档可校验",
     "installed": "包 {pkg} 安装成功。",
     "install_hook_lua_error": "安装钩子 Lua 错误 {script}: {msg}",
     "install_hook_no_run": "安装钩子 {script} 未定义 run() 函数，跳过",
