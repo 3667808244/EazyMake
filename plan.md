@@ -1,58 +1,56 @@
-# EazyMake 1.2.0-dev.7 执行计划
+# EazyMake 1.2.0-dev.8 执行计划
 
-> **状态：已完成**（2026-08-15，全量测试 695 用例 / 3234 断言零失败）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：执行中**（2026-08-15）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
-> 详细设计：[`1.2.0-dev.7.md`](plans/1.2.0/1.2.0-dev.7.md)。本计划为 1.2.0 系列第七个开发子版本：**本地包源 + 项目向上查找**——聚合两个相互独立的改进：① `ezmk pkg install <dir>` 从文件夹（源目录）直接安装包；② `ezmk.toml` 自 CWD 向上查找（最多 5 层父目录）。
+> 详细设计：[`1.2.0-dev.8.md`](plans/1.2.0/1.2.0-dev.8.md)。本计划为 1.2.0 系列第八个开发子版本：**CMake 导出钩子运行时（`ezmk-lua` 独立运行时）**——把 EazyMake 的 Lua 运行时抽成独立、无黑白名单的二进制 `ezmk-lua`，让导出的 CMake 构建在构建节点调用它执行 `[hooks]` 钩子，消除导出产物与 `ezmk build` 的行为漂移。**dev.2 的范围收口**：只动导出侧 + 新增一个独立运行时产物，不触碰本体安全模型。
 >
-> **范围边界**：仅新增 `pkg install` 目录入参形态 + 内部项目根定位；不新增 CLI flag / 配置字段；找不到 `ezmk.toml` 时回退 CWD（行为不变）。不触碰 dev.1~dev.6 的命令构造/导出/导入逻辑。
+> **范围边界**：`ezmk` 本体沙箱 + 黑白名单**零改动**（`run_script` / `push_restricted_globals` / `check_*_permission` 一行不动）；仅 `export cmake` 的 hooks 段从「注释 + WARNING」改为「`find_program` + `add_custom_command`」；`on_failure` 保持不导出（CMake 无原生失败钩子，与 dev.2 一致）。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯新增入参形态 + 内部定位）；③ 全量测试零回归（Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯新增二进制产物 + 导出文本变化，本体零改动）；③ 全量测试零回归（本体沙箱路径必须零变化，作为硬门槛；Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
 
 ---
 
 ## 1 背景
 
-1. **从文件夹安装包缺口**：`ezmk pkg install` 只接受归档文件（`.zip`/`.tar.gz`）、URL、或已注册仓库的包名。开发/调试本地包时，必须先打包成归档才能安装，无法直接从源目录（`include/` + `src/` + `ezmk.toml`）安装。
-2. **项目定位缺口**：`parse_config("ezmk.toml")` 仅在当前工作目录查找。进入项目子目录后运行 `ezmk build`/`ezmk test` 等会因找不到 `ezmk.toml` 而失败，无法像 git 一样"向上查找"。
+1. **导出钩子丢失**：`ezmk.toml` 的 `[hooks]`（`pre_build`/`post_build`/`on_failure`，Lua 脚本）在 `ezmk build` 里由沙箱 Lua 运行时执行，CMake 无等价运行时，因此 dev.2 导出时只能「不映射」（`export.cpp:387-402` 仅注释 + `message(WARNING)`）。结果是导出的 CMake 构建**不跑钩子后处理**，与 `ezmk build` 行为漂移。
+2. **本计划补上钩子映射**：新增独立、无黑白名单的二进制 `ezmk-lua`，由导出的 CMake 在构建节点调用它执行钩子。
 
 ## 2 目标
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | `ezmk pkg install <dir>`：参数为已存在目录时直接安装（复用 `validate_package_dir()` + 与归档同一套后处理） | P0 |
-| 2 | 目录安装跳过 SHA-256（无归档）并显式提示；全局安装确认保留 | P1 |
-| 3 | `util::locate_project_root()`：自 CWD 向上查找含 `ezmk.toml` 的目录，最多 5 层；找到返回，否则回退 CWD | P0 |
-| 4 | `main.cpp`/`pkg.cpp`/`cache.cpp`/`lockfile.cpp` 统一改用定位根 + 绝对路径 `parse_config` | P0 |
-| 5 | 找不到时错误提示清晰（「5 层内未找到 ezmk.toml」）；无配置场景（`project new`）行为不变 | P1 |
-| 6 | 单测 + 集成覆盖两条新能力；全量测试零回归 | P0 |
-| 7 | i18n 新 key（en/zh）+ 文档（pkg.md / cli.md / README / CHANGES.md） | P1 |
+| 1 | 新增独立运行时二进制 `ezmk-lua`：复用 Lua VM + `register_api` bindings，入口无沙箱/无 permissions；`ctx`（project_root/profile/output）由 CLI 注入 | P0 |
+| 2 | `ezmk` 本体行为/沙箱/黑白名单**完全不变**（回归基线证明零变化） | P0 |
+| 3 | `export cmake` 对 `[hooks]`：`pre_build`/`post_build` 生成 `add_custom_command` 调用 `ezmk-lua`；`find_program` 找不到 → 回退 `message(WARNING)`；`on_failure` 保持不导出 | P0 |
+| 4 | 现有钩子脚本（沙箱 `ezmk.*` API）在 `ezmk-lua` 下运行结果一致（超集兼容） | P0 |
+| 5 | 单测/集成：`ezmk-lua` 跑样例钩子 + export 产物含钩子调用；全量测试零回归 | P0 |
+| 6 | i18n + 文档（export 钩子说明、`ezmk-lua` 用法、CHANGES.md） | P1 |
+| 7 | 分发：`ezmk-lua` 随 `ezmk` 进入所有渠道（release 资产 / install.sh / install.ps1 / winget / Homebrew / pacman） | P1 |
 
 ## 3 执行阶段
 
-### 阶段一：`pkg install <dir>` 目录安装
+### 阶段一：运行时抽取（4.1 + 4.2 + 4.3）
 
-- [x] **1.1 入口分支**（2.1）：`install()` 在「URL → 本地文件 → 仓库名」判断前加 `fs::is_directory(input)` 分支，分流到 `install_from_directory`
-- [x] **1.2 后处理抽取**（2.2）：`install_from_directory()` 先 `validate_package_dir(dir)`，再把解压后处理（钩子 → 依赖 → 编译 → 复制）抽为可复用段，目录分支复用（`pkg_root = dir`，不复制不打包）；作用域语义与归档一致
-- [x] **1.3 SHA-256/确认**（2.3）：目录安装无归档，`--sha256` 忽略并提示（i18n 新 key）；全局安装确认保留
-- [x] **1.4 i18n**（2.4）：`install_from_dir` / `sha256_skipped_dir` 等 key 三向一致（`.def` + en/zh JSON），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
+- [ ] **1.1 无沙箱运行函数**（4.1）：`src/lua_api.cpp` 新增 `run_script_unrestricted()`（复用 `register_api`，**不建沙箱 env / 不 push_restricted_globals / 不加载 permissions**，直接全量 `_G` 执行）；ctx（project_root/profile/output）由参数构建 `run(ctx)`；沙箱版 `run_script` / `run_lua_script_with_ctx` 零改动
+- [ ] **1.2 `ezmk-lua` 入口**（4.2）：新建 `src/ezmk_lua_main.cpp`——手工解析 CLI（位置参数脚本路径 + `--project-root`/`--profile`/`--output`），`lua::init()` 后 `register_api(state, project_root)` 注入全局（`g_project_root` + 配置缓存失效），再调 `run_script_unrestricted`，退出码透传；`--help` 支持；无 `--project-root` 时读配置类 `ezmk.*` 降级（返回空/warn）
+- [ ] **1.3 build.sh**（4.3）：新增 `ezmk-lua` 产物（`src/*.cpp` 去掉 `main.cpp` + 换 `src/ezmk_lua_main.cpp`，复用 vendor/Lua/includes）；Windows 产 `ezmk-lua.exe`
 
-### 阶段二：`ezmk.toml` 向上查找
+### 阶段二：export 钩子生成（4.4 + 4.5）
 
-- [x] **2.1 工具函数**（3.1）：`util::locate_project_root(start, max_up=5)`（`src/util.hpp`/`util.cpp`）——start 为第 0 层，最多检查到第 5 层父目录；找到返回目录，否则 `nullopt`
-- [x] **2.2 main.cpp 接入**（3.2）：各命令（build/run/test/watch/project/cc 等）统一 `auto root = locate_project_root(cwd).value_or(cwd)`，`parse_config((root/"ezmk.toml").string())`，`proj_root = root`
-- [x] **2.3 pkg/cache/lockfile 接入**（3.3）：`fs::current_path()` 改定位根；`pkg_install_dir(Project)` 的 `.ezmk/pkg` 路径随根
-- [x] **2.4 错误提示**（3.4）：找不到时提示「5 层内未找到 ezmk.toml」（i18n 新 key）；无配置场景回退 CWD 行为不变
+- [ ] **2.1 export 钩子段**（4.4）：`src/export.cpp` `build_cmake_text()` 把 hooks 段从「注释 + WARNING」改为 §3.4 的 `find_program(EZMK_LUA ezmk-lua)` + `add_custom_command`（`pre_build` → `PRE_BUILD`、`post_build` → `POST_BUILD`，`--project-root ${CMAKE_CURRENT_SOURCE_DIR}`、`--output $<TARGET_FILE:<name>>`、`--profile` 内联）；找不到 `ezmk-lua` → 回退 `message(WARNING)`；`on_failure` 保持注释（范围边界，与 dev.2 一致）
+- [ ] **2.2 i18n**（4.5）：新增 `export_hook_*`/`ezmk_lua_*` key（`.def` + en/zh JSON），`scripts/check_i18n.py` 三向一致；`bash build.sh` 编译通过
 
-### 阶段三：测试
+### 阶段三：测试（4.6）
 
-- [x] **3.1 单测**（2.5 + 3.5）：目录安装成功 / 非法结构拒绝；`locate_project_root` 0/1/5/6 层、无 toml
-- [x] **3.2 集成测试**（2.5 + 3.5）：建临时包目录 → `ezmk pkg install <dir>` → `pkg list` 可见；子目录内 `ezmk build` 成功、5 层边界、回退
-- [x] **3.3 全量回归**：`bash build.sh test-all` 零回归
+- [ ] **3.1 单测**：`test_export.cpp` 更新 hooks 用例——生成 `add_custom_command` + `find_program` 回退 + `on_failure` 注释；无 hooks 仍无 hooks 段
+- [ ] **3.2 集成测试**：`test_integration.cpp` 新增——`ezmk-lua` 跑样例钩子（`run(ctx)` 返回码 / `ezmk.*` API 可用 / `ctx.project_root` 注入）；`ezmk build` 沙箱路径零变化
+- [ ] **3.3 全量回归**：`bash build.sh test-all` 零回归（对比基线 695 用例 / 3234 断言）
 
-### 阶段四：文档收口
+### 阶段四：文档收口（4.7 + 4.8）
 
-- [x] **4.1 文档**（2.6 + 3.6）：`docs/en|zh/pkg.md` 补「从文件夹安装」小节；`docs/en|zh/cli.md` + README 说明向上查找行为；`CHANGES.md` dev.7 条目
-- [x] **4.2 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.7 状态「待实现 → 已完成」；发布门槛复核
+- [ ] **4.1 文档**（4.7）：`docs/en|zh/cli.md`（`ezmk-lua` 用法 + 导出钩子说明）、`docs/en|zh/config_file.md`（hooks 导出小节）、`CHANGES.md` dev.8 条目
+- [ ] **4.2 分发**（4.8）：`release.yml`（4 平台 job 拷贝 `build/ezmk-lua` + Windows standalone + sha256）、`install.sh` / `install.ps1`（安装 `ezmk-lua`）、`publish/winget`（NestedInstallerFiles + PortableCommandAlias）、`publish/homebrew`（`bin.install "ezmk-lua"`）、`publish/arch/PKGBUILD`（`install -Dm755`）；各渠道提交属发布流水线阶段（pre.1 + 1.2.0 收口）
+- [ ] **4.3 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.8 状态「待实现 → 已完成」；发布门槛复核（本体沙箱零变化 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
@@ -62,24 +60,26 @@
 
 | 决策 | 说明 |
 |------|------|
-| 不新增 flag / 配置字段 | 目录入参靠 `fs::is_directory` 自动识别；项目定位为纯内部逻辑 |
-| 目录与归档同一套后处理 | 抽出可复用段，保证目录安装行为与归档完全一致 |
-| SHA-256 跳过 + 提示 | 目录无归档，`--sha256` 忽略并显式提示，不静默 |
-| 最多 5 层 + 回退 CWD | 常量 `PROJECT_ROOT_MAX_UP = 5` 防误扫 home/系统根；未找到保持现状行为 |
-| `locate_project_root()` 单一入口 | 收敛查找逻辑，避免各命令重复实现 |
-| 找到才改变 `proj_root` | 无配置场景（`project new`）不受影响 |
+| 独立二进制而非 flag | `ezmk-lua` 是信任边界**之外**的开发者工具，永不接入包安装钩子/utils 脚本路径；边界体现在「独立二进制」上而非开关 |
+| 共享编译单元 | Lua VM + `register_api` 与 `ezmk` 本体共用，避免 `ezmk.*` 双维护漂移；改 bindings 只改一处 |
+| 入口无沙箱 = 沙箱超集 | 不建 restricted globals、不查 `[utils.permissions]`，全量 `_G`；文档约定导出钩子只用 `ezmk.*` 子集，保证两处行为一致 |
+| `register_api(state, project_root)` 注入全局 | 复用既有公开 API 设置 `g_project_root` + 配置缓存失效，零新 setter；无 `--project-root` 时读配置类函数降级（返回空/warn） |
+| `find_program` + 回退 warning | best-effort，不硬依赖 ezmk 已安装；找不到 `ezmk-lua` 时 CMake 回退「跳过钩子」并提示 |
+| `on_failure` 不导出 | CMake 无原生「构建失败」钩子，保持注释 + 说明（范围边界，与 dev.2 一致） |
+| 分发多渠道联动 | release 资产 / install 脚本 / winget / Homebrew / pacman 任一渠道漏配 → 该渠道导出钩子回退跳过；各渠道提交收口到发布流水线阶段 |
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| `pkg install <dir>` 目录安装 | 纯新增入参形态 | 文件/URL/仓库名路径不变；仅当参数是已存在目录时识别 |
-| SHA-256 对目录安装跳过 | 仅目录安装场景 | `--sha256` 忽略 + 提示 |
-| `ezmk.toml` 向上查找 | 找到时 `proj_root` 变为父目录 | 未找到回退 CWD，行为不变；无新 flag/配置字段 |
-| 新增 i18n key | 纯新增 | `.def` 一行 + 两份 JSON，`check_i18n.py` 校验 |
+| 新增 `ezmk-lua` 二进制 | 纯新增产物 | 不影响 `ezmk` 本体 |
+| `ezmk` 本体沙箱/黑白名单 | 无 | `run_script`/`push_restricted_globals`/`check_*_permission` 零改动 |
+| `export cmake` hooks 段 | 从「注释 + warning」改为「find_program + add_custom_command」 | 找不到 `ezmk-lua` 回退 warning（best-effort） |
+| `on_failure` | 仍不导出 | CMake 无原生失败钩子，范围边界（同 dev.2） |
+| 能力面超集 | `ezmk-lua` 下可用沙箱外能力 | 文档约定钩子只用 `ezmk.*` 子集 |
+| 新增 `ezmk-lua` 于各分发渠道 | release 资产/安装脚本/清单体积略增 | 纯新增，向后兼容；旧版安装脚本仍只装 `ezmk` |
 
 ## 6 延后项
 
-- pacman 分发属发布流水线，已拆至 `plans/1.2.0/1.2.0-pre.1.md`。
-- 更智能的项目根定位（如到 home 或 `.git` 根）属 2.0.0 之后增强，不在本版。
-- dev.9 的包 `[compile].src_dirs`/`include_dirs` 配置收敛，随 dev.7 的本地目录安装共用路径，另行推进。
+- winget PR / Homebrew tap 更新 / AUR 提交属发布流水线阶段，与 pre.1、1.2.0 发布收口一并执行；pacman 渠道暂不提交 AUR（AUR 账户未开通），以「仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si`」为主。
+- 若未来想调整 `ezmk-lua` 的 CLI/语义，集中 2.0.0 窗口（本版为纯新增产物，无破坏性）。
