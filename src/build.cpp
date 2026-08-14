@@ -801,6 +801,13 @@ cache::CompileInput make_compile_input(BuildState& st, const cli::BuildOptions& 
     return cin;
 }
 
+// 1.2.0-dev.6: per-file compile time diagnostics.
+// Slow-build auto-detection threshold (seconds of total wall-clock elapsed) and
+// the number of slowest units shown in the default (non-verbose) path. Kept as
+// named constants, not config fields, to preserve the zero-config surface.
+constexpr double BUILD_TIME_SLOW_THRESHOLD = 5.0;
+constexpr int BUILD_TIME_TOP_N = 10;
+
 // Phase 2: Compile all sources (cache check + compilation).
 // Returns the list of compiled object paths.
 std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opts) {
@@ -867,6 +874,11 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     cache::CompileResult comp_result;
     std::vector<cache::SingleCompileResult> single_results;
     single_results.reserve(cin.sources.size());
+    // 1.2.0-dev.6: per-file compile times (ms), indexed by source so each
+    // parallel worker writes a distinct element — no cross-thread
+    // synchronization needed; the future's get() below orders the reads after
+    // the write. Only the parallel path populates it.
+    std::vector<double> compile_times(cin.sources.size(), 0.0);
     auto build_start = std::chrono::steady_clock::now();
 
     // INVARIANT: In parallel mode, compile_one_source() only reads from
@@ -886,9 +898,12 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
         std::atomic<int> task_index{0};
         int total = static_cast<int>(cin.sources.size());
         for (size_t i = 0; i < cin.sources.size(); ++i) {
-            futures.push_back(pool.submit([&cin, &record, &task_index, total, i, use_inplace]() {
+            futures.push_back(pool.submit([&cin, &record, &task_index, total, i, use_inplace, &compile_times]() {
                 auto idx = task_index.fetch_add(1) + 1;
+                auto t0 = std::chrono::steady_clock::now();
                 auto result = cache::compile_one_source(cin.sources[i], cin, record);
+                compile_times[i] = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - t0).count();
                 // 0.9.6+: Always show progress in parallel mode
                 std::string msg = std::string("[") + std::to_string(idx) +
                     "/" + std::to_string(total) + "] " + result.rel_src;
@@ -967,6 +982,51 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
             elapsed_str << std::fixed << std::setprecision(1) << elapsed << "s";
             util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::build_elapsed_time,
                         {{"time", elapsed_str.str()}}));
+        }
+
+        // 1.2.0-dev.6: per-file compile time detail (parallel path only).
+        // Only cache-miss files are timed (cache hits cost ~0); serial path
+        // (`compile_sources`) has no per-file timing and shows no detail.
+        if (num_jobs > 1 && cin.sources.size() > 1 && !single_results.empty()) {
+            struct TimeEntry { std::string rel_src; double ms; };
+            std::vector<TimeEntry> timed;
+            timed.reserve(single_results.size());
+            for (size_t i = 0; i < single_results.size(); ++i) {
+                if (!single_results[i].cache_hit) {
+                    timed.push_back(TimeEntry{single_results[i].rel_src, compile_times[i]});
+                }
+            }
+            if (!timed.empty()) {
+                std::sort(timed.begin(), timed.end(),
+                          [](const TimeEntry& a, const TimeEntry& b) { return a.ms > b.ms; });
+                double total_ms = 0.0;
+                for (const auto& t : timed) total_ms += t.ms;
+                auto fmt_secs = [](double ms) {
+                    std::ostringstream os;
+                    os << std::fixed << std::setprecision(1) << (ms / 1000.0) << "s";
+                    return os.str();
+                };
+                size_t compiled = timed.size();
+                // -v: full sorted detail; default: top-N only when build is slow.
+                if (opts.verbose || elapsed > BUILD_TIME_SLOW_THRESHOLD) {
+                    size_t limit = opts.verbose
+                        ? compiled
+                        : std::min(static_cast<size_t>(BUILD_TIME_TOP_N), compiled);
+                    util::info(ezmk::i18n::I18nKey::build_time_header,
+                               {{"compiled", std::to_string(compiled)},
+                                {"time", fmt_secs(total_ms)}});
+                    for (size_t i = 0; i < limit; ++i) {
+                        util::info(ezmk::i18n::I18nKey::build_time_entry,
+                                   {{"time", fmt_secs(timed[i].ms)},
+                                    {"file", timed[i].rel_src}});
+                    }
+                    if (!opts.verbose && limit < compiled) {
+                        util::info(ezmk::i18n::I18nKey::build_time_truncated,
+                                   {{"shown", std::to_string(limit)},
+                                    {"compiled", std::to_string(compiled)}});
+                    }
+                }
+            }
         }
     }
 

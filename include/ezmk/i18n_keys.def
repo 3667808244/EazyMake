@@ -164,6 +164,9 @@ EZMK_I18N_KEY(config_err_version_missing)
 EZMK_I18N_KEY(pkg_constraint_unsatisfied)
 EZMK_I18N_KEY(build_failed_summary)
 EZMK_I18N_KEY(build_elapsed_time)
+EZMK_I18N_KEY(build_time_header)      // 1.2.0-dev.6
+EZMK_I18N_KEY(build_time_entry)       // 1.2.0-dev.6
+EZMK_I18N_KEY(build_time_truncated)   // 1.2.0-dev.6
 
 // ---- cli usage / parsing (0.2.3+) ----
 EZMK_I18N_KEY(cli_usage_header)
