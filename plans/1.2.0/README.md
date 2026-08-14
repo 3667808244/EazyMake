@@ -14,7 +14,10 @@
 | [1.2.0-dev.4](1.2.0-dev.4.md) | CMake 项目导入（实验性） | `ezmk project import --from cmake`；标准命令映射 + `find_package` best-effort + 非标准写法拒绝 | **已完成**（2026-08-13） |
 | [1.2.0-dev.5](1.2.0-dev.5.md) | catch2 v3 测试主程序兼容 | `ezmk test` test_main 生成改 v3 兼容（显式 `main` + `Catch::Session().run()`）；v2 vendor 路径不回归 | 待实现 |
 | [1.2.0-dev.6](1.2.0-dev.6.md) | 各源文件构建耗时统计 | `ezmk build` 并行编译路径 per-file 耗时明细（`-v` 全量 / 慢构建自动 top-N）；零配置、不新增 flag | 待实现 |
-| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.6；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
+| [1.2.0-dev.7](1.2.0-dev.7.md) | 本地包源 + 项目定位 | `pkg install <dir>` 从文件夹安装；`ezmk.toml` 向上查找（5 层） | 待实现 |
+| [1.2.0-dev.8](1.2.0-dev.8.md) | CMake 导出钩子运行时（dev.2 延伸） | 独立无黑白名单运行时 `ezmk-lua`；export 对 `[hooks]` 生成 `add_custom_command`（pre/post） | 待实现 |
+| [1.2.0-pre.1](1.2.0-pre.1.md) | pacman 分发（发布流水线） | `publish/` 重组 + `publish/arch/PKGBUILD`；本机 MSYS2 + 远程 Arch Linux 验证 makepkg | 待发布 |
+| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.8 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
 
 > **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（当前为 [1.2.0-dev.4](1.2.0-dev.4.md)，dev.1/dev.2/dev.3 已完成）。
 
@@ -28,14 +31,18 @@
 1.2.0-dev.3 (默认模板内建 Profile) ──────┤
 1.2.0-dev.4 (CMake 项目导入, 实验性) ────┤
 1.2.0-dev.5 (catch2 v3 测试主程序兼容) ──┐
-1.2.0-dev.6 (各源文件构建耗时统计) ────────┘
+1.2.0-dev.6 (各源文件构建耗时统计) ────────┤
+1.2.0-dev.7 (文件夹安装/向上查找) ──────────┤
+1.2.0-dev.8 (CMake 导出钩子运行时) ──────────┤
+1.2.0-pre.1 (pacman 分发) ─────────────────┘
 ```
 
 - **1.1.1 先行**：dev.1 的 `ezmk project cc` 命令依赖 1.1.1 的 `build_compile_args()`/`compile_db`/拦截/自动生成基础。
 - dev.1（命令层）/ dev.2 / dev.3 / dev.4 与 1.1.1、以及彼此**相互独立**，可并行。
 - dev.2 与 dev.4 互为**反向互补**（导出/导入，单向、非可逆往返），共享包名别名表。
+- **dev.8 依赖 dev.2**：`ezmk-lua` + 导出钩子映射是 dev.2 `export cmake` 的收口延伸；与 dev.5/dev.6/dev.7 相互独立。
 - dev.3 与 dev.1、dev.2 存在**协同**：默认模板内建 profile 后，`ezmk project cc --profile release` 与 `ezmk project export cmake --profile release` 开箱即可对照验证。
-- `1.2.0` 正式版依赖 dev.1 ~ dev.4 + 前置 1.1.1 全部完成 + 发布门槛（实现完整 / API 兼容 / 全量测试零回归）。
+- `1.2.0` 正式版依赖 dev.1 ~ dev.8 + 前置 1.1.1 全部完成 + 发布门槛（实现完整 / API 兼容 / 全量测试零回归）。
 
 ## 跨子版本共享的关注点
 
