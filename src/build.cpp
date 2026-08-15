@@ -532,6 +532,26 @@ static AppliedProfile apply_profile(const config::EzConfig& cfg,
     return r;
 }
 
+// 1.2.0-dev.11: package include dirs for one installed package root —
+// <pkg>/include plus each [compile].include_dirs resolved against the package
+// root (missing dirs skipped, dedup against the default include/). Shared by
+// prepare_build_state (build path) and run_tests so tests see the same
+// dependency includes as a real build.
+static std::vector<fs::path> package_include_dirs(const fs::path& pkg_root,
+                                                  const config::EzConfig& pkg_cfg) {
+    std::vector<fs::path> dirs;
+    auto pkg_include = pkg_root / "include";
+    if (util::file_exists(pkg_include)) dirs.push_back(pkg_include);
+    for (auto& d : pkg_cfg.compile.include_dirs) {
+        fs::path resolved = d;
+        if (resolved.is_relative()) resolved = pkg_root / resolved;
+        if (util::file_exists(resolved) && resolved != pkg_include) {
+            dirs.push_back(resolved);
+        }
+    }
+    return dirs;
+}
+
 // Phase 1: Setup + package scanning + pre-build hook.
 // Returns fully initialized build state with effective compile flags.
 BuildState prepare_build_state(const config::EzConfig& cfg,
@@ -637,18 +657,10 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                     auto pkg_cfg = config::parse_config(pkg_toml);
                     installed_pkgs.insert(pkg_cfg.project.name);
                     installed_versions[pkg_cfg.project.name] = pkg_cfg.project.version;
-                    auto pkg_include = entry.path() / "include";
-                    if (util::file_exists(pkg_include)) {
-                        st.extra_includes.push_back(pkg_include);
-                    }
-                    for (auto& d : pkg_cfg.compile.include_dirs) {
-                        fs::path resolved = d;
-                        if (resolved.is_relative()) resolved = entry.path() / resolved;
-                        if (util::file_exists(resolved) &&
-                            resolved != pkg_include) {
-                            st.extra_includes.push_back(resolved);
-                        }
-                    }
+                    // 1.2.0-dev.11: shared helper (also used by run_tests)
+                    auto incs = package_include_dirs(entry.path(), pkg_cfg);
+                    st.extra_includes.insert(st.extra_includes.end(),
+                                             incs.begin(), incs.end());
                     for (auto& f : pkg_cfg.link.flags)
                         st.pkg_link_flags.push_back(f);
                     for (auto& d : pkg_cfg.link.link_dirs)
@@ -1749,77 +1761,108 @@ void run_tests(const config::EzConfig& cfg,
                      "Configure test.dirs in ezmk.toml.");
     }
 
-    // Get project object files (from .ezmk/temp/)
+    // 1.2.0-dev.11: derive project objects from the project's own sources —
+    // matches compile_one_source's obj naming (obj_dir / rel(src, proj_root)
+    // + .o/.obj), so nested src_dirs are included. The previous top-level scan
+    // of .ezmk/temp missed "src/main.cpp" → the test runner linked with no
+    // project objects at all.
     std::vector<fs::path> project_objs;
-    fs::path temp_dir = proj_root / ".ezmk/temp";
-    if (util::file_exists(temp_dir)) {
-        for (auto& entry : fs::directory_iterator(temp_dir)) {
-            auto& p = entry.path();
-            if (p.extension() == ".o" || p.extension() == ".obj") {
-                // Exclude main.o (test runner provides its own main)
-                auto fname = p.filename().string();
-                if (fname != "main.o" && fname != "main.obj") {
-                    project_objs.push_back(p);
+    auto lang_info = config::parse_language(cfg.project.language);
+    auto tc = toolchain::detect_toolchain();
+    bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
+    if (!is_msvc) {
+        // Respect $CXX/$CC overrides like the main build does.
+        lang_info.detected_compiler = detect_compiler(
+            lang_info.compiler == "g++" ? "C++" : "C");
+    }
+    if (cfg.project.type != "utils") {  // utils projects produce no objects
+        try {
+            auto proj_sources = collect_sources(cfg.compile.src_dirs, proj_root,
+                                                cfg.project.type);
+            fs::path temp_dir = proj_root / ".ezmk/temp";
+            for (auto& s : proj_sources) {
+                auto rel = fs::relative(s, proj_root);
+                fs::path obj = temp_dir / rel;
+                obj.replace_extension(is_msvc ? ".obj" : ".o");
+                auto fname = obj.filename().string();
+                if (fname == "main.o" || fname == "main.obj") continue;
+                if (util::file_exists(obj)) project_objs.push_back(obj);
+            }
+        } catch (...) {
+            // Project sources unavailable — tests link without project objects,
+            // matching the pre-fix behavior for degenerate projects.
+        }
+    }
+
+    // 1.2.0-dev.11: dependency package include dirs — same as the build path
+    // (shared package_include_dirs helper with prepare_build_state).
+    std::vector<fs::path> pkg_includes;
+    {
+        fs::path pkg_dir = proj_root / ".ezmk/pkg";
+        if (util::file_exists(pkg_dir)) {
+            for (auto& entry : fs::directory_iterator(pkg_dir)) {
+                if (!entry.is_directory()) continue;
+                auto pkg_toml = entry.path() / "ezmk.toml";
+                if (util::file_exists(pkg_toml)) {
+                    try {
+                        auto pkg_cfg = config::parse_config(pkg_toml);
+                        auto incs = package_include_dirs(entry.path(), pkg_cfg);
+                        pkg_includes.insert(pkg_includes.end(), incs.begin(), incs.end());
+                    } catch (...) { /* skip broken package configs */ }
+                } else {
+                    auto pkg_include = entry.path() / "include";
+                    if (util::file_exists(pkg_include)) pkg_includes.push_back(pkg_include);
                 }
             }
         }
     }
 
-    // Collect project include dirs and flags
-    auto lang_info = config::parse_language(cfg.project.language);
-
-    // Detect compiler
-    std::string compiler;
-    auto tc = toolchain::detect_toolchain();
-    bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
-    if (!is_msvc) {
-        compiler = detect_compiler(lang_info.compiler == "g++" ? "C++" : "C");
-    } else {
-        compiler = tc.cxx_compiler.string();
-    }
-
-    // Build compile flags from the applied profile's compile config
-    // (1.2.0-dev.12: profile merge via apply_profile — CLI --profile /
-    // [test].default_profile; no profile → identical to cfg.compile).
-    std::vector<std::string> base_flags;
-    base_flags.push_back(lang_info.std_flag);
-    if (applied.compile.ezmk_macros) {
-        auto em = generate_ezmk_macros(cfg);
-        base_flags.insert(base_flags.end(), em.begin(), em.end());
-    }
-    for (auto& f : applied.compile.flags) base_flags.push_back(f);
-    auto macro_flags = macros_to_flags(applied.compile.macros);
-    for (auto& f : macro_flags) base_flags.push_back(f);
-
-    // Add include dirs (project config, possibly profile-merged)
-    for (auto& d : applied.compile.include_dirs) {
-        fs::path inc = d;
-        if (inc.is_relative()) inc = proj_root / inc;
-        if (util::file_exists(inc)) {
-            base_flags.push_back("-I" + inc.string());
+    // 1.2.0-dev.11: test compilation goes through the same single source of
+    // truth as the main build — cache::CompileInput → build_compile_args →
+    // join_shell_args. This restores the 1.1.3 S4 shell-escaping on the test
+    // path, applies toolchain::translate_compile_flags for MSVC, injects
+    // dependency-package includes, and (via compile_sources) enables caching.
+    cache::CompileInput cin;
+    cin.proj_root = proj_root;
+    cin.compile = applied.compile;
+    {
+        // Fold effective flags exactly like prepare_build_state: ezmk_macros →
+        // flags → macros (build_compile_args consumes only `flags`).
+        std::vector<std::string> eff;
+        if (cin.compile.ezmk_macros) {
+            auto em = generate_ezmk_macros(cfg);
+            eff.insert(eff.end(), em.begin(), em.end());
         }
+        eff.insert(eff.end(), cin.compile.flags.begin(), cin.compile.flags.end());
+        auto macro_flags = macros_to_flags(cin.compile.macros);
+        eff.insert(eff.end(), macro_flags.begin(), macro_flags.end());
+        // DEPRECATED [test].flags (1.2.0-dev.12, still honored until 2.0.0)
+        for (auto& f : cfg.test.flags) eff.push_back(f);
+        cin.compile.flags = std::move(eff);
     }
-
-    // 1.2.0-dev.12: test-only include dirs — resolved relative to the project
-    // root, missing dirs skipped (mirrors [compile].include_dirs).
+    cin.lang = lang_info;
+    cin.tc = tc;
+    cin.stdlib = cfg.project.stdlib;
+    cin.use_pic = false;
+    cin.disable_cache = false;
+    cin.verbose = verbose;
+    cin.obj_dir = cache_dir / "obj_test";
+    cin.dep_dir = cache_dir / "obj_test";
+    cin.cache_obj_dir = cin.obj_dir;
+    cin.extra_includes = std::move(pkg_includes);
+    // 1.2.0-dev.12: test-only include dirs (resolved against the project root)
     for (auto& d : cfg.test.include_dirs) {
         fs::path inc = d;
         if (inc.is_relative()) inc = proj_root / inc;
-        if (util::file_exists(inc)) {
-            base_flags.push_back("-I" + inc.string());
-        }
+        if (util::file_exists(inc)) cin.extra_includes.push_back(inc);
     }
-
-    // Add test flags (DEPRECATED 1.2.0-dev.12, still honored until 2.0.0)
-    for (auto& f : cfg.test.flags) {
-        base_flags.push_back(f);
-    }
+    // Merged link config: profile-merged link + test-only link targets.
+    config::LinkSection test_link = applied.link;
+    for (auto& t : cfg.test.link_targets) test_link.system_targets.push_back(t);
 
     // Ensure cache dirs exist
-    fs::create_directories(cache_dir / "obj");
+    fs::create_directories(cache_dir / "obj_test");
     fs::create_directories(build_dir);
-
-    auto run_start = std::chrono::steady_clock::now();
 
     if (framework == "CATCH2") {
         // ---- Catch2 Mode ----
@@ -1872,85 +1915,32 @@ void run_tests(const config::EzConfig& cfg,
             }
         }
 
-        // Compile test sources + test_main.cpp
-        std::vector<fs::path> test_objs;
-        int compiled = 0, cached = 0, errors = 0;
-
-        auto compile_one = [&](const fs::path& src) -> std::optional<fs::path> {
-            auto obj = cache_dir / "obj" / (src.filename().string() + ".o");
-            std::ostringstream cmd;
-            if (is_msvc) {
-                cmd << compiler << " /c /Fo:\"" << obj.string() << "\"";
-                for (auto& f : base_flags) cmd << " " << f;
-                cmd << " /I\"" << catch2_inc << "\"";
-                cmd << " \"" << src.string() << "\"";
-            } else {
-                cmd << compiler;
-                for (auto& f : base_flags) cmd << " " << f;
-                cmd << " -I\"" << catch2_inc << "\"";
-                // Add extra includes from installed packages
-                cmd << " -c \"" << src.string() << "\" -o \"" << obj.string() << "\"";
-            }
-
-            if (verbose) util::info("  " + cmd.str());
-            auto res = util::run_command(cmd.str());
-            if (res.exit_code != 0) {
-                util::error(std::string("  compilation failed: ") + src.filename().string());
-                if (!res.err.empty()) util::error(res.err);
-                if (!res.out.empty()) util::error(res.out);
-                return std::nullopt;
-            }
-            return obj;
-        };
-
-        // Compile all test sources
-        for (auto& ts : test_sources) {
-            if (auto obj = compile_one(ts)) {
-                test_objs.push_back(*obj);
-                compiled++;
-            } else {
-                errors++;
-            }
+        // 1.2.0-dev.11: compile test sources + test_main.cpp through the shared
+        // compile_sources — build_compile_args + join_shell_args (S4 escaping),
+        // translate_compile_flags (MSVC), dependency-package includes, caching.
+        cin.sources = test_sources;
+        if (!user_has_main && !test_main_cpp.empty()) cin.sources.push_back(test_main_cpp);
+        fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
+        auto test_record = cache::load_record(test_record_path);
+        auto comp_result = cache::compile_sources(cin, test_record);
+        cache::save_record(test_record, test_record_path);
+        if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
+            util::info("    " + std::to_string(comp_result.cache_hits) + " cached, " +
+                       std::to_string(comp_result.cache_misses) + " compiled");
         }
+        std::vector<fs::path> test_objs = comp_result.objects;
 
-        // Compile test_main.cpp
-        if (!user_has_main && !test_main_cpp.empty()) {
-            if (auto obj = compile_one(test_main_cpp)) {
-                test_objs.push_back(*obj);
-            } else {
-                errors++;
-            }
-        }
-
-        if (errors > 0) {
-            util::fatal(std::to_string(errors) + " test compilation error(s)");
-        }
-
-        // Link test_runner
+        // Link test_runner via the shared link helpers (escaping + MSVC
+        // translation), with project objects + test objects + the Catch2 lib.
         fs::path runner = build_dir / "test_runner";
 #ifdef EZMK_WIN
         runner += ".exe";
 #endif
-        std::ostringstream link_cmd;
-        if (is_msvc) {
-            link_cmd << "link.exe /OUT:\"" << runner.string() << "\"";
-            for (auto& o : project_objs) link_cmd << " \"" << o.string() << "\"";
-            for (auto& o : test_objs) link_cmd << " \"" << o.string() << "\"";
-        } else {
-            link_cmd << compiler;
-            for (auto& o : project_objs) link_cmd << " \"" << o.string() << "\"";
-            for (auto& o : test_objs) link_cmd << " \"" << o.string() << "\"";
-            link_cmd << " -o \"" << runner.string() << "\"";
-        }
-
-        // Add package link flags (1.2.0-dev.12: profile-merged via apply_profile)
-        for (auto& f : applied.link.flags) link_cmd << " " << f;
-        for (auto& d : applied.link.link_dirs) link_cmd << " -L\"" << d << "\"";
-        for (auto& t : applied.link.system_targets) link_cmd << " -l" << t;
-        // 1.2.0-dev.12: test-only link targets (-l)
-        for (auto& t : cfg.test.link_targets) link_cmd << " -l" << t;
+        std::vector<fs::path> objs = project_objs;
+        objs.insert(objs.end(), test_objs.begin(), test_objs.end());
 
         // Link against Catch2 library (from project/user/global scope)
+        std::vector<fs::path> archives;
         {
             fs::path catch2_lib;
             // Try to find libcatch2.a in known locations
@@ -1974,12 +1964,15 @@ void run_tests(const config::EzConfig& cfg,
                 }
             }
             if (!catch2_lib.empty()) {
-                link_cmd << " \"" << catch2_lib.string() << "\"";
+                archives.push_back(catch2_lib);
             }
         }
 
-        if (verbose) util::info("  " + link_cmd.str());
-        auto link_res = util::run_command(link_cmd.str());
+        std::string link_cmd = is_msvc
+            ? make_msvc_exe_cmd(objs, archives, runner, test_link)
+            : make_gcc_link_cmd(objs, archives, runner, test_link, lang_info);
+        if (verbose) util::info("  " + link_cmd);
+        auto link_res = util::run_command(link_cmd);
         if (link_res.exit_code != 0) {
             util::error("test link failed");
             if (!link_res.err.empty()) util::error(link_res.err);
@@ -1992,7 +1985,9 @@ void run_tests(const config::EzConfig& cfg,
         // case-level summary line instead.
         std::string test_cmd = "\"" + runner.string() + "\"";
         if (!test_filter.empty()) {
-            test_cmd += " \"" + test_filter + "\"";
+            // 1.2.0-dev.11: escape the filter — it is user input interpolated
+            // into a shell command on POSIX (1.1.3 S4 class of injection).
+            test_cmd += " \"" + util::escape_shell_arg(test_filter) + "\"";
         }
         auto test_res = util::run_command(test_cmd);
 
@@ -2104,6 +2099,9 @@ void run_tests(const config::EzConfig& cfg,
 
         int passed = 0, failed = 0, timed_out = 0;
         double total_time = 0.0;
+        // 1.2.0-dev.11: shared test compile cache (per-test entries accumulate)
+        fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
+        auto test_record = cache::load_record(test_record_path);
 
         for (auto& ts : test_sources) {
             auto test_start = std::chrono::steady_clock::now();
@@ -2121,34 +2119,37 @@ void run_tests(const config::EzConfig& cfg,
                 }
             }
 
-            // Compile individual test executable
+            // 1.2.0-dev.11: compile to an object via the shared compile input
+            // (build_compile_args + join_shell_args + MSVC translation + package
+            // includes + caching). compile_sources throws on failure after
+            // printing the error — keep the per-test isolation.
+            fs::path test_obj;
+            try {
+                cin.sources = {ts};
+                auto comp_result = cache::compile_sources(cin, test_record);
+                test_obj = comp_result.objects.front();
+            } catch (const ezmk::fatal_error&) {
+                util::error(std::string("  compilation failed: ") + ts.filename().string());
+                failed++;
+                continue;
+            }
+
+            // Link the test executable via the shared link helpers (escaping +
+            // MSVC translation), then run it.
             auto test_exe = build_dir / ("test_" + ts.stem().string());
 #ifdef EZMK_WIN
             test_exe += ".exe";
 #endif
-            std::ostringstream comp_cmd;
-            if (is_msvc) {
-                comp_cmd << compiler << " /Fe:\"" << test_exe.string() << "\"";
-                comp_cmd << " \"" << ts.string() << "\"";
-                for (auto& o : project_objs) comp_cmd << " \"" << o.string() << "\"";
-                for (auto& f : base_flags) comp_cmd << " " << f;
-            } else {
-                comp_cmd << compiler;
-                for (auto& f : base_flags) comp_cmd << " " << f;
-                comp_cmd << " \"" << ts.string() << "\"";
-                for (auto& o : project_objs) comp_cmd << " \"" << o.string() << "\"";
-                comp_cmd << " -o \"" << test_exe.string() << "\"";
-                // 1.2.0-dev.12: profile-merged link flags + test-only targets
-                for (auto& f : applied.link.flags) comp_cmd << " " << f;
-                for (auto& d : applied.link.link_dirs) comp_cmd << " -L\"" << d << "\"";
-                for (auto& t : applied.link.system_targets) comp_cmd << " -l" << t;
-                for (auto& t : cfg.test.link_targets) comp_cmd << " -l" << t;
-            }
+            std::vector<fs::path> objs = project_objs;
+            objs.push_back(test_obj);
+            std::string comp_cmd = is_msvc
+                ? make_msvc_exe_cmd(objs, {}, test_exe, test_link)
+                : make_gcc_link_cmd(objs, {}, test_exe, test_link, lang_info);
 
-            if (verbose) util::info("  " + comp_cmd.str());
-            auto comp_res = util::run_command(comp_cmd.str());
+            if (verbose) util::info("  " + comp_cmd);
+            auto comp_res = util::run_command(comp_cmd);
             if (comp_res.exit_code != 0) {
-                util::error(std::string("  compilation failed: ") + ts.filename().string());
+                util::error(std::string("  link failed: ") + ts.filename().string());
                 if (!comp_res.err.empty()) util::error(comp_res.err);
                 failed++;
                 continue;
@@ -2184,6 +2185,7 @@ void run_tests(const config::EzConfig& cfg,
                 failed++;
             }
         }
+        cache::save_record(test_record, test_record_path);
 
         int total = passed + failed + timed_out;
         // Fold timeouts into the failed bucket for the summary so the numbers

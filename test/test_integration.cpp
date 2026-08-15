@@ -1890,3 +1890,84 @@ TEST_CASE("integration: precompiled_strict refuses toolchain fallback (dev.10)",
     REQUIRE(inst.exit_code != 0);
     REQUIRE((inst.out + inst.err).find("precompiled_strict") != std::string::npos);
 }
+
+// 1.2.0-dev.11: run_tests derives project objects from the project's sources
+// (object at .ezmk/temp/<rel>.o), so tests referencing project functions link.
+// Regression: the old top-level scan of .ezmk/temp missed "src/helper.cpp" —
+// its object lives at .ezmk/temp/src/helper.o — so the runner linked with no
+// project objects and any reference was an undefined symbol.
+TEST_CASE("integration: ezmk test links project objects (dev.11)", "[integration][1.2.0-dev.11]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    std::string proj_name = "projobj";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // A second project source directly under src/ — its object lands at
+    // .ezmk/temp/src/helper.o, nested under temp/.
+    file_write(proj_dir / "src" / "helper.cpp", "int test_helper() { return 5; }\n");
+
+    // EZMK-framework test that calls the project function.
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "test" / "t.cpp",
+        "int test_helper();\nint main() { return test_helper() == 5 ? 0 : 1; }\n");
+
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = []\n\n"
+              "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n";
+    }
+
+    ProcResult r = run_ezmk("test", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE((r.out + r.err).find("[PASS]") != std::string::npos);
+}
+
+// 1.2.0-dev.11: the test compile path goes through build_compile_args +
+// join_shell_args (1.1.3 S4 blacklist) — a shell-expansion flag like
+// -DTESTINJ=$(touch ...) must be passed to the compiler literally, not executed.
+// (On Windows CreateProcessA never interprets $(...) — the assertion is
+// trivially true there, but harmless; on POSIX it is a real regression gate.)
+TEST_CASE("integration: ezmk test compile path is injection-safe (dev.11)", "[integration][1.2.0-dev.11]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    std::string proj_name = "injtest";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "test" / "t.cpp", "int main() { return 0; }\n");
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-DTESTINJ=$(touch injected.marker)\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = []\n\n"
+              "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n";
+    }
+
+    ProcResult r = run_ezmk("test", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(!fs::exists(proj_dir / "injected.marker"));
+}

@@ -98,6 +98,43 @@ TEST_CASE("build_compile_args: deterministic adds reproducibility flags", "[cach
     REQUIRE(has_random_seed);
 }
 
+// 1.2.0-dev.11: the test-path compile input (folded flags + package
+// extra_includes, as built by run_tests) must produce MSVC-translated args —
+// no raw GCC-style "-std=" / "-I" leaking to cl.exe.
+TEST_CASE("build_compile_args: test-path input translates for MSVC", "[cache][compile_db][1.2.0-dev.11]") {
+    TempDir tmp;
+    fs::path proj = tmp.path;
+    fs::create_directories(proj / "src");
+    fs::path src = proj / "src" / "main.cpp";
+    { std::ofstream(src) << "int main() {}\n"; }
+    fs::path extra = proj / "pkg" / "include";
+    fs::create_directories(extra);
+
+    CompileInput in;
+    in.proj_root = proj;
+    in.compile.flags = {"-Wall"};                // folded effective flags (like run_tests)
+    in.compile.include_dirs = {"include"};
+    in.lang = parse_language("C++17");
+    in.tc.family = CompilerFamily::Msvc;
+    in.extra_includes = {extra};
+    in.dep_dir = proj / ".ezmk" / "temp";
+
+    auto args = build_compile_args(in, src, proj / "build" / "main.obj");
+
+    // Translated std flag — the GCC-style "-std=c++17" must not leak through.
+    REQUIRE(std::find(args.begin(), args.end(), "-std=c++17") == args.end());
+    bool has_translated_std = false;
+    for (auto& a : args) if (a.rfind("/std:", 0) == 0) has_translated_std = true;
+    REQUIRE(has_translated_std);
+    // Include dirs surface as /I (project include_dirs + package extra_includes).
+    REQUIRE(std::find_if(args.begin(), args.end(),
+        [&](const std::string& a){ return a.rfind("/I" + extra.string(), 0) == 0; })
+        != args.end());
+    REQUIRE(std::find_if(args.begin(), args.end(),
+        [&](const std::string& a){ return a.rfind("/I" + (proj / "include").string(), 0) == 0; })
+        != args.end());
+}
+
 // ===================================================================
 // cache::join_shell_args() — arg vector → shell command string
 // ===================================================================
