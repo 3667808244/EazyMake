@@ -78,10 +78,13 @@ void pack_project(const config::EzConfig& cfg,
 // test_framework_override: if non-empty, overrides cfg.test.framework (from --framework).
 // test_filter: if non-empty, filters test names (Catch2: -c param; ezmk: filename glob).
 // verbose: if true, shows detailed output for each test (even passing ones).
+// 1.2.0-dev.12: test_profile_override — if non-empty, overrides cfg.test.default_profile
+// (from --profile); both resolve through the shared apply_profile() helper.
 void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
-               bool verbose);
+               bool verbose,
+               const std::string& test_profile_override = {});
 
 // 1.1.1: Prepare a cache::CompileInput exactly as a real build would —
 // include collection, profile merge, macro folding, dependency package

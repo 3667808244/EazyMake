@@ -471,6 +471,67 @@ void run_hook(const std::string& hook_path_cfg, const fs::path& proj_root,
     }
 }
 
+// 1.2.0-dev.12: Resolve the active profile (CLI > default) and merge it into
+// compile/link configs. Shared by the build path (prepare_build_state) and the
+// test path (run_tests) so test compilation/linking honors exactly the same
+// profile semantics as a build. Unknown profile → fatal with closest-match
+// suggestions. Behavior preserved byte-for-byte from the former inline block.
+struct AppliedProfile {
+    config::CompileSection compile;
+    config::LinkSection link;
+};
+
+static AppliedProfile apply_profile(const config::EzConfig& cfg,
+                                    const std::string& cli_profile,
+                                    const std::string& default_profile) {
+    AppliedProfile r;
+    r.compile = cfg.compile;
+    r.link = cfg.link;
+    std::string active_profile = cli_profile;
+    if (active_profile.empty()) active_profile = default_profile;
+    if (active_profile.empty()) return r;
+
+    auto it = cfg.compile_profiles.find(active_profile);
+    if (it != cfg.compile_profiles.end()) {
+        r.compile = merge_compile_profile(r.compile, it->second);
+    } else {
+        // 0.9.4+: collect available profile names + suggest closest matches
+        std::vector<std::string> profile_names;
+        for (const auto& [name, _] : cfg.compile_profiles) profile_names.push_back(name);
+        for (const auto& [name, _] : cfg.link_profiles)
+            if (std::find(profile_names.begin(), profile_names.end(), name) == profile_names.end())
+                profile_names.push_back(name);
+        std::sort(profile_names.begin(), profile_names.end());
+
+        auto matches = util::closest_match(active_profile, profile_names, 2);
+        if (!matches.empty()) {
+            std::string suggestion = matches[0];
+            for (size_t i = 1; i < matches.size() && i < 3; ++i)
+                suggestion += ", " + matches[i];
+            util::fatal(std::string("unknown profile: '") + active_profile +
+                        "'. Did you mean: " + suggestion + "?");
+        }
+
+        if (profile_names.empty()) {
+            util::fatal(std::string("unknown profile: '") + active_profile +
+                        "'. No profiles defined in ezmk.toml.");
+        } else {
+            std::string avail;
+            for (size_t i = 0; i < profile_names.size(); ++i) {
+                if (i > 0) avail += ", ";
+                avail += profile_names[i];
+            }
+            util::fatal(std::string("unknown profile: '") + active_profile +
+                        "'. Available: " + avail);
+        }
+    }
+    auto lit = cfg.link_profiles.find(active_profile);
+    if (lit != cfg.link_profiles.end()) {
+        r.link = merge_link_profile(r.link, lit->second);
+    }
+    return r;
+}
+
 // Phase 1: Setup + package scanning + pre-build hook.
 // Returns fully initialized build state with effective compile flags.
 BuildState prepare_build_state(const config::EzConfig& cfg,
@@ -494,51 +555,12 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
             st.lang.compiler == "g++" ? "C++" : "C");
     }
 
-    // Apply build profile
-    st.compile_cfg = cfg.compile;
-    st.link_cfg = cfg.link;
-    // 1.2.0-dev.3: no explicit --profile → fall back to [compile].default_profile (if set)
-    std::string active_profile = opts.profile;
-    if (active_profile.empty()) active_profile = cfg.compile.default_profile;
-    if (!active_profile.empty()) {
-        auto it = cfg.compile_profiles.find(active_profile);
-        if (it != cfg.compile_profiles.end()) {
-            st.compile_cfg = merge_compile_profile(st.compile_cfg, it->second);
-        } else {
-            // 0.9.4+: collect available profile names + suggest closest matches
-            std::vector<std::string> profile_names;
-            for (const auto& [name, _] : cfg.compile_profiles) profile_names.push_back(name);
-            for (const auto& [name, _] : cfg.link_profiles)
-                if (std::find(profile_names.begin(), profile_names.end(), name) == profile_names.end())
-                    profile_names.push_back(name);
-            std::sort(profile_names.begin(), profile_names.end());
-
-            auto matches = util::closest_match(active_profile, profile_names, 2);
-            if (!matches.empty()) {
-                std::string suggestion = matches[0];
-                for (size_t i = 1; i < matches.size() && i < 3; ++i)
-                    suggestion += ", " + matches[i];
-                util::fatal(std::string("unknown profile: '") + active_profile +
-                            "'. Did you mean: " + suggestion + "?");
-            }
-
-            if (profile_names.empty()) {
-                util::fatal(std::string("unknown profile: '") + active_profile +
-                            "'. No profiles defined in ezmk.toml.");
-            } else {
-                std::string avail;
-                for (size_t i = 0; i < profile_names.size(); ++i) {
-                    if (i > 0) avail += ", ";
-                    avail += profile_names[i];
-                }
-                util::fatal(std::string("unknown profile: '") + active_profile +
-                            "'. Available: " + avail);
-            }
-        }
-        auto lit = cfg.link_profiles.find(active_profile);
-        if (lit != cfg.link_profiles.end()) {
-            st.link_cfg = merge_link_profile(st.link_cfg, lit->second);
-        }
+    // Apply build profile (1.2.0-dev.12: shared apply_profile helper —
+    // CLI --profile > [compile].default_profile; test path uses the same logic)
+    {
+        auto applied = apply_profile(cfg, opts.profile, cfg.compile.default_profile);
+        st.compile_cfg = std::move(applied.compile);
+        st.link_cfg = std::move(applied.link);
     }
 
     // 1.1.0: deterministic build — resolve SOURCE_DATE_EPOCH
@@ -1654,11 +1676,23 @@ std::vector<Catch2TestResult> parse_catch2_xml(const std::string& xml) {
 void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
-               bool verbose) {
+               bool verbose,
+               const std::string& test_profile_override) {
     // 1.2.0-dev.7: located project root (upward search); CWD fallback
     fs::path proj_root = util::locate_project_root(fs::current_path()).value_or(fs::current_path());
     fs::path build_dir = proj_root / "build";
     fs::path cache_dir = proj_root / ".ezmk/cache";
+
+    // 1.2.0-dev.12: [test].flags is deprecated (removed in 2.0.0). Warn at the
+    // point of use — not at parse time, since parse_config also runs for every
+    // dependency package.
+    if (!cfg.test.flags.empty()) {
+        util::warn(ezmk::i18n::I18nKey::test_flags_deprecated);
+    }
+
+    // 1.2.0-dev.12: resolve the active profile (CLI --profile > [test].default_profile)
+    // through the shared apply_profile() helper — same semantics as a build.
+    auto applied = apply_profile(cfg, test_profile_override, cfg.test.default_profile);
 
     // Determine framework (CLI override takes priority)
     std::string framework = test_framework_override.empty()
@@ -1740,19 +1774,21 @@ void run_tests(const config::EzConfig& cfg,
         compiler = tc.cxx_compiler.string();
     }
 
-    // Build compile flags from project config
+    // Build compile flags from the applied profile's compile config
+    // (1.2.0-dev.12: profile merge via apply_profile — CLI --profile /
+    // [test].default_profile; no profile → identical to cfg.compile).
     std::vector<std::string> base_flags;
     base_flags.push_back(lang_info.std_flag);
-    if (cfg.compile.ezmk_macros) {
+    if (applied.compile.ezmk_macros) {
         auto em = generate_ezmk_macros(cfg);
         base_flags.insert(base_flags.end(), em.begin(), em.end());
     }
-    for (auto& f : cfg.compile.flags) base_flags.push_back(f);
-    auto macro_flags = macros_to_flags(cfg.compile.macros);
+    for (auto& f : applied.compile.flags) base_flags.push_back(f);
+    auto macro_flags = macros_to_flags(applied.compile.macros);
     for (auto& f : macro_flags) base_flags.push_back(f);
 
-    // Add include dirs
-    for (auto& d : cfg.compile.include_dirs) {
+    // Add include dirs (project config, possibly profile-merged)
+    for (auto& d : applied.compile.include_dirs) {
         fs::path inc = d;
         if (inc.is_relative()) inc = proj_root / inc;
         if (util::file_exists(inc)) {
@@ -1760,7 +1796,17 @@ void run_tests(const config::EzConfig& cfg,
         }
     }
 
-    // Add test flags
+    // 1.2.0-dev.12: test-only include dirs — resolved relative to the project
+    // root, missing dirs skipped (mirrors [compile].include_dirs).
+    for (auto& d : cfg.test.include_dirs) {
+        fs::path inc = d;
+        if (inc.is_relative()) inc = proj_root / inc;
+        if (util::file_exists(inc)) {
+            base_flags.push_back("-I" + inc.string());
+        }
+    }
+
+    // Add test flags (DEPRECATED 1.2.0-dev.12, still honored until 2.0.0)
     for (auto& f : cfg.test.flags) {
         base_flags.push_back(f);
     }
@@ -1893,10 +1939,12 @@ void run_tests(const config::EzConfig& cfg,
             link_cmd << " -o \"" << runner.string() << "\"";
         }
 
-        // Add package link flags
-        for (auto& f : cfg.link.flags) link_cmd << " " << f;
-        for (auto& d : cfg.link.link_dirs) link_cmd << " -L\"" << d << "\"";
-        for (auto& t : cfg.link.system_targets) link_cmd << " -l" << t;
+        // Add package link flags (1.2.0-dev.12: profile-merged via apply_profile)
+        for (auto& f : applied.link.flags) link_cmd << " " << f;
+        for (auto& d : applied.link.link_dirs) link_cmd << " -L\"" << d << "\"";
+        for (auto& t : applied.link.system_targets) link_cmd << " -l" << t;
+        // 1.2.0-dev.12: test-only link targets (-l)
+        for (auto& t : cfg.test.link_targets) link_cmd << " -l" << t;
 
         // Link against Catch2 library (from project/user/global scope)
         {
@@ -2086,9 +2134,11 @@ void run_tests(const config::EzConfig& cfg,
                 comp_cmd << " \"" << ts.string() << "\"";
                 for (auto& o : project_objs) comp_cmd << " \"" << o.string() << "\"";
                 comp_cmd << " -o \"" << test_exe.string() << "\"";
-                for (auto& f : cfg.link.flags) comp_cmd << " " << f;
-                for (auto& d : cfg.link.link_dirs) comp_cmd << " -L\"" << d << "\"";
-                for (auto& t : cfg.link.system_targets) comp_cmd << " -l" << t;
+                // 1.2.0-dev.12: profile-merged link flags + test-only targets
+                for (auto& f : applied.link.flags) comp_cmd << " " << f;
+                for (auto& d : applied.link.link_dirs) comp_cmd << " -L\"" << d << "\"";
+                for (auto& t : applied.link.system_targets) comp_cmd << " -l" << t;
+                for (auto& t : cfg.test.link_targets) comp_cmd << " -l" << t;
             }
 
             if (verbose) util::info("  " + comp_cmd.str());
