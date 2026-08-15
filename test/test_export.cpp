@@ -210,20 +210,54 @@ TEST_CASE("export cmake: --resolve emits installed dep paths", "[export]") {
 // Hooks
 // ===================================================================
 
-TEST_CASE("export cmake: hooks listed as comment + WARNING", "[export]") {
+TEST_CASE("export cmake: hooks → find_program + add_custom_command PRE/POST", "[export]") {
     auto cfg = make_exe_config();
     cfg.hooks.pre_build = "scripts/pre.lua";
     cfg.hooks.post_build = "scripts/post.lua";
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
-    REQUIRE(t.find("pre_build  = \"scripts/pre.lua\"") != std::string::npos);
-    REQUIRE(t.find("post_build = \"scripts/post.lua\"") != std::string::npos);
-    REQUIRE(t.find("message(WARNING \"[hooks] are not exported") != std::string::npos);
+    // dev.8: hooks run via the standalone ezmk-lua runtime.
+    REQUIRE(t.find("find_program(EZMK_LUA ezmk-lua)") != std::string::npos);
+    REQUIRE(t.find("if(NOT EZMK_LUA)") != std::string::npos);
+    REQUIRE(t.find("message(WARNING \"[hooks] need 'ezmk-lua' on PATH") != std::string::npos);
+    // pre_build → PRE_BUILD, post_build → POST_BUILD; script path rooted at the
+    // CMake source dir; ctx injected via --project-root / --output.
+    REQUIRE(t.find("add_custom_command(TARGET demo PRE_BUILD") != std::string::npos);
+    REQUIRE(t.find("COMMAND ${EZMK_LUA} \"${CMAKE_CURRENT_SOURCE_DIR}/scripts/pre.lua\"")
+            != std::string::npos);
+    REQUIRE(t.find("--project-root ${CMAKE_CURRENT_SOURCE_DIR}") != std::string::npos);
+    REQUIRE(t.find("--output $<TARGET_FILE:demo>") != std::string::npos);
+    REQUIRE(t.find("add_custom_command(TARGET demo POST_BUILD") != std::string::npos);
+    REQUIRE(t.find("\"${CMAKE_CURRENT_SOURCE_DIR}/scripts/post.lua\"") != std::string::npos);
+    // The old "not exported" blanket warning must be gone.
+    REQUIRE(t.find("NOT exported") == std::string::npos);
+}
+
+TEST_CASE("export cmake: on_failure stays a comment (no CMake failure hook)", "[export]") {
+    auto cfg = make_exe_config();
+    cfg.hooks.on_failure = "scripts/fail.lua";
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    // No pre/post hooks → no find_program / add_custom_command block at all.
+    REQUIRE(t.find("find_program(EZMK_LUA") == std::string::npos);
+    REQUIRE(t.find("add_custom_command") == std::string::npos);
+    REQUIRE(t.find("on_failure \"scripts/fail.lua\"") != std::string::npos);
+    REQUIRE(t.find("not exported") != std::string::npos);
+}
+
+TEST_CASE("export cmake: hook command inlines --profile", "[export]") {
+    auto cfg = make_exe_config();
+    cfg.hooks.post_build = "scripts/post.lua";
+    cfg.compile_profiles["release"] = ProfileConfig{{}, {}, {}};
+    ExportOptions opts;
+    opts.profile = "release";
+    auto t = build_cmake_text(cfg, fs::current_path(), opts);
+    REQUIRE(t.find("--profile release") != std::string::npos);
 }
 
 TEST_CASE("export cmake: no hooks → no hooks section", "[export]") {
     auto cfg = make_exe_config();
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
     REQUIRE(t.find("[hooks]") == std::string::npos);
+    REQUIRE(t.find("ezmk-lua") == std::string::npos);
 }
 
 // ===================================================================

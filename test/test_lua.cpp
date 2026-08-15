@@ -1430,3 +1430,105 @@ end
                                     "testpkg", tmp.path,
                                     tmp.path / "install", "project") == 1);
 }
+
+// ===================================================================
+// 1.2.0-dev.8: run_script_unrestricted() — the standalone ezmk-lua runtime
+// ===================================================================
+
+// NOTE: each test calls init() first — it is idempotent ("double init is
+// idempotent") and guarantees state() is non-null regardless of Catch2's test
+// ordering (some lifecycle tests call shutdown()).
+
+TEST_CASE("run_script_unrestricted: basic execution", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "unrestricted_hook", R"(
+function run(ctx)
+    return 0
+end
+)");
+    int rc = run_script_unrestricted(state(), script, tmp.path.string(), "", "");
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_script_unrestricted: receives ctx with output/project_root/profile", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "unrestricted_ctx", R"(
+function run(ctx)
+    assert(type(ctx) == "table", "ctx must be a table")
+    assert(ctx.project_root:find("ezmk_test"), "project_root injected: " .. tostring(ctx.project_root))
+    assert(ctx.profile == "release", "profile injected: " .. tostring(ctx.profile))
+    assert(ctx.output:find("myapp"), "output injected: " .. tostring(ctx.output))
+    return 0
+end
+)");
+    int rc = run_script_unrestricted(state(), script, tmp.path.string(), "release",
+                                     (tmp.path / "build" / "myapp").string());
+    REQUIRE(rc == 0);
+}
+
+TEST_CASE("run_script_unrestricted: returns run() exit code", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "unrestricted_rc", R"(
+function run(ctx)
+    return 7
+end
+)");
+    int rc = run_script_unrestricted(state(), script, tmp.path.string(), "", "");
+    REQUIRE(rc == 7);
+}
+
+TEST_CASE("run_script_unrestricted: null L returns error", "[lua][hook][1.2.0-dev.8]") {
+    int rc = run_script_unrestricted(nullptr, fs::path("test.lua"), "", "", "");
+    REQUIRE(rc != 0);
+}
+
+TEST_CASE("run_script_unrestricted: os/io available (superset of sandbox)", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    // os.execute / os.getenv / io.open all work — impossible under the sandbox.
+    auto script = write_lua_script(tmp.path, "unrestricted_os_io", R"(
+function run(ctx)
+    if type(os) ~= "table" then error("os missing") end
+    if type(io) ~= "table" then error("io missing") end
+    if type(os.getenv) ~= "function" then error("os.getenv missing") end
+    if type(io.open) ~= "function" then error("io.open missing") end
+    return 0
+end
+)");
+    REQUIRE(run_script_unrestricted(state(), script, tmp.path.string(), "", "") == 0);
+}
+
+TEST_CASE("run_script_unrestricted: ezmk.* resolves config from injected project root", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    write_minimal_config(tmp.path);  // [project].name = "testproj"
+    auto script = write_lua_script(tmp.path, "unrestricted_cfg", R"(
+function run(ctx)
+    assert(ezmk.project_name() == "testproj", "project_name: " .. tostring(ezmk.project_name()))
+    assert(ezmk.project_type() == "executable", "project_type: " .. tostring(ezmk.project_type()))
+    return 0
+end
+)");
+    REQUIRE(run_script_unrestricted(state(), script, tmp.path.string(), "", "") == 0);
+}
+
+TEST_CASE("run_script_unrestricted: missing run() returns error", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "unrestricted_no_run", "local x = 1\n");
+    REQUIRE(run_script_unrestricted(state(), script, tmp.path.string(), "", "") == 1);
+}
+
+TEST_CASE("run_script_unrestricted: Lua error returns error", "[lua][hook][1.2.0-dev.8]") {
+    init();
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "unrestricted_error", R"(
+function run(ctx)
+    error("boom")
+end
+)");
+    REQUIRE(run_script_unrestricted(state(), script, tmp.path.string(), "", "") == 1);
+}

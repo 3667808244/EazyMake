@@ -397,6 +397,21 @@ TEST_CASE("1.2.0-dev.7 i18n keys: dir install + upward root", "[i18n][1.2.0-dev.
     REQUIRE(get(I18nKey::config_not_found_upward).find("5") != std::string::npos);
 }
 
+// 1.2.0-dev.8: export hook + ezmk-lua standalone runtime keys.
+TEST_CASE("1.2.0-dev.8 i18n keys: export hook + ezmk-lua", "[i18n][1.2.0-dev.8]") {
+    init("en");
+    REQUIRE(!get(I18nKey::export_hook_note).empty());
+    REQUIRE(get(I18nKey::ezmk_lua_usage).find("ezmk-lua") != std::string::npos);
+    REQUIRE(!get(I18nKey::ezmk_lua_missing_script).empty());
+
+    std::string need = fmt(I18nKey::ezmk_lua_need_value, {{"option", "--profile"}});
+    REQUIRE(need.find("--profile") != std::string::npos);
+    std::string unk = fmt(I18nKey::ezmk_lua_unknown_option, {{"option", "--bogus"}});
+    REQUIRE(unk.find("--bogus") != std::string::npos);
+    std::string extra = fmt(I18nKey::ezmk_lua_extra_arg, {{"arg", "x"}});
+    REQUIRE(extra.find("x") != std::string::npos);
+}
+
 // ===================================================================
 // 0.2.6+: exhaustive regression — EVERY I18nKey must resolve in both
 // languages (guards against the enum/key_name/JSON drift that produced

@@ -68,6 +68,17 @@ fs::path find_ezmk_binary() {
     return fallback;
 }
 
+// 1.2.0-dev.8: resolve the standalone ezmk-lua runtime binary (built alongside
+// ezmk by build.sh: build/ezmk-lua[.exe]). Skipped gracefully if absent.
+fs::path find_ezmk_lua_binary() {
+    fs::path repo_root = find_repo_root();
+    fs::path candidate = repo_root / "build" / ("ezmk-lua" EZMK_EXE_SUFFIX);
+    if (fs::exists(candidate)) return fs::canonical(candidate);
+    fs::path fallback = fs::current_path() / "build" / ("ezmk-lua" EZMK_EXE_SUFFIX);
+    if (fs::exists(fallback)) return fs::canonical(fallback);
+    return {};
+}
+
 // Build the shell command to run ezmk in a specific working directory.
 // Uses "cd <dir> && ezmk <args>" to avoid changing the process CWD.
 std::string build_ezmk_cmd(const std::string& args, const fs::path& cwd) {
@@ -1358,4 +1369,125 @@ TEST_CASE("integration: build with no ezmk.toml fails with clear message", "[int
     INFO("stdout: " << r.out);
     REQUIRE(r.exit_code != 0);
     REQUIRE((r.out + r.err).find("ezmk.toml") != std::string::npos);
+}
+
+// 1.2.0-dev.8: the standalone ezmk-lua runtime runs a hook script, injects ctx
+// from CLI flags, and propagates run(ctx)'s return value as the exit code.
+TEST_CASE("integration: ezmk-lua runs a sample hook with ctx + return code", "[integration][1.2.0-dev.8]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    fs::path lua_bin = find_ezmk_lua_binary();
+    if (lua_bin.empty()) {
+        SKIP("ezmk-lua binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    fs::path proj = tmp.path / "hookproj";
+    fs::create_directories(proj);
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"hookproj\"\ntype = \"executable\"\nversion = \"1.0.0\"\n");
+    file_write(proj / "hook.lua", R"(
+function run(ctx)
+    assert(ctx.project_root:find("hookproj"), "project_root: " .. tostring(ctx.project_root))
+    assert(ctx.output:find("app"), "output: " .. tostring(ctx.output))
+    assert(ctx.profile == "release", "profile: " .. tostring(ctx.profile))
+    -- ezmk.* API resolves config from --project-root
+    assert(ezmk.project_name() == "hookproj", "project_name: " .. tostring(ezmk.project_name()))
+    return 9
+end
+)");
+
+    std::string bin = "\"" + lua_bin.string() + "\"";
+    std::string script = "\"" + (proj / "hook.lua").string() + "\"";
+    std::string cmd = bin + " " + script +
+        " --project-root \"" + proj.string() + "\"" +
+        " --profile release" +
+        " --output \"" + (proj / "build" / "app" EZMK_EXE_SUFFIX).string() + "\"";
+    ProcResult r = run_command(cmd);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 9);
+}
+
+// 1.2.0-dev.8: `ezmk build` still runs hooks via the sandboxed runtime —
+// the sandbox path must be unchanged (hard regression gate for dev.8).
+TEST_CASE("integration: ezmk build runs hooks (sandbox path unchanged)", "[integration][1.2.0-dev.8]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "hookbuild";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // A pre_build hook that writes a marker file via ezmk.file_write.
+    fs::create_directories(proj_dir / "scripts");
+    file_write(proj_dir / "scripts" / "pre.lua", R"(
+function run(ctx)
+    ezmk.file_write(".ezmk/prehook.marker", "ran")
+    return 0
+end
+)");
+    // Append the hooks section to the generated ezmk.toml.
+    {
+        std::ifstream in(proj_dir / "ezmk.toml");
+        std::string content((std::istreambuf_iterator<char>(in)),
+                            std::istreambuf_iterator<char>());
+        content += "\n[hooks]\npre_build = \"scripts/pre.lua\"\n";
+        file_write(proj_dir / "ezmk.toml", content);
+    }
+
+    ProcResult r = run_ezmk("build", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "prehook.marker"));
+    // Sandbox still guards the hook: writing outside the project root must fail.
+    REQUIRE(!fs::exists(proj_dir.parent_path() / "escaped.marker"));
+}
+
+// 1.2.0-dev.8: `ezmk project export cmake` emits the ezmk-lua hook commands and
+// prints the hooks note.
+TEST_CASE("integration: export cmake emits ezmk-lua hook commands + note", "[integration][1.2.0-dev.8]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "hookexport";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    fs::create_directories(proj_dir / "scripts");
+    file_write(proj_dir / "scripts" / "pre.lua", "function run(ctx) return 0 end\n");
+    {
+        std::ifstream in(proj_dir / "ezmk.toml");
+        std::string content((std::istreambuf_iterator<char>(in)),
+                            std::istreambuf_iterator<char>());
+        content += "\n[hooks]\npre_build = \"scripts/pre.lua\"\n";
+        file_write(proj_dir / "ezmk.toml", content);
+    }
+
+    ProcResult r = run_ezmk("project export cmake --overwrite", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    std::string cmake = file_read(proj_dir / "CMakeLists.txt");
+    REQUIRE(cmake.find("find_program(EZMK_LUA ezmk-lua)") != std::string::npos);
+    REQUIRE(cmake.find("add_custom_command(TARGET " + proj_name + " PRE_BUILD")
+            != std::string::npos);
+    REQUIRE(cmake.find("${CMAKE_CURRENT_SOURCE_DIR}/scripts/pre.lua") != std::string::npos);
+    // The export-time note about the ezmk-lua dependency.
+    REQUIRE((r.out + r.err).find("hooks exported") != std::string::npos);
 }
