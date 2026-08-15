@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.10 执行计划
 
-> **状态：执行中**（2026-08-15）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-15，全量 747 用例 / 3442 断言零回归）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.10.md`](plans/1.2.0/1.2.0-dev.10.md)。本计划为 1.2.0 系列第十个开发子版本：**平台标识符扩展（工具链/ABI）**——把预编译包命名从 `lib<name>.<os>-<arch>.<ext>` 扩展为 `os-arch[-compiler][-abi]`（`gcc13`/`clang18`/`msvc143` + 默认 `abi11`），`select_precompiled_archive()` 按 **ABI 安全的 4 级匹配优先级**选择，降级匹配（可能跨工具链）时显式警告，可选 `[project].precompiled_strict = true` 改为 fail-fast。承接 `package_authoring.md` §3.3「多平台共包」——现有 os-arch 命名对 C 成立、对 **C++ ABI 不成立**（GCC/Clang/MSVC 互不兼容）。
 >
@@ -33,33 +33,33 @@
 
 ### 阶段一：`compiler_tag()`（4.1）
 
-- [ ] **1.1 实现**（4.1）：`include/ezmk/toolchain.hpp` + `src/toolchain.cpp` 新增 `compiler_tag(const Toolchain&)`——GCC/Clang 解析 `tc.version` 首个数字段拼 `gcc<major>`/`clang<major>`；MSVC 解析 cl 版本 `19.<minor>…` → `_MSC_VER` 等价数（`1900+minor`）→ **查表**（1900→msvc140 / 1910-1919→msvc141 / 1920-1929→msvc142 / ≥1930→msvc143，不用算术避免 1943→144 错算）
-- [ ] **1.2 单测**（4.1）：`test_toolchain.cpp` `compiler_tag`——GCC/Clang/MSVC 版本串解析 + 工具集映射表边界（1900/1910/1930/1943）
+- [x] **1.1 实现**（4.1）：`include/ezmk/toolchain.hpp` + `src/toolchain.cpp` 新增 `compiler_tag(const Toolchain&)`——GCC/Clang 解析 `tc.version` 首个数字段拼 `gcc<major>`/`clang<major>`；MSVC 解析 cl 版本 `19.<minor>…` → `_MSC_VER` 等价数（`1900+minor`）→ **查表**（1900→msvc140 / 1910-1919→msvc141 / 1920-1929→msvc142 / ≥1930→msvc143，不用算术避免 1943→144 错算）
+- [x] **1.2 单测**（4.1）：`test_toolchain.cpp` `compiler_tag`——GCC/Clang/MSVC 版本串解析 + 工具集映射表边界（1900/1910/1930/1943）
 
 ### 阶段二：匹配重写 + 降级警告/严格模式（4.2 + 4.3）
 
-- [ ] **2.1 匹配重写**（4.2）：`select_precompiled_archive()` 改分段解析（os/arch 固定前缀表 + `gcc\d+`/`clang\d+`/`msvc14\d` compiler 段 + `abi\d+` abi 段，未知段不识别） + 4 级评分（L4 full=4 / L3 compiler 同且 abi 缺失=3 / L2 os-arch=2 / L1 裸名=1）；**特例**：compiler 同但 abi 段存在且不等 → 视为 ABI 不兼容跳过（仅此候选则报错）；同分取 filename 字典序最小；签名不变，`src/pkg.cpp:375` 与 `src/build.cpp:655` 两处调用点零改动
-- [ ] **2.2 降级警告**（4.3）：选中 L2/L1（消费端带 compiler 标签）→ i18n 警告（`precompiled_toolchain_fallback_warn`），指明当前工具链标签与 available 列表；无任何匹配时错误信息补当前完整标签
-- [ ] **2.3 严格模式**（4.3）：`ProjectSection` 增可选 `precompiled_strict`（默认 `false`，`src/config.cpp`/`config.hpp`）；开启后 L2/L1 降级 → `precompiled_strict_mismatch` fatal
+- [x] **2.1 匹配重写**（4.2）：`select_precompiled_archive()` 改分段解析（os/arch 固定前缀表 + `gcc\d+`/`clang\d+`/`msvc14\d` compiler 段 + `abi\d+` abi 段，未知段不识别） + 4 级评分（L4 full=4 / L3 compiler 同且 abi 缺失=3 / L2 os-arch=2 / L1 裸名=1）；**特例**：compiler 同但 abi 段存在且不等 → 视为 ABI 不兼容跳过（仅此候选则报错）；同分取 filename 字典序最小；签名不变，`src/pkg.cpp:375` 与 `src/build.cpp:655` 两处调用点零改动
+- [x] **2.2 降级警告**（4.3）：选中 L2/L1（消费端带 compiler 标签）→ i18n 警告（`precompiled_toolchain_fallback_warn`），指明当前工具链标签与 available 列表；无任何匹配时错误信息补当前完整标签
+- [x] **2.3 严格模式**（4.3）：`ProjectSection` 增可选 `precompiled_strict`（默认 `false`，`src/config.cpp`/`config.hpp`）；开启后 L2/L1 降级 → `precompiled_strict_mismatch` fatal
 
 ### 阶段三：`pkg info` 增显 + i18n（4.4 + 4.5）
 
-- [ ] **3.1 `pkg info` 增显**（4.4）：precompiled 包输出 `lib/ 产物:` 行（列出全部识别标签含裸名，镜像 include_dirs 输出块）
-- [ ] **3.2 i18n**（4.5）：`precompiled_toolchain_fallback_warn` / `precompiled_strict_mismatch` / `pkg_info_precompiled_variants` 三向一致（`.def` + en/zh），`check_i18n.py` 通过；`bash build.sh` 编译通过
+- [x] **3.1 `pkg info` 增显**（4.4）：precompiled 包输出 `lib/ 产物:` 行（列出全部识别标签含裸名，镜像 include_dirs 输出块）
+- [x] **3.2 i18n**（4.5）：`precompiled_toolchain_fallback_warn` / `precompiled_strict_mismatch` / `pkg_info_precompiled_variants` 三向一致（`.def` + en/zh），`check_i18n.py` 通过；`bash build.sh` 编译通过
 
 ### 阶段四：测试与全量回归（4.6）
 
-- [ ] **4.1 单测矩阵**（4.6）：`test_pkg.cpp` `select_precompiled_archive`——L4/L3/L2/L1、abi 不匹配跳过、未知段忽略、字典序确定性、降级警告、strict 报错
-- [ ] **4.2 集成**（4.6）：端到端——当前工具链 full-tag 产物被选中并链接；仅有跨工具链产物时降级 + 警告；strict 模式报错
-- [ ] **4.3 全量回归**（4.6）：`bash build.sh test-all` 零回归（基线 727 用例 / 3361 断言，dev.12 后；既有 os-arch/裸名包路径必须零变化）
+- [x] **4.1 单测矩阵**（4.6）：`test_pkg.cpp` `select_precompiled_archive`——L4/L3/L2/L1、abi 不匹配跳过、未知段忽略、字典序确定性、降级警告、strict 报错
+- [x] **4.2 集成**（4.6）：端到端——当前工具链 full-tag 产物被选中并链接；仅有跨工具链产物时降级 + 警告；strict 模式报错
+- [x] **4.3 全量回归**（4.6）：`bash build.sh test-all` 零回归（基线 727 用例 / 3361 断言，dev.12 后；既有 os-arch/裸名包路径必须零变化）
 
 ### 阶段五：文档收口（4.7）
 
-- [ ] **5.1 文档**（4.7）：`docs/en|zh/package_authoring.md`（命名约定 `os-arch[-compiler][-abi]`、标签表、4 级优先级、ABI 警告、Apple Clang/clang-cl/旧 ABI 覆盖局限）、`pkg.md`、`config_file.md`（`precompiled_strict`）、`CHANGES.md`——**中文基准，先 `docs/zh/` 再同步 `docs/en/`**
+- [x] **5.1 文档**（4.7）：`docs/en|zh/package_authoring.md`（命名约定 `os-arch[-compiler][-abi]`、标签表、4 级优先级、ABI 警告、Apple Clang/clang-cl/旧 ABI 覆盖局限）、`pkg.md`、`config_file.md`（`precompiled_strict`）、`CHANGES.md`——**中文基准，先 `docs/zh/` 再同步 `docs/en/`**
 
 ### 阶段六：收口（4.8）
 
-- [ ] **6.1 收口**（4.8）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.10 状态「待实现 → 已完成」；发布门槛复核（签名不变 + 全量零回归）
+- [x] **6.1 收口**（4.8）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.10 状态「待实现 → 已完成」；发布门槛复核（签名不变 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
