@@ -19,11 +19,12 @@
 | [1.2.0-dev.9](1.2.0-dev.9.md) | 包构建配置收敛（dev.7 延伸） | 包 `[compile].src_dirs` / `include_dirs` 生效：`collect_sources` 复用 + include 去重 + utils 门控对齐 + `pkg info` 增显 | **已完成**（2026-08-15） |
 | [1.2.0-dev.10](1.2.0-dev.10.md) | 平台标识符扩展（工具链/ABI） | `lib<name>.<os>-<arch>[-<compiler>][-<abi>]` 命名 + 4 级匹配 + 降级 ABI 警告 + 可选 `precompiled_strict` | 待实现 |
 | [1.2.0-dev.11](1.2.0-dev.11.md) | 代码质量审查与改进 | 基于 dev.10 完成后的代码全量审查（目前留空，待 dev.10 落地） | 待实现 |
+| [1.2.0-dev.12](1.2.0-dev.12.md) | 测试配置收口（dev.3 延伸） | `[test].default_profile` + `ezmk test --profile`（复用 compile/link profile 表）；`[test].flags` 弃用（warn，2.0.0 移除） | 待实现 |
 | [1.2.0-pre.2](1.2.0-pre.2.md) | README 整理与高级特性触达 | README 重组 + 高级特性教程（semver/lockfile/第三方仓库/预编译共包）+ 预编译包 ABI 警告加强 | 待实现 |
 | [1.2.0-pre.1](1.2.0-pre.1.md) | pacman 分发（发布流水线） | `publish/` 重组 + `publish/arch/PKGBUILD`；本机 MSYS2 + 远程 Arch Linux 验证 makepkg | 待发布 |
-| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.9 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
+| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.12 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
 
-> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1 ~ dev.9 已完成，下一个子版本为 [1.2.0-dev.10](1.2.0-dev.10.md)，dev.11 依赖 dev.10，pre.2 为 dev.10 之后的文档化检查点）。
+> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1 ~ dev.9 已完成，dev.10 与 dev.12 相互独立可并行，dev.11 依赖 dev.10，pre.2 为 dev.10 之后的文档化检查点）。
 
 ## 依赖关系
 
@@ -41,6 +42,7 @@
 1.2.0-dev.9 (包构建配置收敛) ────────────────┤
 1.2.0-dev.10 (平台标识符: 工具链/ABI) ────────┤
 1.2.0-dev.11 (代码质量审查, 依赖 dev.10) ──────┤
+1.2.0-dev.12 (测试配置收口, 依赖 dev.3+dev.5) ──┤
 1.2.0-pre.1 (pacman 分发) ─────────────────┘
 1.2.0-pre.2 (README 整理, 依赖 dev.10) ───────┘
 ```
@@ -52,9 +54,10 @@
 - **dev.9 依赖 dev.7**：包构建配置收敛（`src_dirs`/`include_dirs`）作用于 dev.7 引入的本地目录安装共用路径（`validate_pkg` + `compile_package`）；与 dev.8 相互独立。
 - **dev.10 与 dev.7/dev.8/dev.9 相互独立**：作用于 `precompiled` 包的 `lib/` 选择路径（`select_precompiled_archive`），不碰 `src_dirs`/`include_dirs`。
 - **dev.11 依赖 dev.10**：代码质量审查需基于 dev.10 完成后的代码。
+- **dev.12 依赖 dev.3 + dev.5**：测试 profile 支持镜像 dev.3 的 `[compile].default_profile` 与 `merge_compile_profile` 机制（复用 compile/link profile 表），作用于 dev.5 改造过的 `run_tests`（catch2 v3 兼容路径）；与 dev.10/dev.11 相互独立。
 - **pre.2 依赖 dev.10**：README/教程/package_authoring 声明的 `os-arch[-compiler][-abi]` 最佳实践与 ABI 警告，前提是 dev.10 已实现。
 - dev.3 与 dev.1、dev.2 存在**协同**：默认模板内建 profile 后，`ezmk project cc --profile release` 与 `ezmk project export cmake --profile release` 开箱即可对照验证。
-- `1.2.0` 正式版依赖 dev.1 ~ dev.11 + pre.1 + pre.2 + 前置 1.1.1 全部完成 + 发布门槛（实现完整 / API 兼容 / 全量测试零回归）。
+- `1.2.0` 正式版依赖 dev.1 ~ dev.12 + pre.1 + pre.2 + 前置 1.1.1 全部完成 + 发布门槛（实现完整 / API 兼容 / 全量测试零回归）。
 
 ## 跨子版本共享的关注点
 
