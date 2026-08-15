@@ -17,6 +17,7 @@ struct ProjectSection {
     std::string stdlib = "libstdc++";// 1.1.0-dev.4: standard library ("libstdc++" | "libc++")
     bool header_only = false;        // 0.9.7+ header-only package (no compilation needed)
     bool precompiled = false;        // 0.9.7+ precompiled package (use lib/*.a, skip compilation)
+    bool precompiled_strict = false; // 1.2.0-dev.10: precompiled packages refuse ABI-unsafe toolchain fallback (fail-fast)
 };
 
 // 0.2.5+ — Fine-grained utils permission declaration ([utils.permissions]).

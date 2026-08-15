@@ -379,6 +379,10 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
         if (auto pc = (*proj)["precompiled"].as_boolean()) {
             cfg.project.precompiled = pc->get();
         }
+        // 1.2.0-dev.10: precompiled_strict — refuse ABI-unsafe toolchain fallback
+        if (auto ps = (*proj)["precompiled_strict"].as_boolean()) {
+            cfg.project.precompiled_strict = ps->get();
+        }
     }
 }
 

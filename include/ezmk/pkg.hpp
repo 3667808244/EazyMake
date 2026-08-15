@@ -92,7 +92,26 @@ bool package_available(std::string_view pkg_name);
 // 1.1.0-dev.2: Select the precompiled archive matching the current platform
 // from a lib/ directory. Priority: exact platform tag match (lib<name>.<tag>.a)
 // > bare fallback (lib<name>.a). Throws std::runtime_error if no match.
+// 1.2.0-dev.10: platform identifier extended to os-arch[-compiler][-abi] with
+// a 4-level ABI-safe priority; signature unchanged (wraps
+// select_precompiled_variant with the real platform/toolchain/strict flag).
 fs::path select_precompiled_archive(const fs::path& lib_dir,
                                      const std::string& pkg_name);
+
+// 1.2.0-dev.10: Pure matching core — selects the best precompiled variant for
+// explicit consumer tags (platform "os-arch", compiler "gcc13", abi "abi11").
+// 4-level priority: full (L4) > same-compiler (L3) > os-arch (L2) > bare (L1);
+// same-compiler candidates with a different explicit abi are skipped
+// (ABI-incompatible); ties broken by lexicographically smallest filename.
+// Degradation to L2/L1 emits a warning when compiler_tag is non-empty, or a
+// fatal error when strict is set. Exposed for deterministic unit tests — the
+// public select_precompiled_archive() wraps it with the real environment
+// (detect_platform_tag + detect_toolchain + the package's precompiled_strict).
+fs::path select_precompiled_variant(const fs::path& lib_dir,
+                                    const std::string& pkg_name,
+                                    const std::string& platform_tag,
+                                    const std::string& compiler_tag,
+                                    const std::string& abi_tag,
+                                    bool strict);
 
 } // namespace ezmk::pkg

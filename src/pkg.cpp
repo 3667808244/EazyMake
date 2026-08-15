@@ -319,55 +319,274 @@ bool package_available(std::string_view pkg_name) {
     return !result.archive_path.empty();
 }
 
-// 1.1.0-dev.2: Select the best precompiled archive for the current platform.
-// Priority: exact platform match > bare lib<name>.a/.lib (backward compat) > error.
-fs::path select_precompiled_archive(const fs::path& lib_dir,
-                                            const std::string& pkg_name) {
-    std::string platform_tag = util::detect_platform_tag();
-    fs::path bare_match;                // fallback: lib<name>.a / lib<name>.lib
-    std::vector<std::string> available; // for error reporting
+// ===================================================================
+// 1.2.0-dev.10: precompiled archive selection — os-arch[-compiler][-abi]
+// ===================================================================
+
+namespace {
+
+// The <rest> of "lib<name>.<rest>.<ext>" is dash-separated:
+//   [0] os   (win | linux | mac)
+//   [1] arch (x64 | arm64 | x86)
+//   [2..] compiler (gcc<digits> | clang<digits> | msvc<digits>) and/or
+//         abi (abi<digits>); any other segment → not part of the naming scheme.
+struct PrecompiledVariant {
+    std::string os, arch, compiler, abi;
+    std::string tag;       // the <rest> as-is (for reports)
+    std::string filename;  // full filename (deterministic tie-break)
+    bool recognized = false;    // fully parsed into os/arch/compiler/abi
+    bool os_arch_known = false; // starts with a known os-arch pair (listed in available)
+    int score = 0;              // 4 = full, 3 = same compiler, 2 = os-arch, 1 = bare
+};
+
+bool all_digits(const std::string& s) {
+    if (s.empty()) return false;
+    for (char c : s)
+        if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+    return true;
+}
+
+bool is_compiler_seg(const std::string& seg) {
+    return (seg.rfind("gcc", 0) == 0 && all_digits(seg.substr(3))) ||
+           (seg.rfind("clang", 0) == 0 && all_digits(seg.substr(5))) ||
+           (seg.rfind("msvc", 0) == 0 && all_digits(seg.substr(4)));
+}
+
+bool is_abi_seg(const std::string& seg) {
+    return seg.rfind("abi", 0) == 0 && all_digits(seg.substr(3));
+}
+
+bool is_os(const std::string& s)  { return s == "win" || s == "linux" || s == "mac"; }
+bool is_arch(const std::string& s) { return s == "x64" || s == "arm64" || s == "x86"; }
+
+std::vector<std::string> split_dash(const std::string& s) {
+    std::vector<std::string> parts;
+    size_t pos = 0;
+    while (true) {
+        auto dash = s.find('-', pos);
+        if (dash == std::string::npos) { parts.push_back(s.substr(pos)); break; }
+        parts.push_back(s.substr(pos, dash - pos));
+        pos = dash + 1;
+    }
+    return parts;
+}
+
+PrecompiledVariant parse_variant(const std::string& rest, const std::string& filename) {
+    PrecompiledVariant v;
+    v.filename = filename;
+    v.tag = rest;
+    auto parts = split_dash(rest);
+    if (parts.size() < 2 || !is_os(parts[0]) || !is_arch(parts[1])) return v;
+    v.os = parts[0];
+    v.arch = parts[1];
+    v.os_arch_known = true;
+    for (size_t i = 2; i < parts.size(); ++i) {
+        const auto& seg = parts[i];
+        if (is_compiler_seg(seg)) {
+            if (!v.compiler.empty()) return v;  // two compiler segments → malformed
+            v.compiler = seg;
+        } else if (is_abi_seg(seg)) {
+            if (!v.abi.empty()) return v;
+            v.abi = seg;
+        } else {
+            return v;  // unknown segment → not this naming scheme
+        }
+    }
+    v.recognized = true;
+    return v;
+}
+
+// Score a candidate against the consumer's (os, arch, compiler, abi).
+// A same-compiler candidate with a *different explicit abi* is ABI-incompatible
+// (0) and never degrades to L3. Candidates with a different compiler or an abi
+// without a compiler are never matched.
+int score_variant(const PrecompiledVariant& v,
+                  const std::string& plat_os, const std::string& plat_arch,
+                  const std::string& compiler, const std::string& abi) {
+    if (!v.recognized) return 0;
+    if (v.os != plat_os || v.arch != plat_arch) return 0;
+    if (!v.compiler.empty()) {
+        if (compiler.empty() || v.compiler != compiler) return 0;
+        if (!v.abi.empty()) {
+            if (abi.empty() || v.abi != abi) return 0;  // ABI mismatch
+            return 4;  // L4: full tag
+        }
+        return 3;  // L3: same compiler, candidate has no explicit abi (same default ABI)
+    }
+    if (!v.abi.empty()) return 0;  // abi without compiler → cannot confirm
+    return 2;  // L2: os-arch only
+}
+
+// 1.2.0-dev.10: consumer ABI tag from toolchain defaults (zero-config).
+// GCC → "abi11" (libstdc++ CXX11 ABI); Clang → macOS: "" (defaults to libc++,
+// stable ABI), otherwise "abi11" (libstdc++ default); MSVC → "" (ABI decided
+// by the toolset).
+std::string default_abi_tag(const toolchain::Toolchain& tc) {
+    switch (tc.family) {
+    case toolchain::CompilerFamily::Gcc:
+        return "abi11";
+    case toolchain::CompilerFamily::Clang:
+#ifdef EZMK_MACOS
+        return "";
+#else
+        return "abi11";
+#endif
+    case toolchain::CompilerFamily::Msvc:
+        return "";
+    }
+    return "";
+}
+
+std::string join_list(const std::vector<std::string>& v) {
+    std::string s;
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) s += ", ";
+        s += v[i];
+    }
+    return s;
+}
+
+// 1.2.0-dev.10: list the precompiled variant tags available in a lib/ dir —
+// recognized os-arch[-compiler][-abi] tags plus bare lib<name>.a/.lib names —
+// for `pkg info`. Sorted for deterministic output.
+std::vector<std::string> list_precompiled_variants(const fs::path& lib_dir,
+                                                   const std::string& pkg_name) {
+    std::vector<std::string> out;
+    if (!util::file_exists(lib_dir)) return out;
+    std::string tagged_prefix = "lib" + pkg_name + ".";
+    std::string bare_a  = "lib" + pkg_name + ".a";
+    std::string bare_lib = "lib" + pkg_name + ".lib";
+    for (auto& e : fs::directory_iterator(lib_dir)) {
+        auto ext = e.path().extension().string();
+        if (ext != ".a" && ext != ".lib") continue;
+        std::string filename = e.path().filename().string();
+        if (filename == bare_a || filename == bare_lib) {
+            out.push_back(filename);
+            continue;
+        }
+        if (filename.find(tagged_prefix) != 0) continue;
+        std::string rest = filename.substr(tagged_prefix.size(),
+            filename.size() - tagged_prefix.size() - ext.size());
+        if (rest.empty()) continue;
+        auto v = parse_variant(rest, filename);
+        if (v.os_arch_known) out.push_back(v.tag);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+} // namespace
+
+// 1.2.0-dev.10: pure matching core (testable with explicit tags).
+fs::path select_precompiled_variant(const fs::path& lib_dir,
+                                    const std::string& pkg_name,
+                                    const std::string& platform_tag,
+                                    const std::string& compiler_tag,
+                                    const std::string& abi_tag,
+                                    bool strict) {
+    auto plat = split_dash(platform_tag);
+    std::string plat_os = plat.size() >= 1 ? plat[0] : "";
+    std::string plat_arch = plat.size() >= 2 ? plat[1] : "";
 
     std::string tagged_prefix = "lib" + pkg_name + ".";
     std::string bare_a  = "lib" + pkg_name + ".a";
     std::string bare_lib = "lib" + pkg_name + ".lib";
 
+    std::vector<PrecompiledVariant> candidates;  // score > 0
+    std::vector<std::string> available;          // report list (os-arch-known + bare)
+    PrecompiledVariant bare;
+
     for (auto& e : fs::directory_iterator(lib_dir)) {
         auto ext = e.path().extension().string();
         if (ext != ".a" && ext != ".lib") continue;
-
         std::string filename = e.path().filename().string();
 
-        // Exact bare match: lib<name>.a or lib<name>.lib
         if (filename == bare_a || filename == bare_lib) {
-            bare_match = e.path();
+            bare.filename = filename;
+            bare.recognized = true;  // bare is always a valid L1 candidate
             continue;
         }
-
-        // Platform-tagged: lib<name>.<tag>.a / lib<name>.<tag>.lib
-        if (filename.find(tagged_prefix) == 0) {
-            std::string tag = filename.substr(tagged_prefix.size(),
-                filename.size() - tagged_prefix.size() - ext.size());
-            if (tag == platform_tag) {
-                return e.path(); // exact platform match — highest priority
-            }
-            available.push_back(tag);
+        if (filename.find(tagged_prefix) != 0) continue;
+        std::string rest = filename.substr(tagged_prefix.size(),
+            filename.size() - tagged_prefix.size() - ext.size());
+        if (rest.empty()) continue;  // "lib<name>..a" — malformed, skip
+        auto v = parse_variant(rest, filename);
+        if (v.os_arch_known) available.push_back(v.tag);
+        int score = score_variant(v, plat_os, plat_arch, compiler_tag, abi_tag);
+        if (score > 0) {
+            v.score = score;
+            candidates.push_back(std::move(v));
         }
     }
-
-    // Fallback to bare match (backward compatible — single .a in lib/)
-    if (!bare_match.empty()) return bare_match;
-
-    // Error: no platform match and no bare fallback
-    std::string msg = "precompiled package '" + pkg_name +
-        "' has no build for platform '" + platform_tag + "'";
-    if (!available.empty()) {
-        msg += " — available: ";
-        for (size_t i = 0; i < available.size(); ++i) {
-            if (i > 0) msg += ", ";
-            msg += available[i];
-        }
+    if (!bare.filename.empty()) {
+        bare.score = 1;  // L1
+        candidates.push_back(std::move(bare));
+        available.push_back(bare.filename);
     }
-    throw std::runtime_error(msg);
+
+    if (candidates.empty()) {
+        std::string msg = "precompiled package '" + pkg_name +
+            "' has no build for platform '" + platform_tag + "'";
+        if (!compiler_tag.empty())
+            msg += " (toolchain " + compiler_tag +
+                   (abi_tag.empty() ? "" : "-" + abi_tag) + ")";
+        if (!available.empty()) {
+            std::sort(available.begin(), available.end());
+            msg += " — available: " + join_list(available);
+        }
+        throw std::runtime_error(msg);
+    }
+
+    // Best: highest score; ties → lexicographically smallest filename.
+    auto best_it = std::max_element(candidates.begin(), candidates.end(),
+        [](const PrecompiledVariant& a, const PrecompiledVariant& b) {
+            if (a.score != b.score) return a.score < b.score;
+            return a.filename > b.filename;  // max_element wants "a < b"
+        });
+    const auto& best = *best_it;
+    fs::path result = lib_dir / best.filename;
+
+    // Degraded to L2 (os-arch) / L1 (bare) — possibly cross-toolchain ABI.
+    if (best.score < 3 && !compiler_tag.empty()) {
+        if (strict) {
+            std::sort(available.begin(), available.end());
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::precompiled_strict_mismatch,
+                {{"pkg", pkg_name},
+                 {"toolchain", compiler_tag},
+                 {"fallback", best.filename},
+                 {"available", join_list(available)}}));
+        }
+        std::sort(available.begin(), available.end());
+        util::warn(ezmk::i18n::fmt(
+            ezmk::i18n::I18nKey::precompiled_toolchain_fallback_warn,
+            {{"pkg", pkg_name},
+             {"toolchain", compiler_tag},
+             {"fallback", best.filename},
+             {"available", join_list(available)}}));
+    }
+    return result;
+}
+
+// 1.1.0-dev.2: Select the best precompiled archive for the current platform.
+// 1.2.0-dev.10: resolves the consumer's platform/compiler/abi tags and the
+// package's own precompiled_strict flag, then runs the pure matching core.
+fs::path select_precompiled_archive(const fs::path& lib_dir,
+                                    const std::string& pkg_name) {
+    auto tc = toolchain::detect_toolchain();
+    std::string platform = util::detect_platform_tag();
+    std::string compiler = toolchain::compiler_tag(tc);
+    std::string abi = default_abi_tag(tc);
+
+    bool strict = false;
+    try {
+        auto cfg = config::parse_config(lib_dir.parent_path() / "ezmk.toml");
+        strict = cfg.project.precompiled_strict;
+    } catch (...) {
+        // Malformed package config → proceed non-strict; the install/build
+        // paths surface the config error where the package is processed.
+    }
+    return select_precompiled_variant(lib_dir, pkg_name, platform, compiler, abi, strict);
 }
 
 // 1.1.2 S2: 构造静态库归档命令。路径统一经 escape_shell_arg 转义——
@@ -1421,6 +1640,17 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                     }
                 }
                 if (!found) line += none_str;
+                util::info_line(line);
+            }
+            // 1.2.0-dev.10: precompiled packages — list available lib/ variants
+            if (cfg.project.precompiled) {
+                auto variants = list_precompiled_variants(pkg_path / "lib", cfg.project.name);
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_precompiled_variants) + ":";
+                if (variants.empty()) {
+                    line += none_str;
+                } else {
+                    for (auto& t : variants) line += " " + t;
+                }
                 util::info_line(line);
             }
             return;
