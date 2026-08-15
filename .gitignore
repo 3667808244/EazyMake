@@ -11,6 +11,9 @@ build/
 .claude/*
 !.claude/skills/
 
+# DSH local skill bridge (junctions into .claude/skills)
+.dsh/
+
 # IDE files
 .vscode/
 .idea/
