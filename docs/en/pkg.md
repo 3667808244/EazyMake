@@ -43,6 +43,7 @@ Utils tool packages (`type = "utils"`, see `utils.md` for details):
 | `language` | string | No | `"C++17"` | Format: `<lang><version>`, e.g. `"C11"`, `"C++17"`, `"C++20"` |
 | `header_only` | bool | No | `false` | **0.9.7+** Header-only library (no `src/`, skip compilation) |
 | `precompiled` | bool | No | `false` | **0.9.7+** Precompiled package (`lib/` provides pre-built `.a`, no `src/`). See [Package Authoring Guide](package_authoring.md#33-precompiled-package-precompiled--true-097) |
+| `precompiled_strict` | bool | No | `false` | **1.2.0-dev.10+** Precompiled-package strict mode: toolchain fallback (L2/L1, possibly ABI-incompatible) becomes a fail-fast error |
 
 The `type` field supports the following values:
 

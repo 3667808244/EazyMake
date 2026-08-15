@@ -11,6 +11,7 @@
 | `version` | string | Yes | — | Project version; SemVer format recommended (e.g. `"0.1.0"`) |
 | `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified |
 | `stdlib` | string | No | `"libstdc++"` | **1.1.0-dev.4+** Standard library: `"libstdc++"` (default) or `"libc++"`. Aliases: `"glibcxx"` / `"gnu"` → `libstdc++`; `"llvm"` → `libc++`. Case-insensitive |
+| `precompiled_strict` | bool | No | `false` | **1.2.0-dev.10+** Precompiled-package strict mode: L2/L1 toolchain fallback (possibly ABI-incompatible) becomes a fail-fast error. Only affects packages (with `precompiled = true`); see [Package Authoring Guide](package_authoring.md#33-precompiled-package-precompiled--true-097) |
 
 > **Why is `type` a string instead of an enum?** So adding a project type later
 > (e.g. `"header-only"`) only introduces a new string value — existing `ezmk.toml`

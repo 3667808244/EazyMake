@@ -43,6 +43,7 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 | `language` | string | 否 | `"C++17"` | 格式：`<语言><版本>`，如 `"C11"`、`"C++17"`、`"C++20"` |
 | `header_only` | bool | 否 | `false` | **0.9.7+** Header-only 库（无需 `src/`，跳过编译） |
 | `precompiled` | bool | 否 | `false` | **0.9.7+** 预编译包（`lib/` 提供预编译 `.a`，无需 `src/`），详见 [包制作指南](package_authoring.md#33-预编译包precompiled--true097) |
+| `precompiled_strict` | bool | 否 | `false` | **1.2.0-dev.10+** 预编译包严格模式：工具链降级（L2/L1，可能 ABI 不兼容）改为 fail-fast 报错 |
 
 `type` 字段支持以下取值：
 

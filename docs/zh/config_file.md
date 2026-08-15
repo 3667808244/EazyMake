@@ -11,6 +11,7 @@
 | `version` | string | 是 | — | 项目版本，建议 SemVer 格式（如 `"0.1.0"`） |
 | `language` | string | 否 | `"C++17"` | 语言标准，如 `"C++17"`、`"C11"`、`"GNUCPP17"`。大小写不敏感，`C++`/`CXX`/`CPP` 统一 |
 | `stdlib` | string | 否 | `"libstdc++"` | **1.1.0-dev.4+** 标准库：`"libstdc++"`（默认）或 `"libc++"`。别名：`"glibcxx"` / `"gnu"` → `libstdc++`；`"llvm"` → `libc++`。大小写不敏感 |
+| `precompiled_strict` | bool | 否 | `false` | **1.2.0-dev.10+** 预编译包严格模式：L2/L1 工具链降级（可能 ABI 不兼容）改为 fail-fast 报错。仅对包生效（`precompiled = true` 时），详见 [包制作指南](package_authoring.md#33-预编译包precompiled--true097) |
 
 > **为什么 `type` 用字符串而非枚举？** 为了让旧配置平滑升级——以后新增项目类型（如 `"header-only"`）只需引入一个新字符串值，已有的 `ezmk.toml` 无需改动。字符串在声明式配置里读起来也更自然。
 

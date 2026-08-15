@@ -191,12 +191,13 @@ sdl2/
 ├── ezmk.toml
 ├── include/       # Headers (cross-platform)
 └── lib/           # Pre-built static libraries
-    ├── libSDL2.win-x64.a
-    ├── libSDL2.linux-x64.a
-    └── libSDL2.mac-arm64.a
+    ├── libSDL2.win-x64-msvc143.a
+    ├── libSDL2.linux-x64-gcc13-abi11.a
+    ├── libSDL2.mac-arm64-clang15.a
+    └── libSDL2.win-x64.a          # untagged (legacy — degraded match)
 ```
 
-**Naming convention**: `lib<name>.<os>-<arch>.<ext>`
+**Naming convention** (1.2.0-dev.10+): `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`
 
 | OS | Arch | Tag |
 |----|------|-----|
@@ -207,17 +208,23 @@ sdl2/
 | macOS | x86_64 | `mac-x64` |
 | macOS | aarch64 | `mac-arm64` |
 
-**Selection priority**:
-1. Exact platform match (e.g. current is `win-x64` → picks `lib<name>.win-x64.a`)
-2. Fallback to bare `lib<name>.a` (backward compatible with single-platform legacy packages)
-3. No match → error listing available platforms
+Compiler tag (optional) is derived from the consumer toolchain: `gcc<major>` (e.g. `gcc13`), `clang<major>` (e.g. `clang18`), `msvc143` (VS toolset lookup: 140/141/142/143). ABI tag (optional) follows toolchain defaults: GCC / Clang on Linux (libstdc++ default) → `abi11` (CXX11 ABI); Clang on macOS (libc++ default) and MSVC → none.
 
-> **Why this naming convention?** Tagging each binary with `<os>-<arch>` lets a
-> single archive ship Windows/Linux/macOS builds at once, and the installer picks
-> the file matching the current platform. The tag is deliberately a simplified
-> `os-arch` — it omits the toolchain because a prebuilt archive is not bound to a
-> specific compiler family — and the bare `lib<name>.a` fallback keeps older
-> single-platform packages working.
+**Selection priority** (1.2.0-dev.10+, ABI-safe 4-level match):
+1. **L4 full tag**: `os-arch-compiler-abi` all equal (e.g. `linux-x64-gcc13-abi11` vs `linux-x64-gcc13-abi11`)
+2. **L3 same compiler**: `os-arch-compiler` equal and the artifact has no abi segment (same compiler = same default ABI, safe)
+3. **L2 platform**: only `os-arch` equal (legacy untagged artifacts)
+4. **L1 bare**: bare `lib<name>.a` (backward compatible with single-platform legacy packages)
+
+> Same compiler but an explicitly different abi segment (e.g. `gcc11-abi8` vs `gcc11-abi11`) is **ABI-incompatible** and skipped; ties break by lexicographically smallest filename (deterministic).
+
+**ABI fallback warning** (1.2.0-dev.10+): when the consumer has a toolchain tag but selection falls to **L2/L1** (possibly cross-toolchain), an explicit warning is printed with the current toolchain tag and the available variants — no more silent ABI mismatches that only explode at link time.
+
+**Strict mode** (`[project].precompiled_strict = true`, 1.2.0-dev.10+): L2/L1 fallback becomes a **fail-fast error**. Official-repo packages can use this to enforce "refuse to link without a matching toolchain".
+
+> **Why extend the naming convention?** The 1.1.0 `os-arch` tag deliberately omitted the toolchain, on the grounds that "a prebuilt archive is not bound to a specific compiler family" — true for the **C ABI**, but not for the **C++ ABI**: GCC/Clang/MSVC are mutually ABI-incompatible, and the same platform+arch can still fail to link across toolchains/ABIs. `os-arch[-compiler][-abi]` lets package authors split artifacts per toolchain/ABI, and the consumer picks with ABI-safe priority, warning explicitly on fallback. The bare `lib<name>.a` fallback is kept, so older single-platform packages keep working.
+
+> **Known limitations**: Apple Clang version numbers do not align with LLVM (ABI can shift within the same major); clang-cl does not produce `msvc1xx` tags (use real MSVC for MSVC-ABI artifacts); explicit `-D_GLIBCXX_USE_CXX11_ABI=0` (old ABI) consumer builds are not auto-detected — package authors can ship a dedicated `abi8` artifact for that scenario, matched by default as `abi11`.
 
 **⚠️ Not recommended for general use.** Precompiled packages only work on the specific platform and architecture they were built for. Prefer source-based packages (`src/`) whenever possible, as they compile on any platform. Only use `precompiled` when:
 

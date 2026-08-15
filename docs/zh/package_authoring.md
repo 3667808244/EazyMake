@@ -173,12 +173,13 @@ sdl2/
 ├── ezmk.toml
 ├── include/       # 头文件（跨平台共用）
 └── lib/           # 预编译静态库
-    ├── libSDL2.win-x64.a
-    ├── libSDL2.linux-x64.a
-    └── libSDL2.mac-arm64.a
+    ├── libSDL2.win-x64-msvc143.a
+    ├── libSDL2.linux-x64-gcc13-abi11.a
+    ├── libSDL2.mac-arm64-clang15.a
+    └── libSDL2.win-x64.a          # 无工具链标签（旧式，可降级匹配）
 ```
 
-**命名约定**：`lib<name>.<os>-<arch>.<ext>`
+**命名约定**（1.2.0-dev.10+）：`lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`
 
 | OS | Arch | 标识 |
 |----|------|------|
@@ -189,12 +190,23 @@ sdl2/
 | macOS | x86_64 | `mac-x64` |
 | macOS | aarch64 | `mac-arm64` |
 
-**选择优先级**：
-1. 精确平台匹配（如当前为 `win-x64` → 匹配 `lib<name>.win-x64.a`）
-2. Fallback 到无后缀文件 `lib<name>.a`（向后兼容单平台旧包）
-3. 无匹配 → 报错并列出可用平台
+编译器标签（可选）由消费端工具链生成：`gcc<major>`（如 `gcc13`）、`clang<major>`（如 `clang18`）、`msvc143`（VS 工具集查表：140/141/142/143）。ABI 标签（可选）按工具链默认值生成：GCC / Clang（Linux，libstdc++ 默认）→ `abi11`（CXX11 ABI）；Clang（macOS，libc++ 默认）与 MSVC → 无。
 
-> **为什么用这种命名约定？** 给每个二进制打上 `<os>-<arch>` 标签，一个归档就能同时携带 Windows/Linux/macOS 的产物，安装时自动选择匹配当前平台的文件。标签特意采用简化的 `os-arch`——不含工具链，因为预编译归档不与特定编译器绑定；无后缀的 `lib<name>.a` 回退则保证旧的单平台包不受影响。
+**选择优先级**（1.2.0-dev.10+，ABI 安全的 4 级匹配）：
+1. **L4 完整标签**：`os-arch-compiler-abi` 全部相等（如 `linux-x64-gcc13-abi11` 对 `linux-x64-gcc13-abi11`）
+2. **L3 同编译器**：`os-arch-compiler` 相等且产物无 abi 段（同编译器 = 同默认 ABI，安全）
+3. **L2 平台**：仅 `os-arch` 相等（无工具链标签的旧式产物）
+4. **L1 裸名**：无后缀文件 `lib<name>.a`（向后兼容单平台旧包）
+
+> 同编译器但 abi 段显式不同（如 `gcc11-abi8` 对 `gcc11-abi11`）视为 **ABI 不兼容**，直接跳过；同分取文件名字典序最小（确定性）。
+
+**ABI 降级警告**（1.2.0-dev.10+）：消费端带工具链标签却落到 **L2/L1**（可能跨工具链）时，输出显式警告，指明当前工具链标签与可用产物列表——不再静默拿到错误 ABI 的库到链接期才炸。
+
+**严格模式**（`[project].precompiled_strict = true`，1.2.0-dev.10+）：L2/L1 降级改为 **fail-fast 报错**。官方仓库的包可借此强制「没匹配工具链就拒绝链接」。
+
+> **为什么扩展命名约定？** 1.1.0 的 `os-arch` 标签刻意省略工具链，理由是"预编译归档不与特定编译器绑定"——这对 **C ABI** 成立，但对 **C++ ABI 不成立**：GCC/Clang/MSVC 的 ABI 互不兼容，同平台同架构也可能因工具链/ABI 不同而链接失败。`os-arch[-compiler][-abi]` 让包作者能按工具链/ABI 细分产物，消费端按 ABI 安全的优先级选择，降级时显式警告。无后缀 `lib<name>.a` 回退保留，旧的单平台包不受影响。
+
+> **已知局限**：Apple Clang 版本号与 LLVM 不对齐（同一 major 内也可能 ABI 变）；clang-cl 不生成 `msvc1xx` 标签（需 MSVC ABI 时用真 MSVC 构建）；消费端显式 `-D_GLIBCXX_USE_CXX11_ABI=0`（旧 ABI）构建时不做自动探测——包作者可为该场景单独命名 `abi8` 产物，默认按 `abi11` 匹配。
 
 **⚠️ 不推荐常规使用。** 预编译包只能在构建时对应的特定平台和架构上工作。优先使用源码包（`src/`），它们可在任何平台上编译。仅在以下情况使用 `precompiled`：
 

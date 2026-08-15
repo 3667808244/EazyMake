@@ -43,6 +43,34 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.10 (2026-08-15) — 平台标识符扩展（工具链/ABI）
+
+1.2.0 系列第十个开发子版本，**承接 package_authoring §3.3 多平台共包**：现有命名 `lib<name>.<os>-<arch>.<ext>` 刻意省略工具链，这对 C ABI 成立、对 **C++ ABI 不成立**（GCC/Clang/MSVC 互不兼容，同平台同架构也可能链接失败）。本版把平台标识符扩展为 `os-arch[-compiler][-abi]`，`select_precompiled_archive()` 按 **ABI 安全的 4 级匹配优先级**选择，降级匹配（可能跨工具链）显式警告，可选 `[project].precompiled_strict = true` fail-fast。公共 API 无破坏性变更（`select_precompiled_archive` 签名不变、两处调用点零改动；新增纯函数与可选字段；见文首 API Stability）。
+
+### 新增 / 行为变更
+
+- **`toolchain::compiler_tag()`**：从已缓存的 `tc.version` 生成编译器标签——GCC/Clang 按 `major.minor` 模式提取 major（`gcc13` / `clang18` / Apple `clang15`）；MSVC 解析 cl 版本 `19.<minor>` → `_MSC_VER` 等价数 → **查表**（1900→msvc140 / 1910-1919→msvc141 / 1920-1929→msvc142 / ≥1930→msvc143，不用算术避免 1943→144 错算）；无法解析返回空
+- **平台标识符扩展** `os-arch[-compiler][-abi]`：ABI 标签按工具链默认值生成（GCC/Clang+libstdc++ → `abi11`，libc++/MSVC → 无），零配置
+- **4 级匹配**（`src/pkg.cpp` `select_precompiled_archive` 重写）：L4 完整标签 > L3 同编译器（产物无 abi 段）> L2 os-arch > L1 裸名；同编译器但 abi 段显式不同 → **ABI 不兼容跳过**；同分文件名字典序（确定性）；未知段不识别
+- **ABI 降级警告**（i18n `precompiled_toolchain_fallback_warn`）：消费端带工具链标签却落 L2/L1 → 显式警告（指明工具链标签 + 可用产物），不再静默拿到错误 ABI 的库到链接期才炸；无匹配报错补当前完整标签
+- **`[project].precompiled_strict`**（默认 `false`，P1）：L2/L1 降级改 fail-fast（`precompiled_strict_mismatch`）；消费端 build.cpp 调用点对 fatal 传播（不降级为 skip 警告）
+- **`pkg info` 增显**：precompiled 包列出 `lib/` 可用产物标签（含裸名，i18n `pkg_info_precompiled_variants`）
+
+### 文档
+
+- `docs/en|zh/package_authoring.md` §3.3：命名约定 `os-arch[-compiler][-abi]`、编译器/ABI 标签表、4 级优先级、ABI 降级警告、严格模式、已知局限（Apple Clang / clang-cl / 旧 ABI 覆盖）
+- `docs/en|zh/pkg.md`、`config_file.md`：`precompiled_strict` 字段
+- 新增 i18n key 3 个（en/zh），`check_i18n.py` 三向一致（306 keys）
+
+### 测试
+
+- `test_toolchain.cpp`：`compiler_tag` 5 个用例（GCC/Clang/Apple Clang/MSVC 工具集/查表边界 1900/1910/1930/1943/不可解析）
+- `test_pkg.cpp`：匹配矩阵 11 个用例（L4/L3/L2/L1、ABI 不匹配跳过、未知段忽略、不同编译器不匹配、字典序 tie-break、降级仍选中、strict fatal、无编译器标签不警告/不 strict、报错含工具链+available）
+- 集成测试 3 个：工具链标签产物选中并链接（裸名诱饵含不同符号，选错即链接失败）+ `pkg info` variants；os-arch 降级警告；`precompiled_strict` 安装 fail-fast
+- 全量回归：747 用例 / 3442 断言零失败（基线 727 / 3361，+20 用例 +81 断言）
+
+---
+
 ## 1.2.0-dev.12 (2026-08-15) — 测试配置收口（`[test].default_profile` / `include_dirs` / `link_targets`）
 
 1.2.0 系列第十二个开发子版本，**dev.3 的延伸**：`ezmk test` 引入 profile 支持——`[test].default_profile` + `ezmk test --profile`（复用 `[compile.profile.*]` / `[link.profile.*]`，与 `ezmk build` 完全对称），并补齐测试专属 include / 链接目标（`[test].include_dirs` / `[test].link_targets`），弃用与 `[compile].flags` 重叠的 `[test].flags`（使用点 warn，2.0.0 移除）。公共 API 无破坏性变更（纯新增可选字段 + CLI 选项；见文首 API Stability）。
