@@ -384,21 +384,43 @@ std::string build_cmake_text(const config::EzConfig& cfg,
     emit_deps(cfg.depends.libs);
     emit_deps(cfg.depends.want);
 
-    // ---- hooks (EazyMake-only, not portable to CMake) ----
+    // ---- hooks (run via ezmk-lua, EazyMake standalone Lua runtime) ----
+    // dev.2 只注释 + WARNING；dev.8 起 pre/post 经 find_program + add_custom_command
+    // 调用独立无沙箱运行时 ezmk-lua 复现 ezmk build 的钩子后处理（best-effort：
+    // 未安装 ezmk-lua 时回退 warning，不硬依赖 ezmk 已安装）。
     const auto& hooks = cfg.hooks;
-    if (!hooks.pre_build.empty() || !hooks.post_build.empty() ||
-        !hooks.on_failure.empty()) {
-        os << "\n# --- hooks (EazyMake-only, NOT exported) ---\n";
-        if (!hooks.pre_build.empty())
-            os << "# pre_build  = \"" << hooks.pre_build << "\"\n";
-        if (!hooks.post_build.empty())
-            os << "# post_build = \"" << hooks.post_build << "\"\n";
-        if (!hooks.on_failure.empty())
-            os << "# on_failure = \"" << hooks.on_failure << "\"\n";
-        os << "# Hooks run in EazyMake's sandboxed Lua runtime (ezmk.* API) and have\n";
-        os << "# no CMake equivalent — CMake builds will NOT run hook post-processing.\n";
-        os << "message(WARNING \"[hooks] are not exported to CMake — hook "
-              "post-processing will not run.\")\n";
+    const bool has_pre_post = !hooks.pre_build.empty() || !hooks.post_build.empty();
+    if (has_pre_post || !hooks.on_failure.empty()) {
+        os << "\n# --- hooks (run via ezmk-lua, EazyMake standalone Lua runtime) ---\n";
+        if (has_pre_post) {
+            os << "find_program(EZMK_LUA ezmk-lua)\n";
+            os << "if(NOT EZMK_LUA)\n";
+            os << "    message(WARNING \"[hooks] need 'ezmk-lua' on PATH — hook "
+                  "post-processing will not run.\")\n";
+            os << "else()\n";
+            auto emit_hook_cmd = [&](const std::string& kind,
+                                     const std::string& hook_path) {
+                // 钩子路径相对项目根 → ${CMAKE_CURRENT_SOURCE_DIR}/<path>（与
+                // --project-root 一致）；绝对路径原样保留。
+                std::string script =
+                    fs::path(hook_path).is_absolute()
+                        ? hook_path
+                        : "${CMAKE_CURRENT_SOURCE_DIR}/" + hook_path;
+                os << "    add_custom_command(TARGET " << target << " " << kind << "\n";
+                os << "        COMMAND ${EZMK_LUA} \"" << script << "\"\n";
+                os << "                --project-root ${CMAKE_CURRENT_SOURCE_DIR}\n";
+                if (!profile.empty()) os << "                --profile " << profile << "\n";
+                os << "                --output $<TARGET_FILE:" << target << ">)\n";
+            };
+            if (!hooks.pre_build.empty())  emit_hook_cmd("PRE_BUILD",  hooks.pre_build);
+            if (!hooks.post_build.empty()) emit_hook_cmd("POST_BUILD", hooks.post_build);
+            os << "endif()\n";
+        }
+        // on_failure：CMake 无原生「构建失败」钩子 — 保持注释 + 说明（范围边界，同 dev.2）。
+        if (!hooks.on_failure.empty()) {
+            os << "# on_failure \"" << hooks.on_failure << "\" — CMake has no native "
+                  "failure hook; not exported (same as dev.2).\n";
+        }
     }
 
     return os.str();
@@ -430,6 +452,10 @@ int export_cmake(const config::EzConfig& cfg,
     if (ec) util::file_write(out, text);
 
     util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
+    // dev.8: hooks 现经 ezmk-lua 导出（best-effort），提示用户该运行时依赖。
+    if (!cfg.hooks.pre_build.empty() || !cfg.hooks.post_build.empty()) {
+        util::info(ezmk::i18n::I18nKey::export_hook_note);
+    }
     return 0;
 }
 

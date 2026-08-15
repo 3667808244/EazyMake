@@ -60,6 +60,12 @@ EZMK_I18N_KEY(import_missing_cmakelists)// 1.2.0
 EZMK_I18N_KEY(import_reject_unsupported) // 1.2.0
 EZMK_I18N_KEY(export_exists_refuse)     // 1.2.0
 EZMK_I18N_KEY(export_written)           // 1.2.0
+EZMK_I18N_KEY(export_hook_note)         // 1.2.0-dev.8
+EZMK_I18N_KEY(ezmk_lua_usage)           // 1.2.0-dev.8
+EZMK_I18N_KEY(ezmk_lua_missing_script)  // 1.2.0-dev.8
+EZMK_I18N_KEY(ezmk_lua_need_value)      // 1.2.0-dev.8
+EZMK_I18N_KEY(ezmk_lua_unknown_option)  // 1.2.0-dev.8
+EZMK_I18N_KEY(ezmk_lua_extra_arg)       // 1.2.0-dev.8
 
 // ---- cache (verbose) ----
 EZMK_I18N_KEY(cache_hit)

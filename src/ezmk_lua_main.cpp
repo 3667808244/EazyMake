@@ -23,27 +23,22 @@
 namespace fs = std::filesystem;
 
 static void print_usage() {
-    std::cout
-        << "ezmk-lua — EazyMake standalone Lua hook runtime\n"
-        << "\n"
-        << "Usage:\n"
-        << "  ezmk-lua <hook.lua> [--project-root <dir>] [--profile <name>] [--output <path>]\n"
-        << "\n"
-        << "Options:\n"
-        << "  --project-root <dir>  inject ctx.project_root + set the ezmk.* config root\n"
-        << "  --profile <name>      inject ctx.profile\n"
-        << "  --output <path>       inject ctx.output (built artifact path)\n"
-        << "  -h, --help            show this help\n"
-        << "\n"
-        << "Runs run(ctx) in the full (unrestricted) Lua environment.\n"
-        << "Exit code: the value returned by run(ctx) (0 on success / no return).\n";
+    std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::ezmk_lua_usage) << "\n";
 }
 
 int main(int argc, char** argv) {
+    // Init console + locale first so usage/error output (below) is localized.
+    ezmk::util::init_console();
+    ezmk::i18n::init();  // detect language, load locale data
+
     std::string script_path;
     std::string project_root;
     std::string profile;
     std::string output;
+
+    auto cli_err = [](ezmk::i18n::I18nKey key, const std::string& arg) {
+        return "ezmk-lua: " + ezmk::i18n::fmt(key, {{"option", arg}, {"arg", arg}});
+    };
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -53,7 +48,7 @@ int main(int argc, char** argv) {
         }
         auto need_value = [&](const char* name) -> bool {
             if (i + 1 < argc) return true;
-            std::cerr << "ezmk-lua: " << name << " requires a value\n";
+            std::cerr << cli_err(ezmk::i18n::I18nKey::ezmk_lua_need_value, name) << "\n";
             return false;
         };
         if (arg == "--project-root") {
@@ -66,24 +61,24 @@ int main(int argc, char** argv) {
             if (!need_value("--output")) return 2;
             output = argv[++i];
         } else if (!arg.empty() && arg[0] == '-') {
-            std::cerr << "ezmk-lua: unknown option '" << arg << "'\n";
+            std::cerr << cli_err(ezmk::i18n::I18nKey::ezmk_lua_unknown_option, arg) << "\n";
             return 2;
         } else if (script_path.empty()) {
             script_path = arg;
         } else {
-            std::cerr << "ezmk-lua: unexpected extra argument '" << arg << "'\n";
+            std::cerr << cli_err(ezmk::i18n::I18nKey::ezmk_lua_extra_arg, arg) << "\n";
             return 2;
         }
     }
 
     if (script_path.empty()) {
-        std::cerr << "ezmk-lua: missing hook script path\n\n";
+        std::cerr << "ezmk-lua: "
+                  << ezmk::i18n::get(ezmk::i18n::I18nKey::ezmk_lua_missing_script)
+                  << "\n\n";
         print_usage();
         return 2;
     }
 
-    ezmk::util::init_console();
-    ezmk::i18n::init();  // detect language, load locale data (for ezmk.* logging)
     ezmk::lua::init();   // initialize the shared Lua state
 
     int rc = ezmk::lua::run_script_unrestricted(
