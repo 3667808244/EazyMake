@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.9 执行计划
 
-> **状态：执行中**（2026-08-15）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-15，全量 719 用例 / 3328 断言零回归）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.9.md`](plans/1.2.0/1.2.0-dev.9.md)。本计划为 1.2.0 系列第九个开发子版本：**包构建配置收敛（dev.7 延伸）**——让包的 `[compile].src_dirs` / `[compile].include_dirs` 真正生效，收口包配置与项目配置的语义差距（`src_dirs` 被硬编码忽略、`include_dirs` 有重复 `-I` 边界缺口、包 `type` 语义未对齐）。
 >
@@ -32,39 +32,39 @@
 
 ### 阶段一：`collect_sources` 参数化（4.1）
 
-- [ ] **1.1 参数化**（4.1）：`include/ezmk/build.hpp` `collect_sources` 追加可选参 `bool require_main = true`；`src/build.cpp` 实现中 main.cpp 校验改为 `if (require_main && project_type == "executable")`；项目两个调用点（`src/build.cpp:578,789`）零改动
-- [ ] **1.2 单测**：`test_build.cpp` 增 `require_main=false` 用例（`"executable"` 类型 + 无 main 不抛、多目录收集）
+- [x] **1.1 参数化**（4.1）：`include/ezmk/build.hpp` `collect_sources` 追加可选参 `bool require_main = true`；`src/build.cpp` 实现中 main.cpp 校验改为 `if (require_main && project_type == "executable")`；项目两个调用点（`src/build.cpp:578,789`）零改动
+- [x] **1.2 单测**：`test_build.cpp` 增 `require_main=false` 用例（`"executable"` 类型 + 无 main 不抛、多目录收集）
 
 ### 阶段二：包源收集改造（4.2 + validate_pkg 补充）
 
-- [ ] **2.1 validate_pkg src_dirs 感知**（设计补充）：`src/pkg.cpp` `validate_pkg()` 的 `src/` 硬编码校验改为对 `cfg.compile.src_dirs` 逐目录存在性检查（任一存在即通过），错误消息保留 `src/` 字样（dev.7 集成测试断言）
-- [ ] **2.2 compile_package 改造**（4.2）：`compile_package()` 用 `cfg.compile.src_dirs` + `build::collect_sources(..., require_main=false)`；`header_only` 短路前移到收集前（无 src 不触发 fatal）；`precompiled` 不变；空源走 `collect_sources` 的 fatal（`no_source_files`/`src_dir_missing`，对齐项目语义 fail-fast）
-- [ ] **2.3 单测**：`test_pkg.cpp` 增 `compile_package` 用例——多 `src_dirs` 收集、`header_only`/`precompiled` 短路、空源 fatal、`require_main` 不误判
+- [x] **2.1 validate_pkg src_dirs 感知**（设计补充）：`src/pkg.cpp` `validate_pkg()` 的 `src/` 硬编码校验改为对 `cfg.compile.src_dirs` 逐目录存在性检查（任一存在即通过），错误消息保留 `src/` 字样（dev.7 集成测试断言）
+- [x] **2.2 compile_package 改造**（4.2）：`compile_package()` 用 `cfg.compile.src_dirs` + `build::collect_sources(..., require_main=false)`；`header_only` 短路前移到收集前（无 src 不触发 fatal）；`precompiled` 不变；空源走 `collect_sources` 的 fatal（`no_source_files`/`src_dir_missing`，对齐项目语义 fail-fast）
+- [x] **2.3 单测**：`test_pkg.cpp` 增 `compile_package` 用例——多 `src_dirs` 收集、`header_only`/`precompiled` 短路、空源 fatal、`require_main` 不误判
 
 ### 阶段三：include_dirs 保序去重（4.3）
 
-- [ ] **3.1 去重**（4.3）：`src/cache.cpp` 自编译 `-I` 构造处（MSVC `/I` 与 GCC `-I` 两分支）对 `[def_inc] + [include_dirs 解析结果]` 做保序去重（首次出现顺序保留，`lexically_normal` 判重）；`extra_includes` 不动
-- [ ] **3.2 单测**：`test_cache.cpp` 或现有用例断言 `include_dirs` 含默认 `"include"` 时 `-I` 不重复
+- [x] **3.1 去重**（4.3）：`src/cache.cpp` 自编译 `-I` 构造处（MSVC `/I` 与 GCC `-I` 两分支）对 `[def_inc] + [include_dirs 解析结果]` 做保序去重（首次出现顺序保留，`lexically_normal` 判重）；`extra_includes` 不动
+- [x] **3.2 单测**：`test_cache.cpp` 或现有用例断言 `include_dirs` 含默认 `"include"` 时 `-I` 不重复
 
 ### 阶段四：utils 门控 + `pkg info` + i18n（4.4 + 4.5）
 
-- [ ] **4.1 utils 门控**（4.4）：`src/pkg.cpp:818` `utils && !file_exists(dir/"src")` 改为对 `cfg.compile.src_dirs` 做「任一目录存在且有源文件」检查（轻量遍历，不触发 collect_sources 的 warning 噪音）
-- [ ] **4.2 `pkg info` 增显 `src_dirs`**（4.4）：`src/pkg.cpp` `info()` 镜像 `include_dirs` 输出块
-- [ ] **4.3 i18n**（4.5）：`pkg_info_src_dirs` 三向一致（`i18n_keys.def` + `locale/en.json` + `locale/zh.json`），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
+- [x] **4.1 utils 门控**（4.4）：`src/pkg.cpp:818` `utils && !file_exists(dir/"src")` 改为对 `cfg.compile.src_dirs` 做「任一目录存在且有源文件」检查（轻量遍历，不触发 collect_sources 的 warning 噪音）
+- [x] **4.2 `pkg info` 增显 `src_dirs`**（4.4）：`src/pkg.cpp` `info()` 镜像 `include_dirs` 输出块
+- [x] **4.3 i18n**（4.5）：`pkg_info_src_dirs` 三向一致（`i18n_keys.def` + `locale/en.json` + `locale/zh.json`），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
 
 ### 阶段五：测试与全量回归（4.6）
 
-- [ ] **5.1 单测补全**：`collect_sources` `require_main`、`compile_package` 多目录/自定义 include/短路/空源 fatal、`-I` 去重断言
-- [ ] **5.2 集成测试**：`test_integration.cpp` 增——依赖自定义 `src_dirs`+`include_dirs` 包的端到端编译链接（`pkg install <dir>` + `build`）；compile_commands 含包 `-I`
-- [ ] **5.3 全量回归**：`bash build.sh test-all` 零回归（基线 709 用例 / 3296 断言，dev.8 后；新增用例/断言在其上增加）
+- [x] **5.1 单测补全**：`collect_sources` `require_main`、`compile_package` 多目录/自定义 include/短路/空源 fatal、`-I` 去重断言
+- [x] **5.2 集成测试**：`test_integration.cpp` 增——依赖自定义 `src_dirs`+`include_dirs` 包的端到端编译链接（`pkg install <dir>` + `build`）；compile_commands 含包 `-I`
+- [x] **5.3 全量回归**：`bash build.sh test-all` 零回归（基线 709 用例 / 3296 断言，dev.8 后；新增用例/断言在其上增加）
 
 ### 阶段六：文档收口（4.7）
 
-- [ ] **6.1 文档**（4.7）：`docs/en|zh/pkg.md`（`src_dirs` 对包生效、`include_dirs` 语义、空源 fatal 说明）、`docs/en|zh/package_authoring.md`、`docs/en|zh/config_file.md`（`[compile].src_dirs` 对包生效说明）、`CHANGES.md` dev.9 条目（中文基准，再同步英文）
+- [x] **6.1 文档**（4.7）：`docs/en|zh/pkg.md`（`src_dirs` 对包生效、`include_dirs` 语义、空源 fatal 说明）、`docs/en|zh/package_authoring.md`、`docs/en|zh/config_file.md`（`[compile].src_dirs` 对包生效说明）、`CHANGES.md` dev.9 条目（中文基准，再同步英文）
 
 ### 阶段七：收口（4.8）
 
-- [ ] **7.1 收口**（4.8）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.9 状态「待实现 → 已完成」；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **7.1 收口**（4.8）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.9 状态「待实现 → 已完成」；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 

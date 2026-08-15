@@ -16,14 +16,14 @@
 | [1.2.0-dev.6](1.2.0-dev.6.md) | 各源文件构建耗时统计 | `ezmk build` 并行编译路径 per-file 耗时明细（`-v` 全量 / 慢构建自动 top-N）；零配置、不新增 flag | **已完成**（2026-08-14） |
 | [1.2.0-dev.7](1.2.0-dev.7.md) | 本地包源 + 项目定位 | `pkg install <dir>` 从文件夹安装；`ezmk.toml` 向上查找（5 层） | **已完成**（2026-08-15） |
 | [1.2.0-dev.8](1.2.0-dev.8.md) | CMake 导出钩子运行时（dev.2 延伸） | 独立无黑白名单运行时 `ezmk-lua`；export 对 `[hooks]` 生成 `add_custom_command`（pre/post） | **已完成**（2026-08-15） |
-| [1.2.0-dev.9](1.2.0-dev.9.md) | 包构建配置收敛（dev.7 延伸） | 包 `[compile].src_dirs` / `include_dirs` 生效：`collect_sources` 复用 + include 去重 + utils 门控对齐 + `pkg info` 增显 | 待实现 |
+| [1.2.0-dev.9](1.2.0-dev.9.md) | 包构建配置收敛（dev.7 延伸） | 包 `[compile].src_dirs` / `include_dirs` 生效：`collect_sources` 复用 + include 去重 + utils 门控对齐 + `pkg info` 增显 | **已完成**（2026-08-15） |
 | [1.2.0-dev.10](1.2.0-dev.10.md) | 平台标识符扩展（工具链/ABI） | `lib<name>.<os>-<arch>[-<compiler>][-<abi>]` 命名 + 4 级匹配 + 降级 ABI 警告 + 可选 `precompiled_strict` | 待实现 |
 | [1.2.0-dev.11](1.2.0-dev.11.md) | 代码质量审查与改进 | 基于 dev.10 完成后的代码全量审查（目前留空，待 dev.10 落地） | 待实现 |
 | [1.2.0-pre.2](1.2.0-pre.2.md) | README 整理与高级特性触达 | README 重组 + 高级特性教程（semver/lockfile/第三方仓库/预编译共包）+ 预编译包 ABI 警告加强 | 待实现 |
 | [1.2.0-pre.1](1.2.0-pre.1.md) | pacman 分发（发布流水线） | `publish/` 重组 + `publish/arch/PKGBUILD`；本机 MSYS2 + 远程 Arch Linux 验证 makepkg | 待发布 |
 | [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.9 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
 
-> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1 ~ dev.8 已完成，下一个子版本为 [1.2.0-dev.9](1.2.0-dev.9.md)，dev.10 紧随 dev.9，dev.11 依赖 dev.10，pre.2 为 dev.10 之后的文档化检查点）。
+> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1 ~ dev.9 已完成，下一个子版本为 [1.2.0-dev.10](1.2.0-dev.10.md)，dev.11 依赖 dev.10，pre.2 为 dev.10 之后的文档化检查点）。
 
 ## 依赖关系
 
