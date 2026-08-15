@@ -1,4 +1,4 @@
-﻿// End-to-end integration tests for EazyMake.
+// End-to-end integration tests for EazyMake.
 //
 // These tests call the compiled `ezmk` binary as a subprocess and verify
 // complete workflows: project creation 鈫?dependency install 鈫?build 鈫?run.
@@ -1490,4 +1490,121 @@ TEST_CASE("integration: export cmake emits ezmk-lua hook commands + note", "[int
     REQUIRE(cmake.find("${CMAKE_CURRENT_SOURCE_DIR}/scripts/pre.lua") != std::string::npos);
     // The export-time note about the ezmk-lua dependency.
     REQUIRE((r.out + r.err).find("hooks exported") != std::string::npos);
+}
+
+// 1.2.0-dev.9: a package with custom [compile].src_dirs + include_dirs is
+// installed from a source directory, compiled from BOTH src dirs, and linked
+// into a consumer project. The package is type = "executable" with NO main.cpp
+// — packages are always static libs, so require_main=false must apply. pkg info
+// shows the src_dirs; the consumer's compile_commands.json carries the
+// package's custom include dir.
+TEST_CASE("integration: custom src_dirs+include_dirs package builds and links (dev.9)", "[integration][1.2.0-dev.9]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "convapp";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Source-directory package: src_dirs = ["src","generated"] and
+    // include_dirs = ["include","extra"]. type = "executable" + no main.cpp
+    // exercises the require_main=false path end-to-end.
+    fs::path pkg_dir = tmp.path / "conv_pkg";
+    fs::create_directories(pkg_dir / "include" / "conv");
+    fs::create_directories(pkg_dir / "extra");
+    fs::create_directories(pkg_dir / "src");
+    fs::create_directories(pkg_dir / "generated");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"conv\"\ntype = \"executable\"\nversion = \"1.0.0\"\n\n"
+        "[compile]\nsrc_dirs = [\"src\", \"generated\"]\ninclude_dirs = [\"include\", \"extra\"]\n");
+    file_write(pkg_dir / "include" / "conv" / "conv.hpp",
+        "#pragma once\nint conv_add(int a, int b);\nint conv_mul(int a, int b);\n");
+    // gen.cpp sits in the non-default src_dir "generated" and includes a header
+    // from the CUSTOM include dir "extra" — proves self-compile resolves
+    // src_dirs + include_dirs relative to the package root.
+    file_write(pkg_dir / "extra" / "conv_extra.hpp",
+        "#pragma once\n#define CONV_SCALE 2\n");
+    file_write(pkg_dir / "src" / "conv.cpp",
+        "#include \"conv/conv.hpp\"\nint conv_add(int a, int b) { return a + b; }\n");
+    file_write(pkg_dir / "generated" / "gen.cpp",
+        "#include \"conv_extra.hpp\"\nint conv_mul(int a, int b) { return a * b * CONV_SCALE; }\n");
+
+    // Install from the directory into project scope.
+    ProcResult r = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    // The static library must have been built (GCC/Clang: .a, MSVC: .lib).
+    bool lib_exists =
+        fs::exists(proj_dir / ".ezmk" / "pkg" / "conv" / "build" / "libconv.a") ||
+        fs::exists(proj_dir / ".ezmk" / "pkg" / "conv" / "build" / "libconv.lib");
+    REQUIRE(lib_exists);
+
+    // pkg info displays the configured src_dirs (en locale).
+    ProcResult info_r = run_ezmk("pkg info conv", proj_dir);
+    INFO("info stderr: " << info_r.err);
+    INFO("info stdout: " << info_r.out);
+    REQUIRE(info_r.exit_code == 0);
+    REQUIRE((info_r.out + info_r.err).find("Source dirs: src generated")
+            != std::string::npos);
+
+    // Consumer project: depends on conv and uses both functions.
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\ncompile_commands = true\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = [\"conv\"]\n";
+    }
+    file_write(proj_dir / "src" / "main.cpp",
+        "#include \"conv/conv.hpp\"\n#include <cstdio>\n"
+        "int main() { std::printf(\"%d %d\\n\", conv_add(2, 3), conv_mul(2, 3)); return 0; }\n");
+
+    ProcResult b = run_ezmk("build", proj_dir);
+    INFO("build stderr: " << b.err);
+    INFO("build stdout: " << b.out);
+    REQUIRE(b.exit_code == 0);
+
+    // Run the executable: conv_add(2,3)=5, conv_mul(2,3)=2*3*2=12.
+    fs::path exe = proj_dir / "build" / (proj_name + EZMK_EXE_SUFFIX);
+    REQUIRE(fs::exists(exe));
+    ProcResult run_r = run_command("\"" + exe.string() + "\"");
+    INFO("run stderr: " << run_r.err);
+    INFO("run stdout: " << run_r.out);
+    REQUIRE(run_r.exit_code == 0);
+    REQUIRE(run_r.out.find("5 12") != std::string::npos);
+
+    // compile_commands.json carries the package's custom include dir
+    // (installed location) — proves the consumer-side include_dirs wiring.
+    fs::path cc_file = proj_dir / "compile_commands.json";
+    REQUIRE(fs::exists(cc_file));
+    auto j = nlohmann::json::parse(file_read(cc_file));
+    REQUIRE(j.is_array());
+    std::string expected_inc = "-I" +
+        (proj_dir / ".ezmk" / "pkg" / "conv" / "extra").string();
+    // Windows fs::path may mix '/' and '\' (e.g. proj_root / ".ezmk/pkg" in
+    // build.cpp), so compare with normalized separators.
+    auto norm_sep = [](const std::string& s) {
+        std::string out = s;
+#ifdef EZMK_WIN
+        std::replace(out.begin(), out.end(), '/', '\\');
+#endif
+        return out;
+    };
+    bool found_extra_inc = false;
+    for (auto& entry : j) {
+        auto args = entry["arguments"].get<std::vector<std::string>>();
+        for (auto& a : args) {
+            if (norm_sep(a) == norm_sep(expected_inc)) { found_extra_inc = true; break; }
+        }
+        if (found_extra_inc) break;
+    }
+    REQUIRE(found_extra_inc);
 }
