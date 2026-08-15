@@ -179,6 +179,7 @@
     "test_summary": "{total} tests: {passed} passed, {failed} failed",
     "test_failed": "Some tests failed",
     "test_catch2_not_found": "Catch2 not found. Install it with:\n  ezmk pkg install catch2\nor place catch2.hpp in include/vendor/catch2.hpp",
+    "test_flags_deprecated": "[test].flags is deprecated (1.2.0-dev.12+) — use [compile.profile.<name>] + [test].default_profile, or [test].include_dirs / [test].link_targets. Will be removed in 2.0.0.",
 
     "pkg_info_name": "Package",
     "pkg_info_version": "  Version",

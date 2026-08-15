@@ -179,6 +179,7 @@
     "test_summary": "{total} 个测试: {passed} 通过, {failed} 失败",
     "test_failed": "部分测试失败",
     "test_catch2_not_found": "未找到 Catch2。安装方式:\n  ezmk pkg install catch2\n或将 catch2.hpp 放入 include/vendor/catch2.hpp",
+    "test_flags_deprecated": "[test].flags 已弃用（1.2.0-dev.12+）——请改用 [compile.profile.<name>] + [test].default_profile，或 [test].include_dirs / [test].link_targets。将在 2.0.0 移除。",
 
     "pkg_info_name": "包名",
     "pkg_info_version": "  版本",

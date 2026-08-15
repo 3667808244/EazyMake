@@ -290,6 +290,7 @@ EZMK_I18N_KEY(watch_stopping)
 EZMK_I18N_KEY(test_summary)
 EZMK_I18N_KEY(test_failed)
 EZMK_I18N_KEY(test_catch2_not_found)
+EZMK_I18N_KEY(test_flags_deprecated)        // 1.2.0-dev.12
 
 // ---- help body (0.2.6+) ----
 EZMK_I18N_KEY(help_project_new)
