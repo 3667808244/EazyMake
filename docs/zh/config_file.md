@@ -338,7 +338,10 @@ sharedir = "share"
 |------|------|------|--------|------|
 | `dirs` | string[] | 否 | `["test"]` | 测试源文件目录 |
 | `framework` | string | 否 | `"catch2"` | 测试框架：`"catch2"` 或 `"ezmk"`（大小写不敏感） |
-| `flags` | string[] | 否 | `[]` | 额外的测试编译标志 |
+| `default_profile` | string | 否 | `""` | **1.2.0-dev.12+** 未传 `--profile` 时测试默认应用的 profile（复用 `[compile.profile.<name>]` / `[link.profile.<name>]`，与 `[compile].default_profile` 对称） |
+| `include_dirs` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-I` 目录（相对项目根解析、缺失跳过），不污染主构建 |
+| `link_targets` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-l` 链接目标，不污染主构建 |
+| `flags` | string[] | 否 | `[]` | ⚠️ **已弃用（1.2.0-dev.12+，2.0.0 移除）**——仍生效但输出警告；请改用 `default_profile` + `[compile.profile.<name>]`，或 `include_dirs` / `link_targets` |
 
 示例：
 
@@ -346,10 +349,12 @@ sharedir = "share"
 [test]
 dirs = ["test"]
 framework = "catch2"
-flags = []
+default_profile = "release"        # 1.2.0-dev.12+：默认按 release profile 跑测试
+include_dirs = ["test/helpers"]    # 1.2.0-dev.12+：测试专属头文件目录
+link_targets = ["pthread"]         # 1.2.0-dev.12+：测试专属链接库
 ```
 
-对应 CLI 命令：`ezmk test`（`ezmk project test` 的别名）。
+对应 CLI 命令：`ezmk test`（`ezmk project test` 的别名），支持 `--framework <name>`、`--filter <pattern>`、`--profile <name>`（1.2.0-dev.12+，覆盖 `default_profile`）、`-V`（详细输出）。
 
 ---
 

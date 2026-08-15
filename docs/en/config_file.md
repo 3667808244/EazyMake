@@ -381,7 +381,10 @@ Configuration for `ezmk test` (build and run project tests).
 |-------|------|----------|---------|-------------|
 | `dirs` | string[] | No | `["test"]` | Test source file directories |
 | `framework` | string | No | `"catch2"` | Test framework: `"catch2"` or `"ezmk"` (case-insensitive) |
-| `flags` | string[] | No | `[]` | Extra test compile flags |
+| `default_profile` | string | No | `""` | **1.2.0-dev.12+** Profile applied when no `--profile` is given (reuses `[compile.profile.<name>]` / `[link.profile.<name>]`, symmetric with `[compile].default_profile`) |
+| `include_dirs` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-I` directories (resolved relative to the project root, missing dirs skipped); does not pollute the main build |
+| `link_targets` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-l` link targets; does not pollute the main build |
+| `flags` | string[] | No | `[]` | ⚠️ **Deprecated (1.2.0-dev.12+, removed in 2.0.0)** — still honored but warns; use `default_profile` + `[compile.profile.<name>]`, or `include_dirs` / `link_targets` |
 
 Example:
 
@@ -389,10 +392,12 @@ Example:
 [test]
 dirs = ["test"]
 framework = "catch2"
-flags = []
+default_profile = "release"        # 1.2.0-dev.12+: run tests with the release profile by default
+include_dirs = ["test/helpers"]    # 1.2.0-dev.12+: test-only header directories
+link_targets = ["pthread"]         # 1.2.0-dev.12+: test-only link libraries
 ```
 
-Corresponding CLI command: `ezmk test` (alias of `ezmk project test`).
+Corresponding CLI command: `ezmk test` (alias of `ezmk project test`), with `--framework <name>`, `--filter <pattern>`, `--profile <name>` (1.2.0-dev.12+, overrides `default_profile`), and `-V` (verbose output).
 
 ---
 

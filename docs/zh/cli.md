@@ -140,6 +140,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 |---|---|
 | `--framework` / `-f <catch2\|ezmk>` | 临时覆盖 `test.framework` |
 | `--filter <pattern>` | 过滤测试名称（Catch2: 测试名；ezmk: 文件名 glob） |
+| `--profile <name>` | **1.2.0-dev.12+** 临时覆盖 `test.default_profile`（与 `ezmk build --profile` 对称） |
 | `--verbose` / `-V` | 展示每个测试的详细输出（即使通过） |
 
 `ezmk run`（及其完整形式 `ezmk project run`）将 `--` 之后的所有内容传递给构建后的程序。

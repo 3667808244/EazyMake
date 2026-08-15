@@ -173,6 +173,7 @@ switches to the optimized build. Base `[compile].flags` are warnings-only (`-Wal
 |---|---|
 | `--framework` / `-f <catch2\|ezmk>` | Temporarily override `test.framework` |
 | `--filter <pattern>` | Filter test names (Catch2: test name; ezmk: filename glob) |
+| `--profile <name>` | **1.2.0-dev.12+** Temporarily override `test.default_profile` (symmetric with `ezmk build --profile`) |
 | `--verbose` / `-V` | Show detailed output for every test (even passing ones) |
 
 `ezmk run` (and its full form `ezmk project run`) passes everything after `--` to the built program.

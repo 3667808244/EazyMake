@@ -43,6 +43,34 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.12 (2026-08-15) — 测试配置收口（`[test].default_profile` / `include_dirs` / `link_targets`）
+
+1.2.0 系列第十二个开发子版本，**dev.3 的延伸**：`ezmk test` 引入 profile 支持——`[test].default_profile` + `ezmk test --profile`（复用 `[compile.profile.*]` / `[link.profile.*]`，与 `ezmk build` 完全对称），并补齐测试专属 include / 链接目标（`[test].include_dirs` / `[test].link_targets`），弃用与 `[compile].flags` 重叠的 `[test].flags`（使用点 warn，2.0.0 移除）。公共 API 无破坏性变更（纯新增可选字段 + CLI 选项；见文首 API Stability）。
+
+### 新增 / 行为变更
+
+- **`[test].default_profile`**：`ezmk test` 未传 `--profile` 时回退应用 `[compile.profile.<name>]`（flags/macros/msvc_flags）+ `[link.profile.<name>]`（link flags）——测试编译/链接与 build 的 profile 语义逐字节一致
+- **`ezmk test --profile <name>`**：CLI 覆盖 `default_profile`（CLI > default_profile > 无），与 `ezmk build --profile` 对称
+- **`[test].include_dirs`**：测试编译追加的 `-I` 目录（相对项目根解析、缺失跳过），测试专属，不污染主构建
+- **`[test].link_targets`**：测试 runner 链接追加的 `-l` 系统库目标（catch2 与 ezmk 双框架一致），测试专属，不污染主构建
+- **`apply_profile` 共享 helper**（`src/build.cpp`）：build 路径（`prepare_build_state`）内联的 profile 合并抽取为共享 helper，`run_tests` 复用——profile 解析/合并/未知 profile fatal（含 closest-match 建议）单一事实源，build 路径行为逐字节不变
+- **`[test].flags` 弃用**：非空时在 `ezmk test` 使用点输出弃用警告（i18n `test_flags_deprecated`），行为不变；2.0.0 移除；替代写法 `[compile.profile.<name>]` + `default_profile`，include/链接用新字段
+
+### 文档
+
+- `docs/en|zh/config_file.md`：`[test]` 节新增 `default_profile` / `include_dirs` / `link_targets` 字段，`flags` 标弃用
+- `docs/en|zh/cli.md`：`ezmk test` 新增 `--profile <name>` 标志
+- 新增 i18n key `test_flags_deprecated`（en/zh），`check_i18n.py` 三向一致（303 keys）
+
+### 测试
+
+- `test_config.cpp`：`[test]` 新字段解析 3 个用例（default_profile / include_dirs / link_targets；默认空；flags 仍解析）
+- `test_cli.cpp`：`ezmk test --profile` 解析 4 个用例（分离值 / `=` 形式 / 缺省为空 / 缺值抛错）
+- 集成测试：`[test]` 新字段端到端（ezmk 内建框架，无 catch2 依赖）——default_profile 宏生效（`PROFILE=1`）、`--profile debug` 覆盖（`PROFILE=2`）、include_dirs 头文件解析（`HELP=7`）、link_targets `-lm` 出现在编译命令（MSVC 跳过）、flags 弃用 warn
+- 全量回归：727 用例 / 3361 断言零失败（基线 719 / 3328，+8 用例 +33 断言）
+
+---
+
 ## 1.2.0-dev.8 (2026-08-15) — CMake 导出钩子运行时（`ezmk-lua`）
 
 1.2.0 系列第八个开发子版本，**dev.2 的范围收口**：为 `export cmake` 补上 `[hooks]` 钩子映射——新增**独立、无黑白名单的 Lua 运行时二进制 `ezmk-lua`**，由导出的 CMake 在构建节点调用它复现 `ezmk build` 的钩子后处理，消除导出产物与本体构建的行为漂移。**`ezmk` 本体沙箱/黑白名单零改动**（纯新增产物 + 导出文本变化，见文首 API Stability）。
