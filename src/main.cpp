@@ -253,7 +253,8 @@ int main(int argc, char** argv) {
             ezmk::build::run_tests(cfg,
                                     args.test_framework,
                                     args.test_filter,
-                                    args.test_verbose);
+                                    args.test_verbose,
+                                    args.test_profile);
             break;
         }
 

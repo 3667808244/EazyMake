@@ -633,6 +633,14 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
             cfg.test.framework = normalize_lang(*fw);
         }
         cfg.test.flags = extract_string_array(test->get("flags"));
+        // 1.2.0-dev.12: default_profile — default profile when no --profile given
+        if (auto dp = (*test)["default_profile"].value<std::string>()) {
+            cfg.test.default_profile = *dp;
+        }
+        // 1.2.0-dev.12: test-only include dirs (-I, resolved relative to project root)
+        cfg.test.include_dirs = extract_string_array(test->get("include_dirs"));
+        // 1.2.0-dev.12: test-only link targets (-l system libraries)
+        cfg.test.link_targets = extract_string_array(test->get("link_targets"));
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};

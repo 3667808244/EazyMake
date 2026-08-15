@@ -158,6 +158,7 @@ struct CliArgs {
     std::string test_framework;     // --framework override (empty = use config)
     std::string test_filter;        // --filter pattern
     bool test_verbose = false;      // --verbose
+    std::string test_profile;       // 1.2.0-dev.12: --profile override (empty = use [test].default_profile)
 
     // 0.9.8+: Shorthand expansion hint (e.g. "ri → repo info").
     // Non-empty only when a shorthand alias was expanded AND --verbose was passed.

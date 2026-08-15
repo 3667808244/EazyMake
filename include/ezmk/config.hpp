@@ -107,7 +107,10 @@ struct InstallSection {
 struct TestConfig {
     std::vector<std::string> dirs = {"test"};       // test source directories
     std::string framework = "catch2";                // "catch2" | "ezmk"
-    std::vector<std::string> flags = {};             // extra test compile flags
+    std::vector<std::string> flags = {};             // DEPRECATED (1.2.0-dev.12, removed in 2.0.0) — use default_profile / include_dirs / link_targets
+    std::string default_profile = "";                // 1.2.0-dev.12: profile applied when no --profile given
+    std::vector<std::string> include_dirs = {};      // 1.2.0-dev.12: test-only -I dirs (resolved relative to project root)
+    std::vector<std::string> link_targets = {};      // 1.2.0-dev.12: test-only -l system targets
 };
 
 struct EzConfig {

@@ -345,6 +345,7 @@ namespace ezmk::cli
                 {'f', "framework", true},
                 {'\0', "filter", true},
                 {'V', "verbose", false},
+                {'\0', "profile", true},   // 1.2.0-dev.12
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project test");
             if (auto v = p.value("framework"))
@@ -353,6 +354,8 @@ namespace ezmk::cli
                 args.test_filter = *v;
             if (p.has("verbose"))
                 args.test_verbose = true;
+            if (auto v = p.value("profile"))
+                args.test_profile = *v;
             return args;
         }
 
