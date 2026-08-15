@@ -37,10 +37,14 @@ std::string want_to_macro_name(const std::string& pkg_name);
 // 0.2.2+: Collect source files from multiple src_dirs.
 // Returns deduplicated list; warns on missing/empty directories.
 // Throws if no source files found across all directories.
+// 1.2.0-dev.9: `require_main` — only enforce the main.cpp requirement for
+// executables when true. Package compilation passes false (packages are
+// always static libraries, regardless of their [project].type).
 std::vector<fs::path> collect_sources(
     const std::vector<std::string>& src_dirs,
     const fs::path& proj_root,
-    const std::string& project_type);
+    const std::string& project_type,
+    bool require_main = true);
 
 // 0.2.3+: Merge a compile profile into the base compile section.
 // Profile flags are appended to base flags; profile macros override base macros.

@@ -447,6 +447,37 @@ TEST_CASE("collect_sources: main.c also accepted for executable", "[build][0.2.2
     REQUIRE(sources.size() == 1);
 }
 
+// 1.2.0-dev.9: require_main=false — packages are always static libraries, so
+// an "executable"-typed config without main.cpp must NOT trigger main_missing.
+TEST_CASE("collect_sources: require_main=false skips main.cpp check", "[build][1.2.0-dev.9]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_require_main_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src");
+    // No main.cpp — would throw for require_main=true (default)
+    std::ofstream(tmp / "src" / "util.cpp") << "void util() {}\n";
+
+    auto sources = collect_sources({"src"}, tmp, "executable", /*require_main=*/false);
+    fs::remove_all(tmp);
+
+    REQUIRE(sources.size() == 1);
+}
+
+// 1.2.0-dev.9: require_main=false still collects from multiple directories.
+TEST_CASE("collect_sources: require_main=false multi-directory collection", "[build][1.2.0-dev.9]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_require_main2_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src");
+    fs::create_directories(tmp / "generated");
+    std::ofstream(tmp / "src" / "a.cpp") << "void a() {}\n";
+    std::ofstream(tmp / "generated" / "b.cpp") << "void b() {}\n";
+
+    auto sources = collect_sources({"src", "generated"}, tmp, "executable",
+                                   /*require_main=*/false);
+    fs::remove_all(tmp);
+
+    REQUIRE(sources.size() == 2);
+}
+
 // ===================================================================
 // 0.2.2+: CompileSection new fields
 // ===================================================================

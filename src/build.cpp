@@ -1,4 +1,4 @@
-﻿#include "ezmk/build.hpp"
+#include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
 #include "ezmk/compile_db.hpp"
 #include "ezmk/config.hpp"
@@ -121,10 +121,13 @@ std::string want_to_macro_name(const std::string& pkg_name) {
 // 0.2.2+: Collect source files from multiple src_dirs.
 // Returns deduplicated list; warns on missing/empty directories.
 // Throws if no source files found across all directories.
+// 1.2.0-dev.9: `require_main` — only enforce the main.cpp requirement for
+// executables when true (packages pass false; they are always static libs).
 std::vector<fs::path> collect_sources(
     const std::vector<std::string>& src_dirs,
     const fs::path& proj_root,
-    const std::string& project_type) {
+    const std::string& project_type,
+    bool require_main) {
     std::vector<fs::path> result;
     std::set<std::string> seen_names; // filename stem for dedup
     bool any_dir_exists = false;
@@ -159,8 +162,9 @@ std::vector<fs::path> collect_sources(
         util::fatal(ezmk::i18n::I18nKey::no_source_files);
     }
 
-    // Check main.cpp requirement for executables
-    if (project_type == "executable") {
+    // Check main.cpp requirement for executables (1.2.0-dev.9: skipped when
+    // require_main=false — package compilation, which is always a static lib)
+    if (require_main && project_type == "executable") {
         bool has_main = false;
         for (auto& f : result) {
             auto fn = f.filename().string();
