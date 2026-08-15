@@ -12,6 +12,31 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.8 (2026-08-15) — CMake 导出钩子运行时（`ezmk-lua`）
+
+1.2.0 系列第八个开发子版本，**dev.2 的范围收口**：为 `export cmake` 补上 `[hooks]` 钩子映射——新增**独立、无黑白名单的 Lua 运行时二进制 `ezmk-lua`**，由导出的 CMake 在构建节点调用它复现 `ezmk build` 的钩子后处理，消除导出产物与本体构建的行为漂移。**`ezmk` 本体沙箱/黑白名单零改动**（纯新增产物 + 导出文本变化，见文首 API Stability）。
+
+### 新增
+
+- **`ezmk-lua` 独立运行时**（`src/ezmk_lua_main.cpp` + `src/lua_api.cpp` `run_script_unrestricted()`）：复用 Lua VM 与 `register_api` bindings（共享编译单元，`ezmk.*` 不双维护），入口**无沙箱**——不建 restricted globals、不加载 `[utils.permissions]`、补开 `os`/`io` 库（沙箱编译期移除的），是构建沙箱的**严格超集**；CLI 契约 `ezmk-lua <hook.lua> [--project-root <dir>] [--profile <name>] [--output <path>]`，`ctx`（output/project_root/profile）由 CLI 注入，`run(ctx)` 返回值透传为退出码
+- **`export cmake` 钩子映射**（`src/export.cpp`）：hooks 段从「注释 + WARNING」改为 `find_program(EZMK_LUA ezmk-lua)` + `add_custom_command`（`pre_build` → `PRE_BUILD`、`post_build` → `POST_BUILD`，脚本路径相对 `${CMAKE_CURRENT_SOURCE_DIR}`、`--output $<TARGET_FILE:<name>>`、`--profile` 内联）；找不到 `ezmk-lua` 回退 `message(WARNING)`（best-effort，非硬依赖）；**`on_failure` 保持不导出**（CMake 无原生失败钩子，范围边界同 dev.2）；导出时打印 hooks 提示（i18n `export_hook_note`）
+- **能力面超集约定**：`ezmk-lua` 下钩子可用 `os.execute`/`io` 等沙箱外能力；文档约定导出钩子只用 `ezmk.*` 子集，保证「`ezmk build` 沙箱」与「导出 CMake 无沙箱」行为一致
+
+### 文档
+
+- `docs/en|zh/cli.md` 新增 `ezmk-lua` 伴侣运行时用法；`docs/en|zh/config_file.md` hooks 节补充 CMake 导出映射说明
+- 新增 i18n key `export_hook_note` + `ezmk_lua_usage`/`ezmk_lua_missing_script`/`ezmk_lua_need_value`/`ezmk_lua_unknown_option`/`ezmk_lua_extra_arg`（en/zh），`check_i18n.py` 三向一致（301 keys）
+
+### 测试
+
+- 新增 `run_script_unrestricted` 单测 8 个（基本执行/ctx 注入/返回码/null L/`os`·`io` 可用/配置注入/缺失 run()/Lua error）
+- `test_export.cpp` hooks 用例更新为 `find_program` + `add_custom_command` + 回退 warning + `on_failure` 注释 + `--profile` 内联
+- 新增集成测试 3 个：`ezmk-lua` 跑样例钩子（ctx + 返回码）、`ezmk build` 钩子沙箱路径零变化、`export cmake` 产物含钩子调用 + 导出提示
+- 新增 `test_i18n.cpp` dev.8 key 非空 + fmt 断言
+- 全量回归：709 用例 / 3296 断言零失败（基线 695 / 3234）
+
+---
+
 ## 1.2.0-dev.7 (2026-08-15) — 本地包源 + 项目向上查找
 
 1.2.0 系列第七个开发子版本：聚合两个相互独立的改进——① **`ezmk pkg install <dir>` 从文件夹安装包**（开发/调试本地包免打包归档）；② **`ezmk.toml` 向上查找**（进入项目子目录直接 `ezmk build` / `ezmk test`，如同 `git`）。**纯增量、不破坏任何公共 API**（新增目录入参形态 + 内部项目根定位，见文首 API Stability）。

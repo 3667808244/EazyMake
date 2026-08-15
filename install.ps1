@@ -63,6 +63,7 @@ $Script:DownloadBase = "https://github.com/$RepoOwner/$RepoName/releases/downloa
 $Script:OfficialRepo = "https://github.com/$RepoOwner/ezmk-repo.git"
 $Script:OfficialRepoName = "official"
 $Script:BinName    = "ezmk.exe"
+$Script:LuaBinName = "ezmk-lua.exe"  # standalone Lua hook runtime (exported CMake builds)
 
 # ── Logging helpers ────────────────────────────────────────────────────────────
 function Write-Info {
@@ -126,6 +127,10 @@ function Get-BinPath {
     return Join-Path (Get-BinDir) $Script:BinName
 }
 
+function Get-LuaBinPath {
+    return Join-Path (Get-BinDir) $Script:LuaBinName
+}
+
 # ── Pre-flight checks ──────────────────────────────────────────────────────────
 
 function Test-Prerequisites {
@@ -180,18 +185,20 @@ function Resolve-Version {
 
 # ── Download ───────────────────────────────────────────────────────────────────
 
-function Invoke-Download {
+function Invoke-BinaryDownload {
     param(
         [string]$VersionTag,
-        [string]$DestDir
+        [string]$DestDir,
+        [string]$BinName,
+        [string]$DisplayName
     )
 
-    $url = "$Script:DownloadBase/$VersionTag/$Script:BinName"
-    $dest = Join-Path $DestDir $Script:BinName
-    $checksumUrl = "$Script:DownloadBase/$VersionTag/$Script:BinName.sha256"
-    $checksumDest = Join-Path $DestDir "$Script:BinName.sha256"
+    $url = "$Script:DownloadBase/$VersionTag/$BinName"
+    $dest = Join-Path $DestDir $BinName
+    $checksumUrl = "$Script:DownloadBase/$VersionTag/$BinName.sha256"
+    $checksumDest = Join-Path $DestDir "$BinName.sha256"
 
-    Write-Info "Downloading ezmk.exe (version $VersionTag)..."
+    Write-Info "Downloading $DisplayName (version $VersionTag)..."
     Write-Info "  URL: $url"
 
     if (Test-DryRun) {
@@ -203,7 +210,7 @@ function Invoke-Download {
     try {
         Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
     } catch {
-        Write-Die "Failed to download ezmk.exe. Check your network and the version tag.`n  $($_.Exception.Message)"
+        Write-Die "Failed to download $DisplayName. Check your network and the version tag.`n  $($_.Exception.Message)"
     }
 
     if (-not (Test-Path $dest)) {
@@ -224,6 +231,20 @@ function Invoke-Download {
     }
 
     return @{ Binary = $dest; Checksum = $checksumDest }
+}
+
+function Invoke-Download {
+    param(
+        [string]$VersionTag,
+        [string]$DestDir
+    )
+
+    $ezmk = Invoke-BinaryDownload -VersionTag $VersionTag -DestDir $DestDir `
+        -BinName $Script:BinName -DisplayName "ezmk.exe"
+    # 1.2.0-dev.8: also fetch the standalone Lua hook runtime (exported CMake).
+    $lua  = Invoke-BinaryDownload -VersionTag $VersionTag -DestDir $DestDir `
+        -BinName $Script:LuaBinName -DisplayName "ezmk-lua.exe"
+    return @{ Ezmk = $ezmk; EzmkLua = $lua }
 }
 
 # ── SHA-256 verification ──────────────────────────────────────────────────────
@@ -264,16 +285,15 @@ function Test-Checksum {
 
 # ── Install ────────────────────────────────────────────────────────────────────
 
-function Install-Ezmk {
-    param([string]$SourceBinary)
+function Install-Binary {
+    param([string]$SourceBinary, [string]$Dest, [string]$TempPrefix)
 
     $binDir = Get-BinDir
-    $dest = Get-BinPath
 
-    Write-Info "Installing to: $dest"
+    Write-Info "Installing to: $Dest"
 
     if (Test-DryRun) {
-        Write-Host "       [DRY RUN] Would install: $SourceBinary -> $dest" -ForegroundColor DarkGray
+        Write-Host "       [DRY RUN] Would install: $SourceBinary -> $Dest" -ForegroundColor DarkGray
         return
     }
 
@@ -283,16 +303,26 @@ function Install-Ezmk {
     }
 
     # Atomic install: copy to temp name, then rename into place
-    $tmpDest = Join-Path $binDir ".ezmk.install.$pid"
+    $tmpDest = Join-Path $binDir ".$TempPrefix.install.$pid"
     Copy-Item $SourceBinary $tmpDest -Force
 
     # Remove existing if present
-    if (Test-Path $dest) {
-        Remove-Item $dest -Force
+    if (Test-Path $Dest) {
+        Remove-Item $Dest -Force
     }
 
-    Move-Item $tmpDest $dest -Force
-    Write-Info "Installed: $dest"
+    Move-Item $tmpDest $Dest -Force
+    Write-Info "Installed: $Dest"
+}
+
+function Install-Ezmk {
+    param([string]$SourceBinary)
+    Install-Binary -SourceBinary $SourceBinary -Dest (Get-BinPath) -TempPrefix "ezmk"
+}
+
+function Install-EzmkLua {
+    param([string]$SourceBinary)
+    Install-Binary -SourceBinary $SourceBinary -Dest (Get-LuaBinPath) -TempPrefix "ezmk-lua"
 }
 
 # ── PATH configuration ─────────────────────────────────────────────────────────
@@ -494,14 +524,16 @@ function Main {
     }
 
     try {
-        # 4. Download
+        # 4. Download (ezmk.exe + ezmk-lua.exe)
         $downloadResult = Invoke-Download -VersionTag $resolvedVersion -DestDir $tempDir
 
         # 5. SHA-256 verification
-        Test-Checksum -BinaryPath $downloadResult.Binary -ChecksumPath $downloadResult.Checksum
+        Test-Checksum -BinaryPath $downloadResult.Ezmk.Binary -ChecksumPath $downloadResult.Ezmk.Checksum
+        Test-Checksum -BinaryPath $downloadResult.EzmkLua.Binary -ChecksumPath $downloadResult.EzmkLua.Checksum
 
         # 6. Install
-        Install-Ezmk -SourceBinary $downloadResult.Binary
+        Install-Ezmk -SourceBinary $downloadResult.Ezmk.Binary
+        Install-EzmkLua -SourceBinary $downloadResult.EzmkLua.Binary
 
         # 7. PATH configuration
         Update-Path

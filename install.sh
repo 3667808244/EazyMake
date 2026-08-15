@@ -50,12 +50,13 @@ if ! need python3 && ! need python; then
     warn "Python not found — locale data falls back to English only (build still works)."
 fi
 
-# Platform / binary name.
+# Platform / binary name. ezmk-lua is the standalone Lua hook runtime that ships
+# alongside ezmk (needed by exported CMake builds).
 case "$(uname -s)" in
-    Linux)        PLATFORM=linux;  BIN_NAME=ezmk ;;
-    Darwin)       PLATFORM=macos;  BIN_NAME=ezmk ;;
-    MINGW*|MSYS*|CYGWIN*) PLATFORM=windows; BIN_NAME=ezmk.exe ;;
-    *)            PLATFORM=unknown; BIN_NAME=ezmk
+    Linux)        PLATFORM=linux;  BIN_NAME=ezmk;     LUA_BIN_NAME=ezmk-lua ;;
+    Darwin)       PLATFORM=macos;  BIN_NAME=ezmk;     LUA_BIN_NAME=ezmk-lua ;;
+    MINGW*|MSYS*|CYGWIN*) PLATFORM=windows; BIN_NAME=ezmk.exe; LUA_BIN_NAME=ezmk-lua.exe ;;
+    *)            PLATFORM=unknown; BIN_NAME=ezmk;    LUA_BIN_NAME=ezmk-lua
                   warn "Unknown platform '$(uname -s)', attempting a generic build." ;;
 esac
 
@@ -84,10 +85,13 @@ info "Building ezmk $RESOLVED_VERSION"
 
 BUILT_BIN="$SRC_DIR/build/$BIN_NAME"
 [ -f "$BUILT_BIN" ] || die "Build did not produce $BIN_NAME (looked in $SRC_DIR/build/)."
+BUILT_LUA_BIN="$SRC_DIR/build/$LUA_BIN_NAME"
+[ -f "$BUILT_LUA_BIN" ] || die "Build did not produce $LUA_BIN_NAME (looked in $SRC_DIR/build/)."
 
 # --------------------------------------------------------------- install ----
 DEST_DIR="$PREFIX/bin"
 DEST="$DEST_DIR/$BIN_NAME"
+LUA_DEST="$DEST_DIR/$LUA_BIN_NAME"
 mkdir -p "$DEST_DIR"
 # Install atomically: copy to a temp name in the target dir, then mv into place.
 TMP_DEST="$DEST_DIR/.ezmk.install.$$"
@@ -95,6 +99,12 @@ cp "$BUILT_BIN" "$TMP_DEST"
 chmod 755 "$TMP_DEST"
 mv -f "$TMP_DEST" "$DEST"
 info "Installed: $DEST"
+# ezmk-lua — standalone Lua hook runtime for exported CMake builds.
+TMP_LUA_DEST="$DEST_DIR/.ezmk-lua.install.$$"
+cp "$BUILT_LUA_BIN" "$TMP_LUA_DEST"
+chmod 755 "$TMP_LUA_DEST"
+mv -f "$TMP_LUA_DEST" "$LUA_DEST"
+info "Installed: $LUA_DEST"
 
 # ------------------------------------------------- built-in ezmk-cc ------
 # ezmk-cc (`ezmk utils cc`) is now part of the ezmk-official-utils package (§8).

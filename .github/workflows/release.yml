@@ -45,13 +45,14 @@ jobs:
         shell: msys2 {0}
         run: bash build.sh
 
-      - name: Package (zip) + standalone ezmk.exe
+      - name: Package (zip) + standalone ezmk.exe + ezmk-lua.exe
         shell: pwsh
         run: |
           $version = "${{ needs.version.outputs.version }}"
           $name = "ezmk-windows-x64"
           New-Item -ItemType Directory -Force dist/$name | Out-Null
           Copy-Item build/ezmk.exe dist/$name/
+          Copy-Item build/ezmk-lua.exe dist/$name/
           Copy-Item res/ezmk.zsh dist/$name/_ezmk
           Compress-Archive -Path dist/$name/* -DestinationPath "dist/ezmk-windows-x64.zip"
           # Standalone ezmk.exe + ezmk.exe.sha256 (required by install.ps1):
@@ -60,6 +61,11 @@ jobs:
           Copy-Item build/ezmk.exe dist/ezmk.exe
           $hash = (Get-FileHash build/ezmk.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  ezmk.exe" | Out-File dist/ezmk.exe.sha256 -Encoding ascii
+          # Standalone ezmk-lua.exe + ezmk-lua.exe.sha256 (required by install.ps1;
+          # the standalone Lua hook runtime for exported CMake builds).
+          Copy-Item build/ezmk-lua.exe dist/ezmk-lua.exe
+          $lua_hash = (Get-FileHash build/ezmk-lua.exe -Algorithm SHA256).Hash.ToLower()
+          "$lua_hash  ezmk-lua.exe" | Out-File dist/ezmk-lua.exe.sha256 -Encoding ascii
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
@@ -68,6 +74,8 @@ jobs:
             dist/ezmk-windows-x64.zip
             dist/ezmk.exe
             dist/ezmk.exe.sha256
+            dist/ezmk-lua.exe
+            dist/ezmk-lua.exe.sha256
 
   # ── Linux x64 ──────────────────────────────────────────────────────
   linux-x64:
@@ -92,6 +100,7 @@ jobs:
           name="ezmk-linux-x64"
           mkdir -p "dist/${name}"
           cp build/ezmk "dist/${name}/"
+          cp build/ezmk-lua "dist/${name}/"
           cp res/ezmk.zsh "dist/${name}/_ezmk"
           tar -czf "dist/ezmk-linux-x64.tar.gz" -C dist "${name}"
 
@@ -120,6 +129,7 @@ jobs:
           name="ezmk-macos-x64"
           mkdir -p "dist/${name}"
           cp build/ezmk "dist/${name}/"
+          cp build/ezmk-lua "dist/${name}/"
           cp res/ezmk.zsh "dist/${name}/_ezmk"
           tar -czf "dist/ezmk-macos-x64.tar.gz" -C dist "${name}"
 
@@ -148,6 +158,7 @@ jobs:
           name="ezmk-macos-arm64"
           mkdir -p "dist/${name}"
           cp build/ezmk "dist/${name}/"
+          cp build/ezmk-lua "dist/${name}/"
           cp res/ezmk.zsh "dist/${name}/_ezmk"
           tar -czf "dist/ezmk-macos-arm64.tar.gz" -C dist "${name}"
 

@@ -2,7 +2,8 @@
 #
 # Installs the prebuilt binary for the current platform from the EazyMake
 # GitHub Release. Each tarball (ezmk-<os>-<arch>.tar.gz) contains `ezmk`
-# (the binary) and `_ezmk` (zsh completion).
+# (the binary), `ezmk-lua` (standalone Lua hook runtime, 1.2.0-dev.8+) and
+# `_ezmk` (zsh completion).
 #
 #   brew tap 3667808244/eazymake
 #   brew install ezmk
@@ -38,6 +39,7 @@ class Ezmk < Formula
     dir = stable.url.split("/").last.sub(/\.tar\.gz$/, "")
     chdir dir do
       bin.install "ezmk"
+      bin.install "ezmk-lua"
       zsh_completion.install "_ezmk"
     end
   end

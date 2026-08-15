@@ -103,6 +103,23 @@ aborts (without writing anything) on unsupported non-standard CMake constructs
 macros after import. See [migrate-from-cmake.md](migrate-from-cmake.md) for
 supported/unsupported constructs and manual migration steps.
 
+**Companion runtime: `ezmk-lua` (1.2.0-dev.8+).** `ezmk project export cmake`
+maps `[hooks]` `pre_build` / `post_build` to `add_custom_command` calls that
+invoke the standalone `ezmk-lua` binary, which ships alongside `ezmk` in every
+install channel:
+
+```
+ezmk-lua <hook.lua> [--project-root <dir>] [--profile <name>] [--output <path>]
+```
+
+It runs the hook in an **unrestricted** Lua environment (a strict superset of the
+build sandbox) and builds the `ctx` table (`output` / `project_root` / `profile`)
+from the CLI flags. The generated CMake locates it via
+`find_program(EZMK_LUA ezmk-lua)` and falls back to a `message(WARNING)` when it
+is not installed (hook post-processing is skipped, never fatal). `on_failure`
+has no CMake equivalent and is not exported. See the `hooks` section in
+[config_file.md](config_file.md) for the full mapping.
+
 **`build-opts`** (shared by `build` / `run` / `watch`):
 
 | Flag | Purpose |

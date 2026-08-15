@@ -323,6 +323,17 @@ on_failure = "scripts/fail.lua"
 
 See `utils.md` (Lua API reference) and CLAUDE.md (build hook implementation details).
 
+> **CMake export (1.2.0-dev.8+):** `ezmk project export cmake` maps `pre_build` /
+> `post_build` to `add_custom_command(TARGET ... PRE_BUILD/POST_BUILD)` that invokes
+> the **standalone `ezmk-lua` runtime** (`find_program(EZMK_LUA ezmk-lua)`) with
+> `--project-root`, `--output $<TARGET_FILE:...>` and the export profile. `ezmk-lua`
+> runs the hook in an *unrestricted* Lua environment (a strict superset of the build
+> sandbox) and ships alongside `ezmk` in every distribution channel. If `ezmk-lua` is
+> not on `PATH`, the generated CMake falls back to a `message(WARNING)` (best-effort —
+> hook post-processing is skipped, never fatal). `on_failure` has no CMake equivalent
+> and is not exported. To keep behavior identical under both `ezmk build` (sandboxed)
+> and the exported CMake build, write hooks against the `ezmk.*` API subset only.
+
 ---
 
 ## `install` Section (1.1.0+)

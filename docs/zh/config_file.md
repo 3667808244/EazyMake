@@ -291,6 +291,8 @@ on_failure = "scripts/fail.lua"
 
 详见 [`utils.md`](utils.md)（Lua API 参考）和 CLAUDE.md（构建钩子实现细节）。
 
+> **CMake 导出（1.2.0-dev.8+）：** `ezmk project export cmake` 把 `pre_build` / `post_build` 映射为 `add_custom_command(TARGET ... PRE_BUILD/POST_BUILD)`，调用**独立 `ezmk-lua` 运行时**（`find_program(EZMK_LUA ezmk-lua)`），传入 `--project-root`、`--output $<TARGET_FILE:...>` 与导出时的 profile。`ezmk-lua` 在**无沙箱**的 Lua 环境运行钩子（构建沙箱的严格超集），随 `ezmk` 进入所有分发渠道。若 `PATH` 中找不到 `ezmk-lua`，生成的 CMake 回退为 `message(WARNING)`（best-effort——跳过钩子后处理，非致命）。`on_failure` 在 CMake 中无等价物，不导出。为保持 `ezmk build`（沙箱）与导出的 CMake 构建行为一致，钩子应只使用 `ezmk.*` API 子集。
+
 ---
 
 ## `install` 节（1.1.0+）

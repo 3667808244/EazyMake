@@ -84,6 +84,20 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 不产出半成品。**实验性**——导入后请手动校对库链接与平台宏。支持/不支持清单与手动迁移步骤
 见 [migrate-from-cmake.md](migrate-from-cmake.md)。
 
+**伴侣运行时：`ezmk-lua`（1.2.0-dev.8+）。** `ezmk project export cmake`
+把 `[hooks]` 的 `pre_build` / `post_build` 映射为 `add_custom_command` 调用，
+由独立 `ezmk-lua` 二进制执行（随 `ezmk` 进入所有安装渠道）：
+
+```
+ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <路径>]
+```
+
+它在**无沙箱**的 Lua 环境运行钩子（构建沙箱的严格超集），并从 CLI 参数构建
+`ctx` 表（`output` / `project_root` / `profile`）。生成的 CMake 通过
+`find_program(EZMK_LUA ezmk-lua)` 定位；未安装时回退为 `message(WARNING)`
+（跳过钩子后处理，非致命）。`on_failure` 在 CMake 中无等价物，不导出。
+完整映射见 [config_file.md](config_file.md) 的 `hooks` 节。
+
 **`build-opts`**（`build` / `run` / `watch` 共用）：
 
 | 标志 | 用途 |
