@@ -7,6 +7,7 @@
 #include "ezmk/util.hpp"
 #include "test_helpers.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -479,4 +480,58 @@ TEST_CASE("resolve_source_date_epoch: non-deterministic ignores env", "[cache][1
     cfg.source_date_epoch = 0;
     EnvGuard env("SOURCE_DATE_EPOCH", "123");
     REQUIRE(resolve_source_date_epoch(cfg) == 0);
+}
+
+// 1.2.0-dev.9: include_dirs 含默认 "include" 时与 def_inc (proj_root/include) 重复，
+// 必须保序去重（GCC 分支）。
+TEST_CASE("build_compile_args: def_inc + include_dirs dedup (GCC)", "[cache][1.2.0-dev.9]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / "include");
+    fs::create_directories(tmp.path / "extra");
+    fs::create_directories(tmp.path / "src");
+    fs::create_directories(tmp.path / "build");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+
+    CompileInput in;
+    in.proj_root = tmp.path;
+    in.compile.include_dirs = {"include", "extra"};  // "include" duplicates def_inc
+    in.lang.compiler = "g++";
+    in.lang.std_flag = "-std=c++17";
+
+    auto args = build_compile_args(in, tmp.path / "src" / "main.cpp",
+                                   tmp.path / "build" / "main.o");
+
+    std::string inc = "-I" + (tmp.path / "include").string();
+    std::string extra = "-I" + (tmp.path / "extra").string();
+    REQUIRE(std::count(args.begin(), args.end(), inc) == 1);
+    REQUIRE(std::count(args.begin(), args.end(), extra) == 1);
+
+    // 保序：include 在 extra 之前
+    auto it_inc = std::find(args.begin(), args.end(), inc);
+    auto it_extra = std::find(args.begin(), args.end(), extra);
+    REQUIRE(it_inc != args.end());
+    REQUIRE(it_extra != args.end());
+    REQUIRE(it_inc < it_extra);
+}
+
+// 1.2.0-dev.9: 同上，MSVC 分支（/I 形式）。
+TEST_CASE("build_compile_args: def_inc + include_dirs dedup (MSVC)", "[cache][1.2.0-dev.9]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / "include");
+    fs::create_directories(tmp.path / "src");
+    fs::create_directories(tmp.path / "build");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+
+    CompileInput in;
+    in.proj_root = tmp.path;
+    in.compile.include_dirs = {"include"};  // duplicates def_inc
+    in.lang.compiler = "cl.exe";
+    in.lang.std_flag = "-std=c++17";
+    in.tc.family = ezmk::toolchain::CompilerFamily::Msvc;
+
+    auto args = build_compile_args(in, tmp.path / "src" / "main.cpp",
+                                   tmp.path / "build" / "main.obj");
+
+    std::string inc = "/I" + (tmp.path / "include").string();
+    REQUIRE(std::count(args.begin(), args.end(), inc) == 1);
 }

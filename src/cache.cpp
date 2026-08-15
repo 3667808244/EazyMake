@@ -352,6 +352,27 @@ uint64_t resolve_source_date_epoch(const config::CompileSection& compile) {
     return 0;
 }
 
+// 1.2.0-dev.9: 自编译 -I 构造 — [def_inc (proj_root/include)] + [compile].include_dirs
+// 解析结果的保序去重（首次出现顺序保留，lexically_normal 判重）。当 include_dirs 含
+// 默认 "include" 时与 def_inc 重复，去重后 compile_commands.json 输出更干净，
+// 编译器语义不变。extra_includes（依赖包注入）不参与去重。
+static std::vector<fs::path> resolve_compile_include_paths(const CompileInput& in) {
+    std::vector<fs::path> result;
+    std::set<std::string> seen;
+    auto add = [&](const fs::path& p) {
+        std::string key = p.lexically_normal().string();
+        if (seen.insert(key).second) result.push_back(p);
+    };
+    auto def_inc = in.proj_root / "include";
+    if (util::file_exists(def_inc)) add(def_inc);
+    for (auto& d : in.compile.include_dirs) {
+        fs::path resolved = d;
+        if (resolved.is_relative()) resolved = in.proj_root / resolved;
+        add(resolved);
+    }
+    return result;
+}
+
 std::vector<std::string> build_compile_args(const CompileInput& in,
                                             const fs::path& src,
                                             const fs::path& obj) {
@@ -382,13 +403,8 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
         for (auto& f : in.compile.msvc_flags) args.push_back(f);
         args.push_back("/utf-8");
         args.push_back("/MD");
-        auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) args.push_back("/I" + def_inc.string());
-        for (auto& d : in.compile.include_dirs) {
-            fs::path resolved = d;
-            if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            args.push_back("/I" + resolved.string());
-        }
+        // 1.2.0-dev.9: def_inc + include_dirs 保序去重
+        for (auto& inc : resolve_compile_include_paths(in)) args.push_back("/I" + inc.string());
         for (auto& inc : in.extra_includes) args.push_back("/I" + inc.string());
         args.push_back("/Fo" + obj.string());
         args.push_back("/showIncludes");
@@ -411,13 +427,8 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
         }
         for (auto& f : in.compile.flags) args.push_back(f);
         if (in.use_pic) args.push_back("-fPIC");
-        auto def_inc = in.proj_root / "include";
-        if (util::file_exists(def_inc)) args.push_back("-I" + def_inc.string());
-        for (auto& d : in.compile.include_dirs) {
-            fs::path resolved = d;
-            if (resolved.is_relative()) resolved = in.proj_root / resolved;
-            args.push_back("-I" + resolved.string());
-        }
+        // 1.2.0-dev.9: def_inc + include_dirs 保序去重
+        for (auto& inc : resolve_compile_include_paths(in)) args.push_back("-I" + inc.string());
         for (auto& inc : in.extra_includes) args.push_back("-I" + inc.string());
         fs::path dep = in.dep_dir / rel;
         dep.replace_extension(".d");
