@@ -19,6 +19,7 @@
 #include "test_helpers.hpp"
 #include "ezmk/util.hpp"
 #include "ezmk/crypto.hpp"
+#include "ezmk/toolchain.hpp"
 #include "nlohmann_json.hpp"
 
 #include <algorithm>
@@ -1607,4 +1608,82 @@ TEST_CASE("integration: custom src_dirs+include_dirs package builds and links (d
         if (found_extra_inc) break;
     }
     REQUIRE(found_extra_inc);
+}
+
+// 1.2.0-dev.12: [test].default_profile / include_dirs / link_targets take
+// effect, --profile overrides default_profile, and the deprecated [test].flags
+// fires a warning while still working. Uses the ezmk built-in framework (no
+// catch2 / network needed) and -V so the test stdout + compile command surface.
+TEST_CASE("integration: [test] default_profile + include_dirs + link_targets (dev.12)", "[integration][1.2.0-dev.12]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "testprof";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Test source in test/ that needs BOTH the profile macro (TEST_PROFILE,
+    // defined by the selected compile profile) and the custom include dir
+    // test/helpers (via [test].include_dirs — NOT the source file's dir).
+    fs::create_directories(proj_dir / "test" / "helpers");
+    file_write(proj_dir / "test" / "helpers" / "helper.hpp",
+        "#pragma once\n#define HELP 7\n");
+    file_write(proj_dir / "test" / "t.cpp",
+        "#include \"helper.hpp\"\n#include <cstdio>\n"
+        "int main() {\n"
+        "    std::printf(\"PROFILE=%d HELP=%d\\n\", TEST_PROFILE, HELP);\n"
+        "    return 0;\n"
+        "}\n");
+
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\n\n"
+              "[compile.profile.tsan]\n"
+              "macros.TEST_PROFILE = 1\n\n"
+              "[compile.profile.debug]\n"
+              "macros.TEST_PROFILE = 2\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = []\n\n"
+              "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n"
+              "default_profile = \"tsan\"\n"
+              "include_dirs = [\"test/helpers\"]\n"
+              "link_targets = [\"m\"]\n"
+              "flags = [\"-DTEST_FLAG\"]\n";   // deprecated — must warn
+    }
+
+    // 1) default_profile = "tsan" applies the profile macro (PROFILE=1) and the
+    //    include_dirs header resolves (HELP=7); deprecated flags warn.
+    ProcResult r1 = run_ezmk("test -V", proj_dir);
+    INFO("run1 stderr: " << r1.err);
+    INFO("run1 stdout: " << r1.out);
+    std::string c1 = r1.out + r1.err;
+    REQUIRE(r1.exit_code == 0);
+    REQUIRE(c1.find("PROFILE=1") != std::string::npos);
+    REQUIRE(c1.find("HELP=7") != std::string::npos);
+    REQUIRE(c1.find("deprecated") != std::string::npos);
+
+    // 2) link_targets: the verbose compile command carries -lm. On MSVC the
+    //    ezmk-framework link command never took -l flags (pre-existing
+    //    GCC/Clang-only behavior), so that assertion is skipped there.
+    bool is_msvc = (ezmk::toolchain::detect_toolchain().family ==
+                    ezmk::toolchain::CompilerFamily::Msvc);
+    if (!is_msvc) {
+        REQUIRE(c1.find("-lm") != std::string::npos);
+    }
+
+    // 3) --profile overrides default_profile → debug profile macro (PROFILE=2).
+    ProcResult r2 = run_ezmk("test --profile debug -V", proj_dir);
+    INFO("run2 stderr: " << r2.err);
+    INFO("run2 stdout: " << r2.out);
+    std::string c2 = r2.out + r2.err;
+    REQUIRE(r2.exit_code == 0);
+    REQUIRE(c2.find("PROFILE=2") != std::string::npos);
 }

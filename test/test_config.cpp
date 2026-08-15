@@ -1653,3 +1653,74 @@ TEST_CASE("load_links_json: absolute path value rejected", "[config][1.1.3]") {
     REQUIRE_THROWS_AS(ezmk::config::load_links_json(tmp), std::runtime_error);
     fs::remove_all(tmp);
 }
+
+// ===================================================================
+// 1.2.0-dev.12: [test] — default_profile / include_dirs / link_targets
+// ===================================================================
+
+TEST_CASE("parse_config: [test] new fields parsed", "[config][1.2.0-dev.12]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[test]
+dirs = ["test"]
+framework = "catch2"
+default_profile = "release"
+include_dirs = ["test/helpers", "misc"]
+link_targets = ["pthread"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.test.dirs.size() == 1);
+    REQUIRE(cfg.test.dirs[0] == "test");
+    REQUIRE(cfg.test.framework == "CATCH2");
+    REQUIRE(cfg.test.default_profile == "release");
+    REQUIRE(cfg.test.include_dirs.size() == 2);
+    REQUIRE(cfg.test.include_dirs[0] == "test/helpers");
+    REQUIRE(cfg.test.include_dirs[1] == "misc");
+    REQUIRE(cfg.test.link_targets.size() == 1);
+    REQUIRE(cfg.test.link_targets[0] == "pthread");
+}
+
+TEST_CASE("parse_config: [test] defaults stay empty/absent", "[config][1.2.0-dev.12]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[test]
+dirs = ["test"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.test.default_profile.empty());
+    REQUIRE(cfg.test.include_dirs.empty());
+    REQUIRE(cfg.test.link_targets.empty());
+}
+
+TEST_CASE("parse_config: [test].flags still parsed (deprecated)", "[config][1.2.0-dev.12]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[test]
+dirs = ["test"]
+flags = ["-DTESTING"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.test.flags.size() == 1);
+    REQUIRE(cfg.test.flags[0] == "-DTESTING");
+}

@@ -871,3 +871,32 @@ TEST_CASE("cli parse: project export with no target throws", "[cli][1.2.0]") {
         ezmk::fatal_error
     );
 }
+
+// ===================================================================
+// 1.2.0-dev.12 — project test options
+// ===================================================================
+
+TEST_CASE("cli parse: project test --profile debug", "[cli][1.2.0-dev.12]") {
+    auto args = TestArgs({"project", "test", "--profile", "debug"}).parse();
+    REQUIRE(args.cmd == Command::ProjectTest);
+    REQUIRE(args.test_profile == "debug");
+}
+
+TEST_CASE("cli parse: project test --profile=debug", "[cli][1.2.0-dev.12]") {
+    auto args = TestArgs({"project", "test", "--profile=release"}).parse();
+    REQUIRE(args.cmd == Command::ProjectTest);
+    REQUIRE(args.test_profile == "release");
+}
+
+TEST_CASE("cli parse: project test without --profile keeps empty", "[cli][1.2.0-dev.12]") {
+    auto args = TestArgs({"project", "test", "--framework", "ezmk"}).parse();
+    REQUIRE(args.cmd == Command::ProjectTest);
+    REQUIRE(args.test_profile.empty());
+}
+
+TEST_CASE("cli parse: project test missing --profile value throws", "[cli][1.2.0-dev.12]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "test", "--profile"}).parse(),
+        ezmk::fatal_error
+    );
+}
