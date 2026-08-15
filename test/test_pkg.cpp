@@ -6,6 +6,7 @@
 #include "ezmk/cli.hpp"
 #include "ezmk/util.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -501,4 +502,105 @@ TEST_CASE("url_integrity_confirm: explicit http:// without -y cancels", "[pkg][1
 
 TEST_CASE("url_integrity_confirm: https with sha256 needs no prompt", "[pkg][1.1.3]") {
     REQUIRE(url_integrity_confirm("https://example.com/pkg.tar.gz", true, false));
+}
+
+// ===================================================================
+// 1.2.0-dev.9: compile_package — [compile].src_dirs / include_dirs 收敛
+// ===================================================================
+
+namespace {
+fs::path dev9_pkg_dir(const std::string& tag) {
+    return fs::temp_directory_path() / ("ezmk_pkg_dev9_" + tag + "_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+}
+} // namespace
+
+// header_only 短路前移：无 src_dirs 的 header-only 包不得触发 src_dir_missing，
+// 也不得创建 build/ 目录。
+TEST_CASE("compile_package: header_only short-circuits without sources", "[pkg][1.2.0-dev.9]") {
+    auto pkg = dev9_pkg_dir("header");
+    fs::create_directories(pkg / "include");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"hdronly\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "header_only = true\n";
+    std::ofstream(pkg / "include" / "hdr.hpp") << "#pragma once\n";
+
+    auto result = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    bool build_dir_created = fs::exists(pkg / "build");
+    fs::remove_all(pkg);
+
+    REQUIRE(result.empty());
+    REQUIRE_FALSE(build_dir_created);
+}
+
+// precompiled 短路不变：直接返回 lib/ 下选中归档路径，不编译。
+TEST_CASE("compile_package: precompiled short-circuits to selected archive", "[pkg][1.2.0-dev.9]") {
+    auto pkg = dev9_pkg_dir("precomp");
+    fs::create_directories(pkg / "lib");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"pre\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "precompiled = true\n";
+    // bare fallback archive（无平台 tag）
+    std::ofstream(pkg / "lib" / "libpre.a", std::ios::binary) << "dummy";
+
+    auto result = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    fs::remove_all(pkg);
+
+    REQUIRE(!result.empty());
+    REQUIRE(result.filename() == "libpre.a");
+}
+
+// 空源收紧为 fatal：非 header_only/precompiled 却无任何 src_dirs → 对齐项目语义。
+TEST_CASE("compile_package: no source files is a fatal error", "[pkg][1.2.0-dev.9]") {
+    auto pkg = dev9_pkg_dir("nosrc");
+    fs::create_directories(pkg / "include");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"nosrc\"\ntype = \"static\"\nversion = \"1.0.0\"\n";
+
+    REQUIRE_THROWS_AS(compile_package(pkg, {}, ezmk::toolchain::Toolchain{}),
+                      ezmk::fatal_error);
+    fs::remove_all(pkg);
+}
+
+// 多 src_dirs 生效 + require_main=false：type = "executable" 但无 main.cpp
+// 的包（文档默认写法）必须正常编译成静态库，且两个目录的源都被收集。
+TEST_CASE("compile_package: multi src_dirs compile, require_main=false", "[pkg][1.2.0-dev.9]") {
+    auto pkg = dev9_pkg_dir("multi");
+    fs::create_directories(pkg / "include");
+    fs::create_directories(pkg / "src");
+    fs::create_directories(pkg / "generated");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"multi\"\ntype = \"executable\"\nversion = \"1.0.0\"\n\n"
+        "[compile]\nsrc_dirs = [\"src\", \"generated\"]\n";
+    std::ofstream(pkg / "src" / "a.cpp") << "int a() { return 1; }\n";
+    std::ofstream(pkg / "generated" / "b.cpp") << "int b() { return 2; }\n";
+
+    auto result = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    bool lib_exists = fs::exists(pkg / "build" / "libmulti.a");
+    fs::remove_all(pkg);
+
+    REQUIRE(!result.empty());
+    REQUIRE(result.filename() == "libmulti.a");
+    REQUIRE(lib_exists);
+}
+
+// 自定义 include_dirs 自编译生效：源文件引用非默认 include/ 目录的头文件，
+// 依赖 include_dirs 相对包根解析出 -I。
+TEST_CASE("compile_package: custom include_dirs resolve for self-compile", "[pkg][1.2.0-dev.9]") {
+    auto pkg = dev9_pkg_dir("incdirs");
+    fs::create_directories(pkg / "include");
+    fs::create_directories(pkg / "extra");
+    fs::create_directories(pkg / "src");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"incdirs\"\ntype = \"static\"\nversion = \"1.0.0\"\n\n"
+        "[compile]\ninclude_dirs = [\"include\", \"extra\"]\n";
+    std::ofstream(pkg / "extra" / "extra.hpp") << "#pragma once\n#define EXTRA 7\n";
+    std::ofstream(pkg / "src" / "e.cpp") << "#include \"extra.hpp\"\nint e() { return EXTRA; }\n";
+
+    auto result = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    bool lib_exists = fs::exists(pkg / "build" / "libincdirs.a");
+    fs::remove_all(pkg);
+
+    REQUIRE(!result.empty());
+    REQUIRE(lib_exists);
 }

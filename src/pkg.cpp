@@ -1,4 +1,5 @@
 #include "ezmk/pkg.hpp"
+#include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
@@ -255,10 +256,28 @@ static void validate_pkg(const fs::path& dir) {
     auto cfg = config::parse_config(dir / "ezmk.toml");
     bool is_utils = (cfg.project.type == "utils");
 
-    // include/ is always required; src/ is optional for header-only, utils, and precompiled packages
+    // include/ is always required; source dirs are optional for header-only,
+    // utils, and precompiled packages.
+    // 1.2.0-dev.9: src_dirs-aware — check the configured [compile].src_dirs
+    // (default ["src"]) instead of a hardcoded src/ directory, so packages
+    // with custom src_dirs are not rejected here. Error text keeps the "src/"
+    // token for compatibility with existing diagnostics/tests.
     if (!is_utils && !cfg.project.header_only && !cfg.project.precompiled) {
-        if (!util::file_exists(dir / "src")) {
-            throw std::runtime_error("package missing src/ directory: " + dir.string());
+        bool has_src_dir = false;
+        for (auto& d : cfg.compile.src_dirs) {
+            fs::path resolved = d;
+            if (resolved.is_relative()) resolved = dir / resolved;
+            if (util::file_exists(resolved)) { has_src_dir = true; break; }
+        }
+        if (!has_src_dir) {
+            std::string src_dirs_str;
+            for (auto& d : cfg.compile.src_dirs) {
+                if (!src_dirs_str.empty()) src_dirs_str += ", ";
+                src_dirs_str += d;
+            }
+            throw std::runtime_error(
+                "package missing src/ directory (src_dirs: " + src_dirs_str +
+                "): " + dir.string());
         }
     }
     if (!util::file_exists(dir / "include")) {
@@ -379,16 +398,26 @@ fs::path compile_package(const fs::path& pkg_dir,
         return select_precompiled_archive(lib_dir, name);
     }
 
+    // 0.9.7+: header-only packages have no source files — skip silently.
+    // 1.2.0-dev.9: short-circuit moved BEFORE source collection so a
+    // header-only package without any src_dirs never triggers the
+    // src_dir_missing / no_source_files fatal.
+    if (cfg.project.header_only) return {};
+
     fs::path build_dir = pkg_dir / "build";
     fs::create_directories(build_dir);
 
-    auto sources = util::list_files(pkg_dir / "src", {".c", ".cc", ".cpp", ".cxx"});
-    if (sources.empty()) {
-        // 0.9.7+: header-only packages have no source files — skip silently
-        if (cfg.project.header_only) return {};
-        util::warn("package has no source files: " + name);
-        return {};
-    }
+    // 1.2.0-dev.9: collect sources from [compile].src_dirs (default ["src"]),
+    // reusing build::collect_sources — multi-directory collection, missing-dir
+    // warn+skip, filename dedup. require_main=false: packages are always
+    // static libraries regardless of [project].type (package docs default to
+    // "executable", which must not trigger the main.cpp requirement). An empty
+    // result is a fatal error (no_source_files / src_dir_missing) — aligned
+    // with project semantics: all three no-source short-circuits
+    // (precompiled / header_only / utils gate) run before this point.
+    auto sources = build::collect_sources(cfg.compile.src_dirs, pkg_dir,
+                                          cfg.project.type,
+                                          /*require_main=*/false);
 
     // 1.1.0: MSVC uses .lib, GCC/Clang use .a
     bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
