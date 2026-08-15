@@ -59,16 +59,61 @@ cat > include/ezmk/version.hpp << VEREOF
 #define EZMK_VERSION "${EZMK_VERSION}"
 VEREOF
 
-SRC="src/*.cpp src/vendor/*.c src/vendor/lua/*.c"
+# Shared sources for both binaries: everything except the two entry points.
+# main.cpp owns ezmk's main(); ezmk_lua_main.cpp owns ezmk-lua's main().
+COMMON_SRC=""
+for f in src/*.cpp src/vendor/*.c src/vendor/lua/*.c; do
+    if [ "$f" = "src/main.cpp" ] || [ "$f" = "src/ezmk_lua_main.cpp" ]; then continue; fi
+    COMMON_SRC="$COMMON_SRC $f"
+done
+SRC="$COMMON_SRC src/main.cpp"
+# ezmk-lua — standalone Lua hook runtime: same shared sources, ezmk_lua_main.cpp
+# replaces main.cpp.
+LUA_RUNTIME_SRC="$COMMON_SRC src/ezmk_lua_main.cpp"
 # Exclude main.cpp for tests (it has its own main() function; catch2_impl.cpp provides main)
 TEST_SRC="src/build.cpp src/cache.cpp src/compile_db.cpp src/export.cpp src/import.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lockfile.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
 INCLUDES="-I include/ -I include/vendor/ -I include/vendor/lua/"
 LUA_DEFINES="-DLUA_COMPAT_5_3"
 OUTPUT="build/ezmk"
+LUA_OUTPUT="build/ezmk-lua"
 TEST_OUTPUT="build/test_ezmk"
 CXX="${CXX:-g++}"
 CC="${CC:-gcc}"
 CXXFLAGS="${CXXFLAGS:--std=c++17}"
+
+# Build the standalone ezmk-lua runtime (stale-aware, mirrors the ezmk build).
+build_ezmk_lua() {
+    local need_build=false
+    if [ ! -f "$LUA_OUTPUT" ]; then
+        need_build=true
+    else
+        for src in $LUA_RUNTIME_SRC; do
+            if [ "$src" -nt "$LUA_OUTPUT" ]; then
+                need_build=true
+                break
+            fi
+        done
+    fi
+    if $need_build; then
+        echo "=== Building ezmk-lua (standalone Lua hook runtime) ==="
+        if $VERBOSE; then
+            echo "Compiler: $CXX"
+            echo "Flags:    $CXXFLAGS"
+            echo "Sources:  $LUA_RUNTIME_SRC"
+            echo "Includes: $INCLUDES"
+            echo "Libs:     $LIBS"
+            echo "LDFlags:  $LDFLAGS"
+            echo "Output:   $LUA_OUTPUT"
+            echo ""
+        fi
+        $CXX $CXXFLAGS $LUA_RUNTIME_SRC $INCLUDES $LUA_DEFINES -o "$LUA_OUTPUT" $LIBS $LDFLAGS
+        echo "=== ezmk-lua build successful: $LUA_OUTPUT ==="
+        echo ""
+    else
+        echo "=== ezmk-lua binary is up to date: $LUA_OUTPUT ==="
+        echo ""
+    fi
+}
 
 # Parse flags
 VERBOSE=false
@@ -170,6 +215,9 @@ if $BUILD_TEST; then
             echo "=== ezmk binary is up to date: $OUTPUT ==="
             echo ""
         fi
+
+        # ezmk-lua — integration tests for the standalone runtime need it too.
+        build_ezmk_lua
     fi
 
     # ── Build test binary ──────────────────────────────────────────────────
@@ -226,4 +274,7 @@ else
     $CXX $CXXFLAGS $SRC $INCLUDES $LUA_DEFINES -o "$OUTPUT" $LIBS $LDFLAGS
 
     echo "=== Build successful: $OUTPUT ==="
+
+    # ezmk-lua — the standalone Lua hook runtime ships alongside ezmk.
+    build_ezmk_lua
 fi

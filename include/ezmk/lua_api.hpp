@@ -80,6 +80,11 @@ lua_State* state();
 // Safe to call multiple times (re-registers with the new project_root).
 void register_api(lua_State* L, const fs::path& project_root);
 
+// 1.2.0-dev.8: Open the io/os standard libraries that the sandbox build removes
+// (linit.c). Used only by the standalone `ezmk-lua` runtime so its environment
+// is a strict superset of the sandbox (os.execute/io available).
+void open_io_os_libs(lua_State* L);
+
 // ---- Script execution ----
 
 // Run a utils Lua script.
@@ -112,5 +117,18 @@ int run_install_hook_script(lua_State* L, const fs::path& script_path,
                              const fs::path& pkg_root,
                              const fs::path& install_path,
                              const std::string& scope);
+
+// 1.2.0-dev.8: Run a hook script in the *unrestricted* standalone runtime
+// (`ezmk-lua`). Same run(ctx) pipeline as the sandboxed build hooks, but the
+// script executes in the FULL global environment — no sandbox table, no
+// restricted globals, no [utils.permissions]. A strict superset of the sandbox:
+// scripts written against the ezmk.* subset behave identically.
+// script_path: absolute path to the .lua file
+// project_root / profile / output: injected ctx fields (same shape as run_hook_script)
+// Returns 0 on success, non-zero on Lua error or if run() returns non-zero.
+int run_script_unrestricted(lua_State* L, const fs::path& script_path,
+                            const std::string& project_root,
+                            const std::string& profile,
+                            const std::string& output);
 
 } // namespace ezmk::lua

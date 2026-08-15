@@ -941,6 +941,17 @@ void register_api(lua_State* L, const fs::path& project_root) {
     g_config_loaded = false;
 }
 
+void open_io_os_libs(lua_State* L) {
+    if (!L) return;
+    // io/os were removed from linit.c for the sandbox. The unrestricted
+    // standalone runtime (ezmk-lua) re-opens them into the global table so its
+    // environment is a strict superset of the sandbox.
+    luaL_requiref(L, LUA_IOLIBNAME, luaopen_io, 1);
+    lua_pop(L, 1);
+    luaL_requiref(L, LUA_OSLIBNAME, luaopen_os, 1);
+    lua_pop(L, 1);
+}
+
 // ===================================================================
 // Script execution (with sandbox)
 // ===================================================================
@@ -1327,6 +1338,102 @@ int run_install_hook_script(lua_State* L, const fs::path& script_path,
         lua_pushstring(L, pkg_type.c_str());
         lua_setfield(L, -2, "pkg_type");
     });
+}
+
+// ===================================================================
+// 1.2.0-dev.8: unrestricted standalone runtime (`ezmk-lua`)
+//
+// Same register_api + run(ctx) pipeline as the sandboxed hooks, but executes
+// in the FULL global environment: no sandbox table, no restricted globals,
+// no [utils.permissions]. It is a strict superset of the sandbox — any hook
+// written against the sandboxed ezmk.* subset runs identically here, while
+// scripts may additionally use os/io/dofile/etc. Documented contract: export
+// hooks should stick to the ezmk.* subset so behavior matches `ezmk build`.
+//
+// This is a developer tool OUTSIDE the trust boundary — it never runs package
+// install hooks or utils scripts (those stay on the sandboxed runtime).
+// ===================================================================
+
+int run_script_unrestricted(lua_State* L, const fs::path& script_path,
+                            const std::string& project_root,
+                            const std::string& profile,
+                            const std::string& output) {
+    if (!L) return 1;
+
+    // Same pkg-root derivation as run_hook_script so ezmk.pkg_dir resolves for
+    // scripts living under <pkg>/utils/.
+    g_current_script_pkg_root.clear();
+    {
+        auto parent = script_path.parent_path();
+        if (parent.filename() == "utils") {
+            g_current_script_pkg_root = parent.parent_path();
+        }
+    }
+
+    // Ensure the ezmk API is registered against the injected project root.
+    // register_api() sets g_project_root and invalidates the config cache, so
+    // config-reading ezmk.* functions resolve ezmk.toml from --project-root
+    // (no --project-root → current dir; get_config() degrades to nil/empty
+    // when no ezmk.toml is present). Idempotent — safe after lua::init().
+    register_api(L, project_root.empty() ? fs::current_path() : fs::path(project_root));
+
+    // Re-open io/os (removed by the sandbox linit.c) so the unrestricted
+    // environment is a superset of the sandbox: os.execute/io available.
+    open_io_os_libs(L);
+
+    // NO sandbox: load the script with the default global environment (which
+    // already carries the full stdlib + the ezmk table from register_api).
+    if (luaL_loadfile(L, script_path.string().c_str())) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
+        lua_pop(L, 1);
+        return 1;
+    }
+
+    // Execute the chunk (defines run() in the global env).
+    if (lua_pcall(L, 0, 0, 0)) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
+        lua_pop(L, 1);
+        return 1;
+    }
+
+    // Get run() from globals.
+    lua_getglobal(L, "run");
+    if (!lua_isfunction(L, -1)) {
+        util::error(ezmk::i18n::I18nKey::lua_error,
+                    {{"msg", "script does not define a run() function"}});
+        lua_pop(L, 1);
+        return 1;
+    }
+
+    // Build ctx table { output, project_root, profile } — same shape as
+    // run_hook_script so existing hooks are unchanged.
+    lua_createtable(L, 0, 3);
+    lua_pushstring(L, output.c_str());
+    lua_setfield(L, -2, "output");
+    lua_pushstring(L, project_root.c_str());
+    lua_setfield(L, -2, "project_root");
+    lua_pushstring(L, profile.c_str());
+    lua_setfield(L, -2, "profile");
+
+    // Call run(ctx).
+    if (lua_pcall(L, 1, 1, 0)) {
+        std::string err = lua_tostring(L, -1);
+        util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
+        lua_pop(L, 1);
+        return 1;
+    }
+
+    // Extract exit code (same convention as the sandboxed run(): non-number → 0).
+    int exit_code = 0;
+    if (lua_isinteger(L, -1)) {
+        exit_code = (int)lua_tointeger(L, -1);
+    } else if (lua_isnumber(L, -1)) {
+        exit_code = (int)lua_tonumber(L, -1);
+    }
+    lua_pop(L, 1);
+    return exit_code;
 }
 
 } // namespace ezmk::lua
