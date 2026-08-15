@@ -145,6 +145,7 @@ EZMK_I18N_KEY(pkg_info_location)        // 0.2.3+
 EZMK_I18N_KEY(pkg_info_installed)       // 0.2.3+
 EZMK_I18N_KEY(pkg_info_compile_flags)   // 0.2.3+
 EZMK_I18N_KEY(pkg_info_include_dirs)    // 0.2.3+
+EZMK_I18N_KEY(pkg_info_src_dirs)        // 1.2.0-dev.9+
 EZMK_I18N_KEY(pkg_info_hard_deps)       // 0.2.3+
 EZMK_I18N_KEY(pkg_info_optional_deps)   // 0.2.3+
 EZMK_I18N_KEY(pkg_info_link_flags)      // 0.2.3+

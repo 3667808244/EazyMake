@@ -843,9 +843,22 @@ static void process_installed_pkg(const fs::path& pkg_root,
 
     for (auto& dir : order) {
         auto cfg = config::parse_config(dir / "ezmk.toml");
-        // Skip compilation for utils packages without source files
-        if (cfg.project.type == "utils" && !util::file_exists(dir / "src")) {
-            continue;
+        // Skip compilation for utils packages without source files.
+        // 1.2.0-dev.9: src_dirs-aware — compile only if any configured src_dir
+        // exists AND contains source files. Lightweight walk (no collect_sources)
+        // to avoid missing-directory warning noise for utils-only packages.
+        if (cfg.project.type == "utils") {
+            bool has_sources = false;
+            for (auto& d : cfg.compile.src_dirs) {
+                fs::path sdir = d;
+                if (sdir.is_relative()) sdir = dir / sdir;
+                if (util::file_exists(sdir) &&
+                    !util::list_files(sdir, {".c", ".cc", ".cpp", ".cxx"}).empty()) {
+                    has_sources = true;
+                    break;
+                }
+            }
+            if (!has_sources) continue;
         }
         // 0.9.7+: skip compilation for header-only packages
         if (cfg.project.header_only) {
@@ -1304,6 +1317,13 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                 std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_include_dirs) + ":";
                 for (auto& d : cfg.compile.include_dirs) line += " " + d;
                 if (cfg.compile.include_dirs.empty()) line += none_str;
+                util::info_line(line);
+            }
+            // src dirs (1.2.0-dev.9)
+            {
+                std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_src_dirs) + ":";
+                for (auto& d : cfg.compile.src_dirs) line += " " + d;
+                if (cfg.compile.src_dirs.empty()) line += none_str;
                 util::info_line(line);
             }
             // hard deps

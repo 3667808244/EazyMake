@@ -189,6 +189,7 @@
     "pkg_info_installed": "  安装时间",
     "pkg_info_compile_flags": "  编译标志",
     "pkg_info_include_dirs": "  头文件目录",
+    "pkg_info_src_dirs": "  源码目录",
     "pkg_info_hard_deps": "  硬依赖",
     "pkg_info_optional_deps": "  可选依赖",
     "pkg_info_link_flags": "  链接标志",

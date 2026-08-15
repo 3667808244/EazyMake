@@ -189,6 +189,7 @@
     "pkg_info_installed": "  Installed",
     "pkg_info_compile_flags": "  Compile flags",
     "pkg_info_include_dirs": "  Include dirs",
+    "pkg_info_src_dirs": "  Source dirs",
     "pkg_info_hard_deps": "  Hard dependencies",
     "pkg_info_optional_deps": "  Optional dependencies",
     "pkg_info_link_flags": "  Link flags",
