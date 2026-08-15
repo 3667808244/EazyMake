@@ -83,8 +83,14 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 每个普通库包都会按照依赖链逐个编译为 `*.a` 文件。
 
 对于 `type = "utils"` 的工具包：
-- 若包含 `src/`：编译 `src/` → `build/*.a`，同时注册 `utils/` 下的 Lua 工具
-- 若不包含 `src/`：跳过编译，仅解压并注册 Lua 工具
+- 若任一 `[compile].src_dirs` 目录（默认 `src/`）包含源文件：编译 → `build/*.a`，同时注册 `utils/` 下的 Lua 工具
+- 若全部 `src_dirs` 目录缺失或为空：跳过编译，仅解压并注册 Lua 工具
+
+**`[compile]` 配置对包生效（1.2.0-dev.9+）**：
+
+- **`src_dirs`**（默认 `["src"]`）：包源文件从配置的目录收集，支持多个目录（如 `["src", "generated"]`）；缺失目录 warn + 跳过、文件名重复时去重——与项目构建的 `collect_sources` 完全一致。包**总是**编译成静态库，`[project].type` 不触发 `main.cpp` 校验（包文档默认 `type = "executable"` 亦可）。
+- **`include_dirs`**（默认 `["include"]`）：包自编译时相对包根解析为 `-I`，与默认 `include/` 重复时保序去重、缺失目录跳过；消费者侧同样生效——项目依赖包时，每个 `<pkg>/<include_dir>` 都会加入编译 `-I`。
+- **空源 fatal**：非 header_only / precompiled / utils 却没有任何源文件的退化包，安装时报错（`no source files` / `src/ directory not found`），不再静默生成空库。
 
 如果循环依赖或包不存在抛出错误
 
@@ -200,7 +206,7 @@ ezmk pkg install -u ~/downloads/bar-1.2.0.tar.gz
 
 ### 从文件夹安装（1.2.0-dev.7+）
 
-参数为**已存在的目录**时，直接从该目录安装——目录结构须符合包规范（`include/` + `src/` + `ezmk.toml`，或预编译 `lib/` / header-only）。开发/调试本地包时无需先打包成归档：
+参数为**已存在的目录**时，直接从该目录安装——目录结构须符合包规范（`include/` + 源码目录 + `ezmk.toml`，或预编译 `lib/` / header-only）。源码目录默认 `src/`，可用 `[compile].src_dirs` 自定义（1.2.0-dev.9+，校验与编译均按 `src_dirs` 生效）。开发/调试本地包时无需先打包成归档：
 
 ```bash
 ezmk pkg install -p ./mylib          # ./mylib 为包源目录

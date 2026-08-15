@@ -87,8 +87,14 @@ Cache is always stored in `<project_dir>/.ezmk/cache/`, keyed by compile flags a
 Each standard library package is compiled into a `*.a` file, following the dependency chain.
 
 For `type = "utils"` tool packages:
-- If `src/` is present: compile `src/` → `build/*.a`, and register Lua tools under `utils/`
-- If `src/` is not present: skip compilation, only extract and register Lua tools
+- If any `[compile].src_dirs` directory (default `src/`) contains source files: compile → `build/*.a`, and register Lua tools under `utils/`
+- If all `src_dirs` directories are missing or empty: skip compilation, only extract and register Lua tools
+
+**`[compile]` settings take effect for packages (1.2.0-dev.9+)**:
+
+- **`src_dirs`** (default `["src"]`): package sources are collected from the configured directories — multiple directories supported (e.g. `["src", "generated"]`), missing directories warn + skip, duplicate filenames deduplicated — exactly like the project build's `collect_sources`. Packages are **always** compiled as static libraries; `[project].type` never triggers the `main.cpp` check (the docs' default `type = "executable"` works fine).
+- **`include_dirs`** (default `["include"]`): resolved relative to the package root as `-I` for the package's own compile, order-preserving dedup against the default `include/`, missing directories skipped; the consumer side is wired the same way — every `<pkg>/<include_dir>` is added to the consumer's compile `-I` paths.
+- **Empty sources are fatal**: a degenerate package that is not header_only / precompiled / utils yet has no source files fails the install (`no source files` / `src/ directory not found`) instead of silently producing an empty library.
 
 Circular dependencies or missing packages cause an error.
 
@@ -211,7 +217,10 @@ ezmk pkg install -u ~/downloads/bar-1.2.0.tar.gz
 
 If the argument is an **existing directory**, the package is installed straight
 from that source directory — the structure must follow the package spec
-(`include/` + `src/` + `ezmk.toml`, or precompiled `lib/` / header-only). Great
+(`include/` + source directories + `ezmk.toml`, or precompiled `lib/` /
+header-only). The source directories default to `src/` and can be customized
+via `[compile].src_dirs` (1.2.0-dev.9+, both validation and compilation honor
+`src_dirs`). Great
 for developing/debugging a local package without first packing an archive:
 
 ```bash

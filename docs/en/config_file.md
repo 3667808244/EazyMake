@@ -68,8 +68,8 @@ Prefix `GNU` before the language to enable GNU compiler extensions:
 |-------|------|----------|---------|-------------|
 | `flags` | string[] | No | `[]` | Compile flags (e.g. `-Wall`, `-O2`). GCC/Clang format, auto-translated under MSVC |
 | `msvc_flags` | string[] | No | `[]` | **0.2.1+** MSVC-specific compile flags (not translated, only appended when using MSVC toolchain) |
-| `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root |
-| `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error |
+| `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root; also honored for packages (1.2.0-dev.9+, resolved relative to the package root, order-preserving dedup against the default `include/`) |
+| `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error; also honored for packages (1.2.0-dev.9+, package sources are collected from these directories, missing dirs warn + skip) |
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
 | `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |

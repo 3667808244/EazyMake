@@ -12,6 +12,37 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.9 (2026-08-15) — 包构建配置收敛（`src_dirs` / `include_dirs` 对包生效）
+
+1.2.0 系列第九个开发子版本，**dev.7 的延伸**：让包的 `[compile]` 配置与项目语义对齐——`src_dirs` 从「被静默忽略」变为「真正生效」（复用 `build::collect_sources` 多目录收集 + 文件名去重 + 缺失目录 warn），`include_dirs` 自编译与消费者两侧行为固化（相对包根解析、与默认 `include/` 保序去重），包不再受 `[project].type` 的 `main.cpp` 校验影响。公共 API 无破坏性变更（`collect_sources` 新增默认参数 `require_main = true`，项目路径零变化；见文首 API Stability）。
+
+### 新增 / 行为变更
+
+- **包源收集改用 `[compile].src_dirs`**（`src/pkg.cpp` `compile_package()`）：默认 `["src"]` 与现状一致，绝大多数包零影响；多目录 / 自定义目录为纯新增能力；`header_only` 短路前移到收集前（无 src 的 header-only 包不触发 fatal）；`precompiled` 短路不变
+- **空源收紧为 fatal**：非 header_only / precompiled / utils 却无任何源文件的退化包，安装报错（复用 `no_source_files` / `src_dir_missing`），不再静默生成空库
+- **`collect_sources` 新增 `require_main`**（`include/ezmk/build.hpp`，默认 `true`）：项目调用点零改动；包路径显式传 `false`——包文档默认 `type = "executable"` 但包永远编译成静态库，不再误触发 `main_missing`
+- **自编译 `-I` 保序去重**（`src/cache.cpp`，MSVC `/I` 与 GCC `-I` 两分支）：`def_inc`（`proj_root/include`）与 `include_dirs` 解析结果去重（首次出现顺序保留），compile_commands.json 输出更干净，编译器语义不变
+- **`validate_pkg` src_dirs 感知**（设计补充）：自定义 `src_dirs` 的包不再被安装校验误拒；错误消息保留 `src/` 字样
+- **utils 门控 src_dirs 感知**：utils 包「任一 src_dir 存在且有源文件才编译」，否则跳过
+- **`pkg info` 增显 `src_dirs`**（i18n `pkg_info_src_dirs`）
+
+### 文档
+
+- `docs/en|zh/pkg.md`：`[compile]` 对包生效（`src_dirs` / `include_dirs` 语义、空源 fatal）、utils 门控 src_dirs 感知、目录安装校验按 `src_dirs`
+- `docs/en|zh/package_authoring.md`：§2.3 `[compile]` 补充包语义说明；§3.1 静态库编译来源改为 `src_dirs`
+- `docs/en|zh/config_file.md`：`include_dirs` / `src_dirs` 字段补充对包生效说明
+- 新增 i18n key `pkg_info_src_dirs`（en/zh），`check_i18n.py` 三向一致（302 keys）
+
+### 测试
+
+- `test_build.cpp`：`collect_sources` `require_main=false` 2 个用例（`"executable"` 类型无 main 不抛、多目录收集）
+- `test_pkg.cpp`：`compile_package` 5 个用例（多 `src_dirs` 编译 / 自定义 `include_dirs` 自编译 / header_only·precompiled 短路 / 空源 fatal）
+- `test_cache.cpp`：自编译 `-I` 保序去重 2 个用例（GCC / MSVC 分支）
+- 集成测试：自定义 `src_dirs`+`include_dirs` 包端到端（目录安装 → 编译 → 链接 → 运行输出 → `pkg info` 增显 → compile_commands 含包 `-I`）
+- 全量回归：719 用例 / 3328 断言零失败（基线 709 / 3296，+10 用例 +32 断言）
+
+---
+
 ## 1.2.0-dev.8 (2026-08-15) — CMake 导出钩子运行时（`ezmk-lua`）
 
 1.2.0 系列第八个开发子版本，**dev.2 的范围收口**：为 `export cmake` 补上 `[hooks]` 钩子映射——新增**独立、无黑白名单的 Lua 运行时二进制 `ezmk-lua`**，由导出的 CMake 在构建节点调用它复现 `ezmk build` 的钩子后处理，消除导出产物与本体构建的行为漂移。**`ezmk` 本体沙箱/黑白名单零改动**（纯新增产物 + 导出文本变化，见文首 API Stability）。

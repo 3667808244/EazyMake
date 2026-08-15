@@ -89,6 +89,8 @@ MY_DEFINE = "1"
 MY_STRING = "hello"
 ```
 
+> **`src_dirs` / `include_dirs` 对包生效（1.2.0-dev.9+）**：包编译从 `src_dirs`（默认 `["src"]`）收集源文件——支持多目录、缺失目录 warn + 跳过、文件名去重，与项目构建一致；`include_dirs` 相对包根解析 `-I`，与默认 `include/` 重复时保序去重。包**总是**编译为静态库，`[project].type` 不触发 `main.cpp` 校验（文档默认 `type = "executable"` 亦可）。`header_only` / `precompiled` / utils 包在源收集前短路，无需任何 `src_dirs` 目录；普通包若全部 `src_dirs` 目录缺失或为空 → 安装失败（fatal）。
+
 ### 2.4 `[link]`
 
 ```toml
@@ -117,7 +119,7 @@ on_failure = "hooks/fail.lua"    # 构建失败时
 
 ### 3.1 静态库（`type = "static"`）
 
-最常见的包类型。`ezmk pkg install` 编译 `src/` → `lib<name>.a` 并复制所有文件到安装目录。
+最常见的包类型。`ezmk pkg install` 编译 `[compile].src_dirs`（默认 `src/`）→ `lib<name>.a` 并复制所有文件到安装目录。
 
 ```toml
 [project]

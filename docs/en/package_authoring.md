@@ -97,6 +97,8 @@ MY_DEFINE = "1"
 MY_STRING = "hello"
 ```
 
+> **`src_dirs` / `include_dirs` take effect for packages (1.2.0-dev.9+)**: package sources are collected from `src_dirs` (default `["src"]`) — multiple directories, missing dirs warn + skip, filename dedup, same as the project build; `include_dirs` resolve relative to the package root as `-I`, with order-preserving dedup against the default `include/`. Packages are **always** compiled as static libraries; `[project].type` never triggers the `main.cpp` check (the docs' default `type = "executable"` works fine). `header_only` / `precompiled` / utils packages short-circuit before source collection — no `src_dirs` directory is required; a regular package with all `src_dirs` directories missing or empty fails the install (fatal).
+
 ### 2.4 `[link]`
 
 ```toml
@@ -128,7 +130,7 @@ on_failure = "hooks/fail.lua"    # On build error
 
 ### 3.1 Static Library (`type = "static"`)
 
-The most common package type. `ezmk pkg install` compiles `src/` → `lib<name>.a` and copies everything to the install directory.
+The most common package type. `ezmk pkg install` compiles `[compile].src_dirs` (default `src/`) → `lib<name>.a` and copies everything to the install directory.
 
 ```toml
 [project]
