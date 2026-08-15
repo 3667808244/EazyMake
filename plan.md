@@ -1,65 +1,87 @@
-# EazyMake 1.2.0-dev.10 执行计划
+# EazyMake 1.2.0-dev.11 执行计划
 
-> **状态：已完成**（2026-08-15，全量 747 用例 / 3442 断言零回归）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：执行中**（2026-08-15）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
-> 详细设计：[`1.2.0-dev.10.md`](plans/1.2.0/1.2.0-dev.10.md)。本计划为 1.2.0 系列第十个开发子版本：**平台标识符扩展（工具链/ABI）**——把预编译包命名从 `lib<name>.<os>-<arch>.<ext>` 扩展为 `os-arch[-compiler][-abi]`（`gcc13`/`clang18`/`msvc143` + 默认 `abi11`），`select_precompiled_archive()` 按 **ABI 安全的 4 级匹配优先级**选择，降级匹配（可能跨工具链）时显式警告，可选 `[project].precompiled_strict = true` 改为 fail-fast。承接 `package_authoring.md` §3.3「多平台共包」——现有 os-arch 命名对 C 成立、对 **C++ ABI 不成立**（GCC/Clang/MSVC 互不兼容）。
+> 详细设计：[`1.2.0-dev.11.md`](plans/1.2.0/1.2.0-dev.11.md)。本计划为 1.2.0 系列第十一个开发子版本：**代码质量审查与改进**——基于 dev.10 完成后的代码（基线 747 用例 / 3442 断言）做全库审查（6 并行代理分模块，68 条问题全部带文件:行证据），本版落地 **P0 全部 + P1 大部**：run_tests 命令构造收口（单一事实源/注入面）、钩子/沙箱安全不对称、编码事故全局修复、配置/CLI 校验、包/导入/导出正确性、缓存/工具健壮性、死代码清理、空断言测试修复。
 >
-> **范围边界**：只动预编译包的 `lib/` 选择路径（`select_precompiled_archive`）+ 新增 `toolchain::compiler_tag()` + `ProjectSection::precompiled_strict` 可选字段 + `pkg info` 增显；**不碰** `src_dirs`/`include_dirs`（dev.9）、export cmake（dev.2/dev.8）、repo index `os_arch_toolchain` 三元组（源码包分发维度，归 2.0.0）。
+> **范围边界**：只做内部重构与修复，**公共 API 无破坏性变更**（命令/配置/`select_precompiled_archive` 等签名全部不变；新增 i18n key 为纯增量）；大规模拆分（build.cpp/util.cpp）与语义取舍（compare_version 预发布）明确收口到延后项，不混入本版。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（新增纯函数 + 可选字段，`select_precompiled_archive` **签名不变**、两处调用点零改动）；③ 全量测试零回归（基线 727 用例 / 3361 断言，dev.12 后；Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 747 用例 / 3442 断言，dev.10 后；Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
 
 ---
 
 ## 1 背景
 
-- **C++ ABI 无法用 `os-arch` 区分**：预编译归档的 ABI 由「编译器族 + 工具链版本 + 标准库 ABI」共同决定。三类真实故障：GCC 编译的 `.a` 给 Clang 链接（libstdc++/libc++ 符号不匹配）、GCC 13 产物给 GCC 11 链接（新 libstdc++ 符号）、`msvc143` 产物给 `msvc142` 链接（STL 布局差异）。
-- **现状只做精确 os-arch + 裸名回退**（`src/pkg.cpp:301-348` `select_precompiled_archive`）：没有工具链维度，跨工具链降级无任何提示——用户拿到错误 ABI 的库，链接期才炸。
-- 目标：包作者可按工具链/ABI 细分 `lib/` 产物；消费端按 ABI 安全优先级选择；降级时显式警告。
+- 1.1.2/1.1.3 已做 S1-S5/C1-C5/Q1-Q3 收口，但 1.2.0 系列新增功能后出现新质量债：**run_tests 绕过 `build_compile_args` 单一事实源**（命令注入面在 test 路径重新打开、MSVC 不翻译、对象列表恒空）、**钩子路径无权限门控**（恶意包 preinstall 可无提示读任意路径/执行任意命令）、**编码事故残留**（乱码固化进用户可见输出与测试运行时字符串）、一批校验缺失与死代码。
+- 审查结论：68 条问题（high 13 / medium ~40 / low ~15）+ 30 条值得保留的设计；架构骨架扎实，问题集中在「后续功能引入的新缺口」与「静默失败」。
 
 ## 2 目标
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | 新增 `toolchain::compiler_tag()`：从 `Toolchain` 生成编译器标签（`gcc13`/`clang18`/`msvc143`），纯函数、无子进程（`detect_toolchain` 已缓存 `tc.version`） | P0 |
-| 2 | 平台标识符扩展 `os-arch[-compiler][-abi]`，ABI 标签按工具链默认值生成（GCC/Clang+libstdc++ → `abi11`；libc++/MSVC → 无），零配置 | P0 |
-| 3 | `select_precompiled_archive()` 4 级匹配：full(4) → compiler(3) → os-arch(2) → bare(1)；签名不变、两处调用点零改动 | P0 |
-| 4 | 降级匹配（消费端带工具链标签却落 os-arch/裸名）→ 显式 ABI 兼容性警告（i18n） | P0 |
-| 5 | 可选严格模式 `[project].precompiled_strict = true`：L2/L1 降级改 fail-fast 报错 | P1 |
-| 6 | `pkg info` 对 precompiled 包增显 `lib/` 可用产物标签列表（含裸名） | P1 |
-| 7 | 兼容性：既有 os-arch 标签包、裸名包、`detect_platform_tag()` 其余两处调用（repo.cpp:300 / build.cpp:1419）行为逐字节不变 | P0 |
-| 8 | 测试（单测 + 集成）+ i18n 三向一致 + 文档（package_authoring / pkg / config_file / CHANGES，中文基准）；全量测试零回归 | P0 |
+| 1 | run_tests 命令构造收口：复用 `build_compile_args`/`join_shell_args`/`translate_compile_flags`；`project_objs` 收集修正 | P0 |
+| 2 | 钩子/沙箱安全不对称：安装钩子 perms 门控（或信任模型文档化）；`weakly_canonical` 堵 symlink/junction 逃逸；沙箱黑名单补 io/os | P0 |
+| 3 | 编码事故全局修复（用户可见输出 + 测试运行时字符串 + EZMK_LANG 护栏） | P0 |
+| 4 | 配置/CLI 校验收口（类型/版本/约束/default_profile/clean/-v/-V/互斥/sha256/SDE） | P0/P1 |
+| 5 | 包/导入/导出正确性（import 关键字、export 版本/precompiled、互依赖护栏、约束回读、事务窗口、选择器两缺口） | P0/P1 |
+| 6 | 缓存/工具健壮性（depfile 空格、stoul、targz、lockfile 确定性、macOS 家族、签名差分+SDE、cmd 转义、下载上限） | P1 |
+| 7 | 死代码/一致性清理（watch/parse_catch2_xml/msvc_env 死代码、产物路径 helper、CliArgs 收敛、fmt、ThreadPool(0)、file_watcher） | P1 |
+| 8 | 空断言测试修复（钩子越界 e2e、pkg install e2e 去空转、dev.10 oracle 去耦） | P0 |
+| 9 | 全量回归零失败；CHANGES.md + 文档同步 | P0 |
 
-## 3 执行阶段
+## 3 执行阶段（每阶段一个 commit，带验收测试）
 
-### 阶段一：`compiler_tag()`（4.1）
+### 阶段一：run_tests 命令构造收口（4.1）
 
-- [x] **1.1 实现**（4.1）：`include/ezmk/toolchain.hpp` + `src/toolchain.cpp` 新增 `compiler_tag(const Toolchain&)`——GCC/Clang 解析 `tc.version` 首个数字段拼 `gcc<major>`/`clang<major>`；MSVC 解析 cl 版本 `19.<minor>…` → `_MSC_VER` 等价数（`1900+minor`）→ **查表**（1900→msvc140 / 1910-1919→msvc141 / 1920-1929→msvc142 / ≥1930→msvc143，不用算术避免 1943→144 错算）
-- [x] **1.2 单测**（4.1）：`test_toolchain.cpp` `compiler_tag`——GCC/Clang/MSVC 版本串解析 + 工具集映射表边界（1900/1910/1930/1943）
+- [ ] **1.1 run_tests 重构**（4.1）：编译/链接复用 `cache::build_compile_args` + `join_shell_args`（S4 黑名单）+ `toolchain::translate_compile_flags`（MSVC）；依赖包 extra_includes 注入；测试对象走缓存；`project_objs` 由 CompileInput sources 推导或递归收集；test_filter 经 `escape_shell_arg`
+- [ ] **1.2 验收测试**（4.1）：test 路径注入回归（`-DVALUE=$(touch ...)` POSIX）、引用项目符号的 Catch2/EZMK 集成测试、MSVC 翻译单测
 
-### 阶段二：匹配重写 + 降级警告/严格模式（4.2 + 4.3）
+### 阶段二：钩子/沙箱安全不对称（4.2）
 
-- [x] **2.1 匹配重写**（4.2）：`select_precompiled_archive()` 改分段解析（os/arch 固定前缀表 + `gcc\d+`/`clang\d+`/`msvc14\d` compiler 段 + `abi\d+` abi 段，未知段不识别） + 4 级评分（L4 full=4 / L3 compiler 同且 abi 缺失=3 / L2 os-arch=2 / L1 裸名=1）；**特例**：compiler 同但 abi 段存在且不等 → 视为 ABI 不兼容跳过（仅此候选则报错）；同分取 filename 字典序最小；签名不变，`src/pkg.cpp:375` 与 `src/build.cpp:655` 两处调用点零改动
-- [x] **2.2 降级警告**（4.3）：选中 L2/L1（消费端带 compiler 标签）→ i18n 警告（`precompiled_toolchain_fallback_warn`），指明当前工具链标签与 available 列表；无任何匹配时错误信息补当前完整标签
-- [x] **2.3 严格模式**（4.3）：`ProjectSection` 增可选 `precompiled_strict`（默认 `false`，`src/config.cpp`/`config.hpp`）；开启后 L2/L1 降级 → `precompiled_strict_mismatch` fatal
+- [ ] **2.1 钩子门控**（4.2）：`run_install_hook_script`（至少）加载 perms + `g_in_script_context` 门控；或信任模型文档化 + 修 `lua_api.cpp:51-52` 注释（消除无声不对称）
+- [ ] **2.2 symlink/junction 逃逸**（4.2）：`path_within`/`norm_path` 检查前 `weakly_canonical`
+- [ ] **2.3 沙箱黑名单**（4.2）：`push_restricted_globals` 补 `io`/`os`（纵深防御）
+- [ ] **2.4 验收测试**（4.2）：钩子越界 e2e 真断言、symlink 逃逸单测、受限拷贝无 io/os 断言
 
-### 阶段三：`pkg info` 增显 + i18n（4.4 + 4.5）
+### 阶段三：编码事故全局修复（4.3）
 
-- [x] **3.1 `pkg info` 增显**（4.4）：precompiled 包输出 `lib/ 产物:` 行（列出全部识别标签含裸名，镜像 include_dirs 输出块）
-- [x] **3.2 i18n**（4.5）：`precompiled_toolchain_fallback_warn` / `precompiled_strict_mismatch` / `pkg_info_precompiled_variants` 三向一致（`.def` + en/zh），`check_i18n.py` 通过；`bash build.sh` 编译通过
+- [ ] **3.1 编码修复**（4.3）：build.cpp:150/203 用户可见乱码（`鈥?`→`—`）+ util.cpp 注释 + test_integration.cpp 24+ 处（含 384 行运行时字符串 `鏈煡`→`未知` + 该测试补 `EZMK_LANG` 护栏）
+- [ ] **3.2 防回归**（4.3）：乱码字节检查脚本（可选）或全量测试通过验证
 
-### 阶段四：测试与全量回归（4.6）
+### 阶段四：配置/CLI 校验收口（4.4）
 
-- [x] **4.1 单测矩阵**（4.6）：`test_pkg.cpp` `select_precompiled_archive`——L4/L3/L2/L1、abi 不匹配跳过、未知段忽略、字典序确定性、降级警告、strict 报错
-- [x] **4.2 集成**（4.6）：端到端——当前工具链 full-tag 产物被选中并链接；仅有跨工具链产物时降级 + 警告；strict 模式报错
-- [x] **4.3 全量回归**（4.6）：`bash build.sh test-all` 零回归（基线 727 用例 / 3361 断言，dev.12 后；既有 os-arch/裸名包路径必须零变化）
+- [ ] **4.1 配置校验**（4.4）：`extract_string_array` 非字符串元素报错（i18n）；版本约束格式校验 + 空名报错；`default_profile` 交叉校验（config 层）；`source_date_epoch` 负值报错
+- [ ] **4.2 CLI 校验**（4.4）：`project clean` 参数解析；`project test -v/-V` 统一；`--locked`+`--no-lock` 互斥；`--sha256` 格式校验
+- [ ] **4.3 profile 错误 i18n 化**（4.4）：build.cpp apply_profile 错误串换 i18n key
+- [ ] **4.4 验收测试**（4.4）：每项对应单测（config/cli）
 
-### 阶段五：文档收口（4.7）
+### 阶段五：包/导入/导出正确性（4.5）
 
-- [x] **5.1 文档**（4.7）：`docs/en|zh/package_authoring.md`（命名约定 `os-arch[-compiler][-abi]`、标签表、4 级优先级、ABI 警告、Apple Clang/clang-cl/旧 ABI 覆盖局限）、`pkg.md`、`config_file.md`（`precompiled_strict`）、`CHANGES.md`——**中文基准，先 `docs/zh/` 再同步 `docs/en/`**
+- [ ] **5.1 import**（4.5）：`target_*` 关键字感知解析（无关键字老式写法 + 多分组关键字过滤）+ 测试
+- [ ] **5.2 export**（4.5）：`VERSION` 数字格式校验（预发布省略 + 注释）；precompiled 复用 `select_precompiled_variant` + 测试
+- [ ] **5.3 依赖安装**（4.5）：互依赖自动安装护栏（安装链集合）；自动安装后约束回读校验
+- [ ] **5.4 事务安装**（4.5）：`.new` 换位 + 回滚 ec 检查 + backup 隐藏唯一名
+- [ ] **5.5 dev.10 选择器**（4.5）：`lib/` 缺失友好错误；MSVC 平局偏好 `.lib`
+- [ ] **5.6 验收测试**（4.5）：无关键字/多关键字 import、预发布 export、含 tagged 归档 precompiled 导出、互依赖、约束不满足自动安装
 
-### 阶段六：收口（4.8）
+### 阶段六：缓存/工具健壮性（4.6）
 
-- [x] **6.1 收口**（4.8）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.10 状态「待实现 → 已完成」；发布门槛复核（签名不变 + 全量零回归）
+- [ ] **6.1 缓存**（4.6）：depfile 转义空格解析 + 测试；缓存签名差分测试（签名 ⟺ build_compile_args 输出）+ SDE 入签名
+- [ ] **6.2 工具**（4.6）：`compiler_tag` stoul 溢出保护；targz 长路径 prefix 读出 + size 越界报错 + 往返测试；lockfile sha256 确定性选择；macOS 家族判定（`--version` 双信号）；`escape_cmd_arg`（cmd /c 转义）；下载大小上限 + ofstream 检查
+
+### 阶段七：死代码/一致性清理（4.7）
+
+- [ ] **7.1 死代码**（4.7）：watch 内联 profile 合并、`parse_catch2_xml`/`Catch2TestResult`、`msvc_env` 死调用删除
+- [ ] **7.2 一致性**（4.7）：MSVC 产物路径共享 helper（install/pack 修复）；CliArgs optional 收敛 + `auto_update_repos` 死调用；i18n fmt 单遍扫描；`ThreadPool(0)` 拒绝；file_watcher Windows 错误恢复 + macOS kqueue 语义文档化
+- [ ] **7.3 验收**（4.7）：重构后全量回归
+
+### 阶段八：空断言测试修复（4.8）
+
+- [ ] **8.1 空断言修复**（4.8）：钩子越界 e2e 真断言（写入 ../escaped.marker 断言拒绝）；pkg install e2e 去空转（断言退出码 0 + 产物 + list）；dev.10 预编译测试 oracle 去耦（独立构造期望标签）
+
+### 阶段九：收口（4.9）
+
+- [ ] **9.1 收口**（4.9）：CHANGES.md dev.11 条目 + 文档同步（如有行为变化）+ plan.md 勾选 + 系列 README 状态「待实现 → 已完成」+ 发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
@@ -69,31 +91,29 @@
 
 | 决策 | 说明 |
 |------|------|
-| `compiler_tag()` 从 `tc.version` 解析 | `detect_toolchain()` 已缓存版本串，纯函数零子进程；GCC/Clang 取 major，MSVC 查工具集映射表 |
-| MSVC 工具集查表而非算术 | `_MSC_VER=1943` 按算术会错算 `144`；VS2022 各 17.x 保持 v143 二进制兼容，`≥1930` 一律收束 `143` |
-| ABI 标签按工具链默认值 | GCC/Clang+libstdc++ → `abi11`（CXX11 ABI），libc++/MSVC → 无；零配置；`-D_GLIBCXX_USE_CXX11_ABI=0` 覆盖 P2 延后 |
-| 4 级评分匹配 | L4 full > L3 compiler(abi 缺失) > L2 os-arch > L1 裸名；compiler 同但 abi 不等 → 不兼容跳过；同分字典序（确定性） |
-| 降级警告仅当消费端带工具链标签落 L2/L1 | 既有 os-arch/裸名包（消费端匹配 L2）不产生新噪音；严格模式默认关 |
-| 签名不变 | `select_precompiled_archive` 内部调 `detect_toolchain()`（已缓存），两处调用点零改动 |
-| `detect_platform_tag()` 不改 | repo index 过滤与 pack 元数据属源码包分发维度，不涉及 C++ ABI |
+| run_tests 复用单一事实源 | 编译/链接走 `build_compile_args`/`join_shell_args`/`translate_compile_flags`——注入面、MSVC 翻译、包 include、缓存一次解决；`project_objs` 由 CompileInput 推导避免两处「对象在哪」假设漂移 |
+| 钩子信任模型二选一 | 优先「安装钩子加载 perms + 上下文门控」；若选「钩子=完全信任」必须文档化 + 修注释，消除当前无声不对称 |
+| 词法路径检查升级 | `weakly_canonical` 解析后再比较，堵 symlink/junction 逃逸（Windows junction 亦生效） |
+| 配置校验前移 | 类型/版本/约束在 parse_config 抛 i18n 错误，不再静默吞或拖到 build 深处 |
+| 事务安装 `.new` 换位 | 拷贝窗口内旧版始终存在；回滚 ec 检查；backup 隐藏唯一名 |
+| 每项修复带验收测试 | 注入回归/symlink/含空格 depfile/长路径/约束回读/互依赖护栏全部落测试 |
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 平台标识符扩展 `os-arch[-compiler][-abi]` | 纯新增维度 | 既有 os-arch 标签文件仍命中 L2，行为不变 |
-| 匹配优先级 4 级 | 新增 L4/L3 精确匹配优先 | 高优先级先试；同分字典序确定 |
-| 降级到 os-arch/裸名时警告 | 既有包无工具链标签 → 首次见警告 | 纯新增诊断输出，不影响匹配结果；strict 默认关 |
-| `[project].precompiled_strict` | 新增可选字段（默认 false） | 旧配置无此字段 → 行为不变 |
-| `select_precompiled_archive` 签名 | 无 | 内部 `detect_toolchain()`（已缓存），两处调用点零改动 |
-| `detect_platform_tag()` | 无 | 不改；repo.cpp/build.cpp 调用点不受影响 |
-| `pkg info` 增显 variants 行 | 纯新增输出 | 新增 i18n key |
-| 裸名 `lib<name>.a` 回退 | 无 | L1 保留，向后兼容单平台旧包 |
+| run_tests 命令构造重构 | 行为对齐主构建（转义/翻译/include/缓存） | 既有配置零变化；测试产物路径不变 |
+| 钩子权限门控 | 恶意包钩子受限（按 perms） | 正常包钩子行为不变；文档同步 |
+| 配置校验前移 | 非法配置从「静默」变「报错」 | 合法配置零影响；错误消息更早更清晰 |
+| 编码修复 | 乱码→正确字符 | 纯文本修复；测试字符串断言同步 |
+| 死代码删除 / helper 抽取 | 行为不变 | 全量回归验证 |
+| 事务安装 `.new` 换位 | 失败窗口内旧版保留 | 安装语义不变，更强健 |
+| 公共 API | 无破坏性变更 | 全部内部重构 + 新增 i18n key |
 
-## 6 延后项
+## 6 延后项（P2，明确收口）
 
-- **`_GLIBCXX_USE_CXX11_ABI=0` 覆盖**（P2）：消费端显式旧 ABI 构建不自动探测；包作者可为该场景单独命名 `abi8` 产物，本版默认按 `abi11` 匹配（该文件仅能经降级路径选中并触发警告）。
-- **repo index `os_arch_toolchain` 三元组**：现有机制只区分编译器族（源码包分发过滤），与 `lib/` 文件级 ABI 匹配是两套系统；版本化工具链三元组合并归 2.0.0 窗口。
-- **Apple Clang / clang-cl 局限**：Apple Clang 版本号与 LLVM 不对齐（文档注明，精确 full 匹配仍可用）；clang-cl 不生成 `msvc1xx` 标签（需 MSVC ABI 用真 MSVC 构建）。
-- **pre.2 联动**：本版命名约定与 ABI 警告是 pre.2「加强预编译包跨工具链兼容性警告 + 最佳实践」的实现前提。
-- **回归基线**：全量测试零回归（dev.12 后基线 727 用例 / 3361 断言），作为硬门槛。
+- **大规模拆分**：`build.cpp`（test_runner/install/pack）、`util.cpp`（archive/download）、`process_installed_pkg` 拆分——结构性重构，收口到 dev.11 之后的独立子版本或 1.2.0 发布窗口。
+- **语义取舍**：`compare_version` 预发布剥离（文档化记录）；lockfile platform 字段删除。
+- **测试卫生**：测试夹具统一（test_helpers.hpp）、REQUIRE(true) 清理、watch 测试 PID 化、增量缓存断言收紧——可随各阶段顺带或延后。
+- **macOS kqueue 逐文件语义**：FSEvents 重写为独立工作项（先文档化 + 断言修正）。
+- **回归基线**：全量测试零回归（dev.10 后基线 747 用例 / 3442 断言），作为硬门槛。
