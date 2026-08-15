@@ -1,61 +1,70 @@
-# EazyMake 1.2.0-dev.8 执行计划
+# EazyMake 1.2.0-dev.9 执行计划
 
 > **状态：执行中**（2026-08-15）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
-> 详细设计：[`1.2.0-dev.8.md`](plans/1.2.0/1.2.0-dev.8.md)。本计划为 1.2.0 系列第八个开发子版本：**CMake 导出钩子运行时（`ezmk-lua` 独立运行时）**——把 EazyMake 的 Lua 运行时抽成独立、无黑白名单的二进制 `ezmk-lua`，让导出的 CMake 构建在构建节点调用它执行 `[hooks]` 钩子，消除导出产物与 `ezmk build` 的行为漂移。**dev.2 的范围收口**：只动导出侧 + 新增一个独立运行时产物，不触碰本体安全模型。
+> 详细设计：[`1.2.0-dev.9.md`](plans/1.2.0/1.2.0-dev.9.md)。本计划为 1.2.0 系列第九个开发子版本：**包构建配置收敛（dev.7 延伸）**——让包的 `[compile].src_dirs` / `[compile].include_dirs` 真正生效，收口包配置与项目配置的语义差距（`src_dirs` 被硬编码忽略、`include_dirs` 有重复 `-I` 边界缺口、包 `type` 语义未对齐）。
 >
-> **范围边界**：`ezmk` 本体沙箱 + 黑白名单**零改动**（`run_script` / `push_restricted_globals` / `check_*_permission` 一行不动）；仅 `export cmake` 的 hooks 段从「注释 + WARNING」改为「`find_program` + `add_custom_command`」；`on_failure` 保持不导出（CMake 无原生失败钩子，与 dev.2 一致）。
+> **范围边界**：只动包侧（`src/pkg.cpp` / `src/cache.cpp` 自编译 `-I` 构造 / `collect_sources` 参数化），不碰 `export cmake` 与 `ezmk-lua`（dev.8 范围）；包 `src_dirs`/`include_dirs` 不在 export 范围（dev.2 边界）。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（纯新增二进制产物 + 导出文本变化，本体零改动）；③ 全量测试零回归（本体沙箱路径必须零变化，作为硬门槛；Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更（`collect_sources` 新增默认参数，项目路径零变化；纯新增 i18n key 与 `pkg info` 输出行）；③ 全量测试零回归（基线 709 用例 / 3296 断言，dev.8 后；Gate 定义见 [1.1.0-pre.3](plans/1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)）。
 
 ---
 
 ## 1 背景
 
-1. **导出钩子丢失**：`ezmk.toml` 的 `[hooks]`（`pre_build`/`post_build`/`on_failure`，Lua 脚本）在 `ezmk build` 里由沙箱 Lua 运行时执行，CMake 无等价运行时，因此 dev.2 导出时只能「不映射」（`export.cpp:387-402` 仅注释 + `message(WARNING)`）。结果是导出的 CMake 构建**不跑钩子后处理**，与 `ezmk build` 行为漂移。
-2. **本计划补上钩子映射**：新增独立、无黑白名单的二进制 `ezmk-lua`，由导出的 CMake 在构建节点调用它执行钩子。
+- **`src_dirs` 被静默忽略**：`compile_package()`（`src/pkg.cpp`）硬编码 `util::list_files(pkg_dir / "src")`，包作者写 `src_dirs = ["src", "generated"]` 看着有效实则无效，与项目侧 `build::collect_sources()` 多目录收集不一致。
+- **`include_dirs` 基本生效但未固化**：包自编译 `-I` 已生效；消费者侧逐个加 `<pkg>/<include_dir>` 已生效；但 `include_dirs` 含默认 `"include"` 时与 `def_inc`（`proj_root/include`）重复 `-I`，且无测试固化。
+- **包 `type` 语义未对齐**：包文档默认 `type = "executable"` 却编译成静态库，直接复用 `collect_sources(project_type)` 会把默认包误判为应用、误要求 `main.cpp`。
+- **设计补充（validate_pkg）**：`validate_pkg()`（`src/pkg.cpp:259-263`）同样硬编码 `src/` 存在性校验——若不同步改为 src_dirs 感知，自定义 `src_dirs` 的包会在安装校验阶段即被拒绝，`compile_package` 的改造无法生效。归入阶段二一并落地。
 
 ## 2 目标
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | 新增独立运行时二进制 `ezmk-lua`：复用 Lua VM + `register_api` bindings，入口无沙箱/无 permissions；`ctx`（project_root/profile/output）由 CLI 注入 | P0 |
-| 2 | `ezmk` 本体行为/沙箱/黑白名单**完全不变**（回归基线证明零变化） | P0 |
-| 3 | `export cmake` 对 `[hooks]`：`pre_build`/`post_build` 生成 `add_custom_command` 调用 `ezmk-lua`；`find_program` 找不到 → 回退 `message(WARNING)`；`on_failure` 保持不导出 | P0 |
-| 4 | 现有钩子脚本（沙箱 `ezmk.*` API）在 `ezmk-lua` 下运行结果一致（超集兼容） | P0 |
-| 5 | 单测/集成：`ezmk-lua` 跑样例钩子 + export 产物含钩子调用；全量测试零回归 | P0 |
-| 6 | i18n + 文档（export 钩子说明、`ezmk-lua` 用法、CHANGES.md） | P1 |
-| 7 | 分发：`ezmk-lua` 随 `ezmk` 进入所有渠道（release 资产 / install.sh / install.ps1 / winget / Homebrew / pacman） | P1 |
+| 1 | 包源收集改用 `[compile].src_dirs`（默认 `["src"]`），复用 `build::collect_sources()`：多目录、缺失目录 warn+跳过、文件名去重 | P0 |
+| 2 | 包编译不受 `[project].type` 的 main.cpp 校验影响（包总是静态库）；`collect_sources` 增加 `require_main` 参数，项目路径零变化 | P0 |
+| 3 | 包 `include_dirs` 行为固化：相对包根解析、与默认 `include/` 保序去重、缺失目录跳过、`@link:` 解析——自编译与消费者两侧一致 | P0 |
+| 4 | utils 包「有源码才编译」门控改 src_dirs 感知（对齐）；`pkg info` 增显 `src_dirs` | P1 |
+| 5 | header_only / precompiled / utils 无源短路行为**完全不变**（回归基线） | P0 |
+| 6 | 测试（单测 + 集成）+ 文档（pkg.md / package_authoring.md / config_file.md / CHANGES.md）+ i18n；全量测试零回归 | P0 |
 
 ## 3 执行阶段
 
-### 阶段一：运行时抽取（4.1 + 4.2 + 4.3）
+### 阶段一：`collect_sources` 参数化（4.1）
 
-- [x] **1.1 无沙箱运行函数**（4.1）：`src/lua_api.cpp` 新增 `run_script_unrestricted()`（复用 `register_api`，**不建沙箱 env / 不 push_restricted_globals / 不加载 permissions**，直接全量 `_G` 执行 + 补开 `io`/`os` 库）；ctx（project_root/profile/output）由参数构建 `run(ctx)`；沙箱版 `run_script` / `run_lua_script_with_ctx` 零改动
-- [x] **1.2 `ezmk-lua` 入口**（4.2）：新建 `src/ezmk_lua_main.cpp`——手工解析 CLI（位置参数脚本路径 + `--project-root`/`--profile`/`--output`），`register_api(state, project_root)` 注入全局（`g_project_root` + 配置缓存失效），再调 `run_script_unrestricted`，退出码透传；`--help` 支持；无 `--project-root` 时读配置类 `ezmk.*` 降级（返回空/warn）；CLI 错误/帮助走 i18n
-- [x] **1.3 build.sh**（4.3）：新增 `ezmk-lua` 产物（`COMMON_SRC` 排除两个 main，`main.cpp` ↔ `ezmk_lua_main.cpp` 各自装配）；Windows 产 `ezmk-lua.exe`；测试/正常构建分支均产双二进制
+- [ ] **1.1 参数化**（4.1）：`include/ezmk/build.hpp` `collect_sources` 追加可选参 `bool require_main = true`；`src/build.cpp` 实现中 main.cpp 校验改为 `if (require_main && project_type == "executable")`；项目两个调用点（`src/build.cpp:578,789`）零改动
+- [ ] **1.2 单测**：`test_build.cpp` 增 `require_main=false` 用例（`"executable"` 类型 + 无 main 不抛、多目录收集）
 
-### 阶段二：export 钩子生成（4.4 + 4.5）
+### 阶段二：包源收集改造（4.2 + validate_pkg 补充）
 
-- [x] **2.1 export 钩子段**（4.4）：`src/export.cpp` `build_cmake_text()` 把 hooks 段从「注释 + WARNING」改为 §3.4 的 `find_program(EZMK_LUA ezmk-lua)` + `add_custom_command`（`pre_build` → `PRE_BUILD`、`post_build` → `POST_BUILD`，`--project-root ${CMAKE_CURRENT_SOURCE_DIR}`、`--output $<TARGET_FILE:<name>>`、`--profile` 内联）；找不到 `ezmk-lua` → 回退 `message(WARNING)`；`on_failure` 保持注释（范围边界，与 dev.2 一致）；`export_cmake` 打印 `export_hook_note` 提示
-- [x] **2.2 i18n**（4.5）：新增 `export_hook_note` + 5 个 `ezmk_lua_*` key（`.def` + en/zh JSON），`scripts/check_i18n.py` 三向一致（301 keys）；`bash build.sh` 编译通过
+- [ ] **2.1 validate_pkg src_dirs 感知**（设计补充）：`src/pkg.cpp` `validate_pkg()` 的 `src/` 硬编码校验改为对 `cfg.compile.src_dirs` 逐目录存在性检查（任一存在即通过），错误消息保留 `src/` 字样（dev.7 集成测试断言）
+- [ ] **2.2 compile_package 改造**（4.2）：`compile_package()` 用 `cfg.compile.src_dirs` + `build::collect_sources(..., require_main=false)`；`header_only` 短路前移到收集前（无 src 不触发 fatal）；`precompiled` 不变；空源走 `collect_sources` 的 fatal（`no_source_files`/`src_dir_missing`，对齐项目语义 fail-fast）
+- [ ] **2.3 单测**：`test_pkg.cpp` 增 `compile_package` 用例——多 `src_dirs` 收集、`header_only`/`precompiled` 短路、空源 fatal、`require_main` 不误判
 
-### 阶段三：测试（4.6）
+### 阶段三：include_dirs 保序去重（4.3）
 
-- [x] **3.1 单测**：`test_export.cpp` hooks 用例更新——`find_program` + `add_custom_command`（PRE/POST）+ 回退 warning + `on_failure` 注释 + `--profile` 内联；无 hooks 仍无 hooks 段
-- [x] **3.2 单测 + 集成**：`run_script_unrestricted` 单测 8 个（ctx 注入/返回码/`os`·`io` 超集/配置注入/缺失 run()/Lua error，开头 `init()` 抗测试顺序）；`test_integration.cpp` 新增 3 个——`ezmk-lua` 跑样例钩子（ctx + 返回码）、`ezmk build` 钩子沙箱路径零变化、`export cmake` 产物含钩子调用 + 导出提示；`test_i18n.cpp` dev.8 key 断言
-- [x] **3.3 全量回归**：`bash build.sh test-all` 零回归（**709 用例 / 3296 断言**，基线 695 / 3234，+14 用例 +62 断言）
+- [ ] **3.1 去重**（4.3）：`src/cache.cpp` 自编译 `-I` 构造处（MSVC `/I` 与 GCC `-I` 两分支）对 `[def_inc] + [include_dirs 解析结果]` 做保序去重（首次出现顺序保留，`lexically_normal` 判重）；`extra_includes` 不动
+- [ ] **3.2 单测**：`test_cache.cpp` 或现有用例断言 `include_dirs` 含默认 `"include"` 时 `-I` 不重复
 
-### 阶段四：文档收口（4.7 + 4.8）
+### 阶段四：utils 门控 + `pkg info` + i18n（4.4 + 4.5）
 
-- [x] **4.1 文档**（4.7）：`docs/en|zh/cli.md`（`ezmk-lua` 用法 + 导出钩子说明）、`docs/en|zh/config_file.md`（hooks 导出小节）、`CHANGES.md` dev.8 条目
-- [x] **4.2 分发**（4.8）：`release.yml`（4 平台 job 拷贝 `build/ezmk-lua` + Windows standalone `ezmk-lua.exe` + `.sha256`）、`install.sh` / `install.ps1`（安装/下载/校验 `ezmk-lua`）、Homebrew formula（`homebrew-eazymake/ezmk.rb` `bin.install "ezmk-lua"`）
-- [x] **4.3 收口**：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.8 状态「待实现 → 已完成」；发布门槛复核（本体沙箱零变化 + 全量零回归）
+- [ ] **4.1 utils 门控**（4.4）：`src/pkg.cpp:818` `utils && !file_exists(dir/"src")` 改为对 `cfg.compile.src_dirs` 做「任一目录存在且有源文件」检查（轻量遍历，不触发 collect_sources 的 warning 噪音）
+- [ ] **4.2 `pkg info` 增显 `src_dirs`**（4.4）：`src/pkg.cpp` `info()` 镜像 `include_dirs` 输出块
+- [ ] **4.3 i18n**（4.5）：`pkg_info_src_dirs` 三向一致（`i18n_keys.def` + `locale/en.json` + `locale/zh.json`），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
 
-### 收口项（明确收口到发布流水线）
+### 阶段五：测试与全量回归（4.6）
 
-- **winget / pacman 渠道**：`publish/winget/`（`installer.yaml` 的 `NestedInstallerFiles` 增 `ezmk-lua.exe` + `PortableCommandAlias: ezmk-lua`）与 `publish/arch/PKGBUILD`（`install -Dm755 build/ezmk-lua "$pkgdir/usr/bin/ezmk-lua"`）**文件尚不存在**——`publish/` 目录由 pre.1（pacman 分发）创建，winget 清单提交为发布后跟进项；dev.8 只定义改法，随 pre.1 / 1.2.0 发布收口一并落地。
-- **Homebrew 版本/哈希**：`homebrew-eazymake/ezmk.rb` 的 `install` 块已加 `bin.install "ezmk-lua"`，但公式当前仍指向 v1.1.3（tarball 不含 ezmk-lua）——**版本号与双处 sha256 必须随 1.2.0 发布重新生成后再发布公式**，否则 `bin.install "ezmk-lua"` 会因文件缺失而失败。
+- [ ] **5.1 单测补全**：`collect_sources` `require_main`、`compile_package` 多目录/自定义 include/短路/空源 fatal、`-I` 去重断言
+- [ ] **5.2 集成测试**：`test_integration.cpp` 增——依赖自定义 `src_dirs`+`include_dirs` 包的端到端编译链接（`pkg install <dir>` + `build`）；compile_commands 含包 `-I`
+- [ ] **5.3 全量回归**：`bash build.sh test-all` 零回归（基线 709 用例 / 3296 断言，dev.8 后；新增用例/断言在其上增加）
+
+### 阶段六：文档收口（4.7）
+
+- [ ] **6.1 文档**（4.7）：`docs/en|zh/pkg.md`（`src_dirs` 对包生效、`include_dirs` 语义、空源 fatal 说明）、`docs/en|zh/package_authoring.md`、`docs/en|zh/config_file.md`（`[compile].src_dirs` 对包生效说明）、`CHANGES.md` dev.9 条目（中文基准，再同步英文）
+
+### 阶段七：收口（4.8）
+
+- [ ] **7.1 收口**（4.8）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.9 状态「待实现 → 已完成」；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
@@ -65,26 +74,29 @@
 
 | 决策 | 说明 |
 |------|------|
-| 独立二进制而非 flag | `ezmk-lua` 是信任边界**之外**的开发者工具，永不接入包安装钩子/utils 脚本路径；边界体现在「独立二进制」上而非开关 |
-| 共享编译单元 | Lua VM + `register_api` 与 `ezmk` 本体共用，避免 `ezmk.*` 双维护漂移；改 bindings 只改一处 |
-| 入口无沙箱 = 沙箱超集 | 不建 restricted globals、不查 `[utils.permissions]`，全量 `_G`；文档约定导出钩子只用 `ezmk.*` 子集，保证两处行为一致 |
-| `register_api(state, project_root)` 注入全局 | 复用既有公开 API 设置 `g_project_root` + 配置缓存失效，零新 setter；无 `--project-root` 时读配置类函数降级（返回空/warn） |
-| `find_program` + 回退 warning | best-effort，不硬依赖 ezmk 已安装；找不到 `ezmk-lua` 时 CMake 回退「跳过钩子」并提示 |
-| `on_failure` 不导出 | CMake 无原生「构建失败」钩子，保持注释 + 说明（范围边界，与 dev.2 一致） |
-| 分发多渠道联动 | release 资产 / install 脚本 / winget / Homebrew / pacman 任一渠道漏配 → 该渠道导出钩子回退跳过；各渠道提交收口到发布流水线阶段 |
+| `require_main` 默认 `true` | 项目调用点零改动；包路径显式传 `false`——包文档默认 `type = "executable"` 但包永远编译成静态库，不能触发 main.cpp 校验 |
+| 空源收紧为 fatal | header_only/precompiled/utils 无源短路全部前移到收集之前，能到达收集的包必属「非 header_only 却无源文件」的退化情形 → 对齐项目语义 fail-fast |
+| header_only 短路前移 | 无 src/ 的 header-only 包不得触发 `src_dir_missing` fatal；短路顺序 precompiled → header_only → 收集 |
+| `-I` 保序去重 | `def_inc` 先、`include_dirs` 解析结果后，首次出现顺序保留；编译器语义不变，compile_commands.json 输出更干净 |
+| utils 门控轻量遍历 | 对 `src_dirs` 逐目录「存在且有源文件」检查，避免 collect_sources 对缺失目录的 warning 噪音 |
+| validate_pkg 同步 src_dirs 感知 | 设计补充：否则自定义 `src_dirs` 包在安装校验阶段即被拒绝；错误消息保留 `src/` 字样兼容 dev.7 断言 |
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 新增 `ezmk-lua` 二进制 | 纯新增产物 | 不影响 `ezmk` 本体 |
-| `ezmk` 本体沙箱/黑白名单 | 无 | `run_script`/`push_restricted_globals`/`check_*_permission` 零改动 |
-| `export cmake` hooks 段 | 从「注释 + warning」改为「find_program + add_custom_command」 | 找不到 `ezmk-lua` 回退 warning（best-effort） |
-| `on_failure` | 仍不导出 | CMake 无原生失败钩子，范围边界（同 dev.2） |
-| 能力面超集 | `ezmk-lua` 下可用沙箱外能力 | 文档约定钩子只用 `ezmk.*` 子集 |
-| 新增 `ezmk-lua` 于各分发渠道 | release 资产/安装脚本/清单体积略增 | 纯新增，向后兼容；旧版安装脚本仍只装 `ezmk` |
+| 包 `[compile].src_dirs` 从「忽略」→「生效」 | 默认 `["src"]` 与现状一致，绝大多数包零影响 | 默认值对齐；多目录/自定义目录为纯新增能力 |
+| 空 src 包：warn+空库 → fatal | 仅「非 header_only/precompiled/utils 却无任何源文件」的退化包 | 行为收紧；三种短路前置不变，兼容矩阵说明 |
+| `collect_sources` 新增 `require_main`（默认 `true`） | 项目路径零变化 | 默认值兼容；包路径显式传 `false` |
+| 自编译 `-I` 保序去重 | 消除重复 `-I`（项目+包），编译器语义不变 | 去重保持首次出现顺序 |
+| `pkg info` 增显 `src_dirs` 行 | 纯新增输出 | 新增 i18n key |
+| utils 门控 src_dirs 感知 | 仅影响「utils 且 src_dirs ≠ 默认」的包 | 语义对齐，默认行为不变 |
+| header_only / precompiled / utils 短路 | 无 | 短路逻辑前置，行为逐字节不变 |
+| validate_pkg src_dirs 感知 | 自定义 `src_dirs` 包不再被误拒；默认包校验不变 | 错误消息保留 `src/` 字样 |
 
 ## 6 延后项
 
-- winget PR / Homebrew tap 更新 / AUR 提交属发布流水线阶段，与 pre.1、1.2.0 发布收口一并执行；pacman 渠道暂不提交 AUR（AUR 账户未开通），以「仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si`」为主。
-- 若未来想调整 `ezmk-lua` 的 CLI/语义，集中 2.0.0 窗口（本版为纯新增产物，无破坏性）。
+- **dev.7 联动**：`pkg install <dir>` 本地目录安装共用 `validate_pkg` + `compile_package`，`src_dirs`/`include_dirs` 修复自动惠及该路径（本版集成测试覆盖）。
+- **与 export cmake（dev.2/dev.8）无关**：导出的是项目 config，不导出包配置；包 `src_dirs`/`include_dirs` 不在 export 范围（范围边界，不扩展）。
+- **i18n X-macro**：新增 `pkg_info_src_dirs` 走 `i18n_keys.def` + en/zh 双 JSON；空源提示复用现有 `no_source_files`/`src_dir_missing`，不新增同义 key。
+- **回归基线**：全量测试零回归（dev.8 后基线 709 用例 / 3296 断言），作为硬门槛。
