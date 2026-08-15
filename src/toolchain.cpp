@@ -415,6 +415,86 @@ static fs::path find_vcvars64() {
 
 #endif // EZMK_WIN
 
+// ===================================================================
+// 1.2.0-dev.10: precompiled-package compiler tag (compiler_tag)
+// ===================================================================
+
+namespace {
+
+// Find the first "<digits>.<digit" sequence (a proper major.minor version) and
+// return the leading number. More robust than a bare first-number scan:
+// MSYS2's "g++ (Rev2, Built by MSYS2 project) 14.1.0" would yield "2" from
+// "Rev2" — "14.1" is the first real major.minor. Returns false when none.
+bool first_version_major(const std::string& s, unsigned long& major) {
+    size_t i = 0;
+    while (i + 2 < s.size()) {
+        if (std::isdigit(static_cast<unsigned char>(s[i])) &&
+            s[i + 1] == '.' &&
+            std::isdigit(static_cast<unsigned char>(s[i + 2]))) {
+            size_t start = i;
+            while (start > 0 && std::isdigit(static_cast<unsigned char>(s[start - 1]))) --start;
+            major = std::stoul(s.substr(start, i - start + 1));
+            return true;
+        }
+        ++i;
+    }
+    return false;
+}
+
+// Map a cl.exe version line to the MSVC toolset tag.
+// cl reports "Version <major>.<minor>.<build>" where the 19.x series maps to
+// _MSC_VER = 1900 + <minor> (19.43 → 1943). The toolset lookup uses a table,
+// NOT arithmetic (1943 would wrongly compute 140+(1943-1900)/10 = 144).
+// VS2022 keeps v143 binary compatibility across 17.x, so >= 1930 collapses to 143.
+std::string msvc_toolset_tag(const std::string& version) {
+    auto pos = version.find("Version");
+    if (pos == std::string::npos) pos = version.find("version");
+    if (pos == std::string::npos) return "";
+
+    std::string rest = version.substr(pos + 7);  // skip "Version"
+    // Parse "<major>.<minor>" from rest (e.g. " 19.43.34808 for x64").
+    size_t i = 0;
+    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
+    if (i >= rest.size()) return "";
+    unsigned long major = 0, minor = 0;
+    {
+        size_t start = i;
+        while (i < rest.size() && std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
+        major = std::stoul(rest.substr(start, i - start));
+    }
+    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
+    if (i < rest.size()) {
+        size_t start = i;
+        while (i < rest.size() && std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
+        minor = std::stoul(rest.substr(start, i - start));
+    }
+
+    if (major != 19) return "";  // only the 19.x (VS2015+) series is mapped
+    long msc_ver = 1900L + static_cast<long>(minor);
+    if (msc_ver == 1900)                return "msvc140";  // VS 2015
+    if (msc_ver >= 1910 && msc_ver <= 1919) return "msvc141";  // VS 2017
+    if (msc_ver >= 1920 && msc_ver <= 1929) return "msvc142";  // VS 2019
+    if (msc_ver >= 1930)                return "msvc143";  // VS 2022+
+    return "";
+}
+
+} // namespace
+
+std::string compiler_tag(const Toolchain& tc) {
+    unsigned long major = 0;
+    switch (tc.family) {
+    case CompilerFamily::Gcc:
+        if (!first_version_major(tc.version, major)) return "";
+        return "gcc" + std::to_string(major);
+    case CompilerFamily::Clang:
+        if (!first_version_major(tc.version, major)) return "";
+        return "clang" + std::to_string(major);
+    case CompilerFamily::Msvc:
+        return msvc_toolset_tag(tc.version);
+    }
+    return "";
+}
+
 Toolchain detect_toolchain() {
     // Cache the result — detect only once per process
     static Toolchain cached;

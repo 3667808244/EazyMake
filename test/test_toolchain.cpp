@@ -377,3 +377,72 @@ TEST_CASE("get_stdlib_flags: empty stdlib with Clang returns empty", "[toolchain
     auto flags = tc::get_stdlib_flags("", tc::CompilerFamily::Clang);
     REQUIRE(flags.empty());
 }
+
+// ===================================================================
+// 1.2.0-dev.10: compiler_tag() — precompiled-package compiler tag
+// ===================================================================
+
+namespace {
+tc::Toolchain make_tc(tc::CompilerFamily family, const std::string& version) {
+    tc::Toolchain t;
+    t.family = family;
+    t.version = version;
+    return t;
+}
+} // namespace
+
+TEST_CASE("compiler_tag: GCC major from version string", "[toolchain][1.2.0-dev.10]") {
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "g++ (GCC) 13.2.0")) == "gcc13");
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "g++ (GCC) 11.4.0")) == "gcc11");
+    // MSYS2-style version line
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "g++ (Rev2, Built by MSYS2 project) 14.1.0"))
+            == "gcc14");
+}
+
+TEST_CASE("compiler_tag: Clang major from version string", "[toolchain][1.2.0-dev.10]") {
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Clang, "clang version 18.1.8")) == "clang18");
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Clang, "clang version 16.0.6")) == "clang16");
+    // Apple Clang — version number does not align with LLVM, but the major is taken as-is
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Clang, "Apple clang version 15.0.0 (clang-1500.3.9.4)"))
+            == "clang15");
+}
+
+TEST_CASE("compiler_tag: MSVC toolset from cl version line", "[toolchain][1.2.0-dev.10]") {
+    // VS 2022 (19.3x) → msvc143
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.43.34808 for x64")) == "msvc143");
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.30.30709 for x64")) == "msvc143");
+    // VS 2019 (19.2x) → msvc142
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30153 for x64")) == "msvc142");
+    // VS 2017 (19.1x) → msvc141
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.16.27034 for x64")) == "msvc141");
+    // VS 2015 (19.00) → msvc140
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.00.24215.1")) == "msvc140");
+}
+
+TEST_CASE("compiler_tag: MSVC toolset boundary is table-based, not arithmetic", "[toolchain][1.2.0-dev.10]") {
+    // 19.43 → _MSC_VER 1943 → msvc143 (NOT 144 via 140+(1943-1900)/10)
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.43.34808 for x64")) == "msvc143");
+    // 19.10 → 1910 → msvc141 (lower boundary of VS2017)
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.10.25017 for x64")) == "msvc141");
+    // 19.09 → 1909 — outside the 1910–1919 band and != 1900 → unknown
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.09.99999 for x64")).empty());
+    // Non-19.x series is not mapped
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc,
+        "Microsoft (R) C/C++ Optimizing Compiler Version 18.00.21005 for x64")).empty());
+}
+
+TEST_CASE("compiler_tag: unparseable version returns empty", "[toolchain][1.2.0-dev.10]") {
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "")).empty());
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "g++: fatal error: no input files")).empty());
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Clang, "clang (unknown)")).empty());
+    // MSVC without the "Version" token
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, "cl.exe 19.43")).empty());
+}

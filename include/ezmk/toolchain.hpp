@@ -28,6 +28,17 @@ struct Toolchain {
 // Respects $CXX/$CC env vars.
 Toolchain detect_toolchain();
 
+// 1.2.0-dev.10: Precompiled-package compiler tag from a detected toolchain.
+// Returns "gcc13" / "clang18" / "msvc143" by parsing tc.version (which
+// detect_toolchain() already cached — pure function, no subprocess):
+//   GCC:   "g++ (GCC) 13.2.0"               → gcc13
+//   Clang: "clang version 18.1.8"           → clang18
+//          "Apple clang version 15.0.0"     → clang15
+//   MSVC:  "...Version 19.43.34808 for x64" → msvc143 (_MSC_VER 1943 → toolset 143)
+// Returns "" when the version string cannot be parsed (callers treat it as
+// "no compiler tag" — the full tag degrades to os-arch).
+std::string compiler_tag(const Toolchain& tc);
+
 // Run vcvars64.bat and capture the resulting environment variables.
 // Returns a map of env vars. Windows/MSVC only.
 std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path);
