@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-dev.12 执行计划
 
-> **状态：执行中**（2026-08-15）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-15，全量 727 用例 / 3361 断言零回归）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[`1.2.0-dev.12.md`](plans/1.2.0/1.2.0-dev.12.md)。本计划为 1.2.0 系列第十二个开发子版本：**测试配置收口**——`ezmk test` 引入 profile 支持（`[test].default_profile` + `--profile` CLI，复用 `[compile.profile.*]` / `[link.profile.*]`，与 dev.3 的 build 侧完全对称），并补齐测试专属 include / 链接目标（`[test].include_dirs` / `[test].link_targets`），弃用与 `[compile].flags` 重叠的 `[test].flags`（使用点 warn，2.0.0 移除）。
 >
@@ -31,31 +31,31 @@
 
 ### 阶段一：配置 + CLI（4.1）
 
-- [ ] **1.1 配置**（4.1）：`include/ezmk/config.hpp` `TestConfig` 增 `default_profile` / `include_dirs` / `link_targets`（`flags` 注释标 DEPRECATED）；`src/config.cpp` `parse_test` 解析三个新字段（`default_profile` 镜像 dev.3 写法，`include_dirs`/`link_targets` 用 `extract_string_array`）
-- [ ] **1.2 CLI**（4.1）：`include/ezmk/cli.hpp` `CliArgs` 增 `std::string test_profile;`；`src/cli.cpp` `ezmk project test` 选项表增 `--profile`（有值）；`src/main.cpp` `ProjectTest` 分支透传 `args.test_profile`
+- [x] **1.1 配置**（4.1）：`include/ezmk/config.hpp` `TestConfig` 增 `default_profile` / `include_dirs` / `link_targets`（`flags` 注释标 DEPRECATED）；`src/config.cpp` `parse_test` 解析三个新字段（`default_profile` 镜像 dev.3 写法，`include_dirs`/`link_targets` 用 `extract_string_array`）
+- [x] **1.2 CLI**（4.1）：`include/ezmk/cli.hpp` `CliArgs` 增 `std::string test_profile;`；`src/cli.cpp` `ezmk project test` 选项表增 `--profile`（有值）；`src/main.cpp` `ProjectTest` 分支透传 `args.test_profile`
 
 ### 阶段二：run_tests 改造（4.2）
 
-- [ ] **2.1 `apply_profile` 共享 helper**（4.2）：`src/build.cpp` 抽取 `struct AppliedProfile { CompileSection compile; LinkSection link; }` + `apply_profile(cfg, cli_profile, default_profile)`——含 compile/link profile 合并 + 未知 profile fatal（closest-match 建议）；`prepare_build_state` 内联块（497-539）替换为调用，行为逐字节不变
-- [ ] **2.2 `run_tests`**（4.2）：签名增 `const std::string& test_profile`（`include/ezmk/build.hpp` 同步）；开头 `cfg.test.flags` 非空 → `util::warn(I18nKey::test_flags_deprecated)`；`base_flags` 构建（1743-1761）改用 `apply_profile(cfg, test_profile, cfg.test.default_profile)` 结果的 compile 配置，并在其后追加 `[test].include_dirs`（相对项目根、缺失跳过）与 `[test].flags`；链接（1897-1899 / 2089-2091）改用结果的 link 配置，并追加 `[test].link_targets` 的 `-l<target>`
+- [x] **2.1 `apply_profile` 共享 helper**（4.2）：`src/build.cpp` 抽取 `struct AppliedProfile { CompileSection compile; LinkSection link; }` + `apply_profile(cfg, cli_profile, default_profile)`——含 compile/link profile 合并 + 未知 profile fatal（closest-match 建议）；`prepare_build_state` 内联块（497-539）替换为调用，行为逐字节不变
+- [x] **2.2 `run_tests`**（4.2）：签名增 `const std::string& test_profile`（`include/ezmk/build.hpp` 同步）；开头 `cfg.test.flags` 非空 → `util::warn(I18nKey::test_flags_deprecated)`；`base_flags` 构建（1743-1761）改用 `apply_profile(cfg, test_profile, cfg.test.default_profile)` 结果的 compile 配置，并在其后追加 `[test].include_dirs`（相对项目根、缺失跳过）与 `[test].flags`；链接（1897-1899 / 2089-2091）改用结果的 link 配置，并追加 `[test].link_targets` 的 `-l<target>`
 
 ### 阶段三：i18n（4.3）
 
-- [ ] **3.1 i18n**（4.3）：`test_flags_deprecated` 三向一致（`i18n_keys.def` + `locale/en.json` + `locale/zh.json`），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
+- [x] **3.1 i18n**（4.3）：`test_flags_deprecated` 三向一致（`i18n_keys.def` + `locale/en.json` + `locale/zh.json`），`scripts/check_i18n.py` 通过；`bash build.sh` 编译通过
 
 ### 阶段四：测试与全量回归（4.4）
 
-- [ ] **4.1 单测**（4.4）：`test_config.cpp` `[test].default_profile` / `include_dirs` / `link_targets` 解析 + `flags` 仍解析；`test_cli.cpp` `ezmk test --profile <name>` 解析到 `args.test_profile`
-- [ ] **4.2 集成**（4.4）：`test_integration.cpp` 增——`[test].default_profile` 生效（ezmk 内建框架：profile 宏出现在测试编译中、断言通过）；`ezmk test --profile <name>` 覆盖 default_profile；`[test].include_dirs` 参与测试编译；`[test].link_targets` 参与测试链接；`[test].flags` 弃用 warn 出现在输出中
-- [ ] **4.3 全量回归**（4.4）：`bash build.sh test-all` 零回归（基线 719 用例 / 3328 断言，dev.9 后；新增用例/断言在其上增加）
+- [x] **4.1 单测**（4.4）：`test_config.cpp` `[test].default_profile` / `include_dirs` / `link_targets` 解析 + `flags` 仍解析；`test_cli.cpp` `ezmk test --profile <name>` 解析到 `args.test_profile`
+- [x] **4.2 集成**（4.4）：`test_integration.cpp` 增——`[test].default_profile` 生效（ezmk 内建框架：profile 宏出现在测试编译中、断言通过）；`ezmk test --profile <name>` 覆盖 default_profile；`[test].include_dirs` 参与测试编译；`[test].link_targets` 参与测试链接；`[test].flags` 弃用 warn 出现在输出中
+- [x] **4.3 全量回归**（4.4）：`bash build.sh test-all` 零回归（基线 719 用例 / 3328 断言，dev.9 后；新增用例/断言在其上增加）
 
 ### 阶段五：文档收口（4.5）
 
-- [ ] **5.1 文档**（4.5）：`docs/en|zh/config_file.md` `[test]` 节（`default_profile` 字段 + `flags` 标 DEPRECATED）+ `docs/en|zh/cli.md`（`ezmk test --profile`）+ `CHANGES.md` dev.12 条目（中文基准，再同步英文）
+- [x] **5.1 文档**（4.5）：`docs/en|zh/config_file.md` `[test]` 节（`default_profile` 字段 + `flags` 标 DEPRECATED）+ `docs/en|zh/cli.md`（`ezmk test --profile`）+ `CHANGES.md` dev.12 条目（中文基准，再同步英文）
 
 ### 阶段六：收口（4.6）
 
-- [ ] **6.1 收口**（4.6）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.12 状态「待实现 → 已完成」；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **6.1 收口**（4.6）：本计划勾选 `[x]`；`plans/1.2.0/README.md` dev.12 状态「待实现 → 已完成」；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
