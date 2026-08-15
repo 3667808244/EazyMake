@@ -684,6 +684,10 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                         entry.path().filename().string());
                     st.pkg_archives.push_back(archive);
                 } catch (const std::exception& e) {
+                    // 1.2.0-dev.10: precompiled_strict mismatch is a deliberate
+                    // fail-fast (ezmk::fatal_error) — propagate instead of
+                    // degrading to a skip warning.
+                    if (dynamic_cast<const ezmk::fatal_error*>(&e)) throw;
                     util::warn(std::string("skipping precompiled archive for '") +
                                entry.path().filename().string() + "': " + e.what());
                 }

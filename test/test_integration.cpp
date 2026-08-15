@@ -1687,3 +1687,206 @@ TEST_CASE("integration: [test] default_profile + include_dirs + link_targets (de
     REQUIRE(r2.exit_code == 0);
     REQUIRE(c2.find("PROFILE=2") != std::string::npos);
 }
+
+// 1.2.0-dev.10: a precompiled package with a toolchain-tagged archive
+// (lib<name>.<os>-<arch>-<compiler>.a, L3) is selected over a bare decoy with
+// DIFFERENT symbols — if the wrong archive were chosen the link would fail.
+// The installed package's `pkg info` lists the variants.
+TEST_CASE("integration: precompiled toolchain-tagged archive selected + linked (dev.10)", "[integration][1.2.0-dev.10]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    auto tc = ezmk::toolchain::detect_toolchain();
+    if (tc.family == ezmk::toolchain::CompilerFamily::Msvc) {
+        SKIP("archive creation via ar is GCC/Clang-only — skipping");
+    }
+    std::string plat = ezmk::util::detect_platform_tag();
+    std::string comp = ezmk::toolchain::compiler_tag(tc);
+    REQUIRE_FALSE(comp.empty());
+    std::string tag = plat + "-" + comp;
+
+    std::string proj_name = "precapp";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Precompiled package: lib/<tag>.a provides prec_answer(); the bare decoy
+    // libprec.a provides only prec_decoy() — linking must use the tagged one.
+    fs::path pkg_dir = tmp.path / "prec_pkg";
+    fs::create_directories(pkg_dir / "include");
+    fs::create_directories(pkg_dir / "lib");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"prec\"\ntype = \"static\"\nversion = \"1.0.0\"\nprecompiled = true\n");
+    std::string cxx = tc.cxx_compiler.string();
+    fs::path good_src = tmp.path / "good.cpp";
+    file_write(good_src, "int prec_answer() { return 42; }\n");
+    fs::path good_obj = tmp.path / "good.o";
+    REQUIRE(run_command("\"" + cxx + "\" -c \"" + good_src.string() +
+                        "\" -o \"" + good_obj.string() + "\"").exit_code == 0);
+    fs::path good_ar = pkg_dir / "lib" / ("libprec." + tag + ".a");
+    REQUIRE(run_command("ar rcs \"" + good_ar.string() + "\" \"" +
+                        good_obj.string() + "\"").exit_code == 0);
+    fs::path bad_src = tmp.path / "bad.cpp";
+    file_write(bad_src, "int prec_decoy() { return 1; }\n");
+    fs::path bad_obj = tmp.path / "bad.o";
+    REQUIRE(run_command("\"" + cxx + "\" -c \"" + bad_src.string() +
+                        "\" -o \"" + bad_obj.string() + "\"").exit_code == 0);
+    fs::path bad_ar = pkg_dir / "lib" / "libprec.a";
+    REQUIRE(run_command("ar rcs \"" + bad_ar.string() + "\" \"" +
+                        bad_obj.string() + "\"").exit_code == 0);
+
+    ProcResult inst = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p", proj_dir);
+    INFO("install stderr: " << inst.err);
+    INFO("install stdout: " << inst.out);
+    REQUIRE(inst.exit_code == 0);
+
+    // pkg info lists the variants (sorted; bare + toolchain tag).
+    ProcResult info_r = run_ezmk("pkg info prec", proj_dir);
+    INFO("info stderr: " << info_r.err);
+    REQUIRE(info_r.exit_code == 0);
+    REQUIRE((info_r.out + info_r.err).find("Precompiled variants") != std::string::npos);
+    REQUIRE((info_r.out + info_r.err).find(tag) != std::string::npos);
+
+    // Consumer depends on prec and calls prec_answer().
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = [\"prec\"]\n";
+    }
+    file_write(proj_dir / "src" / "main.cpp",
+        "#include <cstdio>\nint prec_answer();\n"
+        "int main() { std::printf(\"%d\\n\", prec_answer()); return 0; }\n");
+
+    ProcResult b = run_ezmk("build", proj_dir);
+    INFO("build stderr: " << b.err);
+    INFO("build stdout: " << b.out);
+    REQUIRE(b.exit_code == 0);
+    // Toolchain-tagged selection is safe — no ABI fallback warning.
+    REQUIRE((b.out + b.err).find("may be ABI-incompatible") == std::string::npos);
+
+    // prec_answer() = 42 proves the tagged archive (not the bare decoy) linked.
+    fs::path exe = proj_dir / "build" / (proj_name + EZMK_EXE_SUFFIX);
+    REQUIRE(fs::exists(exe));
+    ProcResult run_r = run_command("\"" + exe.string() + "\"");
+    INFO("run stdout: " << run_r.out);
+    REQUIRE(run_r.exit_code == 0);
+    REQUIRE(run_r.out.find("42") != std::string::npos);
+}
+
+// 1.2.0-dev.10: a precompiled package with only an os-arch archive (no toolchain
+// tag) still builds — with an explicit ABI fallback warning.
+TEST_CASE("integration: precompiled os-arch fallback warns (dev.10)", "[integration][1.2.0-dev.10]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    auto tc = ezmk::toolchain::detect_toolchain();
+    if (tc.family == ezmk::toolchain::CompilerFamily::Msvc) {
+        SKIP("archive creation via ar is GCC/Clang-only — skipping");
+    }
+    std::string plat = ezmk::util::detect_platform_tag();
+
+    std::string proj_name = "precwarn";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    fs::path pkg_dir = tmp.path / "prec2_pkg";
+    fs::create_directories(pkg_dir / "include");
+    fs::create_directories(pkg_dir / "lib");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"prec2\"\ntype = \"static\"\nversion = \"1.0.0\"\nprecompiled = true\n");
+    fs::path srcf = tmp.path / "p.cpp";
+    file_write(srcf, "int prec2_answer() { return 7; }\n");
+    fs::path objf = tmp.path / "p.o";
+    REQUIRE(run_command("\"" + tc.cxx_compiler.string() + "\" -c \"" + srcf.string() +
+                        "\" -o \"" + objf.string() + "\"").exit_code == 0);
+    fs::path ar = pkg_dir / "lib" / ("libprec2." + plat + ".a");
+    REQUIRE(run_command("ar rcs \"" + ar.string() + "\" \"" + objf.string() + "\"").exit_code == 0);
+
+    ProcResult inst = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p", proj_dir);
+    INFO("install stderr: " << inst.err);
+    REQUIRE(inst.exit_code == 0);
+    // The install-time selection also degrades → warning expected.
+    REQUIRE((inst.out + inst.err).find("may be ABI-incompatible") != std::string::npos);
+
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = [\"prec2\"]\n";
+    }
+    file_write(proj_dir / "src" / "main.cpp",
+        "#include <cstdio>\nint prec2_answer();\n"
+        "int main() { std::printf(\"%d\\n\", prec2_answer()); return 0; }\n");
+
+    ProcResult b = run_ezmk("build", proj_dir);
+    INFO("build stderr: " << b.err);
+    INFO("build stdout: " << b.out);
+    REQUIRE(b.exit_code == 0);
+    REQUIRE((b.out + b.err).find("may be ABI-incompatible") != std::string::npos);
+
+    fs::path exe = proj_dir / "build" / (proj_name + EZMK_EXE_SUFFIX);
+    REQUIRE(fs::exists(exe));
+    ProcResult run_r = run_command("\"" + exe.string() + "\"");
+    REQUIRE(run_r.exit_code == 0);
+    REQUIRE(run_r.out.find("7") != std::string::npos);
+}
+
+// 1.2.0-dev.10: [project].precompiled_strict = true turns the toolchain
+// fallback into a fail-fast error (install path).
+TEST_CASE("integration: precompiled_strict refuses toolchain fallback (dev.10)", "[integration][1.2.0-dev.10]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    auto tc = ezmk::toolchain::detect_toolchain();
+    if (tc.family == ezmk::toolchain::CompilerFamily::Msvc) {
+        SKIP("archive creation via ar is GCC/Clang-only — skipping");
+    }
+    std::string plat = ezmk::util::detect_platform_tag();
+
+    std::string proj_name = "precstrict";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    fs::path pkg_dir = tmp.path / "prec3_pkg";
+    fs::create_directories(pkg_dir / "include");
+    fs::create_directories(pkg_dir / "lib");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"prec3\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "precompiled = true\nprecompiled_strict = true\n");
+    fs::path srcf = tmp.path / "p.cpp";
+    file_write(srcf, "int prec3_answer() { return 1; }\n");
+    fs::path objf = tmp.path / "p.o";
+    REQUIRE(run_command("\"" + tc.cxx_compiler.string() + "\" -c \"" + srcf.string() +
+                        "\" -o \"" + objf.string() + "\"").exit_code == 0);
+    fs::path ar = pkg_dir / "lib" / ("libprec3." + plat + ".a");  // no toolchain tag
+    REQUIRE(run_command("ar rcs \"" + ar.string() + "\" \"" + objf.string() + "\"").exit_code == 0);
+
+    // Install must fail fast with the strict mismatch error.
+    ProcResult inst = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p", proj_dir);
+    INFO("install stderr: " << inst.err);
+    INFO("install stdout: " << inst.out);
+    REQUIRE(inst.exit_code != 0);
+    REQUIRE((inst.out + inst.err).find("precompiled_strict") != std::string::npos);
+}

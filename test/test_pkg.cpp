@@ -604,3 +604,145 @@ TEST_CASE("compile_package: custom include_dirs resolve for self-compile", "[pkg
     REQUIRE(!result.empty());
     REQUIRE(lib_exists);
 }
+
+// ===================================================================
+// 1.2.0-dev.10: select_precompiled_variant — 4-level matching matrix
+// ===================================================================
+
+namespace {
+fs::path dev10_lib(const std::string& tag) {
+    auto d = fs::temp_directory_path() / ("ezmk_pkg_dev10_" + tag + "_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(d);
+    return d;
+}
+void dev10_touch(const fs::path& p) { std::ofstream(p) << "x"; }
+} // namespace
+
+TEST_CASE("precompiled: L4 full tag beats os-arch and bare", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("l4");
+    dev10_touch(lib / "libex.linux-x64-gcc13-abi11.a");
+    dev10_touch(lib / "libex.linux-x64-gcc11-abi11.a");
+    dev10_touch(lib / "libex.linux-x64.a");
+    dev10_touch(lib / "libex.a");
+
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64-gcc13-abi11.a");
+}
+
+TEST_CASE("precompiled: L3 same compiler without abi beats os-arch", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("l3");
+    dev10_touch(lib / "libex.linux-x64-gcc13.a");
+    dev10_touch(lib / "libex.linux-x64.a");
+
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64-gcc13.a");
+}
+
+TEST_CASE("precompiled: L2 os-arch selected when no compiler variant", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("l2");
+    dev10_touch(lib / "libex.win-x64.a");
+    dev10_touch(lib / "libex.linux-x64.a");
+
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64.a");
+}
+
+TEST_CASE("precompiled: L1 bare fallback", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("l1");
+    dev10_touch(lib / "libex.a");
+
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.a");
+}
+
+TEST_CASE("precompiled: ABI mismatch skips same-compiler variant", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("abi");
+    // gcc13-abi8 is ABI-incompatible with consumer gcc13-abi11 — must be skipped
+    dev10_touch(lib / "libex.linux-x64-gcc13-abi8.a");
+    REQUIRE_THROWS_AS(select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false),
+                      std::runtime_error);
+    // ... but the matching abi11 variant wins when present
+    dev10_touch(lib / "libex.linux-x64-gcc13-abi11.a");
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64-gcc13-abi11.a");
+}
+
+TEST_CASE("precompiled: unknown tag segment is not matched", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("unknown");
+    dev10_touch(lib / "libex.linux-x64-gcc13-abi11-extra.a");  // "extra" unknown segment
+    REQUIRE_THROWS_AS(select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false),
+                      std::runtime_error);
+    dev10_touch(lib / "libex.linux-x64-gcc13-abi11.a");
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64-gcc13-abi11.a");
+}
+
+TEST_CASE("precompiled: different compiler is never matched", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("diffcomp");
+    dev10_touch(lib / "libex.linux-x64-gcc11.a");
+    REQUIRE_THROWS_AS(select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false),
+                      std::runtime_error);
+    fs::remove_all(lib);
+}
+
+TEST_CASE("precompiled: same score ties by lexicographic filename", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("tie");
+    dev10_touch(lib / "libex.linux-x64.lib");
+    dev10_touch(lib / "libex.linux-x64.a");
+
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64.a");  // ".a" < ".lib"
+}
+
+TEST_CASE("precompiled: degradation to os-arch still selects with warning", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("warn");
+    dev10_touch(lib / "libex.linux-x64.a");
+
+    auto r = select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.linux-x64.a");  // selected; warning emitted to stderr
+}
+
+TEST_CASE("precompiled: strict mode turns degradation into fatal", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("strict");
+    dev10_touch(lib / "libex.linux-x64.a");
+    REQUIRE_THROWS_AS(select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", true),
+                      ezmk::fatal_error);
+    fs::remove_all(lib);
+}
+
+TEST_CASE("precompiled: no consumer compiler tag never warns or fails strict", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("nocomp");
+    dev10_touch(lib / "libex.linux-x64.a");
+    // empty consumer compiler tag → L2 is the norm; strict must not fire
+    auto r1 = select_precompiled_variant(lib, "ex", "linux-x64", "", "", false);
+    auto r2 = select_precompiled_variant(lib, "ex", "linux-x64", "", "", true);
+    fs::remove_all(lib);
+    REQUIRE(r1.filename() == "libex.linux-x64.a");
+    REQUIRE(r2.filename() == "libex.linux-x64.a");
+}
+
+TEST_CASE("precompiled: no-match error lists toolchain + available variants", "[pkg][1.2.0-dev.10]") {
+    auto lib = dev10_lib("err");
+    dev10_touch(lib / "libex.win-x64.a");
+    dev10_touch(lib / "libex.linux-x64-gcc11-abi11.a");
+    try {
+        select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+        FAIL("expected a throw");
+    } catch (const std::runtime_error& e) {
+        std::string m = e.what();
+        fs::remove_all(lib);
+        REQUIRE(m.find("gcc13") != std::string::npos);       // full toolchain tag
+        REQUIRE(m.find("available") != std::string::npos);
+        REQUIRE(m.find("win-x64") != std::string::npos);
+        REQUIRE(m.find("gcc11") != std::string::npos);
+    }
+}
