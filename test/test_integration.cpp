@@ -1428,11 +1428,17 @@ TEST_CASE("integration: ezmk build runs hooks (sandbox path unchanged)", "[integ
     REQUIRE(new_r.exit_code == 0);
     fs::path proj_dir = tmp.path / proj_name;
 
-    // A pre_build hook that writes a marker file via ezmk.file_write.
+    // A pre_build hook that writes a marker file via ezmk.file_write, AND
+    // attempts to escape the project root (../escaped.marker) — the write hard
+    // limit must deny it (1.2.0-dev.11: real assertion, not a vacuous check).
     fs::create_directories(proj_dir / "scripts");
     file_write(proj_dir / "scripts" / "pre.lua", R"(
 function run(ctx)
     ezmk.file_write(".ezmk/prehook.marker", "ran")
+    local ok, err = ezmk.file_write("../escaped.marker", "x")
+    if ok then
+        error("escape write unexpectedly succeeded: " .. tostring(err))
+    end
     return 0
 end
 )");
@@ -1450,7 +1456,7 @@ end
     INFO("stdout: " << r.out);
     REQUIRE(r.exit_code == 0);
     REQUIRE(fs::exists(proj_dir / ".ezmk" / "prehook.marker"));
-    // Sandbox still guards the hook: writing outside the project root must fail.
+    // The hook's escape attempt was denied — the marker must not exist.
     REQUIRE(!fs::exists(proj_dir.parent_path() / "escaped.marker"));
 }
 

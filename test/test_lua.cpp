@@ -494,6 +494,36 @@ TEST_CASE("lua: ezmk.file_write rejects traversal / prefix-boundary escapes", "[
     }
 }
 
+// 1.2.0-dev.11: a symlink/junction inside the project pointing OUTSIDE must not
+// bypass the write hard limit — norm_path now resolves links (weakly_canonical)
+// before the path_within check.
+TEST_CASE("lua: ezmk.file_write through symlink cannot escape project root", "[lua][api][fs][sandbox][1.2.0-dev.11]") {
+    init();  // idempotent — safe to call even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+
+    TempDir proj;      // project root
+    TempDir outside;   // target OUTSIDE the project root
+    register_api(L, proj.path);
+
+    fs::path link = proj.path / "link_out";
+    std::error_code ec;
+    fs::create_directory_symlink(outside.path, link, ec);
+    if (ec) {
+        SKIP("cannot create symlink in this environment — skipping");
+    }
+
+    std::string code = "local ok, err = ezmk.file_write('" +
+                       (link / "evil.txt").generic_string() +
+                       "', 'bad'); return ok, err";
+    int rc = luaL_dostring(L, code.c_str());
+    REQUIRE(rc == 0);
+    REQUIRE(!lua_toboolean(L, -2));  // ok == false → denied
+    REQUIRE(lua_isstring(L, -1));
+    REQUIRE_FALSE(fs::exists(outside.path / "evil.txt"));
+    lua_pop(L, 2);
+}
+
 TEST_CASE("lua: ezmk.file_write creates parent directories", "[lua][api][fs]") {
     lua_State* L = state();
     REQUIRE(L != nullptr);
@@ -971,7 +1001,10 @@ TEST_CASE("run_script: sandbox blocks file-loading / introspection escapes", "[l
     // points at the sandbox, not the real global table).
     auto script = write_lua_script(tmp.path, "sandbox_escape", R"(
 function run(args)
-    local blocked = {"dofile", "loadfile", "load", "require", "debug", "package", "collectgarbage"}
+    -- 1.2.0-dev.11: io/os added to the restricted-copy blacklist (defense in
+    -- depth — normally absent because linit.c removes them at compile time).
+    local blocked = {"dofile", "loadfile", "load", "require", "debug", "package",
+                     "collectgarbage", "io", "os"}
     for _, name in ipairs(blocked) do
         if _G[name] ~= nil then
             error("escape vector not blocked: " .. name)

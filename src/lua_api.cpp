@@ -47,9 +47,13 @@ static lua_State* g_L = nullptr;
 static fs::path   g_project_root; // set by register_api
 static fs::path   g_current_script_pkg_root; // set by run_script: root of the pkg owning the current script
 
-// 0.2.5+ — permission state for the currently running utils/hook script.
+// 0.2.5+ — permission state for the currently running utils / install-hook
+// script. Set by run_script (utils) and run_install_hook_script (package code
+// running during install, 1.2.0-dev.11). Build hooks (the project's own code,
+// run_hook_script) deliberately stay out of the context — they run with the
+// user's own authority.
 static std::optional<config::UtilsPermissions> g_current_perms; // nullopt → legacy unrestricted
-static bool g_in_script_context = false;   // true while a utils script drives the API
+static bool g_in_script_context = false;   // true while a utils/install-hook script drives the API
 static bool g_perms_warned = false;        // one deprecation warning per session
 static bool g_noninteractive = false;      // set by -y / detected no-TTY
 static std::set<std::string> g_ask_allow;  // session cache: "cat:target" → allowed
@@ -64,8 +68,14 @@ namespace {
 // Normalize a filesystem path to an absolute, lexically-normal generic string
 // for stable prefix / equality comparisons. Any trailing '/' is stripped so a
 // directory entry like "src/" compares cleanly against "src/main.cpp".
+// 1.2.0-dev.11: weakly_canonical first so symlinks/junctions (Windows) inside
+// the project pointing outside are resolved — a link cannot bypass path_within
+// checks or the write hard limit. Non-existent paths resolve their existing
+// prefix (weakly_canonical semantics).
 std::string norm_path(const fs::path& p) {
-    std::string s = fs::absolute(p).lexically_normal().generic_string();
+    std::error_code ec;
+    auto canon = fs::weakly_canonical(p, ec);
+    std::string s = (ec ? fs::absolute(p) : canon).lexically_normal().generic_string();
     while (s.size() > 1 && s.back() == '/') s.pop_back();
     return s;
 }
@@ -490,7 +500,7 @@ static fs::path resolve_path(const fs::path& p) {
 static void warn_perms_undeclared() {
     if (g_perms_warned) return;
     g_perms_warned = true;
-    util::warn("utils permissions not declared; all file/command access allowed. "
+    util::warn("script permissions not declared; all file/command access allowed. "
                "Define [utils.permissions] to restrict.");
 }
 
@@ -522,7 +532,9 @@ static int ezmk_file_read(lua_State* L) {
         if (!g_current_perms) {
             warn_perms_undeclared();
         } else {
-            auto abs = fs::absolute(resolved).lexically_normal();
+            // 1.2.0-dev.11: symlink-aware normalization (weakly_canonical via
+            // norm_path) — a link must not bypass the permission match.
+            fs::path abs(norm_path(resolved));
             PermResult r = check_read_permission(abs, g_current_perms,
                                                  g_project_root,
                                                  g_current_script_pkg_root);
@@ -577,7 +589,8 @@ static int ezmk_file_write(lua_State* L) {
         if (!g_current_perms) {
             warn_perms_undeclared();
         } else {
-            auto abs = fs::absolute(resolved).lexically_normal();
+            // 1.2.0-dev.11: symlink-aware normalization (weakly_canonical).
+            fs::path abs(norm_path(resolved));
             PermResult r = check_write_permission(abs, g_current_perms, g_project_root);
             if (!permit(r, PermCategory::Write, abs.generic_string())) {
                 lua_pushboolean(L, 0);
@@ -976,7 +989,14 @@ static void push_restricted_globals(lua_State* L) {
                                strcmp(key, "debug") == 0 ||
                                strcmp(key, "package") == 0 ||
                                strcmp(key, "collectgarbage") == 0 ||
-                               strcmp(key, "_G") == 0);
+                               strcmp(key, "_G") == 0 ||
+                               // 1.2.0-dev.11: defense in depth — io/os are
+                               // compile-time removed from linit.c, but if any
+                               // in-process path re-adds them (e.g. the shared
+                               // test state), the restricted copy must not
+                               // carry them into sandboxes.
+                               strcmp(key, "io") == 0 ||
+                               strcmp(key, "os") == 0);
         lua_pop(L, 1);                      // pop key copy
         if (!blocked) {
             lua_pushvalue(L, -2);           // key
@@ -1184,11 +1204,41 @@ using BuildCtxFn = std::function<void(lua_State* L)>;
 static int run_lua_script_with_ctx(lua_State* L,
                                     const fs::path& script_path,
                                     const fs::path& api_project_root,
-                                    BuildCtxFn build_ctx) {
+                                    BuildCtxFn build_ctx,
+                                    bool enforce_utils_permissions = false) {
     if (!L) return 1;
 
     // 0.9.10: stack position assertion — register_api must not leak/pop
     int top_before = lua_gettop(L);
+
+    // 1.2.0-dev.11: install hooks (package code) enter the same script context
+    // as utils scripts — load the package's [utils.permissions] so
+    // ezmk.file_read / file_write / run are gated instead of silently
+    // unrestricted. Build hooks (the project's own code) keep the legacy
+    // behavior — they run with the user's own authority. Restored on all exit
+    // paths via RAII.
+    struct HookCtxGuard {
+        bool active = false;
+        ~HookCtxGuard() {
+            if (active) { g_in_script_context = false; g_current_perms.reset(); }
+        }
+    } hook_ctx_guard;
+    if (enforce_utils_permissions) {
+        g_current_perms.reset();
+        g_in_script_context = true;
+        hook_ctx_guard.active = true;
+        if (!g_current_script_pkg_root.empty()) {
+            auto pkg_toml = g_current_script_pkg_root / "ezmk.toml";
+            if (util::file_exists(pkg_toml)) {
+                try {
+                    auto pkg_cfg = config::parse_config(pkg_toml);
+                    g_current_perms = pkg_cfg.utils.permissions;
+                } catch (...) {
+                    // Unparseable package config → leave perms nullopt (legacy path).
+                }
+            }
+        }
+    }
 
     // Ensure ezmk API is registered
     lua_getglobal(L, "ezmk");
@@ -1296,7 +1346,7 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
         lua_setfield(L, -2, "project_root");
         lua_pushstring(L, profile.c_str());
         lua_setfield(L, -2, "profile");
-    });
+    });  // build hooks: project's own code — legacy (unrestricted) model
 }
 
 // 0.9.9
@@ -1337,7 +1387,8 @@ int run_install_hook_script(lua_State* L, const fs::path& script_path,
         lua_setfield(L, -2, "pkg_version");
         lua_pushstring(L, pkg_type.c_str());
         lua_setfield(L, -2, "pkg_type");
-    });
+    },
+    /*enforce_utils_permissions=*/true);  // install hooks: package code, gated like utils scripts
 }
 
 // ===================================================================
