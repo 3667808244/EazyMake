@@ -23,6 +23,7 @@
 #include "nlohmann_json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -107,19 +108,39 @@ ProcResult run_ezmk(const std::string& args, const fs::path& cwd = fs::current_p
 
 
 
-// Check if we can reach github.com (lightweight check).
-bool network_available() {
-#ifdef EZMK_WIN
-    ProcResult r = run_command("cmd /c ping -n 1 -w 3000 github.com");
-#else
-    ProcResult r = run_command("ping -c 1 -W 3 github.com");
-#endif
-    return r.exit_code == 0;
-}
-
 // Detect if EazyMake binary is available (skip tests gracefully if not).
 bool ezmk_available() {
     return fs::exists(find_ezmk_binary());
+}
+
+// 1.2.0-dev.11: independent oracle for the precompiled-tag tests. Derives the
+// expected compiler tag from the RAW version string instead of calling the
+// production toolchain::compiler_tag() — a regression in tag derivation would
+// otherwise pass silently (the test's expectation was derived from the very
+// code under test). Mirrors the documented rule:
+//   "g++ (GCC) 13.2.0"        → gcc13
+//   "clang version 18.1.8"    → clang18
+// Returns "" when unparseable (MSVC is skipped by the precompiled tests).
+std::string independent_compiler_tag(const ezmk::toolchain::Toolchain& tc) {
+    std::string prefix;
+    switch (tc.family) {
+    case ezmk::toolchain::CompilerFamily::Gcc:   prefix = "gcc"; break;
+    case ezmk::toolchain::CompilerFamily::Clang: prefix = "clang"; break;
+    default: return "";  // MSVC — not covered by these tests
+    }
+    // First "<digits>.<digit" sequence (a real major.minor) → leading number.
+    const std::string& v = tc.version;
+    for (size_t i = 0; i + 2 < v.size(); ++i) {
+        if (std::isdigit(static_cast<unsigned char>(v[i])) &&
+            v[i + 1] == '.' &&
+            std::isdigit(static_cast<unsigned char>(v[i + 2]))) {
+            size_t start = i;
+            while (start > 0 &&
+                   std::isdigit(static_cast<unsigned char>(v[start - 1]))) --start;
+            return prefix + v.substr(start, i - start + 1);
+        }
+    }
+    return "";
 }
 
 } // anonymous namespace
@@ -507,47 +528,60 @@ TEST_CASE("integration: project new creates expected directory layout", "[integr
     REQUIRE(toml.find("executable") != std::string::npos);
 }
 
-// Scenario 6: Package install with network (requires network)
-// ==============================================================
-TEST_CASE("integration: pkg install downloads and installs a package", "[integration][network]") {
+// 1.2.0-dev.11: pkg install from a locally packed archive — real assertions
+// (exit code 0 + installed artifacts + pkg list), no network required. The old
+// test SKIP'd whenever the network install failed, silently swallowing every
+// assertion (vacuous) on machines without GitHub access.
+TEST_CASE("integration: pkg install from a local packed archive (dev.11)", "[integration][1.2.0-dev.11]") {
     if (!ezmk_available()) {
         SKIP("ezmk binary not found — build it first with: bash build.sh");
     }
-
-    if (!network_available()) {
-        SKIP("Network not available — skipping package install test");
-    }
-
+    EnvGuard lang_guard("EZMK_LANG", "en");
     TempDir tmp;
-    std::string proj_name = "pkg_test";
 
+    // 1) A static package project (include/ + src/ + ezmk.toml) to pack.
+    fs::path pkg_dir = tmp.path / "arc_pkg";
+    fs::create_directories(pkg_dir / "include" / "arc");
+    fs::create_directories(pkg_dir / "src");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"arc\"\ntype = \"static\"\nversion = \"1.0.0\"\n");
+    file_write(pkg_dir / "include" / "arc" / "arc.hpp",
+        "#pragma once\nint arc_answer();\n");
+    file_write(pkg_dir / "src" / "arc.cpp",
+        "#include \"arc/arc.hpp\"\nint arc_answer() { return 11; }\n");
+
+    // 2) Pack it into a .tar.gz in a clean output dir.
+    fs::path out_dir = tmp.path / "arc_out";
+    fs::create_directories(out_dir);
+    ProcResult pack_r = run_ezmk(
+        "project pack --output \"" + out_dir.string() + "\"", pkg_dir);
+    INFO("pack stderr: " << pack_r.err);
+    INFO("pack stdout: " << pack_r.out);
+    REQUIRE(pack_r.exit_code == 0);
+    fs::path archive = out_dir / "arc-1.0.0.tar.gz";
+    REQUIRE(fs::exists(archive));
+
+    // 3) A consumer project installs the archive (project scope, -y).
+    std::string proj_name = "arc_app";
     ProcResult new_r = run_ezmk(
         "project new " + proj_name + " --disable-git-init --disable-gitignore",
         tmp.path);
     REQUIRE(new_r.exit_code == 0);
-
     fs::path proj_dir = tmp.path / proj_name;
 
-    // Register the official repo (user scope) so pkg install works.
-    // This is a no-op if already registered.
-    ProcResult repo_r = run_ezmk(
-        "repo add -u https://github.com/3667808244/ezmk-repo.git --name official",
-        proj_dir);
-    INFO("repo add: " << repo_r.out << " / " << repo_r.err);
+    ProcResult r = run_ezmk(
+        "pkg install \"" + archive.string() + "\" -p -y", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
 
-    // Try to install a small package
-    ProcResult r = run_ezmk("pkg install catch2 -p -y", proj_dir);
-
-    INFO("stderr: " << r.err);
-    INFO("stdout: " << r.out);
-
-    // pkg install may fail if the repo isn't set up or network issues.
-    if (r.exit_code != 0) {
-        SKIP("pkg install failed (network or repo issue) — skipping");
-    }
-
-    // Verify the package was installed
-    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg"));
+    // 4) Artifacts installed + visible to pkg list.
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "arc" / "ezmk.toml"));
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "arc" / "include" / "arc" / "arc.hpp"));
+    ProcResult l = run_ezmk("pkg list -p", proj_dir);
+    INFO("list stderr: " << l.err);
+    REQUIRE(l.exit_code == 0);
+    REQUIRE((l.out + l.err).find("arc") != std::string::npos);
 }
 
 // Scenario 7: version and help commands work
@@ -1713,7 +1747,8 @@ TEST_CASE("integration: precompiled toolchain-tagged archive selected + linked (
         SKIP("archive creation via ar is GCC/Clang-only — skipping");
     }
     std::string plat = ezmk::util::detect_platform_tag();
-    std::string comp = ezmk::toolchain::compiler_tag(tc);
+    // 1.2.0-dev.11: independent oracle — see independent_compiler_tag().
+    std::string comp = independent_compiler_tag(tc);
     REQUIRE_FALSE(comp.empty());
     std::string tag = plat + "-" + comp;
 
