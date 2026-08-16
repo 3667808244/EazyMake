@@ -55,7 +55,7 @@ See [`cache.md`](cache.md) for details.
 - `ezmk.file_write()` refuses writes to absolute paths outside the project root directory (hard limit, cannot be bypassed).
 - Does not expose `require` for loading C extensions (pure Lua modules only).
 - Each invocation receives an independent sandbox environment table; global variables do not leak between scripts.
-- **Install hooks (0.9.9+)**: Install lifecycle hooks (`preinstall`/`postinstall`) share the same sandbox infrastructure as build hooks and utils. Lua install hooks do NOT open the editor for review — the sandbox boundary (removed `os`/`io`, `file_write` limits, `ezmk.run()` permission checks) already bounds what the script can do. Only a user confirmation prompt (`[y/N]`) is required before execution.
+- **Install hooks (0.9.9+, permission-gated since 1.2.0-dev.11)**: Install lifecycle hooks (`preinstall`/`postinstall`) share the same sandbox infrastructure as build hooks and utils. Lua install hooks do NOT open the editor for review — they are **package code**, so since 1.2.0-dev.11 they enter the same script context as utils: the package's `[utils.permissions]` is loaded and the three controlled-access categories (`file_read`/`file_write`/`run`) are gated by **deny > allow > ask** instead of being silently unrestricted. Build hooks (`pre_build`/`post_build`/`on_failure`) are the project's **own** code and keep the legacy model (run with the user's authority, no permission check). Only a user confirmation prompt (`[y/N]`) is required before execution.
 
 > **Why remove `os`/`io` at compile time?** Stripping them from the Lua binary
 > means scripts cannot reach them at all — the only path to external commands is
@@ -63,8 +63,9 @@ See [`cache.md`](cache.md) for details.
 
 > **Why no editor review for Lua install hooks?** Shell hooks can run arbitrary
 > commands, so reviewing the script is the only safeguard. A Lua hook is already
-> confined by the sandbox (no `os`/`io`, `file_write` limits, `ezmk.run()`
-> checks), so the `[y/N]` confirmation is sufficient.
+> confined by the sandbox (no `os`/`io`, out-of-bounds `file_write` hard limit),
+> and install hooks are additionally gated by `[utils.permissions]`
+> (1.2.0-dev.11+), so the `[y/N]` confirmation is sufficient.
 
 ## Utils Permission Management (`[utils.permissions]`, 0.2.5+)
 
@@ -77,6 +78,8 @@ The evaluation order is fixed as **deny > allow > ask**:
 
 `file_write` first passes through the sandbox "no out-of-bounds write" hard limit, then enters deny/allow/ask.
 **Backward compatibility**: old packages that omit the entire section retain unrestricted behavior, but a deprecation warning is printed once on the first call to a controlled API.
+
+> **Scope (1.2.0-dev.11+)**: the model also gates **Lua install hooks** (`preinstall`/`postinstall` — package code), on the same footing as utils scripts. Build hooks (the project's own code) are not subject to this section.
 
 See [`utils.md` Permission Management](utils.md#permission-management-version--025) for complete fields and semantics.
 
@@ -105,5 +108,5 @@ See [`utils.md` Permission Management](utils.md#permission-management-version--0
 | Lua `os`/`io` | Removed at compile time |
 | Lua `file_write` out-of-bounds | Deny (hard limit) |
 | Utils controlled access | deny > allow > ask |
-| Lua install hook execution | Sandbox + confirmation prompt (no editor review, 0.9.9+) |
+| Lua install hook execution | Sandbox + `[utils.permissions]` gating + confirmation prompt (no editor review, 0.9.9+; gating 1.2.0-dev.11+) |
 | Shell install hook execution | Open editor for review + confirmation prompt (legacy) |

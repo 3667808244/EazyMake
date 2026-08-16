@@ -178,7 +178,7 @@ end
 | `ctx.pkg_version` | string | Package version (from `ezmk.toml` `[project].version`) |
 | `ctx.pkg_type` | string | Package type: `"executable"` / `"static"` / `"shared"` / `"utils"` |
 
-**Safety**: Lua hooks run in a sandboxed environment (no `os.execute`, no `io.open`, and no file-loading/introspection functions such as `dofile`/`loadfile`/`load`/`require`/`debug`/`package`). All system access must go through `ezmk.*` API functions. Unlike shell scripts, Lua hooks do not require editor review — the sandbox boundary limits what the script can do.
+**Safety**: Lua hooks run in a sandboxed environment (no `os.execute`, no `io.open`, and no file-loading/introspection functions such as `dofile`/`loadfile`/`load`/`require`/`debug`/`package`). All system access must go through `ezmk.*` API functions. Unlike shell scripts, Lua hooks do not require editor review — the sandbox boundary limits what the script can do. **Install hooks are package code and, since 1.2.0-dev.11, are gated by `[utils.permissions]` on the same footing as utils scripts**: the three controlled-access categories (`file_read`/`file_write`/`run`) are evaluated as deny > allow > ask (see [utils.md Permission Management](utils.md#permission-management-version--025)); packages that declare permissions converge their capability accordingly, while legacy packages without `[utils.permissions]` keep unrestricted behavior (a deprecation warning is printed on the first call to a controlled API).
 
 **Note**: If a `run()` function is not defined, ezmk prints a warning and skips the hook (continues installation).
 

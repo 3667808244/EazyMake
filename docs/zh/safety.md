@@ -46,11 +46,11 @@ EazyMake 的安全模型集中说明。本文件为**单一权威**;其他文档
 - `ezmk.file_write()` 拒绝写入项目根目录之外的绝对路径(硬限制,不可绕过)。
 - 不暴露 `require` 加载 C 扩展(仅纯 Lua 模块)。
 - 每次调用获得独立 sandbox 环境表,脚本间全局变量互不污染。
-- **安装钩子（0.9.9+）**：安装生命周期钩子（`preinstall`/`postinstall`）与构建钩子和 utils 共享相同的沙箱基础设施。Lua 安装钩子**不**打开编辑器审查——沙箱边界（已移除 `os`/`io`、`file_write` 限制、`ezmk.run()` 权限检查）已限定了脚本的能力范围。执行前仅需用户确认（`[y/N]`）。
+- **安装钩子（0.9.9+，权限门控 1.2.0-dev.11+）**：安装生命周期钩子（`preinstall`/`postinstall`）与构建钩子和 utils 共享相同的沙箱基础设施。Lua 安装钩子**不**打开编辑器审查——它们是**包代码**，因此自 1.2.0-dev.11 起与 utils 脚本同级：进入脚本上下文时加载包的 `[utils.permissions]`，`file_read`/`file_write`/`run` 三类受控访问按 **deny > allow > ask** 门控，不再静默无限制。构建钩子（`pre_build`/`post_build`/`on_failure`）是项目**自身**代码，保持 legacy 模型（在用户权限下运行，无 perms 检查）。执行前仅需用户确认（`[y/N]`）。
 
 > **为什么在编译期移除 `os`/`io`？** 直接从 Lua 二进制中剥离后脚本完全无法触达它们——执行外部命令的唯一途径是 `ezmk.run()`，ezmk 可以审计并用权限管控。
 
-> **为什么 Lua 安装钩子无需编辑器审查？** Shell 钩子可执行任意命令，因此审查脚本是唯一的防线。Lua 钩子已被沙箱限定边界（无 `os`/`io`、`file_write` 限制、`ezmk.run()` 权限检查），所以仅需 `[y/N]` 确认即可。
+> **为什么 Lua 安装钩子无需编辑器审查？** Shell 钩子可执行任意命令，因此审查脚本是唯一的防线。Lua 钩子已被沙箱限定边界（无 `os`/`io`、`file_write` 越界硬限制），且安装钩子另有 `[utils.permissions]` 门控（1.2.0-dev.11+），所以仅需 `[y/N]` 确认即可。
 
 ## Utils 权限管理(`[utils.permissions]`,0.2.5+)
 
@@ -63,6 +63,8 @@ EazyMake 的安全模型集中说明。本文件为**单一权威**;其他文档
 
 `file_write` 先经 sandbox 的「禁止越界写」硬限制,再进入 deny/allow/ask。
 **向后兼容**:整节缺失的旧包保持无限制行为,但首次调用受控 API 时打印一次 deprecation warning。
+
+> **适用面（1.2.0-dev.11+）**：该模型同样约束 **Lua 安装钩子**（`preinstall`/`postinstall`，包代码）——与 utils 脚本同级。构建钩子（项目自身代码）不受此节约束。
 
 完整字段与语义详见 [`utils.md` 权限管理](utils.md#权限管理-version--025)。
 
@@ -86,5 +88,5 @@ EazyMake 的安全模型集中说明。本文件为**单一权威**;其他文档
 | Lua `os`/`io` | 编译期移除 |
 | Lua `file_write` 越界 | 拒绝(硬限制) |
 | Utils 受控访问 | deny > allow > ask |
-| Lua 安装钩子执行 | 沙箱 + 确认提示（无需编辑器审查，0.9.9+） |
+| Lua 安装钩子执行 | 沙箱 + `[utils.permissions]` 门控 + 确认提示（无需编辑器审查，0.9.9+；门控 1.2.0-dev.11+） |
 | Shell 安装钩子执行 | 打开编辑器审查 + 确认提示（旧版兼容） |

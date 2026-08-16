@@ -263,7 +263,7 @@ Lua scripts run in a restricted environment:
 
 ## Permission management [version >= 0.2.5]
 
-Beyond the Lua sandbox, the package's `ezmk.toml` can declare **fine-grained** allowlists and denylists for the three controlled access categories — `file_read`, `file_write`, and `run` — via `[utils.permissions]`:
+Beyond the Lua sandbox, the package's `ezmk.toml` can declare **fine-grained** allowlists and denylists for the three controlled access categories — `file_read`, `file_write`, and `run` — via `[utils.permissions]`. **Scope (1.2.0-dev.11+)**: this section constrains not only `type = "utils"` package scripts but also the **same package's Lua install hooks** (`preinstall`/`postinstall` — also package code, see [pkg.md](pkg.md)); build hooks (the project's own code) are not subject to it.
 
 ```toml
 [utils]

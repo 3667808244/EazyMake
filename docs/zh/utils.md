@@ -252,7 +252,9 @@ Lua 脚本运行在受限环境：
 ## 权限管理 [version >= 0.2.5]
 
 Lua sandbox 之外，可在包的 `ezmk.toml` 中通过 `[utils.permissions]` 对 `file_read` /
-`file_write` / `run` 三类受控访问声明**细粒度**的白名单与黑名单：
+`file_write` / `run` 三类受控访问声明**细粒度**的白名单与黑名单。**适用面（1.2.0-dev.11+）**：
+该节不仅约束 `type = "utils"` 包的脚本，也约束**同包的 Lua 安装钩子**（`preinstall`/`postinstall`
+——同为包代码，见 [pkg.md](pkg.md)）；构建钩子（项目自身代码）不受此节约束。
 
 ```toml
 [utils]

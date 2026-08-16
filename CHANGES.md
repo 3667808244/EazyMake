@@ -12,6 +12,44 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0-dev.11 (2026-08-15) — 代码质量审查与改进（全库审查 + P0/P1 收口）
+
+1.2.0 系列第十一个开发子版本，**系统性质量收口**：6 个并行审查代理按模块精读全库（配置/CLI、构建/缓存、包/仓库、Lua/异步、工具、测试），共发现 68 条问题（high 13 / medium ~40 / low ~15）+ 30 条值得保留的设计。本版落地 **P0 全部 + P1 大部**，分 9 个阶段逐项修复并带验收测试；P2（大规模拆分、`compare_version` 预发布语义、测试卫生、macOS FSEvents 逐文件重写）明确收口到后续子版本。公共 API 无破坏性变更（`load_msvc_env` 等公共声明保留；全部为内部重构 + 新增 i18n key；见文首 API Stability）。
+
+### 新增 / 行为变更
+
+- **`run_tests` 命令构造收口**（`src/build.cpp`，P0）：测试编译/链接复用 `build_compile_args`/`join_shell_args`/`translate_compile_flags`——S4 转义 + MSVC 翻译 + 依赖包 include + 缓存一次解决，test 路径命令注入面关闭；`project_objs` 由项目源收集推导（修复嵌套 `src/` 子目录对象缺失）；`test_filter` 经 `escape_shell_arg`
+- **`package_include_dirs` 共享 helper**：`prepare_build_state` 与 `run_tests` 共用包 include 收集（单一维护点）
+- **钩子/沙箱安全不对称修复**（`src/lua_api.cpp`，P0）：安装钩子（`preinstall`/`postinstall`）进入脚本上下文时加载包的 `[utils.permissions]`（`enforce_utils_permissions`）——与 utils 脚本同级门控，恶意包钩子不再无提示读任意路径；构建钩子保持 legacy 模型（项目自身代码，用户权限）；`norm_path` 改 `weakly_canonical` 堵 symlink/junction 逃逸（Windows junction 亦生效）；沙箱黑名单补 `io`/`os`（纵深防御）
+- **编码事故全局修复**（P0）：build.cpp/util.cpp 用户可见乱码（`鈥?`→`—` 等 8 处）与 test_integration.cpp 24+ 处（含运行时字符串 `鏈煡`→`未知`）+ 测试 `EZMK_LANG` 护栏
+- **配置/CLI 校验收口**（`src/config.cpp`/`cli.cpp`/`build.cpp`）：`extract_string_array` 非字符串元素报错（含字段名）；版本约束格式校验 + 空名报错；`default_profile` 交叉校验；`source_date_epoch` 负值报错；约束操作符按**最早出现**匹配（`pkg@^1.0` 修复）；`project clean` 参数解析；`project test -v` 别名（与 `-V` 同义）；`--locked`+`--no-lock` 互斥；`--sha256` 格式校验；profile 错误 i18n 化（7 新 key）
+- **包/导入/导出正确性**（`src/import.cpp`/`export.cpp`/`pkg.cpp`）：import `target_*` 关键字感知（PRIVATE/PUBLIC 分组）；export `VERSION` 数字校验 + precompiled 复用 `select_precompiled_variant`；互依赖自动安装护栏（`g_auto_installing`）；自动安装约束回读校验；事务安装 `.new` 换位（拷贝窗口内旧版保留）+ 回滚 ec 检查 + backup 隐藏唯一名；选择器 `lib/` 缺失友好错误 + MSVC 平局偏好 `.lib`
+- **pack 阻断修复**（`src/util.cpp`/`build.cpp`）：`create_targz` 数值字段改 '0' 左填充（修复提取 size=0 致包损坏）；pack 产物 ezmk.toml 注入 `precompiled = true`（预编译校验通过）
+- **缓存/工具健壮性**（`src/cache.cpp`/`toolchain.cpp`/`util.cpp`/`lockfile.cpp`/`pkg.cpp`）：depfile 转义空格路径解析；SDE 入编译签名；`compiler_tag`/`parse_digits` stoul 溢出保护；macOS 家族 `--version` 双信号判定；targz 长路径 prefix 读出 + size 越界报错；`escape_cmd_arg`（`cmd /c` 转义）；下载 1GiB 上限 + curl `--max-filesize`；`find_package_archive` 确定性选择（lockfile/pkg）
+- **死代码/一致性清理**：watch 内联 profile 死代码、`parse_catch2_xml`/`Catch2TestResult`（~130 行）、`load_msvc_env` 死调用（vcvars 探测/版本合并为单次运行）、`auto_update_repos` 死调用删除；**MSVC 产物路径共享 helper**（install/pack 修复 `.lib`/`_implib.lib`/MinGW `.dll` 查找，与 link_phase 对齐）；CliArgs optional 收敛；i18n `fmt` 单遍扫描（值含 `{...}` 不再嵌套替换）；`ThreadPool(0)` 拒绝；file_watcher Windows IOCP 错误恢复 + macOS kqueue 语义文档化
+- **空断言测试修复**：pkg install e2e 去空转（本地打包归档安装，断言退出码 0 + 产物 + `pkg list`）；dev.10 预编译测试 oracle 去耦（独立构造期望标签，不再自指 `compiler_tag`）；钩子越界 e2e 真断言
+
+### 文档
+
+- `docs/en|zh/safety.md`：Lua 安装钩子权限门控（1.2.0-dev.11+）、构建钩子 legacy 模型说明、安全汇总表更新
+- `docs/en|zh/pkg.md`：Lua 钩子安全性补 `[utils.permissions]` 门控说明
+- `docs/en|zh/utils.md`：权限管理适用面扩展（安装钩子与 utils 同级）
+
+### 测试
+
+- `test_build.cpp`/`test_compile_db.cpp`：run_tests 注入回归、MSVC 翻译、project_objs 嵌套对象
+- `test_integration.cpp`：项目对象链接、注入安全、钩子越界 e2e 真断言、symlink/junction 逃逸、含 tagged 归档 precompiled 导出、互依赖、约束不满足自动安装、pkg 本地归档安装、precompiled oracle 去耦
+- `test_config.cpp`/`test_cli.cpp`：校验前移各字段 + clean 解析/别名/互斥/sha256 格式
+- `test_cache.cpp`：depfile 转义空格、缓存签名差分 + SDE
+- `test_toolchain.cpp`：stoul 溢出、macOS 家族双信号、vcvars 单次运行
+- `test_util.cpp`：targz 长路径/越界往返、`escape_cmd_arg`
+- `test_pkg.cpp`：互依赖护栏、约束回读、事务 `.new` 换位、选择器 `lib/` 缺失 + MSVC 平局
+- `test_i18n.cpp`：fmt 单遍（嵌套替换回归 2 用例）
+- `test_thread_pool.cpp`：`ThreadPool(0)` 拒绝
+- 全量回归：775 用例 / 3552 断言零失败（基线 747 / 3442，+28 用例 +110 断言）
+
+---
+
 ## 1.2.0-dev.9 (2026-08-15) — 包构建配置收敛（`src_dirs` / `include_dirs` 对包生效）
 
 1.2.0 系列第九个开发子版本，**dev.7 的延伸**：让包的 `[compile]` 配置与项目语义对齐——`src_dirs` 从「被静默忽略」变为「真正生效」（复用 `build::collect_sources` 多目录收集 + 文件名去重 + 缺失目录 warn），`include_dirs` 自编译与消费者两侧行为固化（相对包根解析、与默认 `include/` 保序去重），包不再受 `[project].type` 的 `main.cpp` 校验影响。公共 API 无破坏性变更（`collect_sources` 新增默认参数 `require_main = true`，项目路径零变化；见文首 API Stability）。
