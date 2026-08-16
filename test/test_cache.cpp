@@ -535,3 +535,40 @@ TEST_CASE("build_compile_args: def_inc + include_dirs dedup (MSVC)", "[cache][1.
     std::string inc = "/I" + (tmp.path / "include").string();
     REQUIRE(std::count(args.begin(), args.end(), inc) == 1);
 }
+
+// 1.2.0-dev.11: the RESOLVED SOURCE_DATE_EPOCH must be part of the cache
+// signature — it is injected via the child env and embedded in objects, so a
+// change must invalidate cached objects even though the command line is the
+// same.
+TEST_CASE("compile_options_signature: source_date_epoch is folded in", "[cache][1.2.0-dev.11]") {
+    CompileSection cs;
+    cs.deterministic = true;
+    cs.source_date_epoch = 1700000000;
+    auto sig1 = compile_options_signature(cs);
+    cs.source_date_epoch = 1800000000;
+    auto sig2 = compile_options_signature(cs);
+    REQUIRE(sig1 != sig2);
+
+    // zero (unset) vs set must also differ
+    cs.source_date_epoch = 0;
+    auto sig0 = compile_options_signature(cs);
+    REQUIRE(sig0 != sig2);
+}
+
+// 1.2.0-dev.11: GCC depfiles escape spaces with backslash ("C:\My\
+// Project\...") — the parser must not split the token at the escaped space,
+// or the header path is never hashed and changes go undetected.
+TEST_CASE("parse_depfile_and_hash: escaped spaces stay in the path", "[cache][1.2.0-dev.11]") {
+    TempDir tmp;
+    fs::path depfile = tmp.path / "x.d";
+    // Raw depfile bytes: the space in "My Project" is escaped as "\ "
+    std::string content = "src/main.o: C:\\My\\ Project\\include\\hdr.hpp \\\n"
+                          "  C:\\Other\\ Path\\a.hpp\n";
+    { std::ofstream(depfile) << content; }
+
+    auto deps = parse_depfile_and_hash(depfile);
+    REQUIRE(deps.size() == 2);
+    // Escaped space decoded, token not split
+    REQUIRE(deps[0].path == "C:\\My Project\\include\\hdr.hpp");
+    REQUIRE(deps[1].path == "C:\\Other Path\\a.hpp");
+}

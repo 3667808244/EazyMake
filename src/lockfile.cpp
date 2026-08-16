@@ -181,15 +181,9 @@ std::vector<std::string> verify(const fs::path& proj_root,
 
         fs::path lib_file;
         auto build_dir = pkg_path / "build";
-        if (util::file_exists(build_dir)) {
-            for (auto& e : fs::directory_iterator(build_dir)) {
-                auto ext = e.path().extension().string();
-                if (ext == ".a" || ext == ".lib") {
-                    lib_file = e.path();
-                    break;
-                }
-            }
-        }
+        // 1.2.0-dev.11: deterministic pick (shared with pkg.cpp record side) —
+        // the previous "first directory entry" was non-deterministic.
+        lib_file = util::find_package_archive(build_dir, pkg.name);
 
         if (!lib_file.empty() && !pkg.sha256.empty()) {
             std::string actual = crypto::sha256_file(lib_file);

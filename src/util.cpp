@@ -447,18 +447,25 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
     };
 
     for (auto& entry : entries) {
-        // Split name into prefix+name if > 100 chars (ustar extension)
+        // Split name into prefix+name if > 100 chars (ustar extension).
+        // 1.2.0-dev.11: split at the LAST slash so the name part fits 100 bytes
+        // — the previous first-slash split left the name >100 chars, which was
+        // then truncated and could not be reconstructed on extraction.
         std::string hdr_name = entry.name;
         std::string hdr_prefix;
         if (hdr_name.size() > 100) {
-            // Find a '/' within the first ~155 chars to split at
-            auto slash = hdr_name.find('/', hdr_name.size() > 155 ? hdr_name.size() - 155 : 0);
-            if (slash != std::string::npos && slash < 155) {
+            size_t slash = hdr_name.rfind('/');
+            if (slash != std::string::npos &&
+                hdr_name.size() - (slash + 1) <= 100) {
                 hdr_prefix = hdr_name.substr(0, slash);
                 hdr_name = hdr_name.substr(slash + 1);
+                if (hdr_prefix.size() > 155) hdr_prefix.resize(155);  // ustar cap
+            } else {
+                // A single component longer than 100 chars cannot be split —
+                // truncate (documented ustar limitation).
+                hdr_name.resize(100);
             }
         }
-        if (hdr_name.size() > 100) hdr_name.resize(100);
 
         std::array<char, 512> hdr{};
         auto set_field = [&](int off, int len, const std::string& v) {
@@ -582,6 +589,9 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
 // 1.1.2 S1: 解压输出大小上限，防止 zip-bomb（解压后数据超过该值直接拒绝）。
 // tar.gz 路径先把整个解压结果读进内存，故必须有界。
 constexpr size_t kMaxDecompressedSize = size_t(1) << 30; // 1 GiB
+
+// 1.2.0-dev.11: 下载大小上限（与解压上限一致）——恶意/异常服务器不能无限灌数据。
+constexpr uint64_t kMaxDownloadSize = size_t(1) << 30;   // 1 GiB
 
 // 1.1.3 S2: 校验包/项目名可作为单一路径段使用。拒绝规则与 safe_extract_path 同口径
 // （路径分隔符、盘符、绝对路径、`.`/`..`、隐藏前缀），非法即抛 runtime_error。
@@ -794,19 +804,31 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
 
         std::string name(reinterpret_cast<const char*>(blk), std::min(size_t(100), out.size() - off));
         name = name.c_str(); // trim at null
+        // 1.2.0-dev.11: ustar long names use the prefix field (offset 345,
+        // 155 bytes) + name — create_targz writes it, extraction must read it
+        // back or packed deep include trees extract truncated.
+        std::string prefix(reinterpret_cast<const char*>(blk + 345),
+                           std::min(size_t(155), out.size() - (off + 345)));
+        prefix = prefix.c_str();
+        if (!prefix.empty()) name = prefix + "/" + name;
         size_t fsize = octal_to_size(reinterpret_cast<const char*>(blk + 124), 12);
         char typeflag = static_cast<char>(blk[156]);
 
         off += 512;
 
+        // 1.2.0-dev.11: a size field beyond the remaining data means a corrupt
+        // or truncated archive — fail loudly instead of silently skipping.
+        if (off + fsize > out.size()) {
+            throw std::runtime_error("corrupt tar.gz: entry '" + name +
+                                     "' size exceeds archive data");
+        }
+
         if (typeflag == '0' || typeflag == '\0') {
             // Regular file
             fs::path outpath = safe_extract_path(dest, name);
             fs::create_directories(outpath.parent_path());
-            if (off + fsize <= out.size()) {
-                std::ofstream fout(outpath, std::ios::binary);
-                fout.write(reinterpret_cast<const char*>(out.data() + off), fsize);
-            }
+            std::ofstream fout(outpath, std::ios::binary);
+            fout.write(reinterpret_cast<const char*>(out.data() + off), fsize);
         } else if (typeflag == '5') {
             // Directory
             fs::create_directories(safe_extract_path(dest, name));
@@ -830,6 +852,25 @@ void extract_archive(const fs::path& archive, const fs::path& dest) {
     } else {
         throw std::runtime_error("unsupported archive format: " + archive.string());
     }
+}
+
+// 1.2.0-dev.11: see header comment.
+fs::path find_package_archive(const fs::path& build_dir,
+                              const std::string& pkg_name) {
+    fs::path canonical_a  = build_dir / ("lib" + pkg_name + ".a");
+    fs::path canonical_lib = build_dir / ("lib" + pkg_name + ".lib");
+    if (file_exists(canonical_a)) return canonical_a;
+    if (file_exists(canonical_lib)) return canonical_lib;
+    std::vector<fs::path> candidates;
+    if (file_exists(build_dir)) {
+        for (auto& e : fs::directory_iterator(build_dir)) {
+            auto ext = e.path().extension().string();
+            if (ext == ".a" || ext == ".lib") candidates.push_back(e.path());
+        }
+    }
+    if (candidates.empty()) return {};
+    std::sort(candidates.begin(), candidates.end());
+    return candidates.front();
 }
 
 // ===================================================================
@@ -930,18 +971,44 @@ void download(std::string_view url_sv, const fs::path& dest) {
     fs::create_directories(dest.parent_path());
     std::ofstream fout(dest, std::ios::binary);
 
+    // 1.2.0-dev.11: cap the download (mirrors the 1 GiB extract limit) and
+    // check the output stream — a malicious/broken server must not fill the
+    // disk, and a failed open/write must not silently leave a half file.
+    uint64_t total = 0;
     DWORD dwSize = 0;
     DWORD dwDownloaded = 0;
     char buf[8192];
+    bool write_ok = fout.good();
     do {
         dwSize = 0;
         if (WinHttpQueryDataAvailable(hRequest, &dwSize)) {
             DWORD toRead = (dwSize < sizeof(buf)) ? dwSize : sizeof(buf);
             if (WinHttpReadData(hRequest, buf, toRead, &dwDownloaded)) {
+                if (!write_ok) continue;
                 fout.write(buf, dwDownloaded);
+                write_ok = fout.good();
+                total += dwDownloaded;
+                if (total > kMaxDownloadSize) {
+                    fout.close();
+                    std::error_code ec;
+                    fs::remove(dest, ec);
+                    WinHttpCloseHandle(hRequest);
+                    WinHttpCloseHandle(hConnect);
+                    WinHttpCloseHandle(hSession);
+                    throw std::runtime_error("download exceeds size limit");
+                }
             }
         }
     } while (dwSize > 0);
+    fout.close();
+    if (!write_ok) {
+        std::error_code ec;
+        fs::remove(dest, ec);
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        throw std::runtime_error("failed to write download to: " + dest.string());
+    }
 
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
@@ -960,7 +1027,8 @@ void download(std::string_view url_sv, const fs::path& dest) {
     };
     std::string escaped_url = escape_sq(url);
     std::string escaped_dest = escape_sq(dest.string());
-    std::string cmd = "curl -sL -o '" + escaped_dest + "' '" + escaped_url + "'";
+    std::string cmd = "curl -sL --max-filesize 1073741824 -o '" + escaped_dest +
+                      "' '" + escaped_url + "'";
     auto res = run_command(cmd);
     if (res.exit_code != 0) {
         throw std::runtime_error("download failed: " + res.err);
@@ -1310,7 +1378,7 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
         cmd << "powershell -ExecutionPolicy Bypass -File \""
             << escape_shell_arg(script.string()) << "\"";
     } else if (ext == ".bat") {
-        cmd << "cmd /c \"" << escape_shell_arg(script.string()) << "\"";
+        cmd << "cmd /c \"" << escape_cmd_arg(script.string()) << "\"";
     } else {
         ProcResult bad;
         bad.exit_code = 1;
@@ -1333,6 +1401,21 @@ std::string escape_shell_arg(std::string_view s) {
     for (char c : s) {
         if (c == '"' || c == '\\' || c == '`' || c == '$')
             r += '\\';
+        r += c;
+    }
+    return r;
+}
+
+// 1.2.0-dev.11: see header comment — cmd.exe /c metachar escaping (^ is the
+// caret escape). `%` is also escaped because double quotes do NOT suppress
+// variable expansion in cmd.
+std::string escape_cmd_arg(std::string_view s) {
+    std::string r;
+    r.reserve(s.size() + 8);
+    for (char c : s) {
+        if (c == '&' || c == '|' || c == '<' || c == '>' ||
+            c == '^' || c == '"' || c == '%')
+            r += '^';
         r += c;
     }
     return r;

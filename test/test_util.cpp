@@ -931,6 +931,66 @@ TEST_CASE("create_targz → extract_targz round trip", "[util][1.2.0-dev.11]") {
     ezmk::util::remove_all(tmp);
 }
 
+// 1.2.0-dev.11: >100-char ustar names — create_targz writes the prefix field,
+// extract must read it back (previously truncated silently).
+TEST_CASE("create_targz → extract_targz round trip: long path via ustar prefix", "[util][1.2.0-dev.11]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_targz_longpath";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp / "src");
+    // Deep include tree: the full relative path exceeds the 100-byte ustar name.
+    std::string deep = "include/very/long/chain/of/directories/that/easily/exceeds/"
+                       "the/100/byte/ustar/name/limit/for/sure/header.hpp";
+    REQUIRE(deep.size() > 100);
+    ezmk::util::file_write(tmp / "src" / deep, "long path content");
+
+    auto arc = tmp / "out.tar.gz";
+    ezmk::util::create_targz(tmp / "src", arc);
+    auto dest = tmp / "out";
+    ezmk::util::create_directories(dest);
+    ezmk::util::extract_targz(arc, dest);
+
+    REQUIRE(ezmk::util::file_read(dest / deep) == "long path content");
+    ezmk::util::remove_all(tmp);
+}
+
+// 1.2.0-dev.11: cmd.exe argument escaping covers the metachars POSIX escaping
+// does not.
+TEST_CASE("escape_cmd_arg: escapes cmd metacharacters", "[util][1.2.0-dev.11]") {
+    REQUIRE(ezmk::util::escape_cmd_arg("a&b") == "a^&b");
+    REQUIRE(ezmk::util::escape_cmd_arg("a|b") == "a^|b");
+    REQUIRE(ezmk::util::escape_cmd_arg("a<b>c") == "a^<b^>c");
+    REQUIRE(ezmk::util::escape_cmd_arg("a^b") == "a^^b");
+    REQUIRE(ezmk::util::escape_cmd_arg("a%b") == "a^%b");
+    REQUIRE(ezmk::util::escape_cmd_arg("a\"b") == "a^\"b");
+    // ordinary characters pass through
+    REQUIRE(ezmk::util::escape_cmd_arg("C:\\Program Files\\x") == "C:\\Program Files\\x");
+}
+
+// 1.2.0-dev.11: deterministic package-archive pick — lib<name>.* preferred,
+// else lexicographically smallest.
+TEST_CASE("find_package_archive: canonical name preferred, else sorted", "[util][1.2.0-dev.11]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_find_archive";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp / "build");
+    auto build = tmp / "build";
+
+    SECTION("canonical lib<name>.a preferred") {
+        ezmk::util::file_write(build / "zfirst.a", "x");
+        ezmk::util::file_write(build / "libfoo.lib", "x");
+        ezmk::util::file_write(build / "libfoo.a", "x");
+        REQUIRE(ezmk::util::find_package_archive(build, "foo").filename() == "libfoo.a");
+    }
+    SECTION("no canonical → lexicographically smallest") {
+        ezmk::util::file_write(build / "b.a", "x");
+        ezmk::util::file_write(build / "a.lib", "x");
+        REQUIRE(ezmk::util::find_package_archive(build, "foo").filename() == "a.lib");
+    }
+    SECTION("no archives → empty") {
+        REQUIRE(ezmk::util::find_package_archive(build, "foo").empty());
+    }
+    ezmk::util::remove_all(tmp);
+}
+
 // ===================================================================
 // detect_platform_tag() — 1.1.0-dev.2
 // ===================================================================

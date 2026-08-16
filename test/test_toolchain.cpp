@@ -446,3 +446,15 @@ TEST_CASE("compiler_tag: unparseable version returns empty", "[toolchain][1.2.0-
     // MSVC without the "Version" token
     REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, "cl.exe 19.43")).empty());
 }
+
+// 1.2.0-dev.11: an overflowing digit run (from a $CXX wrapper or odd cl
+// output) must yield an empty tag, not throw out_of_range through the install
+// path.
+TEST_CASE("compiler_tag: overflowing digit run returns empty without throwing", "[toolchain][1.2.0-dev.11]") {
+    std::string huge = "g++ (GCC) 9999999999999999999999999999.0";
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, huge)).empty());
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Clang, huge)).empty());
+    std::string huge_msvc =
+        "Microsoft (R) C/C++ Optimizing Compiler Version 99999999999999999999999.43 for x64";
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, huge_msvc)).empty());
+}

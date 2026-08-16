@@ -296,8 +296,9 @@ std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path) {
     // Strategy: run "vcvars64.bat > NUL && set" to capture the modified environment.
     // The `set` command prints all env vars as KEY=VALUE lines.
     std::ostringstream cmd;
-    // 1.1.3 S5: vcvars 路径经 escape_shell_arg 再拼入 cmd /c
-    cmd << "cmd /c \"call \\\"" << util::escape_shell_arg(vcvars_path.string()) << "\\\" > NUL && set\"";
+    // 1.1.3 S5: vcvars 路径转义后拼入 cmd /c（1.2.0-dev.11: 改用 cmd 专用转义，
+    // escape_shell_arg 不覆盖 cmd 的 % & | < > ^）
+    cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars_path.string()) << "\\\" > NUL && set\"";
 
     auto res = util::run_command(cmd.str());
     if (res.exit_code != 0) return env;
@@ -357,6 +358,19 @@ static Toolchain detect_gcc_like(const std::string& cxx, const std::string& cc) 
         // Trim trailing \r
         if (!tc.version.empty() && tc.version.back() == '\r')
             tc.version.pop_back();
+    }
+
+    // 1.2.0-dev.11: family by NAME can misjudge macOS, where g++/c++ are
+    // Apple Clang aliases — confirm with the --version output (which declares
+    // "clang"). Otherwise compiler_tag() would emit "gcc15" for a Clang
+    // toolchain and precompiled matching would pick the wrong ABI tag.
+    if (tc.family == CompilerFamily::Gcc && !tc.version.empty()) {
+        std::string vlow = tc.version;
+        std::transform(vlow.begin(), vlow.end(), vlow.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (vlow.find("clang") != std::string::npos) {
+            tc.family = CompilerFamily::Clang;
+        }
     }
 
     return tc;
@@ -425,6 +439,9 @@ namespace {
 // return the leading number. More robust than a bare first-number scan:
 // MSYS2's "g++ (Rev2, Built by MSYS2 project) 14.1.0" would yield "2" from
 // "Rev2" — "14.1" is the first real major.minor. Returns false when none.
+// 1.2.0-dev.11: manual accumulation with overflow guard — a >ULONG_MAX digit
+// run (from a $CXX wrapper or odd cl output) must not throw out_of_range out of
+// compiler_tag into the install path.
 bool first_version_major(const std::string& s, unsigned long& major) {
     size_t i = 0;
     while (i + 2 < s.size()) {
@@ -433,12 +450,32 @@ bool first_version_major(const std::string& s, unsigned long& major) {
             std::isdigit(static_cast<unsigned char>(s[i + 2]))) {
             size_t start = i;
             while (start > 0 && std::isdigit(static_cast<unsigned char>(s[start - 1]))) --start;
-            major = std::stoul(s.substr(start, i - start + 1));
+            unsigned long v = 0;
+            for (size_t j = start; j <= i; ++j) {
+                if (v > (ULONG_MAX - 9) / 10) return false;  // overflow
+                v = v * 10 + static_cast<unsigned long>(s[j] - '0');
+            }
+            major = v;
             return true;
         }
         ++i;
     }
     return false;
+}
+
+// 1.2.0-dev.11: parse a digit run at `s[pos..]` with overflow guard (same
+// rationale as first_version_major). Returns false on overflow.
+bool parse_digits(const std::string& s, size_t& pos, unsigned long& out) {
+    if (pos >= s.size() || !std::isdigit(static_cast<unsigned char>(s[pos])))
+        return false;
+    unsigned long v = 0;
+    while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
+        if (v > (ULONG_MAX - 9) / 10) return false;
+        v = v * 10 + static_cast<unsigned long>(s[pos] - '0');
+        ++pos;
+    }
+    out = v;
+    return true;
 }
 
 // Map a cl.exe version line to the MSVC toolset tag.
@@ -455,19 +492,10 @@ std::string msvc_toolset_tag(const std::string& version) {
     // Parse "<major>.<minor>" from rest (e.g. " 19.43.34808 for x64").
     size_t i = 0;
     while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-    if (i >= rest.size()) return "";
     unsigned long major = 0, minor = 0;
-    {
-        size_t start = i;
-        while (i < rest.size() && std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-        major = std::stoul(rest.substr(start, i - start));
-    }
+    if (!parse_digits(rest, i, major)) return "";
     while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-    if (i < rest.size()) {
-        size_t start = i;
-        while (i < rest.size() && std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-        minor = std::stoul(rest.substr(start, i - start));
-    }
+    if (!parse_digits(rest, i, minor)) minor = 0;
 
     if (major != 19) return "";  // only the 19.x (VS2015+) series is mapped
     long msc_ver = 1900L + static_cast<long>(minor);
@@ -531,7 +559,7 @@ Toolchain detect_toolchain() {
             // Build a command that runs cl within the vcvars environment
             // We check if cl.exe works by running it in the vcvars context
             std::ostringstream test_cmd;
-            test_cmd << "cmd /c \"call \\\"" << util::escape_shell_arg(vcvars.string()) << "\\\" > NUL && cl 2>&1\"";
+            test_cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars.string()) << "\\\" > NUL && cl 2>&1\"";
             auto res = util::run_command(test_cmd.str());
             if (res.exit_code == 0) {
                 // MSVC is available

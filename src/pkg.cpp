@@ -1305,16 +1305,14 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     for (auto& d : pkg_cfg.depends.libs) lp.dependencies.push_back(d.name);
                     for (auto& d : pkg_cfg.depends.want) lp.dependencies.push_back(d.name);
 
-                    // Hash the built library
+                    // Hash the built library — 1.2.0-dev.11: deterministic
+                    // pick (shared with lockfile verify side) so record and
+                    // verify hash the SAME archive.
                     auto build_dir = entry.path() / "build";
-                    if (util::file_exists(build_dir)) {
-                        for (auto& f : fs::directory_iterator(build_dir)) {
-                            auto ext = f.path().extension().string();
-                            if (ext == ".a" || ext == ".lib") {
-                                lp.sha256 = crypto::sha256_file(f.path());
-                                break;
-                            }
-                        }
+                    auto lib_file = util::find_package_archive(
+                        build_dir, pkg_cfg.project.name);
+                    if (!lib_file.empty()) {
+                        lp.sha256 = crypto::sha256_file(lib_file);
                     }
                     lf.packages.push_back(std::move(lp));
                 } catch (...) {

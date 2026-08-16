@@ -144,6 +144,11 @@ fs::path get_exe_dir();
 // Wraps miniz for zip; wraps miniz+gzip + custom tar parser for .tar.gz
 void extract_zip(const fs::path& archive, const fs::path& dest);
 void extract_targz(const fs::path& archive, const fs::path& dest);
+// 1.2.0-dev.11: deterministically pick a package's built archive from its
+// build/ dir — prefer lib<name>.a/.lib, else the lexicographically smallest
+// .a/.lib. Shared by lockfile record/verify so both hash the SAME file.
+fs::path find_package_archive(const fs::path& build_dir,
+                              const std::string& pkg_name);
 
 // Auto-detect archive type by extension and extract
 void extract_archive(const fs::path& archive, const fs::path& dest);
@@ -222,6 +227,11 @@ int compare_version(std::string_view a, std::string_view b);
 // Escapes: " \ ` $
 // This prevents command injection when constructing shell commands with paths/URLs.
 std::string escape_shell_arg(std::string_view s);
+
+// 1.2.0-dev.11: escape an argument for cmd.exe /c (Windows). cmd's metachar
+// set (& | < > ^ % ") differs from POSIX sh — escape_shell_arg does not cover
+// it, so any cmd /c "..." concatenation must use this instead.
+std::string escape_cmd_arg(std::string_view s);
 
 // 1.1.3 S5: 构造「打开文件的编辑器」命令串。editor 与 file 都经 escape_shell_arg +
 // 双引号包裹，防止 POSIX shell 注入（EDITOR="vim; evil"）与含空格路径拆分。

@@ -145,10 +145,26 @@ std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile) {
         joined += content[i];
     }
 
-    // Split on whitespace
+    // 1.2.0-dev.11: split on whitespace honoring GCC's depfile escaping — a
+    // path with spaces is written "C:\My\ Project\..." where "\ " is an escaped
+    // space. The previous plain split cut the token at the escaped space, so
+    // the header's real path was never hashed and changes went undetected.
     std::vector<std::string> tokens;
     std::string curr;
-    for (char c : joined) {
+    for (size_t i = 0; i < joined.size(); ++i) {
+        char c = joined[i];
+        if (c == '\\' && i + 1 < joined.size()) {
+            char next = joined[i + 1];
+            if (next == ' ' || next == '\t' || next == '\n') {
+                // Backslash-escaped whitespace → decode to the literal char.
+                curr += next;
+                ++i;
+                continue;
+            }
+            // Windows path separator (or any other backslash) stays literal.
+            curr += c;
+            continue;
+        }
         if (c == ' ' || c == '\t' || c == '\n') {
             if (!curr.empty()) {
                 tokens.push_back(curr);
@@ -217,6 +233,15 @@ std::string compile_options_signature(const config::CompileSection& compile,
     // 1.1.0: deterministic flag — toggling triggers full rebuild
     if (compile.deterministic) {
         combined += "deterministic=1 ";
+    }
+    // 1.2.0-dev.11: the RESOLVED SOURCE_DATE_EPOCH is injected into the child
+    // environment and embedded in the object's timestamps/build-id — a change
+    // (config, env, git HEAD time) must invalidate cached objects even though
+    // the command line itself does not change.
+    if (compile.source_date_epoch > 0) {
+        combined += "sde=";
+        combined += std::to_string(compile.source_date_epoch);
+        combined += ' ';
     }
     // 1.1.2 C2: stdlib and use_pic both change the emitted command
     // (build_compile_args injects -stdlib=... and -fPIC) — without them here,
