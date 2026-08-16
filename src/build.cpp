@@ -503,27 +503,26 @@ static AppliedProfile apply_profile(const config::EzConfig& cfg,
                 profile_names.push_back(name);
         std::sort(profile_names.begin(), profile_names.end());
 
+        // 1.2.0-dev.11: error text moved to i18n (was hardcoded English).
+        std::string hint;
         auto matches = util::closest_match(active_profile, profile_names, 2);
         if (!matches.empty()) {
             std::string suggestion = matches[0];
             for (size_t i = 1; i < matches.size() && i < 3; ++i)
                 suggestion += ", " + matches[i];
-            util::fatal(std::string("unknown profile: '") + active_profile +
-                        "'. Did you mean: " + suggestion + "?");
-        }
-
-        if (profile_names.empty()) {
-            util::fatal(std::string("unknown profile: '") + active_profile +
-                        "'. No profiles defined in ezmk.toml.");
+            hint = "Did you mean: " + suggestion + "?";
+        } else if (profile_names.empty()) {
+            hint = "No profiles defined in ezmk.toml.";
         } else {
             std::string avail;
             for (size_t i = 0; i < profile_names.size(); ++i) {
                 if (i > 0) avail += ", ";
                 avail += profile_names[i];
             }
-            util::fatal(std::string("unknown profile: '") + active_profile +
-                        "'. Available: " + avail);
+            hint = "Available: " + avail;
         }
+        util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::profile_unknown,
+                    {{"profile", active_profile}, {"hint", hint}}));
     }
     auto lit = cfg.link_profiles.find(active_profile);
     if (lit != cfg.link_profiles.end()) {

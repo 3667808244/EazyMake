@@ -17,13 +17,22 @@ namespace ezmk::config {
 
 namespace {
 
-std::vector<std::string> extract_string_array(const toml::node* node) {
+// 1.2.0-dev.11: array fields must contain only strings — a type mismatch (e.g.
+// `flags = ["-Wall", 42]`) used to be silently dropped, hiding config mistakes.
+// `field` names the config field for the error message.
+std::vector<std::string> extract_string_array(const toml::node* node,
+                                              const char* field) {
     std::vector<std::string> result;
     if (!node || !node->is_array()) return result;
     auto& arr = *node->as_array();
     for (size_t i = 0; i < arr.size(); ++i) {
         if (auto val = arr[i].value<std::string>()) {
             result.push_back(*val);
+        } else {
+            throw std::runtime_error(
+                i18n::fmt(i18n::I18nKey::config_err_array_type,
+                          {{"field", field ? field : ""},
+                           {"index", std::to_string(i)}}));
         }
     }
     return result;
@@ -53,6 +62,33 @@ static bool is_valid_profile_name(std::string_view name) {
 // 0.9.6+ — Parse a single dependency entry string into name + version constraint.
 // Syntax: "pkg" (no constraint), "pkg@1.2.3" (exact), "pkg^1.0" (compatible),
 //         "pkg~1.2" (approx), "pkg>=1.0" (gte), "pkg>1.0" (gt).
+// 1.2.0-dev.11: the version part is validated (numeric dotted core) and a bare
+// constraint (e.g. ">=1.0" with no package name) is rejected instead of being
+// treated as a package named ">=1.0".
+static bool is_valid_version_string(std::string_view v) {
+    // Core: digits ( '.' digits )* — mirrors util::compare_version's parse.
+    size_t i = 0;
+    bool saw_digit = false;
+    while (i < v.size() && std::isdigit(static_cast<unsigned char>(v[i]))) {
+        saw_digit = true;
+        ++i;
+    }
+    if (!saw_digit) return false;
+    while (i < v.size() && v[i] == '.') {
+        ++i;
+        bool seg = false;
+        while (i < v.size() && std::isdigit(static_cast<unsigned char>(v[i]))) {
+            seg = true;
+            ++i;
+        }
+        if (!seg) return false;
+    }
+    // Optional -prerelease / +build suffix: compare_version strips everything
+    // after the first '-' or '+', so any suffix is accepted here.
+    if (i < v.size() && (v[i] == '-' || v[i] == '+')) return true;
+    return i == v.size();
+}
+
 static DependsEntry parse_depends_entry(std::string_view raw) {
     DependsEntry entry;
 
@@ -76,7 +112,13 @@ static DependsEntry parse_depends_entry(std::string_view raw) {
 
     for (auto& o : ops) {
         auto pos = raw.find(o.op);
-        if (pos != std::string_view::npos && pos > 0) {
+        if (pos != std::string_view::npos) {
+            // 1.2.0-dev.11: a constraint at position 0 means the package name
+            // is missing ("pkg>=1.0" is valid, ">=1.0" is not).
+            if (pos == 0) {
+                throw std::runtime_error(
+                    i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
+            }
             std::string_view name_part = raw.substr(0, pos);
             std::string_view ver_part  = raw.substr(pos + o.op.size());
 
@@ -97,6 +139,14 @@ static DependsEntry parse_depends_entry(std::string_view raw) {
             if (name_part.empty()) {
                 throw std::runtime_error(
                     i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
+            }
+
+            // 1.2.0-dev.11: reject malformed versions at parse time instead of
+            // failing cryptically later at install/compare time.
+            if (!is_valid_version_string(ver_part)) {
+                throw std::runtime_error(
+                    i18n::fmt(i18n::I18nKey::config_err_invalid_version,
+                              {{"entry", std::string(raw)}}));
             }
 
             entry.name = std::string(name_part);
@@ -389,19 +439,19 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
 static void parse_compile(const toml::table& root, EzConfig& cfg) {
     // [compile]
     if (auto comp = root["compile"].as_table()) {
-        cfg.compile.flags = extract_string_array(comp->get("flags"));
-        cfg.compile.msvc_flags = extract_string_array(comp->get("msvc_flags"));
+        cfg.compile.flags = extract_string_array(comp->get("flags"), "compile.flags");
+        cfg.compile.msvc_flags = extract_string_array(comp->get("msvc_flags"), "compile.msvc_flags");
 
         // Try new field name "include_dirs" first, fall back to old "include_dir"
         auto inc_dirs = comp->get("include_dirs");
         if (inc_dirs && inc_dirs->is_array()) {
-            cfg.compile.include_dirs = extract_string_array(inc_dirs);
+            cfg.compile.include_dirs = extract_string_array(inc_dirs, "compile.include_dirs");
         } else {
-            cfg.compile.include_dirs = extract_string_array(comp->get("include_dir"));
+            cfg.compile.include_dirs = extract_string_array(comp->get("include_dir"), "compile.include_dir");
         }
 
         // 0.2.2+: src_dirs — multiple source directories
-        cfg.compile.src_dirs = extract_string_array(comp->get("src_dirs"));
+        cfg.compile.src_dirs = extract_string_array(comp->get("src_dirs"), "compile.src_dirs");
 
         // 0.2.2+: ezmk_macros — inject EZMK_* standard macros (default true)
         if (auto ezm = comp->get("ezmk_macros")) {
@@ -419,8 +469,13 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         }
 
         // 1.1.0: source_date_epoch — SOURCE_DATE_EPOCH override
+        // 1.2.0-dev.11: negative values were silently ignored — reject them.
         if (auto sde = (*comp)["source_date_epoch"].value<int64_t>()) {
-            if (*sde >= 0) cfg.compile.source_date_epoch = static_cast<uint64_t>(*sde);
+            if (*sde < 0) {
+                throw std::runtime_error(
+                    i18n::get(i18n::I18nKey::config_err_invalid_source_date_epoch));
+            }
+            cfg.compile.source_date_epoch = static_cast<uint64_t>(*sde);
         }
 
         // 1.1.1: compile_commands — auto-generate compile_commands.json after build
@@ -485,10 +540,10 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
 static void parse_link(const toml::table& root, EzConfig& cfg) {
     // [link]
     if (auto link = root["link"].as_table()) {
-        cfg.link.flags = extract_string_array(link->get("flags"));
-        cfg.link.msvc_flags = extract_string_array(link->get("msvc_flags"));
-        cfg.link.link_dirs = extract_string_array(link->get("link_dirs"));
-        cfg.link.system_targets = extract_string_array(link->get("system_target"));
+        cfg.link.flags = extract_string_array(link->get("flags"), "link.flags");
+        cfg.link.msvc_flags = extract_string_array(link->get("msvc_flags"), "link.msvc_flags");
+        cfg.link.link_dirs = extract_string_array(link->get("link_dirs"), "link.link_dirs");
+        cfg.link.system_targets = extract_string_array(link->get("system_target"), "link.system_targets");
     }
 }
 
@@ -517,8 +572,8 @@ static void parse_profiles(const toml::table& root, EzConfig& cfg) {
 
                 ProfileConfig pc;
                 if (auto prof_table = val.as_table()) {
-                    pc.flags = extract_string_array(prof_table->get("flags"));
-                    pc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"));
+                    pc.flags = extract_string_array(prof_table->get("flags"), "profile.flags");
+                    pc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"), "profile.msvc_flags");
 
                     // Parse macros sub-table within profile
                     if (auto macros_node = (*prof_table)["macros"].as_table()) {
@@ -566,8 +621,8 @@ static void parse_profiles(const toml::table& root, EzConfig& cfg) {
 
                 ProfileLinkConfig plc;
                 if (auto prof_table = val.as_table()) {
-                    plc.flags = extract_string_array(prof_table->get("flags"));
-                    plc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"));
+                    plc.flags = extract_string_array(prof_table->get("flags"), "profile.flags");
+                    plc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"), "profile.msvc_flags");
                 }
                 cfg.link_profiles[profile_name] = std::move(plc);
             }
@@ -631,20 +686,20 @@ static void parse_install(const toml::table& root, EzConfig& cfg) {
 static void parse_test(const toml::table& root, EzConfig& cfg) {
     // 1.1.0-dev.6: [test] — test configuration
     if (auto test = root["test"].as_table()) {
-        cfg.test.dirs = extract_string_array(test->get("dirs"));
+        cfg.test.dirs = extract_string_array(test->get("dirs"), "test.dirs");
         if (auto fw = (*test)["framework"].value<std::string>()) {
             // Normalize framework name (case-insensitive, reuse normalize_lang)
             cfg.test.framework = normalize_lang(*fw);
         }
-        cfg.test.flags = extract_string_array(test->get("flags"));
+        cfg.test.flags = extract_string_array(test->get("flags"), "test.flags");
         // 1.2.0-dev.12: default_profile — default profile when no --profile given
         if (auto dp = (*test)["default_profile"].value<std::string>()) {
             cfg.test.default_profile = *dp;
         }
         // 1.2.0-dev.12: test-only include dirs (-I, resolved relative to project root)
-        cfg.test.include_dirs = extract_string_array(test->get("include_dirs"));
+        cfg.test.include_dirs = extract_string_array(test->get("include_dirs"), "test.include_dirs");
         // 1.2.0-dev.12: test-only link targets (-l system libraries)
-        cfg.test.link_targets = extract_string_array(test->get("link_targets"));
+        cfg.test.link_targets = extract_string_array(test->get("link_targets"), "test.link_targets");
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
@@ -653,19 +708,19 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
 static void parse_utils(const toml::table& root, EzConfig& cfg) {
     // [utils] (only relevant for type = "utils")
     if (auto utils = root["utils"].as_table()) {
-        cfg.utils.tools = extract_string_array(utils->get("tools"));
+        cfg.utils.tools = extract_string_array(utils->get("tools"), "utils.tools");
 
         // 0.2.5+: [utils.permissions] — fine-grained read/write/run control.
         // Presence of the sub-table switches on the deny/allow/ask model;
         // absence keeps the legacy unrestricted behavior.
         if (auto perms = (*utils)["permissions"].as_table()) {
             UtilsPermissions up;
-            up.read       = extract_string_array(perms->get("read"));
-            up.read_deny  = extract_string_array(perms->get("read_deny"));
-            up.write      = extract_string_array(perms->get("write"));
-            up.write_deny = extract_string_array(perms->get("write_deny"));
-            up.run        = extract_string_array(perms->get("run"));
-            up.run_deny   = extract_string_array(perms->get("run_deny"));
+            up.read       = extract_string_array(perms->get("read"), "permissions.read");
+            up.read_deny  = extract_string_array(perms->get("read_deny"), "permissions.read_deny");
+            up.write      = extract_string_array(perms->get("write"), "permissions.write");
+            up.write_deny = extract_string_array(perms->get("write_deny"), "permissions.write_deny");
+            up.run        = extract_string_array(perms->get("run"), "permissions.run");
+            up.run_deny   = extract_string_array(perms->get("run_deny"), "permissions.run_deny");
             if (auto net = perms->get("network")) {
                 if (net->is_boolean()) {
                     up.network = net->as_boolean()->get();
@@ -747,6 +802,24 @@ EzConfig parse_config(const fs::path& toml_path) {
                 resolve(d);
             }
         }
+    }
+
+    // 1.2.0-dev.11: validate default_profile references at parse time — a typo
+    // like "relese" used to surface only deep in build/test with a confusing
+    // error. A profile is valid if it exists in compile OR link profiles (the
+    // shared apply_profile accepts both).
+    {
+        auto check_default = [&](const std::string& profile, const char* field) {
+            if (profile.empty()) return;
+            if (cfg.compile_profiles.find(profile) == cfg.compile_profiles.end() &&
+                cfg.link_profiles.find(profile) == cfg.link_profiles.end()) {
+                throw std::runtime_error(
+                    i18n::fmt(i18n::I18nKey::config_err_unknown_profile,
+                              {{"field", field}, {"profile", profile}}));
+            }
+        };
+        check_default(cfg.compile.default_profile, "compile.default_profile");
+        check_default(cfg.test.default_profile, "test.default_profile");
     }
 
     return cfg;

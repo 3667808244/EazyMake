@@ -211,7 +211,11 @@ namespace ezmk::cli
 
         if (action == "clean")
         {
+            // 1.2.0-dev.11: clean previously accepted any garbage silently
+            // (--bogus / positionals) — parse it like every other subcommand.
             args.cmd = Command::ProjectClean;
+            auto p = parse_options(argc, argv, 3, {}, "ezmk project clean");
+            reject_positionals(p, "ezmk project clean");
             return args;
         }
 
@@ -344,6 +348,9 @@ namespace ezmk::cli
             std::vector<OptionSpec> spec = {
                 {'f', "framework", true},
                 {'\0', "filter", true},
+                // 1.2.0-dev.11: -v accepted as an alias for -V (other commands
+                // use -v for verbose; -V kept for backward compatibility).
+                {'v', "verbose", false},
                 {'V', "verbose", false},
                 {'\0', "profile", true},   // 1.2.0-dev.12
             };
@@ -391,10 +398,24 @@ namespace ezmk::cli
                 p, "ezmk pkg install",
                 ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_arg));
             opts.scope = scopes.empty() ? Scope::Project : scopes[0];
-            if (auto s = p.value("sha256"))
+            if (auto s = p.value("sha256")) {
+                // 1.2.0-dev.11: validate the hash format up front — a typo'd
+                // value used to fail only after a full download+install.
+                if (s->size() != 64 ||
+                    s->find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+                    util::fatal(ezmk::i18n::I18nKey::cli_invalid_sha256,
+                                {{"value", *s}});
+                }
                 opts.sha256 = *s;
+            }
             if (p.has("yes"))
                 opts.assume_yes = true;
+            // 1.2.0-dev.11: --locked and --no-lock are mutually exclusive.
+            if (p.has("locked") && p.has("no-lock")) {
+                util::fatal(ezmk::i18n::I18nKey::cli_conflicting_flags,
+                            {{"cmd", "ezmk pkg install"},
+                             {"flags", "--locked and --no-lock"}});
+            }
             if (p.has("locked"))       // 1.1.0
                 opts.locked = true;
             if (p.has("no-lock"))      // 1.1.0

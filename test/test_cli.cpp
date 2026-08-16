@@ -173,6 +173,14 @@ TEST_CASE("cli parse: project clean", "[cli]") {
     REQUIRE(args.cmd == Command::ProjectClean);
 }
 
+// 1.2.0-dev.11: project clean previously swallowed unknown options/positionals.
+TEST_CASE("cli parse: project clean rejects unknown options and positionals", "[cli][1.2.0-dev.11]") {
+    REQUIRE_THROWS_AS(TestArgs({"project", "clean", "--bogus"}).parse(),
+                      ezmk::fatal_error);
+    REQUIRE_THROWS_AS(TestArgs({"project", "clean", "extra"}).parse(),
+                      ezmk::fatal_error);
+}
+
 // ===================================================================
 // pkg install
 // ===================================================================
@@ -197,10 +205,31 @@ TEST_CASE("cli parse: pkg install -g", "[cli]") {
 }
 
 TEST_CASE("cli parse: pkg install --sha256", "[cli]") {
+    // 1.2.0-dev.11: --sha256 values are validated (64 hex chars) at parse time.
+    std::string valid_sha(64, 'a');
     auto args = TestArgs({"pkg", "install", "./foo.zip",
-                          "--sha256", "abc123"}).parse();
+                          "--sha256", valid_sha}).parse();
     REQUIRE(args.install_opts.has_value());
-    REQUIRE(args.install_opts->sha256 == "abc123");
+    REQUIRE(args.install_opts->sha256 == valid_sha);
+}
+
+TEST_CASE("cli parse: pkg install rejects malformed --sha256", "[cli][1.2.0-dev.11]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"pkg", "install", "./foo.zip", "--sha256", "abc123"}).parse(),
+        ezmk::fatal_error
+    );
+    REQUIRE_THROWS_AS(
+        TestArgs({"pkg", "install", "./foo.zip",
+                  "--sha256", std::string(64, 'g')}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: pkg install rejects --locked + --no-lock together", "[cli][1.2.0-dev.11]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"pkg", "install", "foo.zip", "--locked", "--no-lock"}).parse(),
+        ezmk::fatal_error
+    );
 }
 
 TEST_CASE("cli parse: pkg install -y", "[cli]") {
@@ -578,8 +607,8 @@ TEST_CASE("cli parse: pkg install rejects combined scope flags", "[cli][gnu]") {
 }
 
 TEST_CASE("cli parse: value beginning with dash via = form", "[cli][gnu]") {
-    auto args = TestArgs({"pkg", "install", "foo.zip", "--sha256=-abc"}).parse();
-    REQUIRE(args.install_opts->sha256 == "-abc");
+    auto args = TestArgs({"project", "cc", "--output=-custom.json"}).parse();
+    REQUIRE(args.project_cc_opts->output == "-custom.json");
 }
 
 TEST_CASE("cli parse: invalid -j value throws", "[cli][gnu]") {
@@ -892,6 +921,15 @@ TEST_CASE("cli parse: project test without --profile keeps empty", "[cli][1.2.0-
     auto args = TestArgs({"project", "test", "--framework", "ezmk"}).parse();
     REQUIRE(args.cmd == Command::ProjectTest);
     REQUIRE(args.test_profile.empty());
+}
+
+// 1.2.0-dev.11: -v is accepted as an alias for -V (verbose) on project test.
+TEST_CASE("cli parse: project test -v is verbose alias", "[cli][1.2.0-dev.11]") {
+    auto args = TestArgs({"project", "test", "-v"}).parse();
+    REQUIRE(args.cmd == Command::ProjectTest);
+    REQUIRE(args.test_verbose == true);
+    auto args2 = TestArgs({"project", "test", "-V"}).parse();
+    REQUIRE(args2.test_verbose == true);
 }
 
 TEST_CASE("cli parse: project test missing --profile value throws", "[cli][1.2.0-dev.12]") {

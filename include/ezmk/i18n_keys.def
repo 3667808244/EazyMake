@@ -173,6 +173,11 @@ EZMK_I18N_KEY(config_err_empty_profile)
 EZMK_I18N_KEY(config_err_invalid_profile)
 EZMK_I18N_KEY(config_err_empty_depends_entry)
 EZMK_I18N_KEY(config_err_version_missing)
+EZMK_I18N_KEY(config_err_array_type)              // 1.2.0-dev.11
+EZMK_I18N_KEY(config_err_invalid_version)         // 1.2.0-dev.11
+EZMK_I18N_KEY(config_err_invalid_source_date_epoch) // 1.2.0-dev.11
+EZMK_I18N_KEY(config_err_unknown_profile)         // 1.2.0-dev.11
+EZMK_I18N_KEY(profile_unknown)                    // 1.2.0-dev.11 (build/test shared)
 EZMK_I18N_KEY(config_not_found_upward)     // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_constraint_unsatisfied)
 EZMK_I18N_KEY(build_failed_summary)
@@ -193,6 +198,8 @@ EZMK_I18N_KEY(cli_usage_install_flags)
 EZMK_I18N_KEY(cli_usage_usage)
 EZMK_I18N_KEY(cli_unknown_option)        // 0.2.5+
 EZMK_I18N_KEY(cli_missing_value)         // 0.2.5+
+EZMK_I18N_KEY(cli_invalid_sha256)        // 1.2.0-dev.11
+EZMK_I18N_KEY(cli_conflicting_flags)     // 1.2.0-dev.11
 EZMK_I18N_KEY(scope_project)             // 0.2.3+
 EZMK_I18N_KEY(scope_user)                // 0.2.3+
 EZMK_I18N_KEY(scope_global)              // 0.2.3+

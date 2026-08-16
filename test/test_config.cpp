@@ -1298,10 +1298,28 @@ version = "0.1.0"
 
 [compile]
 default_profile = "release"
+
+[compile.profile.release]
+flags = ["-O2"]
 )");
         auto cfg = parse_config(toml);
         fs::remove(toml);
         REQUIRE(cfg.compile.default_profile == "release");
+    }
+
+    // 1.2.0-dev.11: a default_profile referencing an undefined profile is
+    // rejected at parse time.
+    SECTION("undefined profile name throws") {
+        auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+default_profile = "relese"
+)");
+        REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+        fs::remove(toml);
     }
 
     SECTION("absent field defaults to empty") {
@@ -1666,6 +1684,9 @@ TEST_CASE("parse_config: [test] new fields parsed", "[config][1.2.0-dev.12]") {
 name = "testapp"
 version = "0.1.0"
 
+[compile.profile.release]
+flags = ["-O2"]
+
 [test]
 dirs = ["test"]
 framework = "catch2"
@@ -1704,6 +1725,71 @@ dirs = ["test"]
     REQUIRE(cfg.test.default_profile.empty());
     REQUIRE(cfg.test.include_dirs.empty());
     REQUIRE(cfg.test.link_targets.empty());
+}
+
+// ===================================================================
+// 1.2.0-dev.11: config validation — fail fast instead of silent skipping
+// ===================================================================
+
+TEST_CASE("parse_config: non-string array element throws", "[config][1.2.0-dev.11]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+flags = ["-Wall", 42]
+)");
+    try {
+        parse_config(toml);
+        FAIL("expected a throw");
+    } catch (const std::runtime_error& e) {
+        // The error names the offending field.
+        REQUIRE(std::string(e.what()).find("compile.flags") != std::string::npos);
+    }
+    fs::remove(toml);
+}
+
+TEST_CASE("parse_config: malformed version constraint throws", "[config][1.2.0-dev.11]") {
+    using namespace ezmk::config;
+    // non-numeric version
+    auto toml1 = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["pkg@not-a-version"]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml1), std::runtime_error);
+    fs::remove(toml1);
+    // constraint with no package name
+    auto toml2 = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = [">=1.0"]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml2), std::runtime_error);
+    fs::remove(toml2);
+}
+
+TEST_CASE("parse_config: negative source_date_epoch throws", "[config][1.2.0-dev.11]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+deterministic = true
+source_date_epoch = -5
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
 }
 
 TEST_CASE("parse_config: [test].flags still parsed (deprecated)", "[config][1.2.0-dev.12]") {
