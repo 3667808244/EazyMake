@@ -51,7 +51,7 @@ static std::string escape_macro_value(const std::string& val) {
 }
 
 // 0.2.2+: Convert a macros map to -D flag vector.
-// Empty value 鈫?-DKEY; non-empty 鈫?-DKEY=VALUE.
+// Empty value → -DKEY; non-empty → -DKEY=VALUE.
 std::vector<std::string> macros_to_flags(
     const std::map<std::string, std::string>& macros) {
     std::vector<std::string> result;
@@ -147,7 +147,7 @@ std::vector<fs::path> collect_sources(
             std::string fname = f.filename().string();
             if (!seen_names.insert(fname).second) {
                 util::warn(std::string("duplicate source filename '") + fname +
-                          "' 鈥?using first occurrence");
+                          "' — using first occurrence");
                 continue;
             }
             result.push_back(f);
@@ -200,14 +200,14 @@ std::string detect_compiler(const std::string& language) {
             return cached;
         }
         util::warn(std::string("$") + (is_cxx ? "CXX" : "CC") +
-                   " is set to '" + candidate + "' but it is not executable 鈥?falling back to auto-detect");
+                   " is set to '" + candidate + "' but it is not executable — falling back to auto-detect");
     }
 
     // 2. Platform-specific candidate list
     std::vector<std::string> candidates;
 #ifdef EZMK_WIN
     // MSVC (cl.exe) is now handled by toolchain::detect_toolchain() (0.2.1+).
-    // When MSVC is the active toolchain, detect_compiler() is not called 鈥?    // this function only serves GCC/Clang detection for non-MSVC builds.
+    // When MSVC is the active toolchain, detect_compiler() is not called —     // this function only serves GCC/Clang detection for non-MSVC builds.
     candidates = is_cxx
         ? std::vector<std::string>{"g++", "clang++"}
         : std::vector<std::string>{"gcc", "clang"};
@@ -234,7 +234,7 @@ std::string detect_compiler(const std::string& language) {
         }
     }
 
-    // 4. None found 鈥?fatal with platform-specific install instructions
+    // 4. None found — fatal with platform-specific install instructions
     std::string msg = "no C";
     msg += (is_cxx ? "++" : "");
     msg += " compiler found.\n\n";
@@ -292,7 +292,7 @@ static std::string make_gcc_link_cmd(const std::vector<fs::path>& objs,
     return cmd.str();
 }
 
-// MSVC link command builder 鈥?executable
+// MSVC link command builder — executable
 static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
                                      const std::vector<fs::path>& archives,
                                      const fs::path& output,
@@ -320,12 +320,12 @@ static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
         cmd << "\"" << util::escape_shell_arg(f) << "\" ";
     }
 
-    // Link dirs 鈫?/LIBPATH
+    // Link dirs → /LIBPATH
     for (auto& d : link.link_dirs) {
         cmd << "/LIBPATH:\"" << util::escape_shell_arg(d) << "\" ";
     }
 
-    // System targets: -l<name> 鈫?<name>.lib
+    // System targets: -l<name> → <name>.lib
     for (auto& t : link.system_targets) {
         cmd << "\"" << util::escape_shell_arg(t) << ".lib\" ";
     }
@@ -333,7 +333,7 @@ static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
     return cmd.str();
 }
 
-// MSVC link command builder 鈥?shared library (DLL)
+// MSVC link command builder — shared library (DLL)
 static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
                                      const std::vector<fs::path>& archives,
                                      const fs::path& output_dll,
