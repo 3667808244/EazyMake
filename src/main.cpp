@@ -199,12 +199,20 @@ int main(int argc, char** argv) {
         case ezmk::cli::Command::ProjectInstall: {
             auto proj_root = require_project_root();
             auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
+            auto& install_opts = *args.project_install_opts;
+
+            // 1.2.0-dev.11: the install -v flag used to only mark the install
+            // step — propagate it to the build phase so `ezmk install -v` shows
+            // the compile commands too.
+            if (install_opts.verbose) {
+                args.build_opts.verbose = true;
+            }
 
             // Build first
             ezmk::build::build_project(cfg, args.build_opts);
 
             // Install
-            ezmk::build::install_project(cfg, args.project_install_opts, proj_root);
+            ezmk::build::install_project(cfg, install_opts, proj_root);
             break;
         }
 
@@ -247,7 +255,9 @@ int main(int argc, char** argv) {
 
         // 1.1.0-dev.6: project test
         case ezmk::cli::Command::ProjectTest: {
-            auto_update_repos(args.build_opts);
+            // 1.2.0-dev.11: removed the dead auto_update_repos(args.build_opts)
+            // call — `ezmk test` never fills build_opts, so it always ran with
+            // defaults (a no-op).
             auto proj_root = require_project_root();
             auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
             ezmk::build::run_tests(cfg,
@@ -263,23 +273,6 @@ int main(int argc, char** argv) {
             auto_update_repos(args.build_opts);
             auto proj_root = require_project_root();
             auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
-
-            // Build effective config (profile merge)
-            // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
-            std::string watch_profile = args.build_opts.profile;
-            if (watch_profile.empty()) watch_profile = cfg.compile.default_profile;
-            ezmk::config::CompileSection compile_cfg = cfg.compile;
-            ezmk::config::LinkSection link_cfg = cfg.link;
-            if (!watch_profile.empty()) {
-                auto it = cfg.compile_profiles.find(watch_profile);
-                if (it != cfg.compile_profiles.end()) {
-                    compile_cfg = ezmk::build::merge_compile_profile(compile_cfg, it->second);
-                }
-                auto lit = cfg.link_profiles.find(watch_profile);
-                if (lit != cfg.link_profiles.end()) {
-                    link_cfg = ezmk::build::merge_link_profile(link_cfg, lit->second);
-                }
-            }
 
             // SIGINT handler for graceful exit
             static std::atomic<bool> sigint_received{false};
@@ -300,16 +293,20 @@ int main(int argc, char** argv) {
                 ezmk::util::info(ezmk::i18n::I18nKey::watch_skip_initial);
             }
 
-            // Collect directories to watch
+            // Collect directories to watch.
+            // 1.2.0-dev.11: the profile merge was dead code here — profile
+            // merge only changes flags/macros, never src_dirs/include_dirs, so
+            // it had no effect on the watch set (and silently ignored unknown
+            // profiles). Watch the base config's directories.
             std::vector<std::string> watch_dirs;
             // Use absolute path to ezmk.toml so parent_path() resolves correctly
             watch_dirs.push_back((proj_root / "ezmk.toml").string());
-            for (auto& d : compile_cfg.src_dirs) {
+            for (auto& d : cfg.compile.src_dirs) {
                 std::filesystem::path dir = d;
                 if (dir.is_relative()) dir = proj_root / dir;
                 if (std::filesystem::exists(dir)) watch_dirs.push_back(dir.string());
             }
-            for (auto& d : compile_cfg.include_dirs) {
+            for (auto& d : cfg.compile.include_dirs) {
                 std::filesystem::path dir = d;
                 if (dir.is_relative()) dir = proj_root / dir;
                 if (std::filesystem::exists(dir)) watch_dirs.push_back(dir.string());

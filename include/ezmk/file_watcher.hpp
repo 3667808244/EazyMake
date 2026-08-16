@@ -36,6 +36,13 @@ namespace fs = std::filesystem;
 // the add_directory(recursive) parameter is kept for API compatibility but
 // is currently not honored.
 //
+// Event granularity (1.2.0-dev.11):
+//   - Windows/Linux: the callback receives the specific changed file path.
+//   - macOS: the callback receives the watched DIRECTORY path — kqueue
+//     EVFILT_VNODE reports the vnode, not the changed entry, and per-file
+//     events are not delivered. Do not rely on per-file paths on macOS;
+//     FSEvents-based per-file reporting is a separate deferred work item.
+//
 // Usage:
 //   FileWatcher watcher([](const fs::path& p) { ... });
 //   watcher.add_directory("/path/to/src");

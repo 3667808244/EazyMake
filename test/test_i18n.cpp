@@ -162,6 +162,28 @@ TEST_CASE("fmt() with empty string value", "[i18n][fmt]") {
     REQUIRE(result.find("Compiling") != std::string::npos);
 }
 
+TEST_CASE("fmt() never re-scans replaced values (no nested substitution)", "[i18n][fmt]") {
+    init("en");
+    // Arg value itself contains a "{...}" pattern that matches another arg
+    // name: the value must be inserted verbatim, not substituted again.
+    // Template: "Building {name} ({type}, {lang})..."
+    std::string result = fmt(I18nKey::building,
+                              {{"name", "{type}"}, {"type", "executable"}, {"lang", "C++17"}});
+    // The injected "{type}" (from name's value) survives untouched...
+    REQUIRE(result.find("{type}") != std::string::npos);
+    // ...while the template's own {type} placeholder is still replaced.
+    REQUIRE(result.find("executable") != std::string::npos);
+}
+
+TEST_CASE("fmt() replaces multiple occurrences of the same placeholder", "[i18n][fmt]") {
+    init("en");
+    std::string result = fmt(I18nKey::building,
+                              {{"name", "x"}, {"type", "executable"}, {"lang", "C++17"}});
+    REQUIRE(result.find("x") != std::string::npos);
+    // Every {name} occurrence is replaced (no leftover placeholder)
+    REQUIRE(result.find("{name}") == std::string::npos);
+}
+
 // ===================================================================
 // 3. Language detection
 // ===================================================================

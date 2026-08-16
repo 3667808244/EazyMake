@@ -18,6 +18,10 @@ class ThreadPool {
 public:
     explicit ThreadPool(size_t num_threads)
         : stop_(false) {
+        if (num_threads == 0) {
+            throw std::invalid_argument(
+                "ThreadPool: num_threads must be at least 1");
+        }
         for (size_t i = 0; i < num_threads; ++i) {
             workers_.emplace_back([this] {
                 while (true) {

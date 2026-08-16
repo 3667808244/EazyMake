@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -24,9 +25,10 @@ TEST_CASE("ThreadPool: single thread", "[thread_pool][0.2.3]") {
     REQUIRE(pool.size() == 1);
 }
 
-TEST_CASE("ThreadPool: zero threads still creates pool (degenerate case)", "[thread_pool][0.2.3]") {
-    ThreadPool pool(0);
-    REQUIRE(pool.size() == 0);
+TEST_CASE("ThreadPool: zero threads is rejected", "[thread_pool][0.2.3]") {
+    // 1.2.0-dev.11: a 0-thread pool could never run tasks (submit() would
+    // queue forever) — reject it at construction.
+    REQUIRE_THROWS_AS(ThreadPool(0), std::invalid_argument);
 }
 
 // ===================================================================

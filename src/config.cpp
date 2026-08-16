@@ -102,6 +102,9 @@ static DependsEntry parse_depends_entry(std::string_view raw) {
     raw = raw.substr(start, end - start + 1);
 
     // Scan for constraint operators. Order: longest match first (>= before >).
+    // 1.2.0-dev.11: pick the EARLIEST occurrence across all ops — the previous
+    // ordered first-match scan mis-parsed compound constraints like "pkg@^1.0"
+    // ("^" matched before "@" → name became "pkg@").
     struct { std::string_view op; VersionConstraint::Op kind; } const ops[] = {
         {">=", VersionConstraint::Gte},
         {">",  VersionConstraint::Gt},
@@ -110,50 +113,59 @@ static DependsEntry parse_depends_entry(std::string_view raw) {
         {"@",  VersionConstraint::Exact},
     };
 
-    for (auto& o : ops) {
-        auto pos = raw.find(o.op);
-        if (pos != std::string_view::npos) {
-            // 1.2.0-dev.11: a constraint at position 0 means the package name
-            // is missing ("pkg>=1.0" is valid, ">=1.0" is not).
-            if (pos == 0) {
-                throw std::runtime_error(
-                    i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
-            }
-            std::string_view name_part = raw.substr(0, pos);
-            std::string_view ver_part  = raw.substr(pos + o.op.size());
-
-            // Trim trailing whitespace from name
-            auto name_end = name_part.find_last_not_of(" \t");
-            if (name_end != std::string_view::npos)
-                name_part = name_part.substr(0, name_end + 1);
-
-            // Trim leading whitespace from version
-            auto ver_start = ver_part.find_first_not_of(" \t");
-            if (ver_start == std::string_view::npos) {
-                throw std::runtime_error(
-                    i18n::fmt(i18n::I18nKey::config_err_version_missing,
-                              {{"entry", std::string(raw)}}));
-            }
-            ver_part = ver_part.substr(ver_start);
-
-            if (name_part.empty()) {
-                throw std::runtime_error(
-                    i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
-            }
-
-            // 1.2.0-dev.11: reject malformed versions at parse time instead of
-            // failing cryptically later at install/compare time.
-            if (!is_valid_version_string(ver_part)) {
-                throw std::runtime_error(
-                    i18n::fmt(i18n::I18nKey::config_err_invalid_version,
-                              {{"entry", std::string(raw)}}));
-            }
-
-            entry.name = std::string(name_part);
-            entry.constraint.op = o.kind;
-            entry.constraint.version = std::string(ver_part);
-            return entry;
+    size_t best_pos = std::string_view::npos;
+    size_t best_idx = 0;
+    for (size_t oi = 0; oi < sizeof(ops) / sizeof(ops[0]); ++oi) {
+        auto pos = raw.find(ops[oi].op);
+        if (pos != std::string_view::npos &&
+            (best_pos == std::string_view::npos || pos < best_pos)) {
+            best_pos = pos;
+            best_idx = oi;
         }
+    }
+
+    if (best_pos != std::string_view::npos) {
+        // 1.2.0-dev.11: a constraint at position 0 means the package name
+        // is missing ("pkg>=1.0" is valid, ">=1.0" is not).
+        if (best_pos == 0) {
+            throw std::runtime_error(
+                i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
+        }
+        auto& o = ops[best_idx];
+        std::string_view name_part = raw.substr(0, best_pos);
+        std::string_view ver_part  = raw.substr(best_pos + o.op.size());
+
+        // Trim trailing whitespace from name
+        auto name_end = name_part.find_last_not_of(" \t");
+        if (name_end != std::string_view::npos)
+            name_part = name_part.substr(0, name_end + 1);
+
+        // Trim leading whitespace from version
+        auto ver_start = ver_part.find_first_not_of(" \t");
+        if (ver_start == std::string_view::npos) {
+            throw std::runtime_error(
+                i18n::fmt(i18n::I18nKey::config_err_version_missing,
+                          {{"entry", std::string(raw)}}));
+        }
+        ver_part = ver_part.substr(ver_start);
+
+        if (name_part.empty()) {
+            throw std::runtime_error(
+                i18n::get(i18n::I18nKey::config_err_empty_depends_entry));
+        }
+
+        // 1.2.0-dev.11: reject malformed versions at parse time instead of
+        // failing cryptically later at install/compare time.
+        if (!is_valid_version_string(ver_part)) {
+            throw std::runtime_error(
+                i18n::fmt(i18n::I18nKey::config_err_invalid_version,
+                          {{"entry", std::string(raw)}}));
+        }
+
+        entry.name = std::string(name_part);
+        entry.constraint.op = o.kind;
+        entry.constraint.version = std::string(ver_part);
+        return entry;
     }
 
     // No operator found — plain package name, no constraint

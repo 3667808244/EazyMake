@@ -121,7 +121,7 @@ struct CliArgs {
     BuildOptions build_opts;
 
     // Only valid for ProjectInstall (1.1.0)
-    ProjectInstallOptions project_install_opts;
+    std::optional<ProjectInstallOptions> project_install_opts;
 
     // Only valid for ProjectPack (1.1.0-dev.2)
     std::optional<ProjectPackOptions> project_pack_opts;

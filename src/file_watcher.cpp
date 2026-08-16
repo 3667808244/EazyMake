@@ -168,16 +168,18 @@ void FileWatcher::win32_worker() {
                        FILE_NOTIFY_CHANGE_LAST_WRITE |
                        FILE_NOTIFY_CHANGE_SIZE;
 
-        ReadDirectoryChangesW(
-            w.dir_handle,
-            w.buffer.data(),
-            static_cast<DWORD>(w.buffer.size()),
-            TRUE,  // watch subtree
-            filter,
-            nullptr,
-            ov,
-            nullptr
-        );
+        if (!ReadDirectoryChangesW(
+                w.dir_handle,
+                w.buffer.data(),
+                static_cast<DWORD>(w.buffer.size()),
+                TRUE,  // watch subtree
+                filter,
+                nullptr,
+                ov,
+                nullptr)) {
+            util::warn(std::string("FileWatcher: initial watch failed for ") +
+                       w.dir_path + " (error " + std::to_string(GetLastError()) + ")");
+        }
     }
 
     // Event loop
@@ -195,21 +197,17 @@ void FileWatcher::win32_worker() {
             500  // timeout ms
         );
 
-        if (!ok && ov == nullptr) {
-            // Timeout — check debounce
-            if (stop_requested_) break;
-
-            std::lock_guard<std::mutex> lock(pending_mutex_);
-            if (!pending_paths_.empty()) {
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - last_event_).count();
-                if (elapsed >= debounce_ms_) {
-                    // Need to flush outside the lock; we use a flag
-                    // Actually let's just flush from run()'s main loop
-                }
+        if (!ok) {
+            DWORD err = GetLastError();
+            if (ov == nullptr && err == WAIT_TIMEOUT) {
+                // Timeout — debounce flushing happens in run()'s main loop.
+                continue;
             }
-            continue;
+            // 1.2.0-dev.11: a real IOCP error previously fell into the same
+            // branch as a timeout and the loop spun forever. Fail loudly.
+            util::warn(std::string("FileWatcher: IOCP error ") +
+                       std::to_string(err) + " — stopping watch");
+            break;
         }
 
         if (completionKey < watches_.size() && bytesTransferred > 0) {
@@ -242,13 +240,21 @@ void FileWatcher::win32_worker() {
                            FILE_NOTIFY_CHANGE_LAST_WRITE |
                            FILE_NOTIFY_CHANGE_SIZE;
 
-            ReadDirectoryChangesW(
-                w.dir_handle,
-                w.buffer.data(),
-                static_cast<DWORD>(w.buffer.size()),
-                TRUE, filter, nullptr, ov2, nullptr
-            );
+            if (!ReadDirectoryChangesW(
+                    w.dir_handle,
+                    w.buffer.data(),
+                    static_cast<DWORD>(w.buffer.size()),
+                    TRUE, filter, nullptr, ov2, nullptr)) {
+                // Watch died (e.g. the directory was removed). Leave it
+                // unarmed — re-arming would spin on the same failure.
+                util::warn(std::string("FileWatcher: read re-arm failed for ") +
+                           w.dir_path + " (error " + std::to_string(GetLastError()) + ")");
+            }
         }
+        // bytesTransferred == 0 with a non-null OVERLAPPED is a cancelled/
+        // closed read; with a null OVERLAPPED it is the shutdown sentinel from
+        // PostQueuedCompletionStatus(). Either way the loop exits on
+        // stop_requested_ — nothing to do here.
     }
 }
 
@@ -343,6 +349,16 @@ void FileWatcher::linux_cleanup() {
 #ifdef EZMK_FILEWATCHER_MACOS
 
 void FileWatcher::macos_worker() {
+    // kqueue EVFILT_VNODE semantics (1.2.0-dev.11):
+    //  - The watch is on the directory vnode itself, NOT on its entries, and
+    //    NOT recursive. Only the directory's own NOTE_WRITE/NOTE_DELETE/
+    //    NOTE_RENAME/NOTE_EXTEND arrive — per-file events are NOT delivered.
+    //  - Consequently the callback receives the watched directory path
+    //    (w.path), never a specific changed file — unlike Windows/Linux.
+    //    FSEvents-based per-file reporting is a separate, deferred work item.
+    //  - If the directory is deleted or renamed away, the fd stays open and
+    //    events keep pointing at the stale path; this watcher does not follow
+    //    the move. Documented behavior, not a bug.
     struct kevent changes[32];
     struct kevent events[32];
 
@@ -375,7 +391,10 @@ void FileWatcher::macos_worker() {
                                EV_ADD | EV_CLEAR | EV_ENABLE,
                                NOTE_WRITE | NOTE_DELETE | NOTE_RENAME | NOTE_EXTEND,
                                0, nullptr);
-                        kevent(kq_, changes, 1, nullptr, 0, nullptr);
+                        if (kevent(kq_, changes, 1, nullptr, 0, nullptr) < 0) {
+                            util::warn(std::string("FileWatcher: kevent re-register failed for ") +
+                                       w.path + " (errno " + std::to_string(errno) + ")");
+                        }
                         break;
                     }
                 }

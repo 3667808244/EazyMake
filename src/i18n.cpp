@@ -262,20 +262,44 @@ namespace ezmk::i18n
     {
         std::string tmpl = get(key);
 
-        // Replace {key} placeholders with args values.
-        // Use simple find/replace to avoid depending on a formatting library.
-        for (auto &[arg_name, arg_val] : args)
+        // Single-pass scan: walk the template once and replace each {name}
+        // placeholder with the matching arg value. Replacement values are never
+        // re-scanned, so an arg value that itself contains "{...}" cannot
+        // trigger nested substitution.
+        std::string out;
+        out.reserve(tmpl.size());
+        size_t pos = 0;
+        while (pos < tmpl.size())
         {
-            std::string placeholder = "{" + arg_name + "}";
-            size_t pos = 0;
-            while ((pos = tmpl.find(placeholder, pos)) != std::string::npos)
+            size_t open = tmpl.find('{', pos);
+            if (open == std::string::npos)
             {
-                tmpl.replace(pos, placeholder.size(), arg_val);
-                pos += arg_val.size();
+                out.append(tmpl, pos, std::string::npos);
+                break;
             }
+            out.append(tmpl, pos, open - pos);
+            size_t close = tmpl.find('}', open + 1);
+            if (close == std::string::npos)
+            {
+                // Unmatched '{' — keep the rest verbatim.
+                out.append(tmpl, open, std::string::npos);
+                break;
+            }
+            std::string name = tmpl.substr(open + 1, close - open - 1);
+            auto it = args.find(name);
+            if (it != args.end())
+            {
+                out += it->second;
+            }
+            else
+            {
+                // Unknown placeholder — keep it verbatim as a visible marker.
+                out.append(tmpl, open, close - open + 1);
+            }
+            pos = close + 1;
         }
 
-        return tmpl;
+        return out;
     }
 
     std::string fmt(I18nKey key, std::string_view arg0)

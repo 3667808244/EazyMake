@@ -553,15 +553,15 @@ Toolchain detect_toolchain() {
         // Try to find vcvars64.bat
         fs::path vcvars = find_vcvars64();
         if (!vcvars.empty()) {
-            // Load MSVC environment
-            auto msvc_env = load_msvc_env(vcvars);
-
-            // Build a command that runs cl within the vcvars environment
-            // We check if cl.exe works by running it in the vcvars context
+            // Build a command that runs cl within the vcvars environment.
+            // 1.2.0-dev.11: run ONCE and reuse the output for both the
+            // availability probe and the version capture — previously the
+            // probe ran twice (sourcing vcvars twice) and the load_msvc_env
+            // result was never used (dead code).
             std::ostringstream test_cmd;
             test_cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars.string()) << "\\\" > NUL && cl 2>&1\"";
-            auto res = util::run_command(test_cmd.str());
-            if (res.exit_code == 0) {
+            auto cl_res = util::run_command(test_cmd.str());
+            if (cl_res.exit_code == 0) {
                 // MSVC is available
                 Toolchain tc;
                 tc.family = CompilerFamily::Msvc;
@@ -571,15 +571,12 @@ Toolchain detect_toolchain() {
                 tc.archiver = fs::path("lib.exe");
                 tc.vcvars_path = vcvars;
                 // 1.1.0: capture MSVC version from cl output
-                {
-                    auto cl_ver_res = util::run_command(test_cmd.str());
-                    if (cl_ver_res.exit_code == 0 && !cl_ver_res.out.empty()) {
-                        auto nl = cl_ver_res.out.find('\n');
-                        tc.version = (nl != std::string::npos)
-                            ? cl_ver_res.out.substr(0, nl) : cl_ver_res.out;
-                        if (!tc.version.empty() && tc.version.back() == '\r')
-                            tc.version.pop_back();
-                    }
+                if (!cl_res.out.empty()) {
+                    auto nl = cl_res.out.find('\n');
+                    tc.version = (nl != std::string::npos)
+                        ? cl_res.out.substr(0, nl) : cl_res.out;
+                    if (!tc.version.empty() && tc.version.back() == '\r')
+                        tc.version.pop_back();
                 }
                 cached = tc;
                 cached_valid = true;

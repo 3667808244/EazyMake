@@ -223,6 +223,7 @@ namespace ezmk::cli
         if (action == "install")
         {
             args.cmd = Command::ProjectInstall;
+            ProjectInstallOptions opts;
             std::vector<OptionSpec> spec = {
                 {'v', "verbose", false},
                 {'\0', "prefix", true},
@@ -231,12 +232,13 @@ namespace ezmk::cli
                 {'\0', "no-data", false},
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project install");
-            if (p.has("verbose"))       args.project_install_opts.verbose = true;
-            if (p.has("dry-run"))       args.project_install_opts.dry_run = true;
-            if (p.has("no-headers"))    args.project_install_opts.no_headers = true;
-            if (p.has("no-data"))       args.project_install_opts.no_data = true;
+            if (p.has("verbose"))       opts.verbose = true;
+            if (p.has("dry-run"))       opts.dry_run = true;
+            if (p.has("no-headers"))    opts.no_headers = true;
+            if (p.has("no-data"))       opts.no_data = true;
             if (auto v = p.value("prefix"))
-                args.project_install_opts.prefix = *v;
+                opts.prefix = *v;
+            args.project_install_opts = opts;
             return args;
         }
 

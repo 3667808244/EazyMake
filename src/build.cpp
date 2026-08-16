@@ -1261,6 +1261,50 @@ cache::CompileInput prepare_compile_input(const config::EzConfig& cfg,
     return make_compile_input(st, opts);
 }
 
+// 1.2.0-dev.11: single source of truth for built-artifact file names.
+// Mirrors link_phase() exactly so install/pack never guess wrong:
+//   static + MSVC → <name>.lib            (no "lib" prefix)
+//   static + GCC  → lib<name>.a
+//   shared + MSVC → <name>.dll + <name>_implib.lib
+//   shared + Win  → lib<name>.dll
+//   shared + Unix → lib<name>.so
+//   exe   + WIN   → <name>.exe
+//   exe   + Unix  → <name>
+struct ProjectArtifacts {
+    fs::path primary;      // executable / shared library / static archive
+    fs::path import_lib;   // MSVC shared: <name>_implib.lib (empty otherwise)
+};
+
+ProjectArtifacts project_artifact_paths(const fs::path& build_dir,
+                                        const std::string& name,
+                                        const std::string& type,
+                                        bool is_msvc) {
+    ProjectArtifacts a;
+    if (type == "executable") {
+        a.primary = build_dir / name;
+#ifdef EZMK_WIN
+        a.primary += ".exe";
+#endif
+    } else if (type == "static") {
+        a.primary = is_msvc ? build_dir / (name + ".lib")
+                            : build_dir / ("lib" + name + ".a");
+    } else if (type == "shared") {
+        if (is_msvc) {
+            a.primary = build_dir / (name + ".dll");
+            a.import_lib = build_dir / (name + "_implib.lib");
+        } else {
+            std::string lib_name = "lib" + name;
+#ifdef EZMK_WIN
+            lib_name += ".dll";
+#else
+            lib_name += ".so";
+#endif
+            a.primary = build_dir / lib_name;
+        }
+    }
+    return a;
+}
+
 // 1.1.0: install_project — copy build artifacts to install prefix
 void install_project(const config::EzConfig& cfg,
                      const cli::ProjectInstallOptions& opts,
@@ -1308,34 +1352,23 @@ void install_project(const config::EzConfig& cfg,
         }
     };
 
+    // 1.2.0-dev.11: artifact names come from link_phase() via the shared
+    // helper. The old hand-rolled lookups silently missed MSVC outputs
+    // (static → <name>.lib, shared import lib → <name>_implib.lib) and
+    // MinGW shared (lib<name>.dll).
+    bool is_msvc = (toolchain::detect_toolchain().family ==
+                    toolchain::CompilerFamily::Msvc);
+    auto arts = project_artifact_paths(build_dir, name, type, is_msvc);
+
     if (type == "executable") {
-    #ifdef EZMK_WIN
-        fs::path exe_src = build_dir / (name + ".exe");
-        fs::path exe_dst = bindir / (name + ".exe");
-    #else
-        fs::path exe_src = build_dir / name;
-        fs::path exe_dst = bindir / name;
-    #endif
-        copy_file(exe_src, exe_dst);
+        copy_file(arts.primary, bindir / arts.primary.filename());
     } else if (type == "static") {
-        // Try both .a and .lib
-        for (auto& ext : {".a", ".lib"}) {
-            fs::path lib_src = build_dir / ("lib" + name + ext);
-            if (util::file_exists(lib_src)) {
-                copy_file(lib_src, libdir / ("lib" + name + ext));
-                break;
-            }
-        }
+        copy_file(arts.primary, libdir / arts.primary.filename());
     } else if (type == "shared") {
-    #ifdef EZMK_WIN
-        fs::path dll_src = build_dir / (name + ".dll");
-        fs::path lib_src = build_dir / (name + ".lib");
-        if (util::file_exists(dll_src)) copy_file(dll_src, bindir / (name + ".dll"));
-        if (util::file_exists(lib_src)) copy_file(lib_src, libdir / (name + ".lib"));
-    #else
-        fs::path so_src = build_dir / ("lib" + name + ".so");
-        copy_file(so_src, libdir / ("lib" + name + ".so"));
-    #endif
+        copy_file(arts.primary, bindir / arts.primary.filename());
+        if (!arts.import_lib.empty()) {
+            copy_file(arts.import_lib, libdir / arts.import_lib.filename());
+        }
     }
 
     // Copy headers
@@ -1384,12 +1417,13 @@ void pack_project(const config::EzConfig& cfg,
     }
 
     // Step 2: Build the project if needed
-    auto archive_path = proj_root / "build" / ("lib" + name + ".a");
-    // On MSVC, the built archive may be .lib
-    if (!util::file_exists(archive_path)) {
-        auto alt = proj_root / "build" / ("lib" + name + ".lib");
-        if (util::file_exists(alt)) archive_path = alt;
-    }
+    // 1.2.0-dev.11: archive name comes from project_artifact_paths() — the
+    // old "lib<name>.a then lib<name>.lib" probe missed MSVC static output
+    // (<name>.lib, no "lib" prefix).
+    bool is_msvc = (toolchain::detect_toolchain().family ==
+                    toolchain::CompilerFamily::Msvc);
+    auto archive_path =
+        project_artifact_paths(proj_root / "build", name, cfg.project.type, is_msvc).primary;
 
     if (!util::file_exists(archive_path)) {
         util::info("building project before packing...");
@@ -1399,12 +1433,8 @@ void pack_project(const config::EzConfig& cfg,
 
         // Re-check
         if (!util::file_exists(archive_path)) {
-            auto alt = proj_root / "build" / ("lib" + name + ".lib");
-            if (util::file_exists(alt)) archive_path = alt;
-        }
-        if (!util::file_exists(archive_path)) {
-            util::fatal("build did not produce lib" + name + ".a/.lib — "
-                        "cannot pack");
+            util::fatal("build did not produce " + archive_path.filename().string() +
+                        " — cannot pack");
         }
     }
 
@@ -1561,140 +1591,8 @@ std::vector<fs::path> collect_test_sources(
     return result;
 }
 
-// Simple XML parser for Catch2 output.
-// Extracts test case results from Catch2 XML.
-struct Catch2TestResult {
-    std::string name;
-    std::string filename;
-    int line = 0;
-    bool passed = true;
-    std::string failure_msg;
-};
-
-std::vector<Catch2TestResult> parse_catch2_xml(const std::string& xml) {
-    std::vector<Catch2TestResult> results;
-
-    // Simple state-machine XML parser for Catch2 output format:
-    // <TestCase name="..." filename="..." line="...">
-    //   <OverallResult success="true|false"/>
-    //   <Failure>...</Failure> or <Expression>...</Expression>
-    // </TestCase>
-
-    size_t pos = 0;
-    while (true) {
-        auto tc_start = xml.find("<TestCase", pos);
-        if (tc_start == std::string::npos) break;
-
-        auto tc_end = xml.find("</TestCase>", tc_start);
-        if (tc_end == std::string::npos) break;
-
-        std::string tc_block = xml.substr(tc_start, tc_end - tc_start + 12);
-        pos = tc_end + 12;
-
-        Catch2TestResult r;
-
-        // Extract name
-        auto name_pos = tc_block.find("name=\"");
-        if (name_pos != std::string::npos) {
-            name_pos += 6;
-            auto name_end = tc_block.find("\"", name_pos);
-            if (name_end != std::string::npos) {
-                r.name = tc_block.substr(name_pos, name_end - name_pos);
-            }
-        }
-
-        // Extract filename
-        auto file_pos = tc_block.find("filename=\"");
-        if (file_pos != std::string::npos) {
-            file_pos += 10;
-            auto file_end = tc_block.find("\"", file_pos);
-            if (file_end != std::string::npos) {
-                r.filename = tc_block.substr(file_pos, file_end - file_pos);
-            }
-        }
-
-        // Extract line
-        auto line_pos = tc_block.find("line=\"");
-        if (line_pos != std::string::npos) {
-            line_pos += 6;
-            auto line_end = tc_block.find("\"", line_pos);
-            if (line_end != std::string::npos) {
-                try { r.line = std::stoi(tc_block.substr(line_pos, line_end - line_pos)); }
-                catch (...) {}
-            }
-        }
-
-        // Check success
-        if (tc_block.find("success=\"false\"") != std::string::npos ||
-            tc_block.find("success=\"no\"") != std::string::npos) {
-            r.passed = false;
-        } else if (tc_block.find("success=\"true\"") != std::string::npos ||
-                   tc_block.find("success=\"yes\"") != std::string::npos) {
-            r.passed = true;
-        } else {
-            // No success attribute → passed if no Failure/Expression with failure
-            auto fail_pos = tc_block.find("<Failure");
-            auto expr_pos = tc_block.find("<Expression");
-            auto section_pos = tc_block.find("<Section");
-            if (fail_pos != std::string::npos && fail_pos < tc_block.find("</OverallResult>")) {
-                r.passed = false;
-            }
-        }
-
-        // Extract failure details
-        if (!r.passed) {
-            auto fail_start = tc_block.find("<Failure");
-            if (fail_start != std::string::npos) {
-                auto fail_content_start = tc_block.find(">", fail_start);
-                auto fail_content_end = tc_block.find("</Failure>", fail_start);
-                if (fail_content_start != std::string::npos && fail_content_end != std::string::npos) {
-                    r.failure_msg = tc_block.substr(fail_content_start + 1,
-                                                     fail_content_end - fail_content_start - 1);
-                    // Trim whitespace
-                    auto b = r.failure_msg.find_first_not_of(" \t\n\r");
-                    auto e = r.failure_msg.find_last_not_of(" \t\n\r");
-                    if (b != std::string::npos) {
-                        r.failure_msg = r.failure_msg.substr(b, e - b + 1);
-                    }
-                }
-            }
-            // Also check Expression with success="false"
-            auto expr_start = tc_block.find("<Expression");
-            while (expr_start != std::string::npos) {
-                auto expr_end = xml.find(">", expr_start);
-                auto expr_close = xml.find("/>", expr_start);
-                auto expr_full_end = xml.find("</Expression>", expr_start);
-                std::string expr_block = xml.substr(expr_start,
-                    std::min({expr_end != std::string::npos ? expr_end : std::string::npos,
-                              expr_close != std::string::npos ? expr_close : std::string::npos,
-                              expr_full_end != std::string::npos ? expr_full_end : std::string::npos})
-                    - expr_start + 2);
-                if (expr_block.find("success=\"false\"") != std::string::npos) {
-                    // Extract expression content
-                    auto content_start = xml.find(">", expr_start);
-                    auto content_end = xml.find("</Expression>", expr_start);
-                    if (content_start != std::string::npos && content_end != std::string::npos) {
-                        std::string expr_content = xml.substr(content_start + 1,
-                                                               content_end - content_start - 1);
-                        auto b2 = expr_content.find_first_not_of(" \t\n\r");
-                        auto e2 = expr_content.find_last_not_of(" \t\n\r");
-                        if (b2 != std::string::npos) {
-                            expr_content = expr_content.substr(b2, e2 - b2 + 1);
-                        }
-                        if (!r.failure_msg.empty()) r.failure_msg += "\n";
-                        r.failure_msg += "  assertion: " + expr_content;
-                    }
-                    // Also get expected/actual
-                }
-                expr_start = xml.find("<Expression", expr_start + 11);
-            }
-        }
-
-        results.push_back(r);
-    }
-
-    return results;
-}
+// 1.2.0-dev.11: removed dead code — Catch2TestResult / parse_catch2_xml
+// (~130 lines) had no callers anywhere; the runner parses console output.
 
 } // anonymous namespace
 
