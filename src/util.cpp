@@ -465,15 +465,18 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
             for (size_t i = 0; i < v.size() && i < (size_t)len - 1; ++i)
                 hdr[off + i] = v[i];
         };
+        // 1.2.0-dev.11: numeric fields are LEFT-PADDED with '0' — the previous
+        // null-padding (zeroed array) made ezmk's own octal_to_size (which
+        // stops at the first null/space) read the size as 0, so packed archives
+        // could not be extracted back: content was misread as the next header.
         auto set_octal = [&](int off, int len, size_t v) {
             char buf[32];
             int n = snprintf(buf, sizeof(buf), "%zo", v);
-            // right-align: pad with '0's on the left
             int start = len - 1 - n;
             if (start < 0) start = 0;
+            for (int i = 0; i < start; ++i) hdr[off + i] = '0';
             for (int i = 0; i < n && (start + i) < len - 1; ++i)
                 hdr[off + start + i] = buf[i];
-            // null terminate
             hdr[off + len - 1] = '\0';
         };
 
@@ -493,11 +496,17 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
         set_field(337, 8, "");                          // devminor
         set_field(345, 155, hdr_prefix);                // prefix
 
-        // Checksum: sum all bytes with chksum field treated as 8 spaces
+        // Checksum: sum all bytes with the checksum field treated as 8 SPACES
+        // (POSIX), then write the space-padded octal value.
         for (int i = 148; i < 156; ++i) hdr[i] = ' ';
         unsigned sum = 0;
         for (auto c : hdr) sum += static_cast<unsigned char>(c);
-        set_octal(148, 7, sum); // 6 octal digits + null = 7 bytes, null at 155
+        char chk[16];
+        int cn = snprintf(chk, sizeof(chk), "%o", sum);
+        int cstart = 155 - cn;  // right-align within 7 digits, byte 155 = space
+        if (cstart < 148) cstart = 148;
+        for (int i = 0; i < cn && cstart + i < 155; ++i) hdr[cstart + i] = chk[i];
+        hdr[155] = ' ';
 
         tar.insert(tar.end(), hdr.begin(), hdr.end());
         if (!entry.is_dir && !entry.content.empty()) {

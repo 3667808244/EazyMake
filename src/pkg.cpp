@@ -25,6 +25,21 @@
 
 namespace ezmk::pkg {
 
+// 1.2.0-dev.11: packages currently being auto-installed in the dependency
+// walk (recursion guard). A⇄B mutual hard dependencies used to recurse
+// unboundedly — each recursive install re-walks the other's deps before the
+// first install lands, so neither is ever found installed.
+static std::set<std::string> g_auto_installing;
+
+// RAII: mark a package as being auto-installed; removes on scope exit.
+struct AutoInstallGuard {
+    const std::string& name;
+    explicit AutoInstallGuard(const std::string& n) : name(n) {
+        g_auto_installing.insert(name);
+    }
+    ~AutoInstallGuard() { g_auto_installing.erase(name); }
+};
+
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.
 bool satisfies_version_constraint(std::string_view version,
@@ -488,6 +503,13 @@ fs::path select_precompiled_variant(const fs::path& lib_dir,
     std::string plat_os = plat.size() >= 1 ? plat[0] : "";
     std::string plat_arch = plat.size() >= 2 ? plat[1] : "";
 
+    // 1.2.0-dev.11: missing lib/ must be a friendly "no build" error, not a
+    // raw std::filesystem::filesystem_error from the directory iterator.
+    if (!util::file_exists(lib_dir) || !fs::is_directory(lib_dir)) {
+        throw std::runtime_error("precompiled package '" + pkg_name +
+                                 "' has no lib/ directory");
+    }
+
     std::string tagged_prefix = "lib" + pkg_name + ".";
     std::string bare_a  = "lib" + pkg_name + ".a";
     std::string bare_lib = "lib" + pkg_name + ".lib";
@@ -537,11 +559,20 @@ fs::path select_precompiled_variant(const fs::path& lib_dir,
         throw std::runtime_error(msg);
     }
 
-    // Best: highest score; ties → lexicographically smallest filename.
+    // Best: highest score; ties → MSVC consumers prefer .lib over .a (the
+    // archive format matches the toolchain), otherwise lexicographically
+    // smallest filename (1.2.0-dev.11: extension preference added).
+    bool prefer_lib = (compiler_tag.rfind("msvc", 0) == 0);
+    auto ext_rank = [&](const PrecompiledVariant& v) -> int {
+        if (!prefer_lib) return 0;
+        return fs::path(v.filename).extension() == ".lib" ? 0 : 1;
+    };
     auto best_it = std::max_element(candidates.begin(), candidates.end(),
-        [](const PrecompiledVariant& a, const PrecompiledVariant& b) {
+        [&](const PrecompiledVariant& a, const PrecompiledVariant& b) {
             if (a.score != b.score) return a.score < b.score;
-            return a.filename > b.filename;  // max_element wants "a < b"
+            int ra = ext_rank(a), rb = ext_rank(b);
+            if (ra != rb) return ra > rb;  // max_element wants "a worse than b"
+            return a.filename > b.filename;
         });
     const auto& best = *best_it;
     fs::path result = lib_dir / best.filename;
@@ -936,17 +967,43 @@ static void process_installed_pkg(const fs::path& pkg_root,
                         all_pkgs.push_back(dep_path);
                     } else {
                         // 1.1.0-dev.7: Auto-install hard dependency from registered repos
+                        // 1.2.0-dev.11: guard against unbounded recursion on
+                        // mutual dependencies (A⇄B).
+                        if (g_auto_installing.count(dep.name)) {
+                            throw std::runtime_error(
+                                "circular dependency during auto-install: '" +
+                                dep.name + "' is already being installed");
+                        }
                         auto search = repo::search_package(dep.name, {
                             cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
                         if (!search.archive_path.empty() &&
                             util::file_exists(search.archive_path)) {
                             util::info(std::string("auto-installing dependency: ") + dep.name);
                             try {
+                                AutoInstallGuard guard(dep.name);
                                 // Install to the same scope, skip lockfile for transitive deps
                                 install(dep.name, scope, search.sha256,
                                         assume_yes, false, true);
                                 // After install, verify it now exists
                                 if (util::file_exists(dep_path)) {
+                                    // 1.2.0-dev.11: re-validate the freshly
+                                    // installed version against the caller's
+                                    // constraint — auto-install used to take
+                                    // the newest silently (B@^1.0 could get 2.0).
+                                    if (dep.constraint.op != config::VersionConstraint::None) {
+                                        auto dep_cfg = config::parse_config(
+                                            dep_path / "ezmk.toml");
+                                        if (!satisfies_version_constraint(
+                                                dep_cfg.project.version,
+                                                dep.constraint)) {
+                                            throw std::runtime_error(
+                                                ezmk::i18n::fmt(
+                                                    ezmk::i18n::I18nKey::pkg_constraint_unsatisfied,
+                                                    {{"pkg", dep.name},
+                                                     {"constraint", dep.constraint.version},
+                                                     {"available", dep_cfg.project.version}}));
+                                        }
+                                    }
                                     all_pkgs.push_back(dep_path);
                                     continue;
                                 }
@@ -1118,25 +1175,60 @@ static void process_installed_pkg(const fs::path& pkg_root,
     // package uninstalled with no recovery.
     fs::create_directories(dest_dir);
     util::info(ezmk::i18n::I18nKey::installing_to, {{"path", install_path.string()}});
-    fs::path backup = install_path;
-    backup += ".old";
-    { std::error_code ec; fs::remove_all(backup, ec); }  // stale crash backup
+    // 1.2.0-dev.11: copy-then-swap transaction. The new install is staged at
+    // <name>.new while the old version stays at install_path for the whole
+    // copy window — a crash mid-copy leaves the old version intact (previously
+    // it was moved to a backup first, so a crash stranded the old version with
+    // no install in place). The backup name is hidden and collision-free
+    // (a real package could legitimately be named "foo.old").
+    fs::path new_path = install_path;
+    new_path += ".new";
+    fs::path backup = dest_dir / (".ezmk-backup-" + pkg_name);
+    { std::error_code ec; fs::remove_all(new_path, ec); }   // stale staging
+    { std::error_code ec; fs::remove_all(backup, ec); }     // stale crash backup
+
+    try {
+        util::copy_recursive(pkg_root, new_path);
+    } catch (...) {
+        std::error_code ec;
+        fs::remove_all(new_path, ec);  // drop the partial staging
+        throw;
+    }
+
+    // Swap: old → backup (if present), then new → install_path.
     bool had_old = util::file_exists(install_path);
     if (had_old) {
         std::error_code ec;
         fs::rename(install_path, backup, ec);
         if (ec) {
+            std::error_code ec2;
+            fs::remove_all(new_path, ec2);
             throw std::runtime_error("failed to back up existing install: " +
                                      install_path.string() + " (" + ec.message() + ")");
         }
     }
-    try {
-        util::copy_recursive(pkg_root, install_path);
-    } catch (...) {
+    {
         std::error_code ec;
-        fs::remove_all(install_path, ec);      // drop the partial new install
-        if (had_old) fs::rename(backup, install_path, ec);  // restore old
-        throw;
+        fs::rename(new_path, install_path, ec);
+        if (ec) {
+            // Roll the old version back; report if the rollback itself fails —
+            // the old install must not silently disappear.
+            std::error_code ec2;
+            fs::remove_all(install_path, ec2);  // drop partial new (best effort)
+            bool restored = false;
+            if (had_old) {
+                std::error_code ec3;
+                fs::rename(backup, install_path, ec3);
+                restored = !ec3;
+            }
+            if (!restored) {
+                throw std::runtime_error(
+                    "failed to place new install AND restore old version: " +
+                    install_path.string() + " (" + ec.message() + ")");
+            }
+            throw std::runtime_error("failed to place new install: " +
+                                     install_path.string() + " (" + ec.message() + ")");
+        }
     }
     { std::error_code ec; fs::remove_all(backup, ec); }  // old version gone for good
 

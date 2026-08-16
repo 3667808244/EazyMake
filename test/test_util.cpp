@@ -902,6 +902,35 @@ TEST_CASE("extract_targz: valid nested entry extracts correctly", "[util]") {
     ezmk::util::remove_all(tmp);
 }
 
+// 1.2.0-dev.11: create_targz → extract_targz round trip — the packed archive
+// (as `ezmk project pack` produces) must extract back byte-identically.
+// Regression: create_targz left the numeric size field null-padded, so ezmk's
+// own extractor read size=0 and mis-parsed file content as the next header.
+TEST_CASE("create_targz → extract_targz round trip", "[util][1.2.0-dev.11]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_targz_roundtrip";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp / "src" / "pkg");
+    ezmk::util::create_directories(tmp / "src" / "include");
+    ezmk::util::file_write(tmp / "src" / "pkg" / "ezmk.toml",
+                           "[project]\nname = \"x\"\nversion = \"1.0.0\"\n");
+    std::string big(5000, 'a');  // > one 512-byte block
+    ezmk::util::file_write(tmp / "src" / "include" / "hdr.hpp",
+                           "#pragma once\n" + big);
+
+    auto arc = tmp / "out.tar.gz";
+    ezmk::util::create_targz(tmp / "src", arc);
+
+    auto dest = tmp / "out";
+    ezmk::util::create_directories(dest);
+    ezmk::util::extract_targz(arc, dest);
+
+    REQUIRE(ezmk::util::file_read(dest / "pkg" / "ezmk.toml") ==
+            "[project]\nname = \"x\"\nversion = \"1.0.0\"\n");
+    REQUIRE(ezmk::util::file_read(dest / "include" / "hdr.hpp") ==
+            "#pragma once\n" + big);
+    ezmk::util::remove_all(tmp);
+}
+
 // ===================================================================
 // detect_platform_tag() — 1.1.0-dev.2
 // ===================================================================

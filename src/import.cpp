@@ -294,6 +294,17 @@ void ascii_lower(std::string& s) {
     for (auto& c : s) c = static_cast<char>(std::tolower((unsigned char)c));
 }
 
+// 1.2.0-dev.11: CMake target_* visibility/config keywords — these must be
+// skipped, not collected as paths/options. Covers the common set plus
+// target_link_libraries SYSTEM and per-config keywords.
+bool is_target_keyword(const std::string& s) {
+    std::string u = s;
+    ascii_upper(u);
+    return u == "PRIVATE" || u == "PUBLIC" || u == "INTERFACE" ||
+           u == "SYSTEM" || u == "REQUIRED" || u == "EXCLUDE_FROM_ALL" ||
+           u == "OBJECT" || u == "ALL";
+}
+
 std::string join(const std::vector<std::string>& v, const char* sep = " ") {
     std::string out;
     for (size_t i = 0; i < v.size(); ++i) {
@@ -454,24 +465,32 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                 else if (t == "STATIC" || t == "INTERFACE" || t == "MODULE") p.type = "static";
             }
         } else if (call.name == "target_sources" && !p.main_target.empty() &&
-                   call.args.size() >= 3 && call.args[0] == p.main_target) {
-            for (size_t k = 2; k < call.args.size(); ++k) {
+                   call.args.size() >= 2 && call.args[0] == p.main_target) {
+            // 1.2.0-dev.11: keyword-aware — "target_sources(foo PRIVATE a.cpp)"
+            // and the legacy no-keyword form both work; keyword tokens skipped.
+            size_t start = (call.args.size() >= 2 && is_target_keyword(call.args[1])) ? 2 : 1;
+            for (size_t k = start; k < call.args.size(); ++k) {
+                if (is_target_keyword(call.args[k])) continue;
                 for (auto& a : expand_args(call.args[k], table)) {
                     if (unparsed(a)) add_todo("未解析的参数: " + call.args[k]);
                     else if (is_source_file(a)) p.src_files.push_back(a);
                 }
             }
         } else if (call.name == "target_include_directories" && !p.main_target.empty() &&
-                   call.args.size() >= 3 && call.args[0] == p.main_target) {
-            for (size_t k = 2; k < call.args.size(); ++k) {
+                   call.args.size() >= 2 && call.args[0] == p.main_target) {
+            size_t start = (call.args.size() >= 2 && is_target_keyword(call.args[1])) ? 2 : 1;
+            for (size_t k = start; k < call.args.size(); ++k) {
+                if (is_target_keyword(call.args[k])) continue;
                 for (auto& a : expand_args(call.args[k], table)) {
                     if (unparsed(a)) add_todo("未解析的参数: " + call.args[k]);
                     else p.include_dirs.push_back(a);
                 }
             }
         } else if (call.name == "target_compile_definitions" && !p.main_target.empty() &&
-                   call.args.size() >= 3 && call.args[0] == p.main_target) {
-            for (size_t k = 2; k < call.args.size(); ++k) {
+                   call.args.size() >= 2 && call.args[0] == p.main_target) {
+            size_t start = (call.args.size() >= 2 && is_target_keyword(call.args[1])) ? 2 : 1;
+            for (size_t k = start; k < call.args.size(); ++k) {
+                if (is_target_keyword(call.args[k])) continue;
                 std::string a = expand_var(call.args[k], table);
                 if (unparsed(a)) { add_todo("未解析的参数: " + call.args[k]); continue; }
                 auto eq = a.find('=');
@@ -479,15 +498,19 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                 else p.macros[a] = "";
             }
         } else if (call.name == "target_compile_options" && !p.main_target.empty() &&
-                   call.args.size() >= 3 && call.args[0] == p.main_target) {
-            for (size_t k = 2; k < call.args.size(); ++k) {
+                   call.args.size() >= 2 && call.args[0] == p.main_target) {
+            size_t start = (call.args.size() >= 2 && is_target_keyword(call.args[1])) ? 2 : 1;
+            for (size_t k = start; k < call.args.size(); ++k) {
+                if (is_target_keyword(call.args[k])) continue;
                 std::string a = expand_var(call.args[k], table);
                 if (unparsed(a)) { add_todo("未解析的参数: " + call.args[k]); continue; }
                 p.compile_flags.push_back(a);
             }
         } else if (call.name == "target_link_libraries" && !p.main_target.empty() &&
-                   call.args.size() >= 3 && call.args[0] == p.main_target) {
-            for (size_t k = 2; k < call.args.size(); ++k) {
+                   call.args.size() >= 2 && call.args[0] == p.main_target) {
+            size_t start = (call.args.size() >= 2 && is_target_keyword(call.args[1])) ? 2 : 1;
+            for (size_t k = start; k < call.args.size(); ++k) {
+                if (is_target_keyword(call.args[k])) continue;
                 for (auto& a : expand_args(call.args[k], table)) {
                     if (unparsed(a)) { add_todo("未解析的参数: " + call.args[k]); continue; }
                     std::string lib = a;

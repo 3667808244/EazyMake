@@ -1434,8 +1434,18 @@ void pack_project(const config::EzConfig& cfg,
     auto lib_dst = stage_dir / "lib" / archive_path.filename();
     fs::copy_file(archive_path, lib_dst);
 
-    // ezmk.toml
-    fs::copy_file(proj_root / "ezmk.toml", stage_dir / "ezmk.toml");
+    // ezmk.toml — 1.2.0-dev.11: the packed artifact ships include/ + lib/
+    // only (no src/), so it IS a precompiled package. Mark it precompiled so
+    // install validation accepts it; previously the packed config (type=static,
+    // no precompiled) failed validate_pkg's "missing src/" check.
+    {
+        std::string toml = util::file_read(proj_root / "ezmk.toml");
+        const char* ins = "\nprecompiled = true  # added by ezmk project pack — archive ships include/ + lib/ only\n";
+        auto proj_end = toml.find("\n[", 1);  // next section header after [project]
+        if (proj_end == std::string::npos) toml += ins;
+        else toml.insert(proj_end, ins);
+        util::file_write(stage_dir / "ezmk.toml", toml);
+    }
 
     // Step 5: Create archive
     fs::path output_archive = output_dir / archive_name;

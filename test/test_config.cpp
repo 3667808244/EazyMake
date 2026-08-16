@@ -1777,6 +1777,23 @@ lib = [">=1.0"]
     fs::remove(toml2);
 }
 
+// 1.2.0-dev.11: the constraint delimiter is the EARLIEST operator — "pkg@1.0^2"
+// must delimit at "@" (then reject the malformed version "^2"), not mis-parse
+// into a package named "pkg@1.0".
+TEST_CASE("parse_config: compound constraint delimited at first op (dev.11)", "[config][1.2.0-dev.11]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["pkg@1.0^2"]
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
+}
+
 TEST_CASE("parse_config: negative source_date_epoch throws", "[config][1.2.0-dev.11]") {
     using namespace ezmk::config;
     auto toml = write_temp_toml(R"(

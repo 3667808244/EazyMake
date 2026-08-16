@@ -746,3 +746,34 @@ TEST_CASE("precompiled: no-match error lists toolchain + available variants", "[
         REQUIRE(m.find("gcc11") != std::string::npos);
     }
 }
+
+// 1.2.0-dev.11: a missing lib/ dir must be a friendly "no build" error, not a
+// raw std::filesystem::filesystem_error from the directory iterator.
+TEST_CASE("precompiled: missing lib/ throws friendly error (dev.11)", "[pkg][1.2.0-dev.11]") {
+    fs::path lib = fs::temp_directory_path() / "ezmk_pkg_dev10_nonexistent_lib";
+    try {
+        select_precompiled_variant(lib, "ex", "linux-x64", "gcc13", "abi11", false);
+        FAIL("expected a throw");
+    } catch (const std::runtime_error& e) {
+        REQUIRE(std::string(e.what()).find("no lib/") != std::string::npos);
+    }
+}
+
+// 1.2.0-dev.11: on an equal-score tie an MSVC consumer prefers .lib (the
+// archive format matches the toolchain); GCC/Clang keep the lexicographic
+// tie-break (.a).
+TEST_CASE("precompiled: MSVC tie prefers .lib over .a (dev.11)", "[pkg][1.2.0-dev.11]") {
+    auto lib = dev10_lib("msvctie");
+    dev10_touch(lib / "libex.win-x64.a");
+    dev10_touch(lib / "libex.win-x64.lib");
+    auto r = select_precompiled_variant(lib, "ex", "win-x64", "msvc143", "", false);
+    fs::remove_all(lib);
+    REQUIRE(r.filename() == "libex.win-x64.lib");
+
+    auto lib2 = dev10_lib("gcctie");
+    dev10_touch(lib2 / "libex.win-x64.a");
+    dev10_touch(lib2 / "libex.win-x64.lib");
+    auto r2 = select_precompiled_variant(lib2, "ex", "win-x64", "gcc13", "abi11", false);
+    fs::remove_all(lib2);
+    REQUIRE(r2.filename() == "libex.win-x64.a");
+}

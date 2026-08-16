@@ -1980,3 +1980,158 @@ TEST_CASE("integration: ezmk test compile path is injection-safe (dev.11)", "[in
     REQUIRE(r.exit_code == 0);
     REQUIRE(!fs::exists(proj_dir / "injected.marker"));
 }
+
+// 1.2.0-dev.11: mutual hard dependencies (A⇄B) must not recurse unboundedly
+// during auto-install — the recursion guard turns it into a clear error.
+// Uses a local repo (project scope) + `project pack` archives.
+TEST_CASE("integration: mutual deps stop auto-install recursion (dev.11)", "[integration][1.2.0-dev.11]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    std::string proj_name = "circapp";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    auto make_lib = [&](const std::string& name, const std::string& deps) {
+        fs::path d = tmp.path / name;
+        fs::create_directories(d / "src");
+        fs::create_directories(d / "include");
+        std::ofstream(d / "src" / (name + ".cpp"))
+            << "int " << name << "_f() { return 1; }\n";
+        {
+            std::ofstream of(d / "ezmk.toml");
+            of << "[project]\nname = \"" << name << "\"\ntype = \"static\"\n"
+                  "version = \"1.0.0\"\nlanguage = \"C++17\"\n\n"
+                  "[compile]\nflags = []\ninclude_dirs = [\"include\"]\n\n"
+                  "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+                  "[depends]\nlib = [" << deps << "]\n";
+        }
+        return d;
+    };
+    // A stub installed dep so `project pack`'s build-first step passes the
+    // hard-dep pre-check (static libs never link against their deps, so the
+    // stub's archive content is irrelevant). The PACKED archive only carries
+    // ezmk.toml + include/ + lib/, never the stub.
+    auto make_stub = [&](const fs::path& pkg_proj, const std::string& dep_name) {
+        fs::path stub = pkg_proj / ".ezmk" / "pkg" / dep_name;
+        fs::create_directories(stub / "build");
+        std::ofstream(stub / "ezmk.toml")
+            << "[project]\nname = \"" << dep_name
+            << "\"\ntype = \"static\"\nversion = \"1.0.0\"\n";
+        std::ofstream(stub / "build" / ("lib" + dep_name + ".a"),
+                      std::ios::binary) << "stub";
+    };
+
+    fs::path repo_dir = tmp.path / "repo";
+    fs::create_directories(repo_dir);
+
+    auto pack_lib = [&](const std::string& name, const std::string& deps,
+                        const std::string& stub_dep) {
+        auto d = make_lib(name, deps);
+        if (!stub_dep.empty()) make_stub(d, stub_dep);
+        ProcResult p = run_ezmk("project pack --output \"" + repo_dir.string() + "\"", d);
+        INFO(name << " pack stderr: " << p.err);
+        REQUIRE(p.exit_code == 0);
+    };
+    pack_lib("a_circ", "\"b_circ\"", "b_circ");
+    pack_lib("b_circ", "\"a_circ\"", "a_circ");
+
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"localdev11\"\n\n"
+        "[[packages]]\nname = \"a_circ\"\nversion = \"1.0.0\"\n"
+        "file = \"a_circ-1.0.0.tar.gz\"\n\n"
+        "[[packages]]\nname = \"b_circ\"\nversion = \"1.0.0\"\n"
+        "file = \"b_circ-1.0.0.tar.gz\"\n");
+
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\"", proj_dir);
+    INFO("repo add stderr: " << ra.err);
+    REQUIRE(ra.exit_code == 0);
+
+    ProcResult r = run_ezmk("pkg install a_circ -p -y", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code != 0);
+    REQUIRE((r.out + r.err).find("circular") != std::string::npos);
+}
+
+// 1.2.0-dev.11: auto-install re-validates the freshly installed version against
+// the caller's constraint — B@^1.0 must not silently get repo B 2.0.0.
+TEST_CASE("integration: auto-install enforces version constraint (dev.11)", "[integration][1.2.0-dev.11]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    std::string proj_name = "consapp";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    auto make_lib = [&](const std::string& name, const std::string& version,
+                        const std::string& deps) {
+        fs::path d = tmp.path / name;
+        fs::create_directories(d / "src");
+        fs::create_directories(d / "include");
+        std::ofstream(d / "src" / (name + ".cpp"))
+            << "int " << name << "_f() { return 1; }\n";
+        {
+            std::ofstream of(d / "ezmk.toml");
+            of << "[project]\nname = \"" << name << "\"\ntype = \"static\"\n"
+                  "version = \"" << version << "\"\nlanguage = \"C++17\"\n\n"
+                  "[compile]\nflags = []\ninclude_dirs = [\"include\"]\n\n"
+                  "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+                  "[depends]\nlib = [" << deps << "]\n";
+        }
+        return d;
+    };
+
+    fs::path repo_dir = tmp.path / "repo";
+    fs::create_directories(repo_dir);
+
+    auto pack_lib = [&](const std::string& name, const std::string& version,
+                        const std::string& deps, const std::string& stub_dep) {
+        auto d = make_lib(name, version, deps);
+        if (!stub_dep.empty()) {
+            fs::path stub = d / ".ezmk" / "pkg" / stub_dep;
+            fs::create_directories(stub / "build");
+            std::ofstream(stub / "ezmk.toml")
+                << "[project]\nname = \"" << stub_dep
+                << "\"\ntype = \"static\"\nversion = \"1.0.0\"\n";
+            std::ofstream(stub / "build" / ("lib" + stub_dep + ".a"),
+                          std::ios::binary) << "stub";
+        }
+        ProcResult p = run_ezmk("project pack --output \"" + repo_dir.string() + "\"", d);
+        INFO(name << " pack stderr: " << p.err);
+        REQUIRE(p.exit_code == 0);
+    };
+    // A wants B^1.0 (compatible); the repo only carries B 2.0.0 → auto-install
+    // must fail.
+    pack_lib("b_cons", "2.0.0", "", "");
+    pack_lib("a_cons", "1.0.0", "\"b_cons^1.0\"", "b_cons");
+
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"localdev11b\"\n\n"
+        "[[packages]]\nname = \"b_cons\"\nversion = \"2.0.0\"\n"
+        "file = \"b_cons-2.0.0.tar.gz\"\n\n"
+        "[[packages]]\nname = \"a_cons\"\nversion = \"1.0.0\"\n"
+        "file = \"a_cons-1.0.0.tar.gz\"\n");
+
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\"", proj_dir);
+    INFO("repo add stderr: " << ra.err);
+    REQUIRE(ra.exit_code == 0);
+
+    ProcResult r = run_ezmk("pkg install a_cons -p -y", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code != 0);
+    REQUIRE((r.out + r.err).find("constraint") != std::string::npos);
+}

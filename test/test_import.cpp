@@ -33,6 +33,32 @@ TEST_CASE("import: project fields (name/version/type/language)", "[import][1.2.0
     CHECK(t.find("src_dirs = [\"src\"]") != std::string::npos);
 }
 
+// 1.2.0-dev.11: target_* argument scanning is keyword-aware — the legacy
+// no-keyword forms are not lost, and PRIVATE/PUBLIC tokens are skipped instead
+// of being collected as paths/options.
+TEST_CASE("import: target_* keyword-aware parsing (dev.11)", "[import][1.2.0-dev.11]") {
+    // Legacy no-keyword 2-arg form — previously gated out entirely.
+    auto t1 = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "target_link_libraries(app m)\n",
+        test_root());
+    CHECK(t1.find("system_target = [\"m\"]") != std::string::npos);
+
+    // PRIVATE/PUBLIC mixed — keywords skipped, content collected.
+    auto t2 = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "target_include_directories(app PRIVATE inc1 PUBLIC inc2)\n"
+        "target_compile_options(app PRIVATE -Wall PUBLIC -O2)\n",
+        test_root());
+    CHECK(t2.find("include_dirs = [\"inc1\", \"inc2\"]") != std::string::npos);
+    CHECK(t2.find("-Wall") != std::string::npos);
+    CHECK(t2.find("-O2") != std::string::npos);
+    CHECK(t2.find("\"PRIVATE\"") == std::string::npos);
+    CHECK(t2.find("\"PUBLIC\"") == std::string::npos);
+}
+
 TEST_CASE("import: add_library maps type (STATIC/SHARED)", "[import][1.2.0]") {
     auto shared = ezmk::import::import_cmake_text(
         "project(mylib LANGUAGES CXX)\n"

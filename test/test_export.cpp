@@ -4,6 +4,7 @@
 #include "test_helpers.hpp"
 #include "ezmk/export.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/toolchain.hpp"
 #include "ezmk/util.hpp"
 
 #include <filesystem>
@@ -77,6 +78,39 @@ TEST_CASE("export cmake: precompiled → IMPORTED", "[export]") {
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
     REQUIRE(t.find("add_library(demo IMPORTED)") != std::string::npos);
     REQUIRE(t.find("lib/libdemo.a") != std::string::npos);
+}
+
+// 1.2.0-dev.11: CMake project() VERSION only accepts numeric dotted versions —
+// a pre-release like "1.2.0-dev.10" must not break the generated file.
+TEST_CASE("export cmake: non-numeric version omits VERSION (dev.11)", "[export][1.2.0-dev.11]") {
+    auto cfg = make_exe_config();
+    cfg.project.version = "1.2.0-dev.10";
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    CHECK(t.find("VERSION 1.2.0-dev.10") == std::string::npos);
+    CHECK(t.find("VERSION omitted") != std::string::npos);
+    CHECK(t.find("project(demo") != std::string::npos);   // project() itself intact
+}
+
+// 1.2.0-dev.11: precompiled export resolves the actual archive via the shared
+// selector (os-arch[-compiler][-abi] naming) instead of a hardcoded lib<name>.a.
+TEST_CASE("export cmake: precompiled reuses the archive selector (dev.11)", "[export][1.2.0-dev.11]") {
+    TempDir tmp;
+    auto cfg = make_exe_config();
+    cfg.project.name = "pre";
+    cfg.project.type = "static";
+    cfg.project.precompiled = true;
+    fs::create_directories(tmp.path / "lib");
+    // Only a toolchain-tagged archive (L3: same compiler, no abi segment).
+    std::string plat = ezmk::util::detect_platform_tag();
+    auto tc = ezmk::toolchain::detect_toolchain();
+    std::string comp = ezmk::toolchain::compiler_tag(tc);
+    REQUIRE_FALSE(comp.empty());
+    std::string tag = plat + "-" + comp;
+    { std::ofstream(tmp.path / "lib" / ("libpre." + tag + ".a")) << "x"; }
+
+    auto t = build_cmake_text(cfg, tmp.path, ExportOptions{});
+    CHECK(t.find("libpre." + tag + ".a") != std::string::npos);
+    CHECK(t.find("libpre.a\"") == std::string::npos);  // not the hardcoded fallback
 }
 
 TEST_CASE("export cmake: C project → LANGUAGES C + *.c glob + C_STANDARD", "[export]") {
