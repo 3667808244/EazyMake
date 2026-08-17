@@ -10,6 +10,14 @@
 
 > **v1.1.0 起公共 API 永久稳定。** 破坏性变更仅在 `2.0.0` 引入，并提前至少一个次版本发出弃用警告。详见 [CHANGES.md](CHANGES.md#api-stability)。
 
+## 目录
+
+- [快速开始](#快速开始)
+- [安装](#安装)
+- [命令速览](#命令速览)
+- [高级特性](#高级特性)
+- [文档](#文档)
+
 ## 为什么选择 EazyMake
 
 - **零配置** —— `ezmk project new my_app && cd my_app && ezmk build` 就能跑
@@ -19,7 +27,26 @@
 
 ## 快速开始
 
-### 安装
+### 第一个项目
+
+```bash
+ezmk project new hello
+cd hello
+ezmk build                # 编译 + 链接
+ezmk run                  # 构建 + 运行
+```
+
+> **从子目录也能构建（1.2.0+）：** `ezmk build` / `ezmk test` 等命令会从当前目录
+> 向上查找最多 5 层父目录中的 `ezmk.toml` —— 进入 `src/` 等子目录直接运行即可，如同 `git`。
+
+### 安装包
+
+```bash
+ezmk pkg install fmt      # 按名称安装 — 官方仓库已预注册
+ezmk pkg install ./mylib  # 从源目录安装（1.2.0+，免打包）
+```
+
+## 安装
 
 **macOS / Linux —— 推荐（Homebrew）：**
 
@@ -59,24 +86,16 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 可通过 `PREFIX`、`EZMK_REF`、`EZMK_NO_DEFAULT_REPO` 自定义。详见[安装选项](#安装选项)。
 
-### 第一个项目
+### 安装选项
 
-```bash
-ezmk project new hello
-cd hello
-ezmk build                # 编译 + 链接
-ezmk run                  # 构建 + 运行
-```
-
-> **从子目录也能构建（1.2.0+）：** `ezmk build` / `ezmk test` 等命令会从当前目录
-> 向上查找最多 5 层父目录中的 `ezmk.toml` —— 进入 `src/` 等子目录直接运行即可，如同 `git`。
-
-### 安装包
-
-```bash
-ezmk pkg install fmt      # 按名称安装 — 官方仓库已预注册
-ezmk pkg install ./mylib  # 从源目录安装（1.2.0+，免打包）
-```
+| 变量 / 参数 | 作用 | 默认值 |
+|-------------|------|--------|
+| `PREFIX` | 安装前缀（二进制 → `$PREFIX/bin`） | `$HOME/.local` |
+| `EZMK_REF` | 要构建的 git tag/分支/提交 | 默认分支 |
+| `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （注册） |
+| `-Version`（PS） | 要安装的版本标签 | `"latest"` |
+| `-InstallDir`（PS） | 安装根目录 | `$env:LOCALAPPDATA\ezmk` |
+| `-DryRun`（PS） | 预览操作，不做实际更改 | （关闭） |
 
 ## 与 CMake 对比
 
@@ -144,16 +163,16 @@ ezmk utils cc                   # 生成 compile_commands.json（自 1.2.0 起�
 
 完整参考：[`docs/zh/cli.md`](docs/zh/cli.md)
 
-## 安装选项
+## 高级特性
 
-| 变量 / 参数 | 作用 | 默认值 |
-|-------------|------|--------|
-| `PREFIX` | 安装前缀（二进制 → `$PREFIX/bin`） | `$HOME/.local` |
-| `EZMK_REF` | 要构建的 git tag/分支/提交 | 默认分支 |
-| `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （注册） |
-| `-Version`（PS） | 要安装的版本标签 | `"latest"` |
-| `-InstallDir`（PS） | 安装根目录 | `$env:LOCALAPPDATA\ezmk` |
-| `-DryRun`（PS） | 预览操作，不做实际更改 | （关闭） |
+| 特性 | 一句话 | 链接 |
+|------|--------|------|
+| 语义化版本约束 | `ezmk pkg install fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [12](tutorial/zh/12-version-lockfile.md) |
+| `ezmk.lock` 确定性构建 | 锁定依赖版本与内容哈希，`--locked` 下 CI 可复现构建 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [12](tutorial/zh/12-version-lockfile.md) |
+| 多平台多工具链预编译共包 | 同一包携带 `win-x64-msvc143` / `linux-x64-gcc13-abi11` 等多份产物，按当前工具链自动选择 | [`docs/zh/package_authoring.md`](docs/zh/package_authoring.md) · 教程 [14](tutorial/zh/14-precompiled-packages.md) |
+| 第三方 / 私有仓库 | `ezmk repo add <url>` 接入 git 仓库形式的第三方源 | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [13](tutorial/zh/13-third-party-repos.md) |
+| CMake 互操作 | `project export cmake` 导出 / `project import --from cmake` 导入（实验性） | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [11](tutorial/zh/11-import-cmake.md) |
+| compile_commands | `project cc` 为 clangd/IDE 生成 compile_commands.json | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [08](tutorial/zh/08-utils.md) |
 
 ## 文档
 
