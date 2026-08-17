@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-pre.1 执行计划
 
-> **状态：执行中**（2026-08-16 启动）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-17，本机 MSYS2 + 远程 Arch Linux 双环境 makepkg 验证通过；全量 775 用例 / 3554 断言零回归）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[**1.2.0-pre.1.md**](plans/1.2.0/1.2.0-pre.1.md)。本计划为 1.2.0 系列第一个发布前（pre）子版本：**pacman 分发（Arch Linux / MSYS2）**——为 EazyMake 增加 pacman 分发渠道，与 winget（Windows）、Homebrew（macOS/Linux）并列。
 >
@@ -31,38 +31,38 @@
 
 ### 阶段一：publish/ 目录重组（4.1）
 
-- [ ] **1.1 重组**：`git mv manifests publish/winget`、`git mv homebrew-eazymake publish/homebrew`；新建 `publish/arch/`
-- [ ] **1.2 引用更新**：`ezmk-publish` skill §1.1/§2.1/§4 的路径引用改为 `publish/winget/` / `publish/homebrew/`
+- [x] **1.1 重组**：`git mv manifests publish/winget`、`git mv homebrew-eazymake publish/homebrew`；新建 `publish/arch/`
+- [x] **1.2 引用更新**：`ezmk-publish` skill §1.1/§2.1/§4 的路径引用改为 `publish/winget/` / `publish/homebrew/`
 
 ### 阶段二：编写 PKGBUILD（4.2）
 
-- [ ] **2.1 PKGBUILD**：`pkgname=eazymake`、`pkgver=1.2.0`、`makedepends=('gcc' 'python')`、源码构建（`build.sh` + `EZMK_VERSION`）；`package()` 装 `ezmk` + `ezmk-lua` + `_ezmk`（zsh site-functions）；`sha256sums=('SKIP')` 起步
-- [ ] **2.2 MSYS2 兼容**：`package()` 同时处理 Windows 变体（`build/ezmk.exe`），与 §3.4 MSYS2 渠道对齐
+- [x] **2.1 PKGBUILD**：`pkgname=eazymake`、`pkgver=1.2.0`、`makedepends=('gcc' 'python')`、源码构建（`build.sh` + `EZMK_VERSION`）；`package()` 装 `ezmk` + `ezmk-lua` + `_ezmk`（zsh site-functions）；`sha256sums=('SKIP')` 起步
+- [x] **2.2 MSYS2 兼容**：`package()` 同时处理 Windows 变体（`build/ezmk.exe`），与 §3.4 MSYS2 渠道对齐
 
 ### 阶段三：本机 MSYS2 验证（4.3）
 
-- [ ] **3.1 源码 tarball**：`git archive` 生成 `eazymake-1.2.0.tar.gz`（`--prefix=EazyMake-1.2.0/`，与 GitHub tag tarball 根目录一致）
-- [ ] **3.2 makepkg**：MINGW64 环境 `makepkg -f` 生成 `.pkg.tar.zst`；解包验证 `usr/bin/ezmk.exe`、`usr/bin/ezmk-lua.exe`、`usr/share/zsh/site-functions/_ezmk` 落位
-- [ ] **3.3 产物验证**：运行打包内的 `ezmk version` 输出 `1.2.0`
+- [x] **3.1 源码 tarball**：`git archive` 生成 `eazymake-1.2.0.tar.gz`（`--prefix=EazyMake-1.2.0/`，与 GitHub tag tarball 根目录一致）
+- [x] **3.2 makepkg**：MINGW64 环境 `makepkg -f` 生成 `.pkg.tar.zst`；解包验证 `usr/bin/ezmk.exe`、`usr/bin/ezmk-lua.exe`、`usr/share/zsh/site-functions/_ezmk` 落位
+- [x] **3.3 产物验证**：运行打包内的 `ezmk version` 输出 `1.2.0`
 
 ### 阶段四：远程 Arch Linux 验证（4.4）
 
-- [ ] **4.1 推送**：`scp` PKGBUILD + 源码 tarball 到 `ezmk_project@192.168.136.131`
-- [ ] **4.2 makepkg**：远程 `makepkg -f` 生成并验证（Linux 二进制 `ezmk` + `_ezmk`）
+- [x] **4.1 推送**：`scp` PKGBUILD + 源码 tarball 到 `ezmk_project@192.168.136.131`
+- [x] **4.2 makepkg**：远程 `makepkg -f` 生成并验证（Linux 二进制 `ezmk` + `_ezmk`）
 
 ### 阶段五：文档收口（4.5）
 
-- [ ] **5.1 ezmk-publish skill**：三渠道总览表加 pacman；新增 pacman 章节（PKGBUILD 结构、源码构建 vs 二进制重打包、验证流程、AUR 延后）；坑位清单补 pacman 坑
-- [ ] **5.2 README 分发章节**：分发渠道表补 pacman（若 README 有该章节）
+- [x] **5.1 ezmk-publish skill**：三渠道总览表加 pacman；新增 pacman 章节（PKGBUILD 结构、源码构建 vs 二进制重打包、验证流程、AUR 延后）；坑位清单补 pacman 坑
+- [x] **5.2 README 分发章节**：分发渠道表补 pacman（若 README 有该章节）
 
 ### 阶段六：README 安装章节（4.6）
 
-- [ ] **6.1 README_ZH.md**（中文基准）：安装章节补「Arch Linux / MSYS2：自取 PKGBUILD + `makepkg -si`」路线，AUR 标注延后
-- [ ] **6.2 README.md**：同步英文翻译
+- [x] **6.1 README_ZH.md**（中文基准）：安装章节补「Arch Linux / MSYS2：自取 PKGBUILD + `makepkg -si`」路线，AUR 标注延后
+- [x] **6.2 README.md**：同步英文翻译
 
 ### 阶段七：收口
 
-- [ ] **7.1 收口**：CHANGES.md pre.1 条目 + plan.md 全勾选 + 系列 README 状态更新 + 发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **7.1 收口**：CHANGES.md pre.1 条目 + plan.md 全勾选 + 系列 README 状态更新 + 发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入正式版发布。
 

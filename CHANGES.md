@@ -10,6 +10,23 @@ As of v1.1.0, the following public APIs are **permanently stable**:
 
 Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
 
+## 1.2.0-pre.1 (2026-08-17) — pacman 分发（Arch Linux / MSYS2）
+
+发布流水线补充：新增 pacman 分发渠道，与 winget（Windows）、Homebrew（macOS/Linux）并列。形态为「仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si`」（源码构建，Linux 静态链接）；**AUR 新账户注册未开放，不提交 AUR**（延后，账户开通后补）。公共 API 无任何变更。
+
+### 新增 / 行为变更
+
+- **`publish/` 目录重组**：`manifests/` → `publish/winget/`、`homebrew-eazymake/` → `publish/homebrew/`（`git mv` 保历史；`ezmk-publish` skill 路径引用同步）——纯本地路径搬迁，不影响线上 winget-pkgs / Homebrew tap 提交流程
+- **`publish/arch/PKGBUILD`**（新）：`pkgname=eazymake`、`pkgver=1.2.0`（指向 `v1.2.0` 正式 tag）、`makedepends=('gcc' 'python')`（无 depends——Linux 静态链接）；`build()` 以 `EZMK_VERSION="$pkgver" bash build.sh` 源码构建；`package()` 安装 `ezmk` + `ezmk-lua`（dev.8 CMake 导出钩子运行时）+ `_ezmk`（`zsh/site-functions`），Linux / MSYS2 双变体（`build/ezmk` vs `build/ezmk.exe`）；`sha256sums=('SKIP')` 起步，稳定后填真实 digest
+- **可移植性修复**：`src/toolchain.cpp` 补 `#include <climits>`（`ULONG_MAX` 在 Arch Linux gcc 下未声明，pre.1 远程验证发现；MSYS2 g++16 被传递包含故本机未暴露）
+- **文档**：README 中英安装章节补「Arch Linux / MSYS2 自取 PKGBUILD + `makepkg -si`」路线（AUR 标注延后）；`ezmk-publish` skill 扩为三渠道总览 + pacman 章节（PKGBUILD 结构 / 验证流程 / 用户安装 / 坑位）+ 坑位清单补 3 行
+
+### 测试
+
+- 本机 MSYS2（MINGW64 环境）：`makepkg -fd` 生成 `eazymake-1.2.0-1-x86_64.pkg.tar.zst`；解包验证 `usr/bin/ezmk.exe` / `usr/bin/ezmk-lua.exe` / `usr/share/zsh/site-functions/_ezmk` 落位；`ezmk version` 输出 1.2.0
+- 远程 Arch Linux（`ezmk_project@192.168.136.131`）：`makepkg -f` 生成 Linux 产物并验证（`<climits>` 可移植性 bug 在此发现并修复）
+- 全量回归：775 用例 / 3554 断言零失败（dev.11 基线 775 / 3552，零回归）
+
 ---
 
 ## 1.2.0-dev.11 (2026-08-15) — 代码质量审查与改进（全库审查 + P0/P1 收口）
