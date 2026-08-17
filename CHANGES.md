@@ -12,6 +12,42 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.0 (2026-08-17) — 工具链互操作与开箱工程化
+
+正式发布版，聚合 dev.1 ~ dev.12 与 pre.1 / pre.2。主题：**工具链互操作 + 开箱工程化**。公共 API 保持 1.1.0 起的永久稳定（破坏性变更仅 2.0.0 引入）；`ezmk utils cc` 自本版起**弃用**（保留可用并提示转用 `ezmk project cc`，2.0.0 移除）。
+
+### 新增 / 行为变更
+
+- **`ezmk project cc`**（dev.1）：内置 compile_commands.json 生成命令（`-o/--output`、`--profile`），零外部包依赖；`ezmk utils cc` 弃用提示
+- **`ezmk project export cmake`**（dev.2）：从 `ezmk.toml` 生成 CMakeLists.txt（project/compile/link/deps 全映射），默认拒绝覆盖手写文件，`--overwrite`/`--profile`/`--resolve`/`--glob`
+- **默认模板内建 Debug/Release Profile**（dev.3）：`ezmk project new` 模板内置 `[compile.profile.debug/release]`；基准去 `-O2`、优化归 profile（新建项目需显式 `--profile release` 才优化）
+- **`ezmk project import --from cmake`**（dev.4，实验性）：标准 CMake 命令映射 + `find_package` best-effort + 非标准写法事务性拒绝
+- **catch2 v3 测试主程序兼容**（dev.5）：`ezmk test` test_main 生成改 v3 显式 `main` + `Catch::Session().run()`；v2 vendor 路径不回归
+- **各源文件构建耗时统计**（dev.6）：`-v` 全量明细 / 总耗时 >5s 自动 top-N；零配置、不新增 flag
+- **本地包源 + 项目向上查找**（dev.7）：`ezmk pkg install <dir>` 从文件夹安装；`ezmk.toml` 向上查找最多 5 层父目录
+- **CMake 导出钩子运行时 `ezmk-lua`**（dev.8）：独立无黑白名单运行时；`export cmake` 对 `[hooks]` 生成 `add_custom_command`
+- **包构建配置收敛**（dev.9）：包 `[compile].src_dirs`/`include_dirs` 生效（`collect_sources` 复用 + include 去重 + utils 门控对齐 + `pkg info` 增显）
+- **平台标识符扩展**（dev.10）：`lib<name>.<os>-<arch>[-<compiler>][-<abi>]` 命名 + 4 级 ABI 安全匹配 + 降级警告 + 可选 `precompiled_strict`
+- **代码质量审查与改进**（dev.11）：全库审查 68 条问题，P0 全部 + P1 大部（run_tests 命令构造收口 / 钩子沙箱安全 / 编码修复 / 配置 CLI 校验 / 死代码清理）
+- **测试配置收口**（dev.12）：`[test].default_profile` / `include_dirs` / `link_targets` + `ezmk test --profile`；`[test].flags` 弃用（2.0.0 移除）
+- **README 整理与高级特性触达**（pre.2）：README 重组（目录 / 安装独立章节 / 高级特性索引）+ 教程 12/13/14 + 预编译包 ABI 四层警告
+- **pacman 分发**（pre.1）：`publish/arch/PKGBUILD`（Arch Linux / MSYS2 自取 + `makepkg -si`；AUR 延后）
+- **可移植性修复**：`src/toolchain.cpp` 补 `#include <climits>`（pre.1 远程 Arch 验证发现，Arch gcc 下 `ULONG_MAX` 未声明）
+
+### 测试
+
+- 全量回归：775 用例 / 3554 断言零失败（dev.11 基线 775 / 3552，零回归）
+- 分发验证：本机 MSYS2 + 远程 Arch Linux `makepkg` 双环境产物验证；Release 产物（win/linux/macOS）构建核对
+
+### 已知限制 / 跟进项
+
+- **macOS Intel（x64）**：无预编译产物（`macos-13` runner 在 free tier 不分配，job 持续排队）
+- **AUR**：账户注册未开放，pacman 以自取 PKGBUILD + `makepkg -si` 为主，AUR 延后
+- **winget**：v1.1.3 PR（`microsoft/winget-pkgs#416835`）待版主审批；1.2.0 新 PR 提交后同样待审批
+- **P2 收口项**：`export cmake` 的 profiles/test/install/deterministic 进阶映射（dev.2 §4.10）未实现，2.0.0 窗口评估
+
+---
+
 ## 1.2.0-pre.2 (2026-08-17) — README 整理与高级特性触达
 
 发布前文档检查点：README 重组 + 高级特性教程 + 预编译 ABI 警告加强，让「能力可见、上手有路、坑位说透」。**纯文档交付**——无代码变更、无新增 i18n key；**中文为基准**（README_ZH / tutorial/zh / docs/zh 先行），英文同步翻译。
