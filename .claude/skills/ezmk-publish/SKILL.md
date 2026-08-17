@@ -33,7 +33,7 @@ gh api repos/3667808244/EazyMake/releases/tags/v1.1.3 \
 
 ### 1.1 Manifest 结构：必须拆成 3 个文件
 
-提交给 `microsoft/winget-pkgs` 的是 **split manifest**，仓库里 `manifests/e/ezmk/1.1.3.yaml`（单文件 `defaultManifest`）只作参考，**不是**提交格式。winget-pkgs 的目录结构：
+提交给 `microsoft/winget-pkgs` 的是 **split manifest**，仓库里 `publish/winget/e/ezmk/1.1.3.yaml`（单文件 `defaultManifest`）只作参考，**不是**提交格式。winget-pkgs 的目录结构：
 
 ```
 manifests/<publisher首字母小写>/<Publisher>/<Package>/<version>/
@@ -165,7 +165,7 @@ PR 打开后 bot 会留言要求签微软 CLA，并打上 `Needs-CLA` 标签。*
 
 ### 2.1 tap 仓库是独立的
 
-tap 在 **`3667808244/homebrew-eazymake`**（独立 git 仓库），公式路径 `Formula/ezmk.rb`。EazyMake 仓库里也有一份副本 `homebrew-eazymake/ezmk.rb`——**两份必须保持同步**。🕳️ 坑：线上 tap 已更新后，本地副本容易悄悄过期（v1.1.3 时就差一版），如果哪天从本地重新生成 tap 会把已修好的公式回退掉。更新时两处都改。
+tap 在 **`3667808244/homebrew-eazymake`**（独立 git 仓库），公式路径 `Formula/ezmk.rb`。EazyMake 仓库里也有一份副本 `publish/homebrew/ezmk.rb`——**两份必须保持同步**。🕳️ 坑：线上 tap 已更新后，本地副本容易悄悄过期（v1.1.3 时就差一版），如果哪天从本地重新生成 tap 会把已修好的公式回退掉。更新时两处都改。
 
 ### 2.2 公式解剖（v1.1.3）
 
@@ -227,7 +227,7 @@ end
 | 2 | 用单文件 `defaultManifest` 提交 | winget-pkgs 拒绝 | 拆成 version/installer/defaultLocale 三文件 |
 | 3 | sha256 手填/留空 | winget CI 校验失败 / brew 安装失败 | 从 `gh api releases` 的 `assets[].digest` 抄 |
 | 4 | tarball 不 `chdir` 就 install | brew 找不到二进制 | 按 URL 文件名取平台 triple 目录再 chdir |
-| 5 | 本地 `homebrew-eazymake/ezmk.rb` 与线上 tap 不同步 | 日后回退线上公式 | 双处同步更新 |
+| 5 | 本地 `publish/homebrew/ezmk.rb` 与线上 tap 不同步 | 日后回退线上公式 | 双处同步更新 |
 | 6 | 提交时漏签 CLA | PR 卡在 `Needs-CLA` | PR 上回 `@microsoft-github-policy-service agree` |
 | 7 | 以为 CI 全绿就完事 | 不知道还要等版主 | CI 绿后还有版主人工批准（几小时~几天） |
 | 8 | 查 check-runs 用 merge commit | 拿不到数据 | 用 PR 的 **head SHA**（`headRefOid`） |
@@ -235,8 +235,8 @@ end
 
 ## 4. 相关文件
 
-- winget 提交记录：`manifests/e/ezmk/1.1.3.yaml`（单文件参考格式）
+- winget 提交记录：`publish/winget/e/ezmk/1.1.3.yaml`（单文件参考格式）
 - winget-pkgs PR：`microsoft/winget-pkgs#416835`（v1.1.3，含 CI 全绿标签）
-- homebrew 公式：`homebrew-eazymake/ezmk.rb`（本地副本，需与 tap 同步）
+- homebrew 公式：`publish/homebrew/ezmk.rb`（本地副本，需与 tap 同步）
 - Release 资产哈希来源：`gh api repos/3667808244/EazyMake/releases/tags/<tag>`
 - 发布流程/跟进项：`plans/1.1.x/1.1.0.md`（发布流水线章节）、记忆 `eazymake-110-release`
