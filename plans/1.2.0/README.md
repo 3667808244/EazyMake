@@ -22,9 +22,9 @@
 | [1.2.0-dev.12](1.2.0-dev.12.md) | 测试配置收口（dev.3 延伸） | `[test].default_profile` + `ezmk test --profile`（复用 compile/link profile 表）+ 测试专属 `include_dirs`/`link_targets`；`[test].flags` 弃用（warn，2.0.0 移除） | **已完成**（2026-08-15） |
 | [1.2.0-pre.2](1.2.0-pre.2.md) | README 整理与高级特性触达 | README 重组 + 高级特性教程（semver/lockfile/第三方仓库/预编译共包）+ 预编译包 ABI 警告加强 | **已完成**（2026-08-17） |
 | [1.2.0-pre.1](1.2.0-pre.1.md) | pacman 分发（发布流水线） | `publish/` 重组 + `publish/arch/PKGBUILD`；本机 MSYS2 + 远程 Arch Linux 验证 makepkg | **已完成**（2026-08-17） |
-| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.12 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
+| [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.12 + pre.1/pre.2；前置 1.1.1；发布门槛 + 全量回归；三渠道分发（winget/Homebrew/pacman） | **已发布**（2026-08-17，tag `v1.2.0`） |
 
-> **执行计划**：根 `plan.md` 为当前执行计划，镜像正在推进的子版本设计文档（dev.1 ~ dev.12 全部已完成；pre.2 为 dev.10 之后的文档化检查点，待实现）。
+> **执行计划**：根 `plan.md` 为当前执行计划。dev.1 ~ dev.12 + pre.1/pre.2 全部完成；**1.2.0 已于 2026-08-17 正式发布**。
 
 ## 依赖关系
 
