@@ -1,6 +1,6 @@
 # EazyMake 1.2.0-pre.2 执行计划
 
-> **状态：执行中**（2026-08-17 启动）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
+> **状态：已完成**（2026-08-17，README 重组 + 教程 12/13/14 + package_authoring 警告加强全部落地；全量 775 用例 / 3554 断言零回归）。1.2.0 系列路线图见 [`plans/1.2.0/README.md`](plans/1.2.0/README.md)。
 >
 > 详细设计：[**1.2.0-pre.2.md**](plans/1.2.0/1.2.0-pre.2.md)。本计划为 1.2.0 系列第二个发布前（pre）子版本：**README 整理与高级特性触达**——README 重组（快速开始去安装、安装独立章节、新增高级特性索引）、新增高级特性教程 12/13/14（语义化版本约束 + lockfile / 第三方私有仓库 / 多平台多工具链预编译共包）、`package_authoring.md` §3.3 预编译 ABI 警告加强（四层兼容性 + 最佳实践 + 失败案例）。
 >
@@ -31,33 +31,33 @@
 
 ### 阶段一：README 重组（4.1/4.2）
 
-- [ ] **1.1 README_ZH.md（中文基准）**：按 §3.1 重构——头部不动；新增「目录」；「快速开始」去掉安装流程（保留第一个项目 + 安装包）；「安装」提升为独立章节（Homebrew / pacman / install 脚本 + 安装选项表）；新增「高级特性」章节（6 行特性表 + 文档/教程链接）
-- [ ] **1.2 README.md 英文同步**：与中文逐章节对应，术语沿用既有翻译
+- [x] **1.1 README_ZH.md（中文基准）**：按 §3.1 重构——头部不动；新增「目录」；「快速开始」去掉安装流程（保留第一个项目 + 安装包）；「安装」提升为独立章节（Homebrew / pacman / install 脚本 + 安装选项表）；新增「高级特性」章节（6 行特性表 + 文档/教程链接）
+- [x] **1.2 README.md 英文同步**：与中文逐章节对应，术语沿用既有翻译
 
 ### 阶段二：教程 12/13（4.3，中文先行）
 
-- [ ] **2.1 教程 12**（zh）：`tutorial/zh/12-version-lockfile.md`——`@`/`^`/`~`/`>=` 约束写法（引用 config_file.md 约束表）、`ezmk.lock` 生成/校验/`--locked`、`[compile].deterministic = true` 复现构建
-- [ ] **2.2 教程 13**（zh）：`tutorial/zh/13-third-party-repos.md`——`repo add`（git/本地目录、-p/-u/-g、--name/--branch）、`repo update`、index.toml `[platform]` 平台映射
-- [ ] **2.3 英文同步**：`tutorial/en/12/13` 对照翻译
+- [x] **2.1 教程 12**（zh）：`tutorial/zh/12-version-lockfile.md`——`@`/`^`/`~`/`>=` 约束写法（引用 config_file.md 约束表）、`ezmk.lock` 生成/校验/`--locked`、`[compile].deterministic = true` 复现构建
+- [x] **2.2 教程 13**（zh）：`tutorial/zh/13-third-party-repos.md`——`repo add`（git/本地目录、-p/-u/-g、--name/--branch）、`repo update`、index.toml `[platform]` 平台映射
+- [x] **2.3 英文同步**：`tutorial/en/12/13` 对照翻译
 
 ### 阶段三：教程 14（4.4，中文先行）
 
-- [ ] **3.1 教程 14**（zh）：`tutorial/zh/14-precompiled-packages.md`——dev.10 命名 `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`、4 级选择优先级、**ABI 兼容性警告**（libstdc++ CXX11 / MSVC 工具集）、失败案例演示、"源码分发远优于预编译"立场
-- [ ] **3.2 英文同步**：`tutorial/en/14`
+- [x] **3.1 教程 14**（zh）：`tutorial/zh/14-precompiled-packages.md`——dev.10 命名 `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`、4 级选择优先级、**ABI 兼容性警告**（libstdc++ CXX11 / MSVC 工具集）、失败案例演示、"源码分发远优于预编译"立场
+- [x] **3.2 英文同步**：`tutorial/en/14`
 
 ### 阶段四：教程索引（4.5）
 
-- [ ] **4.1 tutorial/zh/README.md**：追加 11/12/13/14（顺带修复既有缺漏——11-import-cmake.md 存在但未入索引）
-- [ ] **4.2 tutorial/en/README.md**：同步
+- [x] **4.1 tutorial/zh/README.md**：追加 11/12/13/14（顺带修复既有缺漏——11-import-cmake.md 存在但未入索引）
+- [x] **4.2 tutorial/en/README.md**：同步
 
 ### 阶段五：package_authoring 警告加强（4.6，中文基准）
 
-- [ ] **5.1 docs/zh/package_authoring.md §3.3**：命名约定升级引用 dev.10 + **四层兼容性维度**（OS+架构 / 编译器族 / 工具链版本+标准库 ABI / MSVC 运行时）+ 最佳实践声明 + 失败案例（`std::__cxx11` 叙事）
-- [ ] **5.2 docs/en/package_authoring.md**：同步
+- [x] **5.1 docs/zh/package_authoring.md §3.3**：命名约定升级引用 dev.10 + **四层兼容性维度**（OS+架构 / 编译器族 / 工具链版本+标准库 ABI / MSVC 运行时）+ 最佳实践声明 + 失败案例（`std::__cxx11` 叙事）
+- [x] **5.2 docs/en/package_authoring.md**：同步
 
 ### 阶段六：收口（4.7）
 
-- [ ] **6.1 收口**：CHANGES.md pre.2 条目 + plan.md/设计文档全勾选 + 系列 README pre.2 状态更新 + 双语一致性通读（中文为基准）+ 发布门槛复核（无代码变更 + 全量 775/3554 零回归）
+- [x] **6.1 收口**：CHANGES.md pre.2 条目 + plan.md/设计文档全勾选 + 系列 README pre.2 状态更新 + 双语一致性通读（中文为基准）+ 发布门槛复核（无代码变更 + 全量 775/3554 零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入正式版发布。
 

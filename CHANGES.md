@@ -10,6 +10,29 @@ As of v1.1.0, the following public APIs are **permanently stable**:
 
 Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
 
+---
+
+## 1.2.0-pre.2 (2026-08-17) — README 整理与高级特性触达
+
+发布前文档检查点：README 重组 + 高级特性教程 + 预编译 ABI 警告加强，让「能力可见、上手有路、坑位说透」。**纯文档交付**——无代码变更、无新增 i18n key；**中文为基准**（README_ZH / tutorial/zh / docs/zh 先行），英文同步翻译。
+
+### 文档
+
+- **README 重组**（中英）：新增目录；快速开始去掉安装流程（保留第一个项目 + 安装包）；安装提升为独立章节（Homebrew / pacman / install 脚本 + 安装选项表）；**新增「高级特性」章节**——6 项特性一行索引（semver 约束 / `ezmk.lock` / 预编译共包 / 第三方仓库 / CMake 互操作 / compile_commands）+ 文档与教程链接
+- **新增高级特性教程**（中英，编号接续 11）：
+  - `12-version-lockfile.md`：`@`/`^`/`~`/`>=` 版本约束（`[depends]` 配置）+ `ezmk.lock` 生成/校验/`--locked`/`--no-lock` + `[compile].deterministic = true` 复现构建
+  - `13-third-party-repos.md`：`repo add`（git/本地目录、`-p/-u/-g`、`--name/--branch`）+ `repo update` + index.toml `[platform]` 平台映射
+  - `14-precompiled-packages.md`：dev.10 命名 `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>` + 4 级匹配 + **ABI 兼容性警告**（libstdc++ CXX11 / MSVC 工具集）+ 失败案例 + 源码分发优先立场
+- **教程索引**（中英）：追加 11/12/13/14（顺带修复既有缺漏——`11-import-cmake` 存在但未入索引）
+- **`package_authoring.md` §3.3 警告加强**（中英）：兼容性**四层维度**（OS+架构 / 编译器族 / 工具链版本+标准库 ABI / MSVC 运行时）+ 失败案例（`std::__cxx11` 叙事）+ 最佳实践声明（同一包内 `os-arch[-compiler][-abi]` 并排多产物，源码分发仍远优于预编译）
+- **文档缺陷修复**：README 高级特性表版本约束示例改为 `[depends]` 配置语法（设计文档示例 `ezmk pkg install fmt@1.2.3` 与实现不符——CLI `pkg install` 单位置参数不接受 `name@` 约束，约束在配置层解析）
+
+### 测试
+
+- 全量回归：775 用例 / 3554 断言零失败（dev.11 基线 775 / 3552，零回归；纯文档变更）
+
+---
+
 ## 1.2.0-pre.1 (2026-08-17) — pacman 分发（Arch Linux / MSYS2）
 
 发布流水线补充：新增 pacman 分发渠道，与 winget（Windows）、Homebrew（macOS/Linux）并列。形态为「仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si`」（源码构建，Linux 静态链接）；**AUR 新账户注册未开放，不提交 AUR**（延后，账户开通后补）。公共 API 无任何变更。

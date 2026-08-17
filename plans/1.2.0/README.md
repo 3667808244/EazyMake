@@ -20,7 +20,7 @@
 | [1.2.0-dev.10](1.2.0-dev.10.md) | 平台标识符扩展（工具链/ABI） | `lib<name>.<os>-<arch>[-<compiler>][-<abi>]` 命名 + 4 级匹配 + 降级 ABI 警告 + 可选 `precompiled_strict` | **已完成**（2026-08-15） |
 | [1.2.0-dev.11](1.2.0-dev.11.md) | 代码质量审查与改进 | 基于 dev.10 后代码的全库审查（6 模块并行，68 条问题）：run_tests 收口/钩子安全/编码修复/校验前移/死代码清理 | **已完成**（2026-08-15） |
 | [1.2.0-dev.12](1.2.0-dev.12.md) | 测试配置收口（dev.3 延伸） | `[test].default_profile` + `ezmk test --profile`（复用 compile/link profile 表）+ 测试专属 `include_dirs`/`link_targets`；`[test].flags` 弃用（warn，2.0.0 移除） | **已完成**（2026-08-15） |
-| [1.2.0-pre.2](1.2.0-pre.2.md) | README 整理与高级特性触达 | README 重组 + 高级特性教程（semver/lockfile/第三方仓库/预编译共包）+ 预编译包 ABI 警告加强 | 待实现 |
+| [1.2.0-pre.2](1.2.0-pre.2.md) | README 整理与高级特性触达 | README 重组 + 高级特性教程（semver/lockfile/第三方仓库/预编译共包）+ 预编译包 ABI 警告加强 | **已完成**（2026-08-17） |
 | [1.2.0-pre.1](1.2.0-pre.1.md) | pacman 分发（发布流水线） | `publish/` 重组 + `publish/arch/PKGBUILD`；本机 MSYS2 + 远程 Arch Linux 验证 makepkg | **已完成**（2026-08-17） |
 | [1.2.0](1.2.0.md) | 正式发布 | 聚合 dev.1 ~ dev.12 + pre.1；前置 1.1.1；发布门槛 + 全量回归 | 待发布 |
 
