@@ -3,22 +3,23 @@ name: ezmk-publish
 description: How to publish EazyMake releases to winget and Homebrew — manifest/formula preparation, submission workflow to microsoft/winget-pkgs and the homebrew tap, and known pitfalls (hashes, manifest types, CLA, moderation).
 ---
 
-# EazyMake 分发：winget + Homebrew
+# EazyMake 分发：winget + Homebrew + pacman
 
-EazyMake 的两个第三方分发渠道，都消费 GitHub Release 的产物：
+EazyMake 的三个第三方分发渠道，统一在仓库 `publish/` 下管理（`publish/winget/`、`publish/homebrew/`、`publish/arch/`）：
 
 | 渠道 | 目标平台 | 消费的 Release 资产 | 交付物 |
 |------|---------|--------------------|--------|
 | **winget** | Windows x64 | `ezmk-windows-x64.zip`（含 `ezmk.exe`） | 3 个 split manifest 提交到 `microsoft/winget-pkgs` |
 | **Homebrew** | macOS arm64 / Linux x64 | `ezmk-macos-arm64.tar.gz`、`ezmk-linux-x64.tar.gz` | `Formula/ezmk.rb` 更新到 tap 仓库 |
+| **pacman** | Arch Linux / MSYS2 x86_64 | 无（源码构建，从 git tag 拉源码） | `publish/arch/PKGBUILD`（自取 + `makepkg -si`；AUR 延后） |
 
-**先决条件**：GitHub Release 已发布（`gh release create vX.Y.Z` 触发 `release.yml` 构建 win/linux/macOS 产物并上传）。
+**先决条件**：winget/Homebrew 需要 GitHub Release 已发布（`gh release create vX.Y.Z` 触发 `release.yml` 构建 win/linux/macOS 产物并上传）；pacman 只需 `vX.Y.Z` tag 已推送（源码 tarball URL 立即可用）。
 
 ---
 
 ## 0. 万事的第一步：拿真实资产哈希
 
-两个渠道的 sha256 都必须来自 **Release 资产的实际 digest**，不要手算、不要猜：
+winget/Homebrew 的 sha256 都必须来自 **Release 资产的实际 digest**，不要手算、不要猜（pacman 首次用 `SKIP`，见 §3.1）：
 
 ```bash
 gh api repos/3667808244/EazyMake/releases/tags/v1.1.3 \
@@ -219,7 +220,50 @@ end
 
 ---
 
-## 3. 坑位清单（速查）
+## 3. Pacman（Arch Linux / MSYS2）
+
+> 1.2.0 起新增的第三个分发渠道（`publish/arch/PKGBUILD`）。形态为**自取 PKGBUILD + `makepkg -si`**（用户从仓库拉 PKGBUILD 本地构建安装）；**不提交 AUR**——AUR 新账户注册尚未开放，账户开通后补（届时本 skill 补 AUR 章节）。
+
+### 3.1 PKGBUILD 结构（`publish/arch/PKGBUILD`）
+
+```bash
+pkgname=eazymake
+pkgver=1.2.0            # 随版本号手工同步（指向 v1.2.0 正式 tag）
+arch=('x86_64')
+makedepends=('gcc' 'python')    # 无 depends：build.sh 在 Linux 产出静态链接二进制
+source=("$pkgname-$pkgver.tar.gz::https://github.com/3667808244/EazyMake/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')     # 首次用 SKIP；稳定后填真实 digest（源码 tarball）
+```
+
+- **源码构建 vs 二进制重打包**：首选**源码构建**（PKGBUILD 标准形态：从 git tag 拉源码 + `build.sh` 编译，`EZMK_VERSION="$pkgver"` 注入版本号）；备选 `-bin` 风格（`source=` 直接指向 Release 资产 + `sha256sums` 用 §0 的真实 digest）——若远端网络受限用备选。
+- **`pkgname=eazymake`**：包名用项目名；安装的二进制名保持 `ezmk`（与 CLI 一致）。
+- **package() 双变体**：Linux 产出 `build/ezmk`；Windows/MSYS2 产出 `build/ezmk.exe`（`if [ -f build/ezmk.exe ]` 分支），保证 MSYS2 渠道可用。
+- **`ezmk-lua` 一并安装**：dev.8 的 CMake 导出钩子独立运行时，保证 pacman 渠道下导出钩子可用。
+- **`_ezmk` 补全**：安装到 `zsh/site-functions/_ezmk`，与 Homebrew 的 `zsh_completion.install "_ezmk"` 对齐。
+
+### 3.2 验证流程（无需 AUR 账户）
+
+- **本机 MSYS2**（已实测通过 2026-08-17）：`export MSYSTEM=MINGW64` + `export PATH=/mingw64/bin:/usr/bin:/bin` 后 `makepkg -fd`（`-d`：MINGW 工具链已装、msys 包名 `gcc`/`python` 不满足依赖检查）生成 `.pkg.tar.zst`；解包验证 `usr/bin/ezmk.exe`、`usr/bin/ezmk-lua.exe`、`usr/share/zsh/site-functions/_ezmk` 落位；`ezmk.exe version` 输出正确版本。
+- **远程 Arch Linux**：`scp` PKGBUILD + 源码 tarball 到真机（VM 到 github 大文件传输被 reset，需自带 tarball），`makepkg -f` 生成并验证（Linux 二进制 `ezmk` + `_ezmk`；依赖 `gcc`/`python` 在 Arch 正常解析）。
+- **tag 未发布时的本地替代**：`v1.2.0` tag 不存在时，用 `git archive --prefix=EazyMake-1.2.0/ HEAD -o eazymake-1.2.0.tar.gz` 生成同名 tarball 放 PKGBUILD 同目录——makepkg 识别本地文件不下载（GitHub tag tarball 根目录同为 `EazyMake-1.2.0/`）。
+
+### 3.3 用户安装
+
+- **Arch Linux**：`curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/publish/arch/PKGBUILD -o PKGBUILD && makepkg -si`（需 `base-devel`）
+- **MSYS2**：MINGW64 环境 `makepkg -si`（若提示缺 `gcc`/`python`，加 `--nodeps` 跳过——MINGW 工具链已就绪；亦可 `makepkg-mingw -si`）
+- **AUR**：账户开通后提交为 AUR 包（`pkgbase=eazymake`），验证流程与 §3.2 一致。
+
+### 3.4 🕳️ 坑（MSYS2 本机验证实测）
+
+- **MSYS2 bash 依赖 Cygwin 信号管道**：受限环境（文件沙箱）下 bash 无法启动（Win32 error 5「couldn't create signal pipe」），验证需在非受限环境跑。
+- **`set -u` + `source /etc/profile` 冲突**：MSYS2 的 /etc/profile 引用未定义变量，`set -u` 下直接杀死脚本；验证脚本显式设 PATH（`/mingw64/bin:/usr/bin:/bin`）更稳。
+- **MSYS 环境无 g++/python**：默认 MSYS root 环境没有编译器（只有 MINGW64 有 mingw-w64-x86_64-gcc/python），makepkg 须在 MINGW64 环境（`export MSYSTEM=MINGW64`）跑。
+- **依赖检查按 msys 包名**：MINGW64 下 `pacman -Q gcc` 不存在（实为 mingw-w64-x86_64-gcc），`makepkg` 依赖检查失败——用 `-d`/`--nodeps`。
+- **版本绑定**：`pkgver` 指向正式 tag；Release 前 makepkg 拉不到 tag 源码——用 git archive 本地 tarball 做功能验证，最终验证在发布后。
+
+---
+
+## 4. 坑位清单（速查）
 
 | # | 坑 | 后果 | 正确做法 |
 |---|----|------|---------|
@@ -232,11 +276,15 @@ end
 | 7 | 以为 CI 全绿就完事 | 不知道还要等版主 | CI 绿后还有版主人工批准（几小时~几天） |
 | 8 | 查 check-runs 用 merge commit | 拿不到数据 | 用 PR 的 **head SHA**（`headRefOid`） |
 | 9 | Intel macOS 加进公式 | 误导用户 | 明确只在 arm64 下提供（缺 x64 资产） |
+| 10 | MSYS2 环境跑 makepkg 用错环境 | MSYS 环境无 g++/python | `export MSYSTEM=MINGW64`（MINGW64 环境） |
+| 11 | MINGW64 下依赖检查失败 | 报缺 `gcc`/`python`（msys 包名） | `makepkg -d`/`--nodeps`（MINGW 工具链已装） |
+| 12 | `pkgver` 指向未发布 tag | makepkg 拉不到源码 | `git archive` 本地同名 tarball 做功能验证，最终验证延后到 Release 后 |
 
-## 4. 相关文件
+## 5. 相关文件
 
 - winget 提交记录：`publish/winget/e/ezmk/1.1.3.yaml`（单文件参考格式）
 - winget-pkgs PR：`microsoft/winget-pkgs#416835`（v1.1.3，含 CI 全绿标签）
 - homebrew 公式：`publish/homebrew/ezmk.rb`（本地副本，需与 tap 同步）
+- pacman PKGBUILD：`publish/arch/PKGBUILD`（源码构建；AUR 延后）
 - Release 资产哈希来源：`gh api repos/3667808244/EazyMake/releases/tags/<tag>`
-- 发布流程/跟进项：`plans/1.1.x/1.1.0.md`（发布流水线章节）、记忆 `eazymake-110-release`
+- 发布流程/跟进项：`plans/1.1.x/1.1.0.md`（发布流水线章节）、`plans/1.2.0/1.2.0-pre.1.md`（pacman 渠道）、记忆 `eazymake-110-release`
