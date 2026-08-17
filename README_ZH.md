@@ -167,7 +167,7 @@ ezmk utils cc                   # 生成 compile_commands.json（自 1.2.0 起�
 
 | 特性 | 一句话 | 链接 |
 |------|--------|------|
-| 语义化版本约束 | `ezmk pkg install fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [12](tutorial/zh/12-version-lockfile.md) |
+| 语义化版本约束 | `[depends]` 中用 `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [12](tutorial/zh/12-version-lockfile.md) |
 | `ezmk.lock` 确定性构建 | 锁定依赖版本与内容哈希，`--locked` 下 CI 可复现构建 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [12](tutorial/zh/12-version-lockfile.md) |
 | 多平台多工具链预编译共包 | 同一包携带 `win-x64-msvc143` / `linux-x64-gcc13-abi11` 等多份产物，按当前工具链自动选择 | [`docs/zh/package_authoring.md`](docs/zh/package_authoring.md) · 教程 [14](tutorial/zh/14-precompiled-packages.md) |
 | 第三方 / 私有仓库 | `ezmk repo add <url>` 接入 git 仓库形式的第三方源 | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [13](tutorial/zh/13-third-party-repos.md) |
