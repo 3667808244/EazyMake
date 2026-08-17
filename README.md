@@ -29,6 +29,20 @@ brew tap 3667808244/eazymake && brew install ezmk
 
 > Homebrew covers macOS (Apple Silicon) and Linux x64. macOS Intel has no prebuilt binary yet — use the script below.
 
+**Arch Linux / MSYS2 — pacman (1.2.0+):**
+
+```bash
+# Arch Linux
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/publish/arch/PKGBUILD -o PKGBUILD
+makepkg -si
+
+# MSYS2 (MINGW64 shell)
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/publish/arch/PKGBUILD -o PKGBUILD
+makepkg -si --nodeps
+```
+
+> Source build (statically linked); requires `base-devel` (Arch) or the MINGW64 toolchain (MSYS2; `--nodeps` skips the dependency check). Not on AUR yet (registration unavailable) — self-serve `publish/arch/PKGBUILD` + `makepkg -si` for now.
+
 **Alternative — install script:**
 
 **Linux / macOS / MSYS2:**

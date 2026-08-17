@@ -29,6 +29,20 @@ brew tap 3667808244/eazymake && brew install ezmk
 
 > Homebrew 覆盖 macOS（Apple Silicon）与 Linux x64。macOS Intel 暂无预编译产物 —— 请用下方的安装脚本。
 
+**Arch Linux / MSYS2 —— pacman（1.2.0+）：**
+
+```bash
+# Arch Linux
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/publish/arch/PKGBUILD -o PKGBUILD
+makepkg -si
+
+# MSYS2（MINGW64 环境）
+curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/publish/arch/PKGBUILD -o PKGBUILD
+makepkg -si --nodeps
+```
+
+> 源码构建（静态链接），需 `base-devel`（Arch）或 MINGW64 工具链（MSYS2；`--nodeps` 跳过依赖检查）。暂未提交 AUR（账户注册未开放）—— 以仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si` 为主。
+
 **备选 —— 安装脚本：**
 
 **Linux / macOS / MSYS2：**
