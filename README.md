@@ -10,6 +10,14 @@ A simple C/C++ build tool — `ezmk`. Supports GCC, Clang, and MSVC.
 
 > **Stable public API as of v1.1.0.** Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version. See [CHANGES.md](CHANGES.md#api-stability).
 
+## Contents
+
+- [Quick start](#quick-start)
+- [Install](#install)
+- [Commands at a glance](#commands-at-a-glance)
+- [Advanced features](#advanced-features)
+- [Documentation](#documentation)
+
 ## Why EazyMake
 
 - **Zero config** — `ezmk project new my_app && cd my_app && ezmk build` and you're running
@@ -19,7 +27,27 @@ A simple C/C++ build tool — `ezmk`. Supports GCC, Clang, and MSVC.
 
 ## Quick start
 
-### Install
+### Your first project
+
+```bash
+ezmk project new hello
+cd hello
+ezmk build                # compile + link
+ezmk run                  # build + run
+```
+
+> **Build from a subdirectory too (1.2.0+):** `ezmk build` / `ezmk test` and
+> friends locate `ezmk.toml` by walking **up at most 5 parent directories** from
+> the current directory — drop into `src/` and run directly, just like `git`.
+
+### Install a package
+
+```bash
+ezmk pkg install fmt      # by name — official repo pre-registered
+ezmk pkg install ./mylib  # from a source directory (1.2.0+, no packing needed)
+```
+
+## Install
 
 **macOS / Linux — recommended (Homebrew):**
 
@@ -59,25 +87,16 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 Customize with `PREFIX`, `EZMK_REF`, `EZMK_NO_DEFAULT_REPO`. See [install options](#install-options).
 
-### Your first project
+### Install options
 
-```bash
-ezmk project new hello
-cd hello
-ezmk build                # compile + link
-ezmk run                  # build + run
-```
-
-> **Build from a subdirectory too (1.2.0+):** `ezmk build` / `ezmk test` and
-> friends locate `ezmk.toml` by walking **up at most 5 parent directories** from
-> the current directory — drop into `src/` and run directly, just like `git`.
-
-### Install a package
-
-```bash
-ezmk pkg install fmt      # by name — official repo pre-registered
-ezmk pkg install ./mylib  # from a source directory (1.2.0+, no packing needed)
-```
+| Variable / Flag | Purpose | Default |
+|-----------------|---------|---------|
+| `PREFIX` | Install prefix (binary → `$PREFIX/bin`) | `$HOME/.local` |
+| `EZMK_REF` | git tag/branch/commit to build | default branch |
+| `EZMK_NO_DEFAULT_REPO` | Set to `1` to skip official repo registration | (registers) |
+| `-Version` (PS) | Version tag to install | `"latest"` |
+| `-InstallDir` (PS) | Root install directory | `$env:LOCALAPPDATA\ezmk` |
+| `-DryRun` (PS) | Preview without making changes | (off) |
 
 ## vs CMake
 
@@ -145,16 +164,16 @@ ezmk utils cc                   # generate compile_commands.json (deprecated sin
 
 Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 
-## Install options
+## Advanced features
 
-| Variable / Flag | Purpose | Default |
-|-----------------|---------|---------|
-| `PREFIX` | Install prefix (binary → `$PREFIX/bin`) | `$HOME/.local` |
-| `EZMK_REF` | git tag/branch/commit to build | default branch |
-| `EZMK_NO_DEFAULT_REPO` | Set to `1` to skip official repo registration | (registers) |
-| `-Version` (PS) | Version tag to install | `"latest"` |
-| `-InstallDir` (PS) | Root install directory | `$env:LOCALAPPDATA\ezmk` |
-| `-DryRun` (PS) | Preview without making changes | (off) |
+| Feature | One-liner | Links |
+|---------|-----------|-------|
+| Semantic version constraints | `ezmk pkg install fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` pin dependency versions precisely | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [12](tutorial/en/12-version-lockfile.md) |
+| `ezmk.lock` deterministic builds | Lock dependency versions and content hashes; `--locked` gives reproducible CI builds | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [12](tutorial/en/12-version-lockfile.md) |
+| Multi-platform / multi-toolchain precompiled packages | One package ships `win-x64-msvc143` / `linux-x64-gcc13-abi11` artifacts, auto-selected for the current toolchain | [`docs/en/package_authoring.md`](docs/en/package_authoring.md) · Tutorial [14](tutorial/en/14-precompiled-packages.md) |
+| Third-party / private repos | `ezmk repo add <url>` wires in git-repo third-party sources | [`docs/en/repo.md`](docs/en/repo.md) · Tutorial [13](tutorial/en/13-third-party-repos.md) |
+| CMake interop | `project export cmake` to export / `project import --from cmake` to import (experimental) | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [11](tutorial/en/11-import-cmake.md) |
+| compile_commands | `project cc` generates compile_commands.json for clangd/IDEs | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [08](tutorial/en/08-utils.md) |
 
 ## Documentation
 
