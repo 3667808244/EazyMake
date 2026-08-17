@@ -1,0 +1,39 @@
+# EazyMake — pacman 分发（Arch Linux / MSYS2）
+#
+# 自取 PKGBUILD + makepkg -si（需 base-devel）。AUR 提交延后（账户开通后补）。
+# pkgver 指向 v1.2.0 正式 tag；sha256sums 首次用 SKIP，稳定后填真实 digest：
+#   gh api repos/3667808244/EazyMake/releases/tags/v${pkgver} --jq '.assets[] | {name, digest}'
+#   （源码 tarball 的 digest 用 git archive 本地生成同构 tarball 的 sha256 替代）
+#
+# 构建说明：build.sh 在 Linux 产出静态链接二进制（LDFLAGS="-static"），
+# 故 depends 为空、makedepends 仅 gcc + python；ezmk-lua 为 dev.8 新增的
+# CMake 导出钩子独立运行时，随包一并安装；_ezmk 为 zsh 补全。
+
+pkgname=eazymake
+pkgver=1.2.0
+pkgrel=1
+pkgdesc="A simple C/C++ build tool (GCC/Clang/MSVC)"
+arch=('x86_64')
+url="https://github.com/3667808244/EazyMake"
+license=('MIT')
+makedepends=('gcc' 'python')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/3667808244/EazyMake/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "EazyMake-$pkgver"
+  EZMK_VERSION="$pkgver" bash build.sh
+}
+
+package() {
+  cd "EazyMake-$pkgver"
+  # Linux 产出 build/ezmk；Windows/MSYS2 产出 build/ezmk.exe（同源双变体）
+  if [ -f build/ezmk.exe ]; then
+    install -Dm755 build/ezmk.exe "$pkgdir/usr/bin/ezmk.exe"
+    install -Dm755 build/ezmk-lua.exe "$pkgdir/usr/bin/ezmk-lua.exe"
+  else
+    install -Dm755 build/ezmk "$pkgdir/usr/bin/ezmk"
+    install -Dm755 build/ezmk-lua "$pkgdir/usr/bin/ezmk-lua"
+  fi
+  install -Dm644 res/ezmk.zsh "$pkgdir/usr/share/zsh/site-functions/_ezmk"
+}
