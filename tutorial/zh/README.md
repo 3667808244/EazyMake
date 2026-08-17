@@ -16,6 +16,10 @@
 8. [Utils 工具（clangd 集成）](08-utils.md)
 9. [测试你的项目](09-test.md)
 10. [顶层别名（快速参考）](10-top-level-aliases.md)
+11. [导入 CMake 项目](11-import-cmake.md)
+12. [语义化版本约束与确定性构建](12-version-lockfile.md)
+13. [第三方与私有仓库](13-third-party-repos.md)
+14. [多平台多工具链预编译共包](14-precompiled-packages.md)
 
 ## 约定
 

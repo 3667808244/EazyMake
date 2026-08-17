@@ -18,6 +18,10 @@ option surface, see the [`docs/en/`](../../docs/en/) reference (especially [`doc
 8. [Utils tools (clangd integration)](08-utils.md)
 9. [Testing your project](09-test.md)
 10. [Top-level aliases (quick reference)](10-top-level-aliases.md)
+11. [Importing a CMake project](11-import-cmake.md)
+12. [Semantic version constraints & deterministic builds](12-version-lockfile.md)
+13. [Third-party & private repositories](13-third-party-repos.md)
+14. [Multi-platform, multi-toolchain precompiled packages](14-precompiled-packages.md)
 
 ## Conventions
 
