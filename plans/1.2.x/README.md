@@ -75,7 +75,7 @@
 
 | 版本 | 主题 | 关键交付 | 状态 |
 |------|------|----------|------|
-| [1.2.1](1.2.1.md) | 按项目类型差异化模板生成 | `project new` 按类型生成：executable → main.cpp；static/shared → `include/<name>.hpp` + `src/<name>.cpp` 库骨架；utils → 不变；namespace 净化（`-`/`.`/空格 → `_`） | 待实现 |
+| [1.2.1](1.2.1.md) | 按项目类型差异化模板生成 + 默认配置补全 | `project new` 按类型生成：executable → main.cpp；static/shared → `include/<name>.hpp` + `src/<name>.cpp` 库骨架；utils → 不变；namespace 净化（`-`/`.`/空格 → `_`）；默认模板追加注释 `[test]` 示例节 | 待实现 |
 
 ## 1.2.2 — 补丁（教程分类重组）
 
