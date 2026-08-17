@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <map>
