@@ -85,6 +85,14 @@
 |------|------|----------|------|
 | [1.2.2](1.2.2.md) | 教程分类重组（子目录迁移 + 组内重新编号） | `tutorial/zh|en/` 四分类子目录（basic/packages/dev/interop）+ 组内重编号（每组 01 起）+ README 分组索引 + 全仓链接/编号修复（grep 零死链 + 零旧编号残留） | 待实现 |
 
+## 1.2.3 — 补丁（`ezmk example` 命令组 + 内置示例）
+
+1.2.3 为 **1.2.x 稳定线补丁**：新增顶层命令组 `ezmk example`（`list` / `<name>` / `-o`），内置 6 个示例（hello / greeter / with-packages / with-tests / with-hooks / cmake-interop）。示例内容以**方案B（构建期嵌入资源）**存储：`examples/` 源目录为单一事实源，`scripts/embed_examples.py` 构建期生成 `src/example_data.cpp` 嵌入二进制（对齐 embed_locale/embed_logo 机制）——装好即用、离线可用、与版本同源。生成到 `./<name>/`（同 `project new`）；with-packages 在 CI 正常联网测试（GitHub runner 有完整出站网络）。**纯新增命令组，公共 API 无破坏性变更**。
+
+| 版本 | 主题 | 关键交付 | 状态 |
+|------|------|----------|------|
+| [1.2.3](1.2.3.md) | `ezmk example` 命令组 + 内置示例 | 顶层命令组（list/<name>/-o）+ 6 内置示例 + 构建期嵌入管线（examples/ → example_data.cpp）+ 集成测试/CI 自举验证 + 文档 | 待实现 |
+
 ## 发布门槛
 
 ⛔ 发布前必须同时满足：**实现完整 + API 兼容 + 全量测试零回归**。详细 Gate 定义见 [1.1.0-pre.3](../1.1.x/1.1.0-pre.3.md#⛔-发布门槛release-gate)。
