@@ -226,11 +226,29 @@ Compiler tag (optional) is derived from the consumer toolchain: `gcc<major>` (e.
 
 > **Known limitations**: Apple Clang version numbers do not align with LLVM (ABI can shift within the same major); clang-cl does not produce `msvc1xx` tags (use real MSVC for MSVC-ABI artifacts); explicit `-D_GLIBCXX_USE_CXX11_ABI=0` (old ABI) consumer builds are not auto-detected — package authors can ship a dedicated `abi8` artifact for that scenario, matched by default as `abi11`.
 
-**⚠️ Not recommended for general use.** Precompiled packages only work on the specific platform and architecture they were built for. Prefer source-based packages (`src/`) whenever possible, as they compile on any platform. Only use `precompiled` when:
+**⚠️ Not recommended for general use.** Precompiled packages only work on the specific platform, architecture, toolchain, and ABI they were built for. Prefer source-based packages (`src/`) whenever possible, as they compile on any platform. Only use `precompiled` when:
 
 - The library cannot be compiled with a simple `gcc`/`g++` invocation (requires CMake, autotools, OpenSSL's `Configure`, or other complex build systems)
 - The library takes extremely long to compile (e.g. gRPC, Qt) — precompilation dramatically improves user experience
 - You can enumerate and provide builds for all target platforms
+
+**Four compatibility dimensions** (a prebuilt artifact must match the consumer on all four):
+
+1. **Operating system + instruction set architecture**: `win-x64` ≠ `linux-x64` — the most basic layer.
+2. **Compiler family**: GCC / Clang / MSVC artifacts are mutually incompatible (C++ ABIs differ; pure C ABI is the exception).
+3. **Toolchain version / standard-library ABI**:
+   - libstdc++: `_GLIBCXX_USE_CXX11_ABI` (`abi11` new / `abi8` old) — mixing causes `std::__cxx11` undefined references;
+   - MSVC toolset: `msvc143` (VS2022) ≠ `msvc142` (VS2019);
+   - Apple Clang / clang-cl version misalignment limitations (see "Known limitations" above).
+4. **MSVC runtime (/MD vs /MT)**: a static library's CRT binding must match the consumer (dev.10 does not add a runtime-dimension tag yet).
+
+**Failure case** (the real narrative from the dev.10 background):
+
+> The docs did say "platform and architecture". But as a developer who has been burned by the C++ ABI countless times, the instinctive reading of "platform and architecture" is: "oh, a .a built on Windows just can't be used on Linux". So you confidently drop a `.a` built with GCC 11 into the repo and have a colleague link it with GCC 13 — the linker spews `std::__cxx11` undefined references and you debug for a whole day.
+
+**Best practice (precompiled packages only)**:
+
+> Place multiple toolchain/ABI artifacts side by side within one package using `os-arch[-compiler][-abi]` names, and let `ezmk` auto-select for the current toolchain (see the naming convention and 4-level matching above). **Source distribution (`src/`) is still far better than precompiled** — precompiled artifacts only work on the platforms/toolchains/ABIs you declared; source packages compile everywhere.
 
 ### 3.4 Utils Package (`type = "utils"`)
 
