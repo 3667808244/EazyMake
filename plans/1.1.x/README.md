@@ -35,7 +35,7 @@
 ### 与 1.2.0 的关系
 
 - 1.1.1 **先行**：为 1.2.0 的 `ezmk project cc` 命令铺路（共享 `build_compile_args()` + `compile_db` + 自动生成基础）。
-- 1.2.0 承接：`ezmk project cc` 新命令 + `ezmk utils cc` 弃用（见 `plans/1.2.0/`）；自动生成已在 1.1.1 交付，1.2.0 不重复。
+- 1.2.0 承接：`ezmk project cc` 新命令 + `ezmk utils cc` 弃用（见 `plans/1.2.x/`）；自动生成已在 1.1.1 交付，1.2.0 不重复。
 
 ## 1.1.2 — 补丁（安全加固 + 静默错误修复）
 
