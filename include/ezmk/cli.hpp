@@ -30,6 +30,7 @@ enum class Command {
     ProjectImport,   // 1.2.0
     PkgList,         // 0.2.3+
     PkgUpdate,       // 0.2.3+
+    Example,         // 1.2.3
     Version,
     Help,
 };
@@ -86,6 +87,13 @@ struct ProjectImportOptions {
     bool overwrite = false;      // --overwrite: replace an existing ezmk.toml
 };
 
+// 1.2.3: example command options — `ezmk example` (list / <name> / -o)
+struct ExampleOptions {
+    bool list = false;        // list mode (no name / explicit `list`)
+    std::string name;         // example name (generate mode)
+    std::string output_dir;   // -o/--output <dir> (default: ".")
+};
+
 struct InstallOptions {
     Scope scope = Scope::Project;
     std::string pkg_file;    // local path or URL
@@ -134,6 +142,9 @@ struct CliArgs {
 
     // Only valid for ProjectImport (1.2.0)
     std::optional<ProjectImportOptions> project_import_opts;
+
+    // Only valid for Example (1.2.3)
+    std::optional<ExampleOptions> example_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;

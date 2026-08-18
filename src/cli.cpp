@@ -635,6 +635,36 @@ namespace ezmk::cli
         return args;
     }
 
+    // 1.2.3: `ezmk example` — list built-in examples or scaffold one:
+    //   ezmk example                    → list
+    //   ezmk example list               → list
+    //   ezmk example <name> [-o <dir>]  → scaffold ./<name>/ (or <dir>/<name>/)
+    static CliArgs parse_example_args(int argc, char **argv)
+    {
+        CliArgs args;
+        args.cmd = Command::Example;
+
+        if (argc < 3 || std::string(argv[2]) == "list")
+        {
+            ExampleOptions opts;
+            opts.list = true;
+            args.example_opts = std::move(opts);
+            return args;
+        }
+
+        std::vector<OptionSpec> spec = {
+            {'o', "output", true},
+        };
+        auto p = parse_options(argc, argv, 3, spec, "ezmk example");
+        reject_positionals(p, "ezmk example");
+
+        ExampleOptions opts;
+        opts.name = argv[2];  // fixed positional at index 2
+        if (auto o = p.value("output")) opts.output_dir = *o;
+        args.example_opts = std::move(opts);
+        return args;
+    }
+
     // ===================================================================
     // Main parse entry point
     // ===================================================================
@@ -817,6 +847,12 @@ namespace ezmk::cli
 
         if (argc < 3)
         {
+            // 1.2.3: `ezmk example` (no subcommand) means `example list`.
+            if (arg1 == "example") {
+                auto result = parse_example_args(argc, argv);
+                result.shorthand_expansion = std::move(args.shorthand_expansion);
+                return result;
+            }
             util::fatal(ezmk::i18n::I18nKey::cli_requires_subcommand,
                         {{"group", std::string(arg1)}});
         }
@@ -843,13 +879,18 @@ namespace ezmk::cli
             result.shorthand_expansion = std::move(args.shorthand_expansion);
             return result;
         }
+        if (group == "example") {
+            auto result = parse_example_args(argc, argv);
+            result.shorthand_expansion = std::move(args.shorthand_expansion);
+            return result;
+        }
 
         util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_unknown_command,
                                     {{"cmd", std::string(group)}}));
         // 0.9.4+: suggest closest matching command
         {
             std::vector<std::string> cmds = {
-                "project", "pkg", "repo", "utils", "help", "version"
+                "project", "pkg", "repo", "utils", "example", "help", "version"
             };
             auto matches = util::closest_match(std::string(group), cmds, 2);
             if (!matches.empty()) {
@@ -932,6 +973,7 @@ namespace ezmk::cli
 
         // ── §4: Other ────────────────────────────────────────────
         std::cout << get(I18nKey::help_section_other) << "\n";
+        row("ezmk example [<name>] [-o <dir>]", I18nKey::help_example);
         row("ezmk utils   <name> [-- args]", I18nKey::help_utils);
         row("ezmk help", I18nKey::help_help);
         row("ezmk version", I18nKey::help_version);

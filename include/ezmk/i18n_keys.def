@@ -358,6 +358,15 @@ EZMK_I18N_KEY(toolchain_msvc_detected)
 // ---- cache ----
 EZMK_I18N_KEY(cache_hit_detail)
 
+// ---- example (1.2.3) ----
+EZMK_I18N_KEY(example_list_header)
+EZMK_I18N_KEY(example_list_item)
+EZMK_I18N_KEY(example_created)
+EZMK_I18N_KEY(example_not_found)
+EZMK_I18N_KEY(example_exists)
+EZMK_I18N_KEY(example_generating)
+EZMK_I18N_KEY(help_example)
+
 // ---- general ----
 EZMK_I18N_KEY(fatal_prefix)
 EZMK_I18N_KEY(error_prefix)
