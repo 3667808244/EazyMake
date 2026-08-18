@@ -528,6 +528,119 @@ TEST_CASE("integration: project new creates expected directory layout", "[integr
     REQUIRE(toml.find("executable") != std::string::npos);
 }
 
+// 1.2.1: project new templates differ by type — static/shared get a library
+// skeleton (include/<name>.hpp + src/<name>.cpp, no main.cpp), executable keeps
+// Hello world main.cpp, utils gets no C++ code at all.
+TEST_CASE("integration: project new templates differ by type (1.2.1)", "[integration][1.2.1]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+
+    TempDir tmp;
+
+    // executable: main.cpp present, no header
+    {
+        ProcResult r = run_ezmk(
+            "project new exe_121 --type executable --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(r.exit_code == 0);
+        fs::path p = tmp.path / "exe_121";
+        REQUIRE(fs::exists(p / "src" / "main.cpp"));
+        REQUIRE_FALSE(fs::exists(p / "include" / "exe_121.hpp"));
+        REQUIRE_FALSE(fs::exists(p / "src" / "exe_121.cpp"));
+    }
+
+    // static: hpp + cpp library skeleton, no main.cpp
+    {
+        ProcResult r = run_ezmk(
+            "project new st_121 --type static --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(r.exit_code == 0);
+        fs::path p = tmp.path / "st_121";
+        REQUIRE(fs::exists(p / "include" / "st_121.hpp"));
+        REQUIRE(fs::exists(p / "src" / "st_121.cpp"));
+        REQUIRE_FALSE(fs::exists(p / "src" / "main.cpp"));
+        std::string hpp = file_read(p / "include" / "st_121.hpp");
+        REQUIRE(hpp.find("#pragma once") != std::string::npos);
+        REQUIRE(hpp.find("namespace st_121 {") != std::string::npos);
+    }
+
+    // shared: same library skeleton, no main.cpp
+    {
+        ProcResult r = run_ezmk(
+            "project new sh_121 --type shared --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(r.exit_code == 0);
+        fs::path p = tmp.path / "sh_121";
+        REQUIRE(fs::exists(p / "include" / "sh_121.hpp"));
+        REQUIRE(fs::exists(p / "src" / "sh_121.cpp"));
+        REQUIRE_FALSE(fs::exists(p / "src" / "main.cpp"));
+    }
+
+    // utils: no C++ code, utils/ directory only
+    {
+        ProcResult r = run_ezmk(
+            "project new ut_121 --type utils --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(r.exit_code == 0);
+        fs::path p = tmp.path / "ut_121";
+        REQUIRE(fs::is_directory(p / "utils"));
+        REQUIRE_FALSE(fs::exists(p / "src" / "main.cpp"));
+        REQUIRE(fs::is_empty(p / "src"));
+    }
+
+    // dashed name: file names keep the dash, namespace is sanitized
+    {
+        ProcResult r = run_ezmk(
+            "project new my-lib --type static --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(r.exit_code == 0);
+        fs::path p = tmp.path / "my-lib";
+        REQUIRE(fs::exists(p / "include" / "my-lib.hpp"));
+        REQUIRE(fs::exists(p / "src" / "my-lib.cpp"));
+        std::string cpp = file_read(p / "src" / "my-lib.cpp");
+        REQUIRE(cpp.find("namespace my_lib {") != std::string::npos);
+    }
+}
+
+// 1.2.1: a newly created static/shared library skeleton compiles out of the
+// box (library compile + archive/link), no manual edits needed.
+TEST_CASE("integration: library skeleton builds (1.2.1)", "[integration][1.2.1]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+
+    TempDir tmp;
+
+    // static → archive (lib<name>.a / <name>.lib)
+    {
+        ProcResult new_r = run_ezmk(
+            "project new libst_121 --type static --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(new_r.exit_code == 0);
+        fs::path p = tmp.path / "libst_121";
+
+        ProcResult b = run_ezmk("project build", p);
+        INFO("static build stderr: " << b.err);
+        INFO("static build stdout: " << b.out);
+        REQUIRE(b.exit_code == 0);
+    }
+
+    // shared → lib<name>.dll / lib<name>.so
+    {
+        ProcResult new_r = run_ezmk(
+            "project new libsh_121 --type shared --disable-git-init --disable-gitignore",
+            tmp.path);
+        REQUIRE(new_r.exit_code == 0);
+        fs::path p = tmp.path / "libsh_121";
+
+        ProcResult b = run_ezmk("project build", p);
+        INFO("shared build stderr: " << b.err);
+        INFO("shared build stdout: " << b.out);
+        REQUIRE(b.exit_code == 0);
+    }
+}
+
 // 1.2.0-dev.11: pkg install from a locally packed archive — real assertions
 // (exit code 0 + installed artifacts + pkg list), no network required. The old
 // test SKIP'd whenever the network install failed, silently swallowing every
