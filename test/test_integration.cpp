@@ -2283,3 +2283,140 @@ TEST_CASE("integration: auto-install enforces version constraint (dev.11)", "[in
     REQUIRE(r.exit_code != 0);
     REQUIRE((r.out + r.err).find("constraint") != std::string::npos);
 }
+
+// =============================================================
+// 1.2.3: ezmk example — list / scaffold / errors / build
+// =============================================================
+
+// Repo-root examples/ dir — the source of truth for the embedded table.
+static fs::path example_source_dir() {
+    return find_repo_root() / "examples";
+}
+
+TEST_CASE("integration: ezmk example lists all built-in examples (1.2.3)", "[integration][1.2.3]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+
+    // Bare `ezmk example` and explicit `ezmk example list` both list 6 examples.
+    for (const std::string& args : {"example", "example list"}) {
+        ProcResult r = run_ezmk(args, tmp.path);
+        INFO("stderr: " << r.err);
+        INFO("stdout: " << r.out);
+        REQUIRE(r.exit_code == 0);
+        for (const std::string& name :
+             {"hello", "greeter", "with-packages", "with-tests", "with-hooks", "cmake-interop"}) {
+            INFO("list must contain: " << name);
+            REQUIRE((r.out + r.err).find(name) != std::string::npos);
+        }
+    }
+}
+
+TEST_CASE("integration: ezmk example scaffolds match source tree (1.2.3)", "[integration][1.2.3]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+
+    // Generate `hello` and `with-hooks`; every file must byte-match the source.
+    for (const std::string& name : {"hello", "with-hooks"}) {
+        ProcResult g = run_ezmk("example " + name, tmp.path);
+        INFO(name << " stderr: " << g.err);
+        REQUIRE(g.exit_code == 0);
+        fs::path out_dir = tmp.path / name;
+        fs::path src_dir = example_source_dir() / name;
+        for (auto& e : fs::recursive_directory_iterator(src_dir)) {
+            if (!e.is_regular_file()) continue;
+            auto rel = fs::relative(e.path(), src_dir).generic_string();
+            if (rel == "description.txt") continue;  // metadata, not scaffolded
+            INFO(name << ": " << rel);
+            REQUIRE(fs::exists(out_dir / rel));
+            REQUIRE(file_read(out_dir / rel) == file_read(e.path()));
+        }
+    }
+
+    // --output <dir> scaffolds to <dir>/<name>/.
+    fs::path out_root = tmp.path / "out";
+    ProcResult o = run_ezmk("example greeter --output \"" + out_root.string() + "\"", tmp.path);
+    INFO("greeter -o stderr: " << o.err);
+    REQUIRE(o.exit_code == 0);
+    REQUIRE(fs::exists(out_root / "greeter" / "ezmk.toml"));
+    REQUIRE(fs::exists(out_root / "greeter" / "include" / "greeter.hpp"));
+}
+
+TEST_CASE("integration: ezmk example error paths (1.2.3)", "[integration][1.2.3]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");  // error messages are localized
+    TempDir tmp;
+
+    // Existing directory → fatal.
+    ProcResult g1 = run_ezmk("example hello", tmp.path);
+    REQUIRE(g1.exit_code == 0);
+    ProcResult g2 = run_ezmk("example hello", tmp.path);
+    INFO("exists stderr: " << g2.err);
+    REQUIRE(g2.exit_code != 0);
+    REQUIRE((g2.out + g2.err).find("exist") != std::string::npos);
+
+    // Unknown example name → fatal listing available names.
+    ProcResult u = run_ezmk("example no_such_example", tmp.path);
+    INFO("unknown stderr: " << u.err);
+    REQUIRE(u.exit_code != 0);
+    REQUIRE((u.out + u.err).find("hello") != std::string::npos);
+    REQUIRE((u.out + u.err).find("no_such_example") != std::string::npos);
+}
+
+TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integration][1.2.3]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+
+    // Dependency-free examples: hello / greeter / with-hooks / cmake-interop build
+    // out of the box; with-tests runs via the built-in ezmk framework.
+    for (const std::string& name :
+         {"hello", "greeter", "with-hooks", "cmake-interop", "with-tests"}) {
+        ProcResult g = run_ezmk("example " + name, tmp.path);
+        INFO(name << " gen stderr: " << g.err);
+        REQUIRE(g.exit_code == 0);
+        fs::path proj = tmp.path / name;
+
+        ProcResult b = run_ezmk("build", proj);
+        INFO(name << " build stderr: " << b.err);
+        INFO(name << " build stdout: " << b.out);
+        REQUIRE(b.exit_code == 0);
+    }
+
+    // with-tests: `ezmk test` (built-in framework, zero deps) passes.
+    {
+        ProcResult t = run_ezmk("test", tmp.path / "with-tests");
+        INFO("with-tests stderr: " << t.err);
+        INFO("with-tests stdout: " << t.out);
+        REQUIRE(t.exit_code == 0);
+        REQUIRE((t.out + t.err).find("PASS") != std::string::npos);
+    }
+
+    // with-packages: needs fmt — install (network/repo), then build. Skip the
+    // build verification when the install cannot succeed (offline / broken repo),
+    // but always verify the scaffold content above.
+    {
+        ProcResult g = run_ezmk("example with-packages", tmp.path);
+        REQUIRE(g.exit_code == 0);
+        fs::path proj = tmp.path / "with-packages";
+        // fmt constraint is declared in the example's ezmk.toml.
+        std::string toml = file_read(proj / "ezmk.toml");
+        REQUIRE(toml.find("fmt") != std::string::npos);
+
+        ProcResult inst = run_ezmk("pkg install fmt -p -y", proj);
+        INFO("fmt install stderr: " << inst.err);
+        if (inst.exit_code == 0) {
+            ProcResult b = run_ezmk("build", proj);
+            INFO("with-packages build stderr: " << b.err);
+            REQUIRE(b.exit_code == 0);
+        } else {
+            SKIP("fmt install unavailable (network/repo) — build verification skipped");
+        }
+    }
+}
