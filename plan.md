@@ -1,6 +1,6 @@
 # EazyMake 1.2.3 执行计划
 
-> **状态：执行中**（2026-08-18 启动）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
+> **状态：已完成**（2026-08-18 执行完毕，待发布）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
 >
 > 详细设计：[**1.2.3.md**](plans/1.2.x/1.2.3.md)。本计划为 1.2.x 稳定线补丁：新增**顶层命令组 `ezmk example`**（`list` / `<name>` / `-o`），内置 6 个示例（hello / greeter / with-packages / with-tests / with-hooks / cmake-interop）。示例内容以**方案B（构建期嵌入资源）**存储：`examples/` 源目录为单一事实源，`scripts/embed_examples.py` 构建期生成 `src/example_data.cpp` 嵌入二进制（对齐 embed_locale/embed_logo 机制）——装好即用、离线可用、与版本同源。生成到 `./<name>/`（同 `project new`）；with-packages 在 CI 正常联网测试（GitHub runner 有完整出站网络）。
 >
@@ -32,36 +32,36 @@
 
 ### 阶段一：示例源文件（4.1）
 
-- [ ] **1.1 `examples/` 6 个完整示例**（ezmk.toml + 源码 + 中文注释，与教程对应）+ `examples/README.md` 索引（每项：一句话 + 对应教程 + 运行方式）
+- [x] **1.1 `examples/` 6 个完整示例**（ezmk.toml + 源码 + 中文注释，与教程对应）+ `examples/README.md` 索引（每项：一句话 + 对应教程 + 运行方式）；全部本机构建/测试冒烟通过
 
 ### 阶段二：嵌入管线（4.2）
 
-- [ ] **2.1 `scripts/embed_examples.py`**：扫描 `examples/*/` → 生成 `src/example_data.cpp`（`{name, description, files[{path, content}]}` 表，对齐 embed_locale/embed_logo）
-- [ ] **2.2 build.sh 接入**（locale/logo 嵌入后调用；python 缺失时生成空表 stub）+ `src/example_data.cpp` 加入 `.gitignore`
-- [ ] **2.3 嵌入表完整性单测**：嵌入表文件集合 ≡ 源目录文件集合（防漂移）
+- [x] **2.1 `scripts/embed_examples.py`**：扫描 `examples/*/` → 生成 `src/example_data.cpp`（`{name, description, files[{path, content}]}` 表，对齐 embed_locale/embed_logo）
+- [x] **2.2 build.sh 接入**（locale/logo 嵌入后调用；python 缺失时生成空表 stub）+ `src/example_data.cpp` 加入 `.gitignore`
+- [x] **2.3 嵌入表完整性单测**：嵌入表文件集合 ≡ 源目录文件集合（防漂移）
 
 ### 阶段三：命令实现（4.3）
 
-- [ ] **3.1 `Command::Example`**（cli.hpp 枚举新增）+ cli.cpp 子命令解析（list/<name>/-o，仿 project 组）
-- [ ] **3.2 `src/example.cpp`**：按嵌入表写文件到 `./<name>/`（或 `<dir>/<name>/`），目录已存在 fatal，未知示例名 fatal（列出可用项）
-- [ ] **3.3 main.cpp 分发 + i18n key 三向一致**（`example_list_header` / `example_list_item` / `example_created` / `example_not_found` / `example_exists`；`check_i18n.py` 通过）
+- [x] **3.1 `Command::Example`**（cli.hpp 枚举新增）+ cli.cpp 子命令解析（list/<name>/-o，仿 project 组）
+- [x] **3.2 `src/example.cpp`**：按嵌入表写文件到 `./<name>/`（或 `<dir>/<name>/`），目录已存在 fatal，未知示例名 fatal（列出可用项）
+- [x] **3.3 main.cpp 分发 + i18n key 三向一致**（7 key；`check_i18n.py` 通过）
 
 ### 阶段四：测试（4.4）
 
-- [ ] **4.1 集成测试**：`ezmk example`/`list` 输出 6 项；`example hello` 内容与源文件一致；`--output` 覆盖、已存在 fatal、未知名 fatal；每个示例生成后 `build` 通过（with-tests 另跑 `test`；with-packages 联网 `pkg install`）
-- [ ] **4.2 全量回归**：`bash build.sh test-all` 零失败（基线 785/3629）
+- [x] **4.1 集成测试**：`ezmk example`/`list` 输出 6 项；`example hello` 内容与源文件一致；`--output` 覆盖、已存在 fatal、未知名 fatal；每个示例生成后 `build` 通过（with-tests 另跑 `test`；with-packages 联网 `pkg install`，安装不可用时 SKIP）
+- [x] **4.2 全量回归**：`bash build.sh test-all` 零失败（791/3745，基线 785/3629）
 
 ### 阶段五：CI（4.5）
 
-- [ ] **5.1 ci.yml**：Linux job 追加「自举验证 6 示例」步骤（`ezmk example <name>` → build/test；with-packages 联网正常测试）
+- [x] **5.1 ci.yml**：Linux job 追加「自举验证 6 示例」步骤（`ezmk example <name>` → build/test；with-packages 联网正常测试）
 
 ### 阶段六：文档（4.6）
 
-- [ ] **6.1 cli.md**（example 命令组）/ README 命令速览 / 教程章节尾部「运行 `ezmk example <name>` 获取完整示例」指引 / CHANGES.md 1.2.3 条目
+- [x] **6.1 cli.md**（example 命令组）/ README 命令速览 / 教程 8 章节尾部「运行 `ezmk example <name>` 获取完整示例」指引（zh/en）/ CHANGES.md 1.2.3 条目
 
 ### 阶段七：收口（4.7）
 
-- [ ] **7.1 plan.md 全勾选** + 设计文档勾选 + `plans/1.2.x/README.md` 状态更新 + 发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **7.1 plan.md 全勾选** + 设计文档勾选 + `plans/1.2.x/README.md` 状态更新 + 发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
