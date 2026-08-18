@@ -1443,6 +1443,18 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 expected_sha256 = search_result.sha256;
             }
             util::info(ezmk::i18n::I18nKey::found_in_repo, {{"path", archive_path.string()}});
+
+            // 1.2.4: directory package — the repo's `file` points at a directory
+            // (index `type = "dir"`, or a bare directory path). Reuse the dev.7
+            // directory-install path; a directory has no archive, so SHA-256
+            // verification is skipped (notice when --sha256 / index sha256 given).
+            if (fs::is_directory(archive_path)) {
+                if (!expected_sha256.empty()) {
+                    util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
+                }
+                install_from_directory(archive_path, scope, assume_yes, no_lock);
+                return;
+            }
         }
     }
 

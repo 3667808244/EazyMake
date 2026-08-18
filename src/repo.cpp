@@ -327,12 +327,22 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
             auto file = (*tbl)["file"].value<std::string>();
             if (!file) continue;
 
+            // 1.2.4: optional `type` — "dir" marks a directory package (repo
+            // file points at a directory; no archive → sha256 omitted/skipped).
+            // Absent = archive package (backward compatible).
+            auto type = (*tbl)["type"].value<std::string>();
+            bool is_dir_pkg = (type && *type == "dir");
+
             std::string ver_str = ver ? *ver : "0.0.0";
             if (best_file.empty() || util::compare_version(ver_str, best_version) > 0) {
                 best_version = ver_str;
                 best_file = *file;
-                auto sha = (*tbl)["sha256"].value<std::string>();
-                best_sha256 = sha ? *sha : "";
+                if (is_dir_pkg) {
+                    best_sha256 = "";  // 1.2.4: dir packages have no archive hash
+                } else {
+                    auto sha = (*tbl)["sha256"].value<std::string>();
+                    best_sha256 = sha ? *sha : "";
+                }
             }
         }
 
