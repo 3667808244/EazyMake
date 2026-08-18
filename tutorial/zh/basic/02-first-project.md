@@ -83,6 +83,6 @@ $ ezmk pr           # project run
 $ ezmk pc           # project clean
 ```
 
-大多数 `project` 操作也提供**顶层别名**（`ezmk build`、`ezmk run`、`ezmk clean`、…）——标志相同，输入更短。完整列表参见 [CLI 参考](../../docs/zh/cli.md#顶层别名110)。
+大多数 `project` 操作也提供**顶层别名**（`ezmk build`、`ezmk run`、`ezmk clean`、…）——标志相同，输入更短。完整列表参见 [CLI 参考](../../../docs/zh/cli.md#顶层别名110)。
 
 下一步：[理解 `ezmk.toml` →](03-config.md)

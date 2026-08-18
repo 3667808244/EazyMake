@@ -69,6 +69,6 @@ $ ezmk pkg remove fmt          # 卸载
 
 > 构建时加上 `--auto-update` 会先执行 `ezmk repo update --pug`，确保包名解析基于最新的索引。
 
-详见 [`docs/pkg.md`](../../docs/zh/pkg.md) 和 [`docs/repo.md`](../../docs/zh/repo.md)。
+详见 [`docs/pkg.md`](../../../docs/zh/pkg.md) 和 [`docs/repo.md`](../../../docs/zh/repo.md)。
 
-下一章：[监视模式与钩子 →](07-watch-hooks.md)
+下一章：[监视模式与钩子 →](../dev/01-watch-hooks.md)

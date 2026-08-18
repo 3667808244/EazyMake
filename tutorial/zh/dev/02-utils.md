@@ -44,8 +44,8 @@ $ ezmk utils hello
 
 沙箱移除了 `os`/`io`；通过 `ezmk.run()` 运行外部命令，`ezmk.file_write()` 会拒绝写入项目根目录之外的路径。包还可以通过 `[utils.permissions]` 进一步限制访问权限。
 
-详见 [`docs/utils.md`](../../docs/zh/utils.md) 了解完整的插件 API 和权限模型。
+详见 [`docs/utils.md`](../../../docs/zh/utils.md) 了解完整的插件 API 和权限模型。
 
 ---
 
-以上就是全部教程内容。现在你可以创建项目、配置构建、增量编译、使用 profile 和并行编译、引入包、监视文件变更、挂载构建钩子，以及与 clangd 集成。关于任何命令或选项的确切语义，[`docs/cli.md`](../../docs/zh/cli.md) 是权威参考。
+以上就是全部教程内容。现在你可以创建项目、配置构建、增量编译、使用 profile 和并行编译、引入包、监视文件变更、挂载构建钩子，以及与 clangd 集成。关于任何命令或选项的确切语义，[`docs/cli.md`](../../../docs/zh/cli.md) 是权威参考。

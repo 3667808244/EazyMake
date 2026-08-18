@@ -53,7 +53,7 @@ lib = []
 
 - `executable` → 可运行的程序。
 - `static` / `shared` → 可供其他项目依赖的库（`.a` / `.so`/`.dll`）。
-- `utils` → Lua 工具包（参见[第 8 章](08-utils.md)）。
+- `utils` → Lua 工具包（参见[开发体验第 2 章](../dev/02-utils.md)）。
 
 ## `[compile]`
 
@@ -90,10 +90,10 @@ lib  = ["fmt"]      # 硬性依赖 — 缺失则构建报错
 want = ["spdlog"]   # 可选依赖 — 已安装则使用，否则跳过
 ```
 
-`lib` 中的包必须已安装（参见[第 6 章](06-packages.md)）；`want` 中的包是
+`lib` 中的包必须已安装（参见[包管理第 1 章](../packages/01-packages.md)）；`want` 中的包是
 可选的。
 
 完整的配置规范（包括构建配置与钩子）请参阅
-[`docs/config_file.md`](../../docs/zh/config_file.md)。
+[`docs/config_file.md`](../../../docs/zh/config_file.md)。
 
 下一章：[增量构建与缓存 →](04-cache.md)

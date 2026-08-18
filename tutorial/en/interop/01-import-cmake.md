@@ -67,7 +67,7 @@ directly, don't go back to editing `CMakeLists.txt`.
 | `add_custom_command`, `function()`, `$<...>` generator expressions, `pkg_check_modules` | **Import aborts** (nothing written) |
 
 For rejected projects, see
-[`docs/en/migrate-from-cmake.md`](../docs/en/migrate-from-cmake.md) for manual
+[`docs/en/migrate-from-cmake.md`](../../../docs/en/migrate-from-cmake.md) for manual
 migration using Lua `[hooks]`.
 
 ## Next steps

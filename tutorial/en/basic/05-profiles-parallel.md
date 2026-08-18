@@ -48,4 +48,4 @@ Rules:
 Different profiles produce different compile fingerprints, so switching profiles
 rebuilds as needed without clobbering the other profile's cache.
 
-Next: [Using packages →](06-packages.md)
+Next: [Using packages →](../packages/01-packages.md)

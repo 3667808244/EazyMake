@@ -36,7 +36,7 @@ Two more layers exist for typing speed:
   position — `ezmk project pb` is still an unknown subcommand.
 - **Scope flags**: `-p` (project), `-u` (user), `-g` (global) for `pkg`/`repo`.
 
-The full alias tables are in [`docs/en/cli.md`](../../docs/en/cli.md#command-shorthands-026).
+The full alias tables are in [`docs/en/cli.md`](../../../docs/en/cli.md#command-shorthands-026).
 
 That wraps up the tutorial. You now know how to install, scaffold, configure, build
 incrementally, use profiles and parallelism, pull in packages, watch, hook, integrate

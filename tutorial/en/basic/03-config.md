@@ -55,7 +55,7 @@ fill them in to use `ezmk test`; pure comments have zero parse impact.
 
 - `executable` → a runnable program.
 - `static` / `shared` → a library (`.a` / `.so`/`.dll`) other projects can depend on.
-- `utils` → a Lua tool package (see [chapter 8](08-utils.md)).
+- `utils` → a Lua tool package (see [Dev chapter 2](../dev/02-utils.md)).
 
 ## `[compile]`
 
@@ -92,10 +92,10 @@ lib  = ["fmt"]      # hard dependency — missing → build error
 want = ["spdlog"]   # optional — used if installed, skipped otherwise
 ```
 
-`lib` packages must be installed (see [chapter 6](06-packages.md)); `want` packages are
+`lib` packages must be installed (see [Packages chapter 1](../packages/01-packages.md)); `want` packages are
 optional.
 
 For the complete specification — including profiles and hooks — see
-[`docs/en/config_file.md`](../../docs/en/config_file.md).
+[`docs/en/config_file.md`](../../../docs/en/config_file.md).
 
 Next: [Incremental builds & caching →](04-cache.md)

@@ -168,12 +168,12 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 
 | Feature | One-liner | Links |
 |---------|-----------|-------|
-| Semantic version constraints | `[depends]` entries like `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` pin dependency versions precisely | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [12](tutorial/en/12-version-lockfile.md) |
-| `ezmk.lock` deterministic builds | Lock dependency versions and content hashes; `--locked` gives reproducible CI builds | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [12](tutorial/en/12-version-lockfile.md) |
-| Multi-platform / multi-toolchain precompiled packages | One package ships `win-x64-msvc143` / `linux-x64-gcc13-abi11` artifacts, auto-selected for the current toolchain | [`docs/en/package_authoring.md`](docs/en/package_authoring.md) · Tutorial [14](tutorial/en/14-precompiled-packages.md) |
-| Third-party / private repos | `ezmk repo add <url>` wires in git-repo third-party sources | [`docs/en/repo.md`](docs/en/repo.md) · Tutorial [13](tutorial/en/13-third-party-repos.md) |
-| CMake interop | `project export cmake` to export / `project import --from cmake` to import (experimental) | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [11](tutorial/en/11-import-cmake.md) |
-| compile_commands | `project cc` generates compile_commands.json for clangd/IDEs | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [08](tutorial/en/08-utils.md) |
+| Semantic version constraints | `[depends]` entries like `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` pin dependency versions precisely | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [Pkg 02](tutorial/en/packages/02-version-lockfile.md) |
+| `ezmk.lock` deterministic builds | Lock dependency versions and content hashes; `--locked` gives reproducible CI builds | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [Pkg 02](tutorial/en/packages/02-version-lockfile.md) |
+| Multi-platform / multi-toolchain precompiled packages | One package ships `win-x64-msvc143` / `linux-x64-gcc13-abi11` artifacts, auto-selected for the current toolchain | [`docs/en/package_authoring.md`](docs/en/package_authoring.md) · Tutorial [Interop 02](tutorial/en/interop/02-precompiled-packages.md) |
+| Third-party / private repos | `ezmk repo add <url>` wires in git-repo third-party sources | [`docs/en/repo.md`](docs/en/repo.md) · Tutorial [Pkg 03](tutorial/en/packages/03-third-party-repos.md) |
+| CMake interop | `project export cmake` to export / `project import --from cmake` to import (experimental) | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Interop 01](tutorial/en/interop/01-import-cmake.md) |
+| compile_commands | `project cc` generates compile_commands.json for clangd/IDEs | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Dev 02](tutorial/en/dev/02-utils.md) |
 
 ## Documentation
 

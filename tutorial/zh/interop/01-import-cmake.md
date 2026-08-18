@@ -63,7 +63,7 @@ hi
 | `add_custom_command`、`function()`、`$<...>` 生成器表达式、`pkg_check_modules` | **导入中止**（不产出任何文件） |
 
 被拒绝的项目，手动迁移步骤见
-[`docs/zh/migrate-from-cmake.md`](../docs/zh/migrate-from-cmake.md)（用 Lua
+[`docs/zh/migrate-from-cmake.md`](../../../docs/zh/migrate-from-cmake.md)（用 Lua
 `[hooks]` 复刻自定义步骤）。
 
 ## 下一步

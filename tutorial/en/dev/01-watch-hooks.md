@@ -60,4 +60,4 @@ Hooks run in the same sandbox as utils tools (no `os`/`io`; use the `ezmk.*` API
 missing hook script warns and is skipped — it is not fatal. Hooks apply only to your
 project, not to package compilation.
 
-Next: [Utils tools →](08-utils.md)
+Next: [Utils tools →](02-utils.md)

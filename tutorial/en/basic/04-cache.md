@@ -61,6 +61,6 @@ $ ezmk clean                   # delete .ezmk/cache and temp files
 Changing compile flags (e.g. editing `[compile].flags`) invalidates the cache
 automatically — the flags are part of the fingerprint.
 
-For the full algorithm, see [`docs/en/cache.md`](../../docs/en/cache.md).
+For the full algorithm, see [`docs/en/cache.md`](../../../docs/en/cache.md).
 
 Next: [Build profiles & parallelism →](05-profiles-parallel.md)

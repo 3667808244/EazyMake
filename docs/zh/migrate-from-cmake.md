@@ -77,7 +77,7 @@ pre_build  = "scripts/gen_headers.lua"   # 编译前执行
 post_build = "scripts/strip_symbols.lua" # 链接后执行
 ```
 
-钩子示例见 `docs/zh/config_file.md`（`[hooks]` 节）与 `tutorial/zh/07-watch-hooks.md`。
+钩子示例见 `docs/zh/config_file.md`（`[hooks]` 节）与 `tutorial/zh/dev/01-watch-hooks.md`。
 `execute_process` 式逻辑对应 Lua API 的 `ezmk.run_command()` / `ezmk.file_write()`；
 `pkg_check_modules` 对应 `ezmk pkg install <name>`（或上面的 `[depends]` 注释条目）。
 
