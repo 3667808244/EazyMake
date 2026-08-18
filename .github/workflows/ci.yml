@@ -37,6 +37,26 @@ jobs:
       - name: Build + run all tests
         run: bash build.sh test-all 2>&1 | tee test-report.log
 
+      # 1.2.3: bootstrap-verify the six built-in examples — `ezmk example <name>`
+      # then build/test each. GitHub-hosted runners have full outbound network,
+      # so with-packages can install fmt (and the built-in ezmk framework makes
+      # with-tests run offline).
+      - name: Bootstrap-verify built-in examples (1.2.3)
+        run: |
+          set -euo pipefail
+          EZMK="$GITHUB_WORKSPACE/build/ezmk"
+          cd "$RUNNER_TEMP"
+          for name in hello greeter with-hooks cmake-interop with-tests; do
+            "$EZMK" example "$name"
+            (cd "$name" && "$EZMK" build)
+            echo "OK: example $name builds"
+          done
+          (cd with-tests && "$EZMK" test)
+          echo "OK: example with-tests passes"
+          "$EZMK" example with-packages
+          (cd with-packages && "$EZMK" pkg install fmt -p -y && "$EZMK" build)
+          echo "OK: example with-packages builds"
+
       - name: Emit test report on failure
         if: failure()
         run: |
