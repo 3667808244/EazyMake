@@ -28,6 +28,12 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - 新增集成测试：四类型生成物集合 + 连字符项目名净化 + 新库项目（static/shared）`build` 通过
 - 全量回归：**785 用例 / 3629 断言零失败**（1.2.0 基线 775 / 3554，+10 用例；1 跳过为既有 symlink 环境限制）
 
+### 已知限制 / 跟进项
+
+- **macOS Intel（x64）**：仍无预编译产物（`macos-13` runner 在 free tier 不分配，job 持续排队）——与 1.2.0 相同
+- **winget**：1.2.1 PR（`microsoft/winget-pkgs#419171`）已提交，待 CI + 版主人工审批；1.2.0 PR（`#418815`）仍在待审批队列
+- **Homebrew / pacman**：1.2.1 已同步（tap 公式真实 digest + PKGBUILD `pkgver=1.2.1` 源码 digest）；真机 `brew install` 需真 Mac 环境验证
+
 ---
 
 ## 1.2.0 (2026-08-17) — 工具链互操作与开箱工程化

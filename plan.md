@@ -1,6 +1,6 @@
 # EazyMake 1.2.1 执行计划
 
-> **状态：已完成**（2026-08-17 执行完毕，待发布）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
+> **状态：已发布**（2026-08-18，tag `v1.2.1`，GitHub Release + Homebrew tap + winget PR #419171 + pacman PKGBUILD 已同步）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
 >
 > 详细设计：[**1.2.1.md**](plans/1.2.x/1.2.1.md)。本计划为 1.2.0 正式发布后的第一个补丁子版本：**按项目类型差异化模板生成**——`ezmk project new` 的 `static`/`shared` 类型改为生成 `include/<name>.hpp` + `src/<name>.cpp` 库骨架（不再生成无意义的 `main.cpp`），`executable`/`utils` 保持现状；默认配置模板追加注释掉的 `[test]` 示例节。
 >
