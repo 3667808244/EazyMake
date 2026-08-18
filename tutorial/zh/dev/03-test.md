@@ -82,4 +82,4 @@ Running tests (ezmk)...
 
 如果项目尚未构建，`ezmk test` 会先构建。测试套件失败时返回非零退出码，可直接接入你的 CI。
 
-> 💡 想直接跑完整示例？运行 `ezmk example with-tests` 生成带内置框架测试的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+> 💡 想直接跑完整示例？运行 `ezmk example with-tests` 生成带 Catch2 测试的项目（运行前先 `ezmk pkg install catch2 -y`；示例列表见 [`examples/README.md`](../../../examples/README.md)）。

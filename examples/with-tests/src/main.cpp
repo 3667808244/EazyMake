@@ -1,7 +1,8 @@
 // with-tests 示例 — 项目代码（教程 09「测试你的项目」）。
 //
 // 生成：ezmk example with-tests
-// 运行测试：cd with-tests && ezmk test     （内置 ezmk 框架，零依赖）
+// 安装依赖：cd with-tests && ezmk pkg install catch2 -y     （需网络）
+// 运行测试：ezmk test
 // 构建运行：ezmk build && ezmk run
 #include <iostream>
 

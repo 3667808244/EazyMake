@@ -20,12 +20,12 @@ flags = []
 link_dirs = []
 system_target = []
 
+# 测试框架依赖（教程 09「测试你的项目」）：ezmk test 会使用 catch2 包提供的
+# 实现（libcatch2.a）；主程序由 ezmk test 自动生成（Catch2 v3 兼容）。
 [depends]
-lib = []
+lib = ["catch2"]
 
-# 测试配置（教程 09「测试你的项目」）。
-# framework = "ezmk" 为内置框架（零依赖，测试文件自带 main，退出码判定）；
-# 想用 Catch2：ezmk pkg install catch2 后改 framework = "catch2" 即可。
+# 测试配置：测试源码在 test/，框架为 Catch2（默认框架）。
 [test]
 dirs = ["test"]
-framework = "ezmk"
+framework = "catch2"

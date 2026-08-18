@@ -19,21 +19,21 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 ### 新增 / 行为变更
 
 - **`ezmk example` 顶层命令组**：`ezmk example` / `example list` 列出全部内置示例（名称 + 一句话说明）；`ezmk example <name> [-o <dir>]` 生成到 `./<name>/`（或 `<dir>/<name>/`）；目标目录已存在 / 示例名未知 → fatal 并列出可用项；无别名
-- **6 个内置示例**（中文注释，对应教程）：`hello` 最简可执行 · `greeter` 静态库骨架（对齐 1.2.1 库模板）· `with-packages` 依赖 + 版本约束（`fmt^10.0`）+ lockfile · `with-tests` 内置框架测试 · `with-hooks` pre/post Lua 钩子 · `cmake-interop` export/import 互操作
+- **6 个内置示例**（中文注释，对应教程）：`hello` 最简可执行 · `greeter` 静态库骨架（对齐 1.2.1 库模板）· `with-packages` 依赖 + 版本约束（`fmt^10.0`）+ lockfile · `with-tests` Catch2 测试（`[test] framework="catch2"`）· `with-hooks` pre/post Lua 钩子 · `cmake-interop` export/import 互操作
 - **构建期嵌入管线**：`examples/` 源目录 = 单一事实源 → `scripts/embed_examples.py` → `src/example_data.cpp`（对齐 embed_locale/embed_logo 机制；python 缺失时空表 stub；加入 `.gitignore`）
 - **示例索引**：`examples/README.md`（每项一句话 + 对应教程 + 运行方式）；教程对应章节尾部加「运行 `ezmk example <name>`」指引
 
 ### 测试
 
 - 新增单测：嵌入表非空 + 与 `examples/` 源目录文件集合与内容逐一一致（防漂移）
-- 新增集成测试：list 6 项 / 生成内容与源文件一致 / `--output` / 已存在 fatal / 未知名 fatal / 生成后逐个 build+test（with-tests `ezmk test` 内置框架；with-packages 联网安装 fmt，安装不可用时 SKIP）
+- 新增集成测试：list 6 项 / 生成内容与源文件一致 / `--output` / 已存在 fatal / 未知名 fatal / 生成后逐个 build+test（with-tests 装 catch2 后 `ezmk test`；with-packages 联网安装 fmt，安装不可用时 SKIP）
 - CI：ubuntu job 追加「自举验证 6 示例」步骤（`ezmk example` → build/test，with-packages 联网装 fmt）
 - 全量回归：**791 用例 / 3745 断言零失败**（基线 785 / 3629，+6 用例；2 跳过为既有环境限制）
 
 ### 已知限制 / 跟进项
 
-- **with-packages 依赖安装需网络**：生成后首次 `ezmk build` 前需 `ezmk pkg install fmt -y`（CI 有完整出站网络可自举验证）
-- **教程 09 catch2 框架路径**：gitee 官方仓库的 catch2 包（v3 多头版）缺实现源文件，`framework = "catch2"` 测试链接会失败——`with-tests` 示例用内置 `ezmk` 框架规避；catch2 包修复归 ezmk-repo 仓库维护
+- **with-packages / with-tests 依赖安装需网络**：生成后首次构建/测试前需 `ezmk pkg install fmt -y` / `ezmk pkg install catch2 -y`（CI 有完整出站网络可自举验证）
+- **官方仓库基准为 GitHub**（`install.sh` 的 `OFFICIAL_REPO_URL`）：gitee 镜像若未同步会拿到旧包（如 catch2 缺实现源文件、fmt 索引哈希失配）——遇到包问题先 `repo update` 或切换到 GitHub 源
 
 ---
 

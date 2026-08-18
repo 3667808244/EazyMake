@@ -2375,9 +2375,9 @@ TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integr
     TempDir tmp;
 
     // Dependency-free examples: hello / greeter / with-hooks / cmake-interop build
-    // out of the box; with-tests runs via the built-in ezmk framework.
+    // out of the box.
     for (const std::string& name :
-         {"hello", "greeter", "with-hooks", "cmake-interop", "with-tests"}) {
+         {"hello", "greeter", "with-hooks", "cmake-interop"}) {
         ProcResult g = run_ezmk("example " + name, tmp.path);
         INFO(name << " gen stderr: " << g.err);
         REQUIRE(g.exit_code == 0);
@@ -2389,13 +2389,25 @@ TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integr
         REQUIRE(b.exit_code == 0);
     }
 
-    // with-tests: `ezmk test` (built-in framework, zero deps) passes.
+    // with-tests: Catch2 framework — install catch2 (network/repo), then
+    // `ezmk test` passes the two TEST_CASEs. Skip if the install cannot succeed.
     {
-        ProcResult t = run_ezmk("test", tmp.path / "with-tests");
+        ProcResult g = run_ezmk("example with-tests", tmp.path);
+        REQUIRE(g.exit_code == 0);
+        fs::path proj = tmp.path / "with-tests";
+        std::string toml = file_read(proj / "ezmk.toml");
+        REQUIRE(toml.find("catch2") != std::string::npos);
+
+        ProcResult inst = run_ezmk("pkg install catch2 -p -y", proj);
+        INFO("catch2 install stderr: " << inst.err);
+        if (inst.exit_code != 0) {
+            SKIP("catch2 install unavailable (network/repo) — test verification skipped");
+        }
+        ProcResult t = run_ezmk("test", proj);
         INFO("with-tests stderr: " << t.err);
         INFO("with-tests stdout: " << t.out);
         REQUIRE(t.exit_code == 0);
-        REQUIRE((t.out + t.err).find("PASS") != std::string::npos);
+        REQUIRE((t.out + t.err).find("passed") != std::string::npos);
     }
 
     // with-packages: needs fmt — install (network/repo), then build. Skip the

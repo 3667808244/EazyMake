@@ -92,5 +92,5 @@ If the project isn't built yet, `ezmk test` builds it first. A failing test suit
 exits non-zero, ready to wire into your CI.
 
 > 💡 Want a complete runnable example? Run `ezmk example with-tests` to scaffold a
-> project with built-in-framework tests (see
+> Catch2 test project (run `ezmk pkg install catch2 -y` first; see
 > [`examples/README.md`](../../../examples/README.md) for the list).

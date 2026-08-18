@@ -19,7 +19,7 @@ ezmk example hello -o /tmp   # 生成到 /tmp/hello/
 | `hello` | 最简可执行项目 | [01 安装与验证](../tutorial/zh/basic/01-install.md) / [02 第一个项目](../tutorial/zh/basic/02-first-project.md) | `ezmk example hello && cd hello && ezmk build && ezmk run` |
 | `greeter` | 静态库骨架（公共头文件 + 实现） | [03 理解 ezmk.toml](../tutorial/zh/basic/03-config.md) / [05 构建配置](../tutorial/zh/basic/05-profiles-parallel.md) | `ezmk example greeter && cd greeter && ezmk build` → `build/libgreeter.a` |
 | `with-packages` | 依赖 + 版本约束（`fmt@^10.0`）+ lockfile | [06 使用包](../tutorial/zh/packages/01-packages.md) / [12 版本约束](../tutorial/zh/packages/02-version-lockfile.md) | `ezmk example with-packages && cd with-packages && ezmk run`（首次构建自动装 fmt，需网络） |
-| `with-tests` | Catch2 测试（`ezmk test`） | [09 测试你的项目](../tutorial/zh/dev/03-test.md) | `ezmk example with-tests && cd with-tests && ezmk test`（首次自动装 catch2，需网络） |
+| `with-tests` | Catch2 测试（`ezmk test`） | [09 测试你的项目](../tutorial/zh/dev/03-test.md) | `ezmk example with-tests && cd with-tests && ezmk pkg install catch2 -y && ezmk test`（首次装 catch2，需网络） |
 | `with-hooks` | 构建钩子（pre/post Lua 脚本） | [07 监视模式与钩子](../tutorial/zh/dev/01-watch-hooks.md) | `ezmk example with-hooks && cd with-hooks && ezmk build -v` |
 | `cmake-interop` | CMake 导出 / 导入互操作 | [11 导入 CMake 项目](../tutorial/zh/interop/01-import-cmake.md) | `ezmk example cmake-interop && cd cmake-interop && ezmk project export cmake` |
 
