@@ -12,6 +12,28 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.4 (2026-08-18) — 仓库文件夹包支持（repo 托管目录形式包）
+
+1.2.x 稳定线补丁：打通「仓库托管目录包」——按名安装解析出的包路径为目录时复用 dev.7 的文件夹安装（`install_from_directory`），`index.toml` 增可选 `type = "dir"` 标注（目录包无归档 hash，sha256 省略且跳过校验）；header-only / 源码包可免打包、以 git 目录形式托管。**归档包零影响，公共 API 无破坏性变更**（index 字段纯增量，命令/配置不变）。
+
+### 新增 / 行为变更
+
+- **按名安装目录分支**（`src/pkg.cpp`）：repo 解析出的 `archive_path` 为目录时走 `install_from_directory`（目录结构校验 + 源码编译/安装，与 `pkg install <dir>` 同路径）；归档分支（`extract_archive`）不动、互斥
+- **`index.toml` 目录包标注**（`src/repo.cpp`）：`[[packages]]` 增可选 `type` 字段——`"dir"` = 目录包（sha256 省略且跳过校验）；省略 = 归档包（向后兼容）；`type` 省略但 `file` 指向目录时 `is_directory` 自动兜底
+- **`validate_local_repo` / `repo info` / 版本约束解析**：天然兼容 dir 包（sha256 非空才校验；`file_exists` 兼容目录）
+
+### 测试
+
+- 新增集成测试：local 仓库 dir 包 → `pkg install <name>` 端到端（目录分支触发 + 源码编译归档 + 无 sha256 不报错）；`file` 指向缺失目录 → `repo add` 友好报错
+- 全量回归：**793 用例 / 3755 断言零失败**（基线 791 / 3746，+2 用例；1 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **目录包内容哈希 / 增量同步语义**（非归档 sha256）：归 2.0.0 或后续评估；本版以 `is_directory` + 可选 `type` 标注的最小实现为准
+- **官方仓库是否切换 header-only 包为目录形式**：由 ezmk-repo 维护决定，本版只提供能力
+
+---
+
 ## 1.2.3 (2026-08-18) — `ezmk example` 命令组 + 内置示例
 
 1.2.x 稳定线补丁：新增顶层命令组 `ezmk example`（`list` / `<name>` / `-o`），内置 6 个示例（hello / greeter / with-packages / with-tests / with-hooks / cmake-interop），与教程章节一一对应。示例内容以**构建期嵌入资源**存储（`examples/` 源目录为单一事实源，`scripts/embed_examples.py` 生成 `src/example_data.cpp` 嵌入二进制）——装好即用、离线可用、与版本同源。**纯新增命令组，公共 API 无破坏性变更**。

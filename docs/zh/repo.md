@@ -62,6 +62,13 @@ name = "ezmk-cc"
 version = "0.1.0"
 file = "packages/ezmk-cc-0.1.0.zip"
 sha256 = "hsiqno182bl2..."
+
+# 1.2.4+：目录包 —— file 指向仓库内目录（免打包），无 sha256
+[[packages]]
+name = "mylib"
+version = "0.2.0"
+type = "dir"
+file = "packages/mylib/"
 ```
 
 ### `[repo]` section
@@ -77,10 +84,13 @@ sha256 = "hsiqno182bl2..."
 | --------- | ------ | ---- | --------------------------------- |
 | `name`    | string | 是   | 包名称                            |
 | `version` | string | 是   | 包版本，建议 SemVer               |
-| `file`    | string | 是   | 包归档相对于仓库根目录的路径      |
-| `sha256`  | string | 否   | 归档的 SHA-256 校验值（建议提供） |
+| `file`    | string | 是   | 包归档或目录相对于仓库根目录的路径 |
+| `type`    | string | 否   | `"dir"` = 目录包（1.2.4+）；省略 = 归档包 |
+| `sha256`  | string | 否   | 归档的 SHA-256 校验值（建议提供；目录包省略） |
 
 > **为什么 `sha256` 可选但建议提供？** 校验值让 `pkg install` 验证归档完整性，因此公共仓库应提供。保留可选，是为了不卡住信任自身文件的简单内部仓库。
+
+> **目录包（1.2.4+）：** `type = "dir"`（或 `file` 直接指向目录）时，`pkg install` 走**文件夹安装**（同 `pkg install <目录>`：校验 `ezmk.toml` + 源码编译/安装），**无归档 sha256 校验**。适合 header-only / 源码包免打包托管（git 仓库克隆即得源码，改动即时生效）；`local` 类型仓库最适用。归档包行为完全不变。
 
 同一包的多个版本通过重复 `[[packages]]`、`name` 相同而 `version` 不同来表示。`pkg install` 默认安装最新版本。
 

@@ -64,6 +64,13 @@ name = "ezmk-cc"
 version = "0.1.0"
 file = "packages/ezmk-cc-0.1.0.zip"
 sha256 = "hsiqno182bl2..."
+
+# 1.2.4+: directory package — `file` points at a directory in the repo (no archive), no sha256
+[[packages]]
+name = "mylib"
+version = "0.2.0"
+type = "dir"
+file = "packages/mylib/"
 ```
 
 ### `[repo]` Section
@@ -79,12 +86,20 @@ sha256 = "hsiqno182bl2..."
 | --------- | ------ | -------- | --------------------------------------------------- |
 | `name`    | string | Yes      | Package name                                        |
 | `version` | string | Yes      | Package version, SemVer recommended                 |
-| `file`    | string | Yes      | Path to the package archive relative to the repo root |
-| `sha256`  | string | No       | SHA-256 checksum of the archive (recommended)       |
+| `file`    | string | Yes      | Path to the package archive or directory, relative to the repo root |
+| `type`    | string | No       | `"dir"` = directory package (1.2.4+); absent = archive package |
+| `sha256`  | string | No       | SHA-256 checksum of the archive (recommended; omitted for directory packages) |
 
 > **Why is `sha256` optional but recommended?** A checksum lets `pkg install` verify
 > the archive arrived intact, so public repos should provide it. Keeping it optional
 > avoids blocking simple internal repos that trust their own files.
+
+> **Directory packages (1.2.4+):** with `type = "dir"` (or when `file` points at a
+> directory), `pkg install` uses the **directory-install path** (same as
+> `pkg install <dir>`: validates `ezmk.toml` + compiles/installs sources), with **no
+> archive sha256 verification**. Ideal for header-only / source packages hosted
+> without packaging (a git repo clone gives you the sources; edits take effect
+> immediately); `local`-type repos are the best fit. Archive packages are unchanged.
 
 Multiple versions of the same package are represented by repeating `[[packages]]` entries with the same `name` but different `version`. `pkg install` installs the latest version by default.
 
