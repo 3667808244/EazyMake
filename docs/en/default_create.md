@@ -18,6 +18,14 @@ int main(int argc, char **argv){
 > project builds and runs immediately (`ezmk project new` → `ezmk build`), with
 > no setup between scaffolding and the user's first edits.
 
+> **Per-type sources (1.2.1+):** the code above is the default `executable`
+> template. `--type static` / `--type shared` do **not** create `main.cpp` —
+> they scaffold a library skeleton `include/<name>.hpp` (`#pragma once` +
+> `namespace <ns>` + a `greeting()` sample API) + `src/<name>.cpp`
+> (implementation) — file names keep the original project name, and the C++
+> namespace replaces `-` / `.` / spaces with `_`; `--type utils` generates no
+> C++ code at all, only a `utils/` directory for Lua scripts.
+
 ---
 
 ## `<project_dir>/ezmk.toml`
@@ -29,8 +37,17 @@ version = "0.1.0"
 language = "C++17"
 
 [compile]
-flags = ["-Wall", "-Wextra", "-O2"]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
 include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+msvc_flags = ["/Zi", "/Od"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+msvc_flags = ["/O2", "/DNDEBUG"]
 
 [link]
 flags = []
@@ -39,12 +56,23 @@ system_target = []
 
 [depends]
 lib = []
+
+# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`
+# framework = "catch2"       # "catch2" | "ezmk"（内置框架）
+# dirs = ["test"]
+# default_profile = "debug"  # 1.2.0-dev.12+：测试默认 profile
+# include_dirs = ["test/helpers"]   # 测试专属 -I（1.2.0-dev.12+）
+# link_targets = ["pthread"]        # 测试专属 -l（1.2.0-dev.12+）
 ```
 
 > **Why these defaults?** The generated config is pre-wired to the scaffolded
 > layout — `type = "executable"` matches the `src/main.cpp` entry point, C++17 is
-> a modern baseline, and `-Wall -Wextra -O2` keeps a new project warning-visible
-> while still building fast.
+> a modern baseline, and `-Wall -Wextra` keeps a new project warning-visible;
+> optimization lives in the profiles (`debug` default, `release` requires an
+> explicit `--profile release`). The `# [test]` lines at the end are a
+> **commented-out example section** (1.2.1+): uncomment and fill them in to use
+> `ezmk test`; pure comments have zero parse impact, the fields match the `[test]`
+> config exactly (the deprecated `flags` is deliberately not shown).
 
 ---
 

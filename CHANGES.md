@@ -12,6 +12,24 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.1 (2026-08-17) — 按项目类型差异化模板生成（.cpp / .h）与默认配置补全
+
+1.2.0 正式发布后的补丁版本：`ezmk project new` 按项目类型差异化生成源码模板——`static` / `shared` 库项目生成 `include/<name>.hpp` + `src/<name>.cpp` 库骨架（不再生成无意义的 `main.cpp`），`executable` / `utils` 保持现状；默认配置模板追加注释掉的 `[test]` 示例节，降低测试配置发现成本。公共 API 无破坏性变更（`create_project()` 签名与 `project new` CLI 不变）。
+
+### 新增 / 行为变更
+
+- **按类型生成源码模板**：`project new` 的 `static` / `shared` 类型改为生成库骨架 `include/<name>.hpp`（`#pragma once` + `namespace <ns>` + `greeting()` 示例公共 API）+ `src/<name>.cpp`（实现），**不再生成 `main.cpp`**；`executable` 保持 Hello world 入口不变；`utils` 仍无 C++ 代码（`utils/` 目录放 Lua 脚本）
+- **项目名净化**：库模板文件名保留原始项目名（`my-lib` → `include/my-lib.hpp`），C++ namespace 将 `-` / `.` / 空格替换为 `_`（`my-lib` → `namespace my_lib`），头文件用 `#pragma once` 保护
+- **默认配置模板追加注释 `[test]` 示例节**：`project new` 生成的 `ezmk.toml` 末尾附带注释掉的 `[test]`（`framework` / `dirs` / `default_profile` / `include_dirs` / `link_targets`）——取消注释即可启用 `ezmk test`；纯注释对解析零影响，字段与 `[test]` 配置一致（含 1.2.0-dev.12 新字段，刻意不展示已弃用的 `flags`）
+
+### 测试
+
+- 新增单测：`sanitize_namespace()` 净化、static/shared 库骨架文件集合与内容、executable 无头文件、utils 无 C++ 代码、默认模板注释 `[test]` 节存在性（含零解析影响）
+- 新增集成测试：四类型生成物集合 + 连字符项目名净化 + 新库项目（static/shared）`build` 通过
+- 全量回归：**785 用例 / 3629 断言零失败**（1.2.0 基线 775 / 3554，+10 用例；1 跳过为既有 symlink 环境限制）
+
+---
+
 ## 1.2.0 (2026-08-17) — 工具链互操作与开箱工程化
 
 正式发布版，聚合 dev.1 ~ dev.12 与 pre.1 / pre.2。主题：**工具链互操作 + 开箱工程化**。公共 API 保持 1.1.0 起的永久稳定（破坏性变更仅 2.0.0 引入）；`ezmk utils cc` 自本版起**弃用**（保留可用并提示转用 `ezmk project cc`，2.0.0 移除）。

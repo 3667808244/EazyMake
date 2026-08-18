@@ -22,6 +22,12 @@ hello/
 > Skip git or the `.gitignore` with `--disable-git-init` / `--disable-gitignore`.
 > Choose a different kind of project with `--type static|shared|utils` (default `executable`).
 
+> **Library templates (1.2.1+):** `--type static` / `--type shared` do **not** create
+> `main.cpp` — instead they scaffold a library skeleton `include/<name>.hpp` (sample
+> public API) + `src/<name>.cpp` (implementation), ready for `ezmk build` out of the
+> box; `--type utils` generates no C++ code at all, only a `utils/` directory for Lua
+> scripts.
+
 The generated `src/main.cpp`:
 
 ```cpp

@@ -10,8 +10,17 @@ version = "0.1.0"
 language = "C++17"
 
 [compile]
-flags = ["-Wall", "-Wextra", "-O2"]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
 include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+msvc_flags = ["/Zi", "/Od"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+msvc_flags = ["/O2", "/DNDEBUG"]
 
 [link]
 flags = []
@@ -20,7 +29,18 @@ system_target = []
 
 [depends]
 lib = []
+
+# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`
+# framework = "catch2"       # "catch2" | "ezmk"（内置框架）
+# dirs = ["test"]
+# default_profile = "debug"  # 1.2.0-dev.12+：测试默认 profile
+# include_dirs = ["test/helpers"]   # 测试专属 -I（1.2.0-dev.12+）
+# link_targets = ["pthread"]        # 测试专属 -l（1.2.0-dev.12+）
 ```
+
+模板内建 `debug` / `release` 两个 profile，`default_profile = "debug"`——裸 `ezmk build`
+开箱即可调试，`ezmk build --profile release` 切换到优化构建；文件末尾的 `# [test]`
+是**注释掉的示例节**（1.2.1+），取消注释并填写后即可 `ezmk test`，纯注释对解析零影响。
 
 ## `[project]`
 

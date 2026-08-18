@@ -154,6 +154,25 @@ has no CMake equivalent and is not exported. See the `hooks` section in
 plain `ezmk build` is debuggable out of the box, and `ezmk build --profile release`
 switches to the optimized build. Base `[compile].flags` are warnings-only (`-Wall -Wextra`).
 
+**Per-type source templates (1.2.1+):** `project new` now generates sources
+differently depending on `--type`:
+
+| `--type` | Generated files |
+|---|---|
+| `executable` (default) | `src/main.cpp` (Hello world entry, unchanged) |
+| `static` / `shared` | `include/<name>.hpp` (sample public API) + `src/<name>.cpp` (implementation), **no `main.cpp`** |
+| `utils` | No C++ code — only the `utils/` directory (for Lua scripts) |
+
+Library templates **keep the original project name in file names** (`my-lib` →
+`include/my-lib.hpp` + `src/my-lib.cpp`), and the C++ **namespace replaces `-` / `.` /
+spaces with `_`** (`my-lib` → `namespace my_lib`); headers are guarded with
+`#pragma once`. The generated `ezmk.toml` also ends with a **commented-out `[test]`
+example section** (`# [test]` / `# framework` / `# dirs` / `# default_profile` /
+`# include_dirs` / `# link_targets`) — uncomment and fill it in to use `ezmk test`;
+pure comments have zero parse impact, and the fields match the `[test]` config
+exactly (including the 1.2.0-dev.12 additions; the deprecated `flags` is
+deliberately not shown).
+
 **`watch`-only flag:** `--no-build-on-start` — skip the initial build; wait for the first change.
 
 **`install`-only flags:**

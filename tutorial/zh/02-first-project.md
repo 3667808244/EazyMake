@@ -22,6 +22,10 @@ hello/
 > 使用 `--disable-git-init` / `--disable-gitignore` 可以跳过 git 或 `.gitignore` 的生成。
 > 使用 `--type static|shared|utils` 可以选择不同的项目类型（默认为 `executable`）。
 
+> **库项目模板（1.2.1+）：** `--type static` / `--type shared` 不会生成 `main.cpp`，
+> 而是生成库骨架 `include/<name>.hpp`（示例公共 API）+ `src/<name>.cpp`（实现），
+> 开箱即可 `ezmk build` 编译归档；`--type utils` 不生成任何 C++ 代码，只有 `utils/` 目录放 Lua 脚本。
+
 生成的 `src/main.cpp`：
 
 ```cpp

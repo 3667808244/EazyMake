@@ -121,6 +121,16 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 
 **生成的模板（1.2.0+）：** `project new` 生成的模板内建 `[compile.profile.debug]`（`-g -O0` / `/Zi /Od`）与 `[compile.profile.release]`（`-O2 -DNDEBUG` / `/O2 /DNDEBUG`）两个 profile，并设置 `default_profile = "debug"`——裸 `ezmk build` 开箱即可调试，`ezmk build --profile release` 切换到优化构建。基准 `[compile].flags` 仅为警告标志（`-Wall -Wextra`）。
 
+**按类型生成的源码模板（1.2.1+）：** `project new` 按 `--type` 差异化生成源码：
+
+| `--type` | 生成物 |
+|---|---|
+| `executable`（默认） | `src/main.cpp`（Hello world 入口，不变） |
+| `static` / `shared` | `include/<name>.hpp`（公共 API 示例）+ `src/<name>.cpp`（实现），**不生成 `main.cpp`** |
+| `utils` | 无 C++ 代码，仅 `utils/` 目录（放 Lua 脚本） |
+
+库模板的**文件名保留原始项目名**（`my-lib` → `include/my-lib.hpp` + `src/my-lib.cpp`），C++ **namespace 将 `-` / `.` / 空格替换为 `_`**（`my-lib` → `namespace my_lib`）；头文件用 `#pragma once` 保护。生成的 `ezmk.toml` 末尾还附带**注释掉的 `[test]` 示例节**（`# [test]` / `# framework` / `# dirs` / `# default_profile` / `# include_dirs` / `# link_targets`）——取消注释并填写后即可 `ezmk test`；纯注释对解析零影响，字段与 `[test]` 配置完全一致（含 1.2.0-dev.12 新字段，刻意不展示已弃用的 `flags`）。
+
 **`watch` 专属标志：** `--no-build-on-start` — 跳过初始构建，等待文件首次变更。
 
 **`install` 专属标志：**

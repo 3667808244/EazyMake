@@ -16,6 +16,11 @@ int main(int argc, char **argv){
 
 > **为什么是这个模板？** 脚手架生成的是一个最小的可运行程序，让新项目开箱即用（`ezmk project new` → `ezmk build` 即可运行），从脚手架到用户第一次改代码之间无需任何配置。
 
+> **按类型差异化（1.2.1+）：** 上面是默认的 `executable` 模板。`--type static` / `--type shared`
+> **不生成 `main.cpp`**，而是生成库骨架 `include/<name>.hpp`（`#pragma once` + `namespace <ns>` +
+> `greeting()` 示例公共 API）+ `src/<name>.cpp`（实现）——文件名保留原始项目名，C++ namespace
+> 将 `-` / `.` / 空格替换为 `_`；`--type utils` 不生成任何 C++ 代码，只有 `utils/` 目录放 Lua 脚本。
+
 ---
 
 ## `<project_dir>/ezmk.toml`
@@ -27,8 +32,17 @@ version = "0.1.0"
 language = "C++17"
 
 [compile]
-flags = ["-Wall", "-Wextra", "-O2"]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
 include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+msvc_flags = ["/Zi", "/Od"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+msvc_flags = ["/O2", "/DNDEBUG"]
 
 [link]
 flags = []
@@ -37,9 +51,16 @@ system_target = []
 
 [depends]
 lib = []
+
+# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`
+# framework = "catch2"       # "catch2" | "ezmk"（内置框架）
+# dirs = ["test"]
+# default_profile = "debug"  # 1.2.0-dev.12+：测试默认 profile
+# include_dirs = ["test/helpers"]   # 测试专属 -I（1.2.0-dev.12+）
+# link_targets = ["pthread"]        # 测试专属 -l（1.2.0-dev.12+）
 ```
 
-> **为什么是这些默认值？** 生成的配置与脚手架布局一一对应——`type = "executable"` 对应 `src/main.cpp` 入口，C++17 是现代的基线标准，`-Wall -Wextra -O2` 让新项目既能尽早看到警告又保持构建速度。
+> **为什么是这些默认值？** 生成的配置与脚手架布局一一对应——`type = "executable"` 对应 `src/main.cpp` 入口，C++17 是现代的基线标准，`-Wall -Wextra` 让新项目尽早看到警告；优化归 profile（`debug` 默认，`release` 需显式 `--profile release`）。文件末尾的 `# [test]` 是**注释掉的示例节**（1.2.1+）：取消注释并填写后即可 `ezmk test`，纯注释对解析零影响，字段与 `[test]` 配置一致（刻意不展示已弃用的 `flags`）。
 
 ---
 

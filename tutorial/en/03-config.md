@@ -10,8 +10,17 @@ version = "0.1.0"
 language = "C++17"
 
 [compile]
-flags = ["-Wall", "-Wextra", "-O2"]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
 include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+msvc_flags = ["/Zi", "/Od"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+msvc_flags = ["/O2", "/DNDEBUG"]
 
 [link]
 flags = []
@@ -20,7 +29,20 @@ system_target = []
 
 [depends]
 lib = []
+
+# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`
+# framework = "catch2"       # "catch2" | "ezmk"（内置框架）
+# dirs = ["test"]
+# default_profile = "debug"  # 1.2.0-dev.12+：测试默认 profile
+# include_dirs = ["test/helpers"]   # 测试专属 -I（1.2.0-dev.12+）
+# link_targets = ["pthread"]        # 测试专属 -l（1.2.0-dev.12+）
 ```
+
+The template ships built-in `debug` / `release` profiles with
+`default_profile = "debug"` — a plain `ezmk build` is debuggable out of the box,
+and `ezmk build --profile release` switches to the optimized build. The `# [test]`
+lines at the end are a **commented-out example section** (1.2.1+): uncomment and
+fill them in to use `ezmk test`; pure comments have zero parse impact.
 
 ## `[project]`
 
