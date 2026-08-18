@@ -266,8 +266,24 @@ The registration is user-scoped (`-u`) so it can be removed with `ezmk repo remo
 |---|---|
 | `ezmk utils <name> [args...]` | Run a Lua tool from an installed `type = "utils"` package |
 
-Everything after `<name>` is passed through to the tool. Tools are discovered via
-the project → user → global scope chain.
+Everything after `<name>` is passed through to the tool. Tools are looked up in
+project → user → global scope.
+
+## `example` — built-in examples (1.2.3+)
+
+| Command | Description |
+|---|---|
+| `ezmk example` / `ezmk example list` | List all built-in examples (name + one-liner) |
+| `ezmk example <name> [-o <dir>]` | Scaffold an example into `./<name>/` (or `<dir>/<name>/`) |
+
+Six examples ship inside the binary (hello / greeter / with-packages / with-tests /
+with-hooks / cmake-interop), one-to-one with the tutorial chapters, embedded at
+build time from the repo's `examples/` source dir — **offline-ready** and versioned
+with the binary. Each scaffold is a complete buildable project:
+`cd <name> && ezmk build` (with-packages installs its dependency on first build —
+network required; with-tests uses the built-in framework, zero deps). An existing
+target directory or an unknown name is an error that lists the available examples.
+Index: `examples/README.md` in the repo.
 
 ### Official tools (`ezmk-official-utils` package, 1.1.0+)
 

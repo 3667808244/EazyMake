@@ -71,4 +71,6 @@ $ ezmk pkg remove fmt          # 卸载
 
 详见 [`docs/pkg.md`](../../../docs/zh/pkg.md) 和 [`docs/repo.md`](../../../docs/zh/repo.md)。
 
+> 💡 想直接跑完整示例？运行 `ezmk example with-packages` 生成依赖 + 版本约束项目（首次构建联网装 fmt；示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+
 下一章：[监视模式与钩子 →](../dev/01-watch-hooks.md)

@@ -87,3 +87,5 @@ $ ezmk build
 - **`ezmk.lock` 应随项目提交**（不要加进 `.gitignore`）——它是可复现构建的一部分，团队和 CI 都依赖它。
 - **约束在安装时解析**：lockfile 生成后，日常 `install`/`build` 遵循锁定的版本；重新解析发生在 `pkg update` 时。
 - **不带运算符的条目保持"取最新"**：`"fmt"` 与 `"fmt@10.2.1"` 语义不同——前者在 `pkg update` 时可能跳到新版本。
+
+> 💡 想直接跑完整示例？运行 `ezmk example with-packages` 生成带 `fmt^10.0` 约束 + lockfile 的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。

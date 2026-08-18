@@ -81,3 +81,5 @@ Running tests (ezmk)...
 | `ezmk test -V` | 详细输出——显示每个测试，包括通过的 |
 
 如果项目尚未构建，`ezmk test` 会先构建。测试套件失败时返回非零退出码，可直接接入你的 CI。
+
+> 💡 想直接跑完整示例？运行 `ezmk example with-tests` 生成带内置框架测试的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。

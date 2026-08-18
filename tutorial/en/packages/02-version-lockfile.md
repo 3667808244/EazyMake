@@ -87,3 +87,7 @@ $ ezmk build
 - **Commit `ezmk.lock`** (don't add it to `.gitignore`) — it's part of reproducible builds; your team and CI rely on it.
 - **Constraints are resolved at install time**: after the lockfile exists, daily `install`/`build` follow the locked versions; re-resolution happens on `pkg update`.
 - **Bare entries keep "latest" semantics**: `"fmt"` and `"fmt@10.2.1"` differ — the former may jump to a new version on `pkg update`.
+
+> 💡 Want a complete runnable example? Run `ezmk example with-packages` to scaffold a
+> project with a `fmt^10.0` constraint + lockfile (see
+> [`examples/README.md`](../../../examples/README.md) for the list).

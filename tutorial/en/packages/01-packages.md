@@ -75,4 +75,8 @@ $ ezmk pkg remove fmt          # uninstall
 
 See [`docs/en/pkg.md`](../../../docs/en/pkg.md) and [`docs/en/repo.md`](../../../docs/en/repo.md) for details.
 
+> 💡 Want a complete runnable example? Run `ezmk example with-packages` to scaffold a
+> dependency + version-constraint project (first build installs fmt — network required;
+> see [`examples/README.md`](../../../examples/README.md) for the list).
+
 Next: [Watch mode & hooks →](../dev/01-watch-hooks.md)

@@ -60,4 +60,7 @@ Hooks run in the same sandbox as utils tools (no `os`/`io`; use the `ezmk.*` API
 missing hook script warns and is skipped — it is not fatal. Hooks apply only to your
 project, not to package compilation.
 
+> 💡 Want a complete runnable example? Run `ezmk example with-hooks` to scaffold a
+> project with pre/post hooks (see [`examples/README.md`](../../../examples/README.md) for the list).
+
 Next: [Utils tools →](02-utils.md)

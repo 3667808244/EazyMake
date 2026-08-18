@@ -90,3 +90,7 @@ Running tests (ezmk)...
 
 If the project isn't built yet, `ezmk test` builds it first. A failing test suite
 exits non-zero, ready to wire into your CI.
+
+> 💡 Want a complete runnable example? Run `ezmk example with-tests` to scaffold a
+> project with built-in-framework tests (see
+> [`examples/README.md`](../../../examples/README.md) for the list).

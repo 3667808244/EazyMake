@@ -70,6 +70,10 @@ For rejected projects, see
 [`docs/en/migrate-from-cmake.md`](../../../docs/en/migrate-from-cmake.md) for manual
 migration using Lua `[hooks]`.
 
+> 💡 Want a complete runnable example? Run `ezmk example cmake-interop` to scaffold a
+> project ready for `export cmake` (see
+> [`examples/README.md`](../../../examples/README.md) for the list).
+
 ## Next steps
 
 - Regenerate `compile_commands.json` for clangd/LSP: `ezmk project cc`.

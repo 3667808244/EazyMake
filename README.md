@@ -160,6 +160,10 @@ ezmk repo update                # refresh repo indices
 
 # Utilities
 ezmk utils cc                   # generate compile_commands.json (deprecated since 1.2.0 → ezmk project cc)
+
+# Examples (1.2.3+)
+ezmk example list               # list built-in examples
+ezmk example hello              # scaffold an example into ./hello/
 ```
 
 Full reference: [`docs/en/cli.md`](docs/en/cli.md)

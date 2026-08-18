@@ -222,6 +222,19 @@ ezmk repo update -u official
 
 `<name>` 之后的所有内容透传给工具。工具按 project → user → global 作用域查找。
 
+## `example` — 内置示例（1.2.3+）
+
+| 命令 | 描述 |
+|---|---|
+| `ezmk example` / `ezmk example list` | 列出全部内置示例（名称 + 一句话说明） |
+| `ezmk example <name> [-o <dir>]` | 生成示例到 `./<name>/`（或 `<dir>/<name>/`） |
+
+内置 6 个示例（hello / greeter / with-packages / with-tests / with-hooks / cmake-interop），
+与教程章节一一对应，内容随二进制同版本（构建期从仓库 `examples/` 源目录嵌入）——
+**离线可用**。示例生成后即为完整可构建项目：`cd <name> && ezmk build`（with-packages
+首次构建需联网安装依赖；with-tests 用内置框架，零依赖）。目标目录已存在或示例名
+未知会报错并列出可用项。示例索引见仓库 `examples/README.md`。
+
 ### 官方工具（`ezmk-official-utils` 包，1.1.0+）
 
 安装脚本自动预装 `ezmk-official-utils` 包（全局作用域），提供以下工具：

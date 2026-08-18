@@ -96,4 +96,6 @@ want = ["spdlog"]   # 可选依赖 — 已安装则使用，否则跳过
 完整的配置规范（包括构建配置与钩子）请参阅
 [`docs/config_file.md`](../../../docs/zh/config_file.md)。
 
+> 💡 想直接跑完整示例？运行 `ezmk example greeter` 生成一个静态库项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+
 下一章：[增量构建与缓存 →](04-cache.md)

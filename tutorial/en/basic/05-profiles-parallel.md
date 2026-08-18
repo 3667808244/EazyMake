@@ -48,4 +48,7 @@ Rules:
 Different profiles produce different compile fingerprints, so switching profiles
 rebuilds as needed without clobbering the other profile's cache.
 
+> 💡 Want a complete runnable example? Run `ezmk example greeter` to scaffold a
+> static-library project (see [`examples/README.md`](../../../examples/README.md) for the list).
+
 Next: [Using packages →](../packages/01-packages.md)

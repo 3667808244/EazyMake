@@ -56,4 +56,6 @@ end
 
 钩子在和工具脚本相同的沙箱中运行（没有 `os`/`io`；使用 `ezmk.*` API）。找不到钩子脚本时会警告并跳过——不会导致构建失败。钩子仅作用于你的项目，包编译不受影响。
 
+> 💡 想直接跑完整示例？运行 `ezmk example with-hooks` 生成带 pre/post 钩子的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+
 下一章：[工具 →](02-utils.md)

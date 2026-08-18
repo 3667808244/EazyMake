@@ -89,4 +89,7 @@ Most `project` actions are also available as top-level commands (`ezmk build`,
 `ezmk run`, `ezmk clean`, …) — same flags, shorter typing. See the
 [CLI reference](../../../docs/en/cli.md#top-level-aliases-110) for the full list.
 
+> 💡 Want a complete runnable example? Run `ezmk example hello` to scaffold it here
+> (see [`examples/README.md`](../../../examples/README.md) for the list).
+
 Next: [Understanding `ezmk.toml` →](03-config.md)

@@ -159,6 +159,10 @@ ezmk repo update                # 刷新仓库索引
 
 # 工具
 ezmk utils cc                   # 生成 compile_commands.json（自 1.2.0 起弃用 → ezmk project cc）
+
+# 示例（1.2.3+）
+ezmk example list               # 列出内置示例
+ezmk example hello              # 生成示例到 ./hello/
 ```
 
 完整参考：[`docs/zh/cli.md`](docs/zh/cli.md)

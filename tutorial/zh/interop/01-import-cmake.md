@@ -66,6 +66,8 @@ hi
 [`docs/zh/migrate-from-cmake.md`](../../../docs/zh/migrate-from-cmake.md)（用 Lua
 `[hooks]` 复刻自定义步骤）。
 
+> 💡 想直接跑完整示例？运行 `ezmk example cmake-interop` 生成可 `export cmake` 的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+
 ## 下一步
 
 - 为 clangd/LSP 重新生成 `compile_commands.json`：`ezmk project cc`。

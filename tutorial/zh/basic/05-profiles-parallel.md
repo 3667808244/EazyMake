@@ -48,4 +48,6 @@ $ ezmk run   --profile release
 不同的构建配置会产生不同的编译指纹，因此切换构建配置时会按需重新构建，
 而不会破坏其他构建配置的缓存。
 
+> 💡 想直接跑完整示例？运行 `ezmk example greeter` 生成一个静态库项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+
 下一章：[使用包 →](../packages/01-packages.md)
