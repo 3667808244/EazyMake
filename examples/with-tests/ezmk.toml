@@ -1,0 +1,31 @@
+[project]
+name = "with-tests"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
+include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []
+
+# 测试配置（教程 09「测试你的项目」）。
+# framework = "ezmk" 为内置框架（零依赖，测试文件自带 main，退出码判定）；
+# 想用 Catch2：ezmk pkg install catch2 后改 framework = "catch2" 即可。
+[test]
+dirs = ["test"]
+framework = "ezmk"

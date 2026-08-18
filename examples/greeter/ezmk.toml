@@ -1,0 +1,26 @@
+[project]
+name = "greeter"
+type = "static"
+version = "0.1.0"
+language = "C++17"
+
+# 库项目骨架：公共头文件放 include/（默认 -I 已含），实现放 src/。
+# 与 `ezmk project new mylib --type static` 生成的模板一致（1.2.1+）。
+[compile]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
+include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []

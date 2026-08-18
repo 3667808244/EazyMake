@@ -1,0 +1,27 @@
+[project]
+name = "with-packages"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
+include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+# 依赖与版本约束（教程 06「使用包」/ 12「语义化版本约束与确定性构建」）。
+# fmt^10.0 表示 >=10.0 且 <11.0（兼容约束）；fmt@10.2.1 为精确锁定。
+# 生成后首次构建会自动解析安装（需网络）；ezmk build --locked 配合 ezmk.lock 复现构建。
+[depends]
+lib = ["fmt^10.0"]

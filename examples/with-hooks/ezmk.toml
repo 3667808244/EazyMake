@@ -1,0 +1,30 @@
+[project]
+name = "with-hooks"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
+include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []
+
+# 构建钩子（教程 07「监视模式与钩子」）：Lua 脚本，路径相对项目根。
+# pre_build 在编译前、post_build 在链接成功后触发；找不到脚本只警告不失败。
+[hooks]
+pre_build = "scripts/pre_build.lua"
+post_build = "scripts/post_build.lua"

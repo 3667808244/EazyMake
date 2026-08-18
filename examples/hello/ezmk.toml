@@ -1,0 +1,25 @@
+[project]
+name = "hello"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+# [compile] 基准确认编译标志；优化归 profile（见下）。
+[compile]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
+include_dirs = ["include"]
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[compile.profile.release]
+flags = ["-O2", "-DNDEBUG"]
+
+[link]
+flags = []
+link_dirs = []
+system_target = []
+
+[depends]
+lib = []
