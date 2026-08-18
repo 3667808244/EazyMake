@@ -1,6 +1,6 @@
 # EazyMake 1.2.2 执行计划
 
-> **状态：执行中**（2026-08-18 启动）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
+> **状态：已完成**（2026-08-18 执行完毕，待发布）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
 >
 > 详细设计：[**1.2.2.md**](plans/1.2.x/1.2.2.md)。本计划为 1.2.x 稳定线的**文档补丁**：教程 14 章按主题移入分类子目录（`basic/` 入门 · `packages/` 包管理 · `dev/` 开发体验 · `interop/` 互操作），**组内重新编号（每组 01 起）**，README 索引分组展示；全仓链接按新旧映射表同步，grep 零死链 + 零旧编号残留双验收。
 >
@@ -30,28 +30,28 @@
 
 ### 阶段一：目录迁移 + 重命名（4.1，中文基准）
 
-- [ ] **1.1 git mv**：按 §3.3 新旧映射 `tutorial/zh/` 14 章 → `basic/`（01~05 名称不变）、`packages/`（06→01、12→02、13→03）、`dev/`（07→01、08→02、09→03、10→04）、`interop/`（11→01、14→02）
-- [ ] **1.2 验收**：`tutorial/zh/` 根目录仅剩 README.md；旧文件名零残留
+- [x] **1.1 git mv**：按 §3.3 新旧映射 `tutorial/zh/` 14 章 → `basic/`（01~05 名称不变）、`packages/`（06→01、12→02、13→03）、`dev/`（07→01、08→02、09→03、10→04）、`interop/`（11→01、14→02）
+- [x] **1.2 验收**：`tutorial/zh/` 根目录仅剩 README.md；旧文件名零残留
 
 ### 阶段二：索引改造（4.2，中文）
 
-- [ ] **2.1 `tutorial/zh/README.md`**：分组展示（4 组小标题 + 新编号列表）+ 约定节锚点更新（`basic/01-install.md#windows原生无需-msys2`）+ 各组「从哪开始读」提示
+- [x] **2.1 `tutorial/zh/README.md`**：分组展示（4 组小标题 + 新编号列表）+ 约定节锚点更新（`basic/01-install.md#windows原生无需-msys2`）+ 各组「从哪开始读」提示
 
 ### 阶段三：英文同步（4.3）
 
-- [ ] **3.1 `tutorial/en/`** 同样迁移 + 重命名 + `tutorial/en/README.md` 分组（与 zh 逐文件对照）
+- [x] **3.1 `tutorial/en/`** 同样迁移 + 重命名 + `tutorial/en/README.md` 分组（与 zh 逐文件对照）
 
 ### 阶段四：外部链接修复 + 验收（4.4）
 
-- [ ] **4.1 `README.md` / `README_ZH.md` 高级特性表**：教程链接新路径 + 显示编号同步（如 `packages/02-version-lockfile.md`）
-- [ ] **4.2 `docs/zh|en/migrate-from-cmake.md`**：`tutorial/zh/07-watch-hooks.md` → `tutorial/zh/dev/01-watch-hooks.md`（en 侧同查）
-- [ ] **4.3 教程内部交叉引用**：相对路径（`../packages/01-packages.md`）+ 文字性「第 N 章」按映射更新
-- [ ] **4.4 硬验收**：全仓 grep —— `tutorial/(zh|en)/` 零死链 + 旧编号文件名（`06-|07-|08-|09-|10-|11-|12-|13-|14-`）零残留
+- [x] **4.1 `README.md` / `README_ZH.md` 高级特性表**：教程链接新路径 + 显示编号同步（如 `packages/02-version-lockfile.md`）
+- [x] **4.2 `docs/zh|en/migrate-from-cmake.md`**：`tutorial/zh/07-watch-hooks.md` → `tutorial/zh/dev/01-watch-hooks.md`（en 侧同查）
+- [x] **4.3 教程内部交叉引用**：相对路径（`../packages/01-packages.md`）+ 文字性「第 N 章」按映射更新；子目录化后 docs 相对链接深度修正（`../../docs` → `../../../docs`）
+- [x] **4.4 硬验收**：全仓 grep —— `tutorial/(zh|en)/` 零死链 + 旧编号文件名（`06-|07-|08-|09-|10-|11-|12-|13-|14-`）零残留；脚本校验全仓 .md 相对链接目标存在（排除 plans 历史）
 
 ### 阶段五：收口（4.5）
 
-- [ ] **5.1 CHANGES.md 1.2.2 条目** + `plans/1.2.x/README.md` 状态更新 + plan.md 全勾选
-- [ ] **5.2 发布门槛复核**：纯文档无 API 变更 + 全量测试零回归（`bash build.sh test-all`，基线 785/3629）
+- [x] **5.1 CHANGES.md 1.2.2 条目** + `plans/1.2.x/README.md` 状态更新 + plan.md 全勾选
+- [x] **5.2 发布门槛复核**：纯文档无 API 变更 + 全量测试零回归（`bash build.sh test-all`，基线 785/3629）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
