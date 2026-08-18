@@ -2432,3 +2432,80 @@ TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integr
         }
     }
 }
+
+// =============================================================
+// 1.2.4: repo-hosted directory packages
+// =============================================================
+
+TEST_CASE("integration: repo directory package installs (1.2.4)", "[integration][1.2.4]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+
+    // A local repo with a `type = "dir"` package (no sha256 — dir packages have
+    // no archive hash). `pkg install <name>` must reuse the directory-install path.
+    fs::path repo_dir = tmp.path / "dirrepo";
+    fs::path pkg_dir = repo_dir / "packages" / "greetdir";
+    fs::create_directories(pkg_dir / "include");
+    fs::create_directories(pkg_dir / "src");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"greetdir\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "language = \"C++17\"\n\n[compile]\nflags = []\ninclude_dirs = [\"include\"]\n");
+    file_write(pkg_dir / "include" / "greetdir.hpp",
+        "#pragma once\nconst char* greetdir_hi();\n");
+    file_write(pkg_dir / "src" / "greetdir.cpp",
+        "#include \"greetdir.hpp\"\nconst char* greetdir_hi() { return \"hi\"; }\n");
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"dirrepo\"\n\n"
+        "[[packages]]\nname = \"greetdir\"\nversion = \"1.0.0\"\n"
+        "type = \"dir\"\nfile = \"packages/greetdir\"\n");
+
+    std::string proj_name = "dir_app";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\" --name dirrepo", proj_dir);
+    INFO("repo add stderr: " << ra.err);
+    REQUIRE(ra.exit_code == 0);
+
+    ProcResult r = run_ezmk("pkg install greetdir -p -y", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(fs::exists(proj_dir / ".ezmk/pkg/greetdir/ezmk.toml"));
+    REQUIRE(fs::exists(proj_dir / ".ezmk/pkg/greetdir/include/greetdir.hpp"));
+    // The dir package was compiled into an archive (not just copied).
+    REQUIRE(fs::exists(proj_dir / ".ezmk/pkg/greetdir/build/libgreetdir.a"));
+}
+
+TEST_CASE("integration: repo directory package missing dir errors (1.2.4)", "[integration][1.2.4]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+
+    // index `file` points at a directory that does not exist → repo validation
+    // fails at `repo add` (same friendly missing-file path as archive packages).
+    fs::path repo_dir = tmp.path / "dirrepo_missing";
+    fs::create_directories(repo_dir);
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"dirrepo_missing\"\n\n"
+        "[[packages]]\nname = \"ghostdir\"\nversion = \"1.0.0\"\n"
+        "type = \"dir\"\nfile = \"packages/ghostdir\"\n");
+
+    std::string proj_name = "dir_miss_app";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\" --name dirrepo_missing", proj_dir);
+    INFO("repo add stderr: " << ra.err);
+    REQUIRE(ra.exit_code != 0);
+    REQUIRE((ra.out + ra.err).find("ghostdir") != std::string::npos);
+}
