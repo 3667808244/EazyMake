@@ -879,6 +879,19 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
         content += "tools = []\n";
     }
 
+    // 1.2.1: commented-out [test] example — uncomment to enable `ezmk test`.
+    // Pure TOML comments (zero parse impact); fields match TestConfig exactly,
+    // including the 1.2.0-dev.12 additions (default_profile / include_dirs /
+    // link_targets). Deliberately omits the deprecated [test].flags (removed
+    // in 2.0.0) — the example only teaches the modern usage.
+    content += "\n";
+    content += "# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`\n";
+    content += "# framework = \"catch2\"       # \"catch2\" | \"ezmk\"（内置框架）\n";
+    content += "# dirs = [\"test\"]\n";
+    content += "# default_profile = \"debug\"  # 1.2.0-dev.12+：测试默认 profile\n";
+    content += "# include_dirs = [\"test/helpers\"]   # 测试专属 -I（1.2.0-dev.12+）\n";
+    content += "# link_targets = [\"pthread\"]        # 测试专属 -l（1.2.0-dev.12+）\n";
+
     if (!util::file_write(toml_path, content)) {
         throw std::runtime_error("failed to write config file: " + toml_path.string());
     }

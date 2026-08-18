@@ -7,6 +7,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -648,6 +649,72 @@ TEST_CASE("write_default_config: round-trip shared", "[config]") {
 
     REQUIRE(cfg.project.name == "myshared");
     REQUIRE(cfg.project.type == "shared");
+}
+
+// 1.2.1: default template carries a commented-out [test] example — pure TOML
+// comments (zero parse impact), fields match TestConfig incl. dev.12 additions,
+// and the deprecated [test].flags is deliberately NOT shown.
+TEST_CASE("write_default_config: commented [test] example present", "[config][1.2.1]") {
+    using namespace ezmk::config;
+
+    auto tmp = fs::temp_directory_path() / "ezmk_test_testsec.toml";
+
+    write_default_config(tmp, "testapp", "executable");
+    REQUIRE(fs::exists(tmp));
+
+    std::string raw;
+    {
+        std::ifstream in(tmp);
+        std::stringstream ss;
+        ss << in.rdbuf();
+        raw = ss.str();
+    }
+
+    REQUIRE(raw.find("# [test]") != std::string::npos);
+    REQUIRE(raw.find("# framework = \"catch2\"") != std::string::npos);
+    REQUIRE(raw.find("# dirs = [\"test\"]") != std::string::npos);
+    REQUIRE(raw.find("# default_profile = \"debug\"") != std::string::npos);
+    REQUIRE(raw.find("# include_dirs = [\"test/helpers\"]") != std::string::npos);
+    REQUIRE(raw.find("# link_targets = [\"pthread\"]") != std::string::npos);
+    // Deprecated [test].flags must not appear (2.0.0 removal) — example teaches
+    // modern usage only. (Check the commented form: `[compile].flags` legitimately
+    // contains an uncommented `flags =`.)
+    REQUIRE(raw.find("# flags =") == std::string::npos);
+
+    // Zero parse impact: config still round-trips; the commented lines must not
+    // activate anything. dirs/framework carry their built-in defaults ({"test"} /
+    // "catch2") and the 1.2.0-dev.12 additions stay absent.
+    auto cfg = parse_config(tmp);
+    fs::remove(tmp);
+
+    REQUIRE(cfg.project.name == "testapp");
+    REQUIRE(cfg.test.dirs.size() == 1);
+    REQUIRE(cfg.test.dirs[0] == "test");
+    REQUIRE(cfg.test.framework == "catch2");  // built-in default (unparsed → not uppercased)
+    REQUIRE(cfg.test.default_profile.empty());
+    REQUIRE(cfg.test.include_dirs.empty());
+    REQUIRE(cfg.test.link_targets.empty());
+}
+
+TEST_CASE("write_default_config: commented [test] example also for libraries", "[config][1.2.1]") {
+    using namespace ezmk::config;
+
+    auto tmp = fs::temp_directory_path() / "ezmk_test_testsec_static.toml";
+
+    write_default_config(tmp, "mylib", "static");
+    REQUIRE(fs::exists(tmp));
+
+    std::string raw;
+    {
+        std::ifstream in(tmp);
+        std::stringstream ss;
+        ss << in.rdbuf();
+        raw = ss.str();
+    }
+    fs::remove(tmp);
+
+    REQUIRE(raw.find("# [test]") != std::string::npos);
+    REQUIRE(raw.find("# link_targets = [\"pthread\"]") != std::string::npos);
 }
 
 // ===================================================================

@@ -69,24 +69,112 @@ TEST_CASE("create_project: sets correct name in ezmk.toml", "[project]") {
     REQUIRE(cfg.project.language == "C++17");
 }
 
-TEST_CASE("create_project: static type", "[project]") {
+// 1.2.1: static/shared projects get a library skeleton (include/<name>.hpp +
+// src/<name>.cpp) and NO main.cpp — a library never links one.
+TEST_CASE("create_project: static type generates library skeleton", "[project][1.2.1]") {
     CwdGuard guard;
 
     create_project("static_lib", "static");
 
     auto cfg = parse_config(guard.temp_dir / "static_lib/ezmk.toml");
     REQUIRE(cfg.project.type == "static");
-    // main.cpp is still created as a starting point
-    REQUIRE(file_exists(guard.temp_dir / "static_lib/src/main.cpp"));
+    REQUIRE(file_exists(guard.temp_dir / "static_lib/include/static_lib.hpp"));
+    REQUIRE(file_exists(guard.temp_dir / "static_lib/src/static_lib.cpp"));
+    REQUIRE_FALSE(file_exists(guard.temp_dir / "static_lib/src/main.cpp"));
 }
 
-TEST_CASE("create_project: shared type", "[project]") {
+TEST_CASE("create_project: shared type generates library skeleton", "[project][1.2.1]") {
     CwdGuard guard;
 
     create_project("shared_lib", "shared");
 
     auto cfg = parse_config(guard.temp_dir / "shared_lib/ezmk.toml");
     REQUIRE(cfg.project.type == "shared");
+    REQUIRE(file_exists(guard.temp_dir / "shared_lib/include/shared_lib.hpp"));
+    REQUIRE(file_exists(guard.temp_dir / "shared_lib/src/shared_lib.cpp"));
+    REQUIRE_FALSE(file_exists(guard.temp_dir / "shared_lib/src/main.cpp"));
+}
+
+// 1.2.1: executable keeps the Hello world main.cpp and generates no headers.
+TEST_CASE("create_project: executable has main.cpp and no header", "[project][1.2.1]") {
+    CwdGuard guard;
+
+    create_project("exe_only", "executable");
+
+    REQUIRE(file_exists(guard.temp_dir / "exe_only/src/main.cpp"));
+    REQUIRE_FALSE(file_exists(guard.temp_dir / "exe_only/include/exe_only.hpp"));
+    REQUIRE(fs::is_empty(guard.temp_dir / "exe_only/include"));
+}
+
+// 1.2.1: utils projects generate no C++ code, only the utils/ directory.
+TEST_CASE("create_project: utils type generates no C++ code", "[project][1.2.1]") {
+    CwdGuard guard;
+
+    create_project("utils_tool", "utils");
+
+    REQUIRE(fs::is_directory(guard.temp_dir / "utils_tool/utils"));
+    REQUIRE_FALSE(file_exists(guard.temp_dir / "utils_tool/src/main.cpp"));
+    REQUIRE(fs::is_empty(guard.temp_dir / "utils_tool/src"));
+    REQUIRE(fs::is_empty(guard.temp_dir / "utils_tool/include"));
+}
+
+// 1.2.1: '-' in the project name is sanitized in the C++ namespace but kept
+// in file names.
+TEST_CASE("create_project: dashed name keeps file names, sanitizes namespace", "[project][1.2.1]") {
+    CwdGuard guard;
+
+    create_project("my-lib", "static");
+
+    fs::path root = guard.temp_dir / "my-lib";
+    REQUIRE(file_exists(root / "include/my-lib.hpp"));
+    REQUIRE(file_exists(root / "src/my-lib.cpp"));
+
+    auto hpp = file_read(root / "include/my-lib.hpp");
+    REQUIRE(hpp.find("namespace my_lib {") != std::string::npos);
+    auto cpp = file_read(root / "src/my-lib.cpp");
+    REQUIRE(cpp.find("#include \"my-lib.hpp\"") != std::string::npos);
+    REQUIRE(cpp.find("namespace my_lib {") != std::string::npos);
+}
+
+// ===================================================================
+// 1.2.1: library skeleton content
+// ===================================================================
+
+TEST_CASE("create_project: library header has pragma once + greeting", "[project][1.2.1]") {
+    CwdGuard guard;
+
+    create_project("skeleton", "static");
+
+    auto hpp = file_read(guard.temp_dir / "skeleton/include/skeleton.hpp");
+    REQUIRE(hpp.find("#pragma once") != std::string::npos);
+    REQUIRE(hpp.find("namespace skeleton {") != std::string::npos);
+    REQUIRE(hpp.find("const char* greeting();") != std::string::npos);
+    REQUIRE(hpp.find("} // namespace skeleton") != std::string::npos);
+}
+
+TEST_CASE("create_project: library impl includes header + greeting impl", "[project][1.2.1]") {
+    CwdGuard guard;
+
+    create_project("skeleton", "shared");
+
+    auto cpp = file_read(guard.temp_dir / "skeleton/src/skeleton.cpp");
+    REQUIRE(cpp.find("#include \"skeleton.hpp\"") != std::string::npos);
+    REQUIRE(cpp.find("namespace skeleton {") != std::string::npos);
+    REQUIRE(cpp.find("const char* greeting()") != std::string::npos);
+    REQUIRE(cpp.find("Hello from skeleton!") != std::string::npos);
+}
+
+// ===================================================================
+// 1.2.1: sanitize_namespace()
+// ===================================================================
+
+TEST_CASE("sanitize_namespace: replaces - . and space with _", "[project][1.2.1]") {
+    REQUIRE(sanitize_namespace("my-lib") == "my_lib");
+    REQUIRE(sanitize_namespace("my.lib") == "my_lib");
+    REQUIRE(sanitize_namespace("my lib") == "my_lib");
+    REQUIRE(sanitize_namespace("my-lib.v2") == "my_lib_v2");
+    REQUIRE(sanitize_namespace("plain_name") == "plain_name");
+    REQUIRE(sanitize_namespace("a-b.c d") == "a_b_c_d");
 }
 
 // ===================================================================

@@ -7,6 +7,17 @@
 
 namespace ezmk::project {
 
+// 1.2.1: '-', '.', ' ' → '_' so the project name is a valid C++ namespace
+// identifier. File names keep the original name (filesystem allows these
+// characters); only the C++ identifier needs sanitizing.
+std::string sanitize_namespace(const std::string& name) {
+    std::string ns = name;
+    for (char& c : ns) {
+        if (c == '-' || c == '.' || c == ' ') c = '_';
+    }
+    return ns;
+}
+
 void create_project(const std::string& name, const std::string& project_type,
                     bool disable_git_init, bool disable_gitignore) {
     fs::path root = fs::current_path() / name;
@@ -26,8 +37,40 @@ void create_project(const std::string& name, const std::string& project_type,
     fs::create_directories(root / ".ezmk/temp");
     fs::create_directories(root / ".ezmk/cache");
 
-    // src/main.cpp (skip for utils — no C++ code needed)
-    if (project_type != "utils") {
+    // 1.2.1: source templates branch by project type —
+    //   executable → src/main.cpp (Hello world entry, unchanged)
+    //   static/shared → include/<name>.hpp + src/<name>.cpp library skeleton
+    //                   (no main.cpp — a library never links one)
+    //   utils → no C++ code at all (utils/ holds Lua scripts)
+    if (project_type == "static" || project_type == "shared") {
+        const std::string ns = sanitize_namespace(name);
+
+        std::string hpp = "#pragma once\n"
+                          "\n"
+                          "// " + name + " — 示例公共 API。\n"
+                          "// 替换为你的库接口：头文件放 include/，实现放 src/。\n"
+                          "\n"
+                          "namespace " + ns + " {\n"
+                          "\n"
+                          "// 示例函数：返回一条问候消息。\n"
+                          "const char* greeting();\n"
+                          "\n"
+                          "} // namespace " + ns + "\n";
+
+        std::string cpp = "#include \"" + name + ".hpp\"\n"
+                          "\n"
+                          "namespace " + ns + " {\n"
+                          "\n"
+                          "const char* greeting() {\n"
+                          "    return \"Hello from " + name + "!\";\n"
+                          "}\n"
+                          "\n"
+                          "} // namespace " + ns + "\n";
+
+        util::file_write(root / "include" / (name + ".hpp"), hpp);
+        util::file_write(root / "src" / (name + ".cpp"), cpp);
+    } else if (project_type != "utils") {
+        // executable (default) and any other non-utils type: Hello world entry.
         std::string main_cpp = R"(#include <iostream>
 
 int main(int argc, char **argv){
@@ -37,6 +80,7 @@ int main(int argc, char **argv){
 )";
         util::file_write(root / "src/main.cpp", main_cpp);
     }
+    // utils: no C++ code — only the utils/ directory created below.
 
     // For utils projects, create the utils/ directory for Lua scripts
     if (project_type == "utils") {
