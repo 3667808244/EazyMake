@@ -50,6 +50,25 @@ inline constexpr const char* EZMK_LOGO = "";
 CPPEOF
 fi
 
+# 1.2.3: Generate embedded example data (examples/ → C++ table for `ezmk example`)
+if command -v python3 &> /dev/null; then
+    python3 scripts/embed_examples.py examples/ > src/example_data.cpp
+elif command -v python &> /dev/null; then
+    python scripts/embed_examples.py examples/ > src/example_data.cpp
+else
+    echo "Warning: Python not found — example data will be empty" >&2
+    cat > src/example_data.cpp << 'CPPEOF'
+// Auto-generated stub — Python was not available at build time.
+#include "ezmk/example.hpp"
+namespace ezmk::example {
+const std::vector<Example>& embedded_examples() {
+    static const std::vector<Example> examples = {};
+    return examples;
+}
+}
+CPPEOF
+fi
+
 # Version tag — embedded in the binary for "ezmk version" output.
 # Write to a header file to avoid platform-specific -D quoting issues.
 EZMK_VERSION="${EZMK_VERSION:-1.2.1}"
@@ -71,7 +90,7 @@ SRC="$COMMON_SRC src/main.cpp"
 # replaces main.cpp.
 LUA_RUNTIME_SRC="$COMMON_SRC src/ezmk_lua_main.cpp"
 # Exclude main.cpp for tests (it has its own main() function; catch2_impl.cpp provides main)
-TEST_SRC="src/build.cpp src/cache.cpp src/compile_db.cpp src/export.cpp src/import.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lockfile.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
+TEST_SRC="src/build.cpp src/cache.cpp src/compile_db.cpp src/export.cpp src/import.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/example_data.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lockfile.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
 INCLUDES="-I include/ -I include/vendor/ -I include/vendor/lua/"
 LUA_DEFINES="-DLUA_COMPAT_5_3"
 OUTPUT="build/ezmk"
