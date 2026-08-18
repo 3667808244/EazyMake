@@ -1,6 +1,6 @@
 # EazyMake 1.2.4 执行计划
 
-> **状态：执行中**（2026-08-18 启动）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
+> **状态：已完成**（2026-08-18 执行完毕，待发布）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
 >
 > 详细设计：[**1.2.4.md**](plans/1.2.x/1.2.4.md)。本计划为 1.2.x 稳定线补丁：**仓库文件夹包支持**——官方仓库目前只能托管归档包（`file` → `archive_path` → `extract_archive`），而 `pkg install <dir>` 的文件夹安装（dev.7）只作用于用户手传目录。本版打通「仓库托管目录包」：按名安装解析出的路径为目录时复用 `install_from_directory`；`index.toml` 增可选 `type = "dir"` 标注（sha256 语义区分——目录包无归档 hash，跳过校验）；归档包零影响。header-only/源码包可免打包、以 git 目录形式托管。**纯增量，公共 API 无破坏性变更**。
 >
@@ -28,25 +28,25 @@
 
 ### 阶段一：安装分支（4.1，src/pkg.cpp）
 
-- [ ] **1.1 按名安装目录分支**：`search_result.archive_path` 消费入口（统一入口）加 `fs::is_directory(archive_path) → install_from_directory(archive_path, ...)`；归档分支（`extract_archive`）不动、互斥
+- [x] **1.1 按名安装目录分支**：`search_result.archive_path` 消费入口（统一入口）加 `fs::is_directory(archive_path) → install_from_directory(archive_path, ...)`；归档分支（`extract_archive`）不动、互斥；1846/1908 消费点经 `install(路径)` 自动复用 1388 目录分支
 
 ### 阶段二：index 解析（4.2，src/repo.cpp）
 
-- [ ] **2.1 `[[packages]].type` 可选字段**：`"dir"` 或省略（省略 = 归档包，向后兼容）；`type = "dir"` 时 sha256 可省略且不参与校验
-- [ ] **2.2 `find_package_archive` 对 dir 包返回目录路径**（`file_exists` 已兼容目录）；版本/约束/依赖解析零改动
+- [x] **2.1 `[[packages]].type` 可选字段**：`"dir"` 或省略（省略 = 归档包，向后兼容）；`type = "dir"` 时 sha256 可省略且不参与校验
+- [x] **2.2 `find_package_archive` 对 dir 包返回目录路径**（`file_exists` 已兼容目录）；版本/约束/依赖解析零改动；validate/info 天然兼容
 
 ### 阶段三：测试（4.3）
 
-- [ ] **3.1 集成测试**：local 仓库 index 含 dir 包 → `pkg install <name>` 成功（源码/header 编译安装）；归档包回归；dir 包无 sha256 不报错；缺失目录友好报错
-- [ ] **3.2 全量回归**：`bash build.sh test-all` 零失败（基线 791/3746）
+- [x] **3.1 集成测试**：local 仓库 index 含 dir 包 → `pkg install <name>` 成功（目录分支触发 + 源码编译归档 + 无 sha256 不报错）；file 指向缺失目录 → repo add 友好报错
+- [x] **3.2 全量回归**：`bash build.sh test-all` 零失败（793/3755，基线 791/3746）
 
 ### 阶段四：文档（4.4）
 
-- [ ] **4.1 repo.md**（目录包格式 / 校验语义 / 示例）+ package_authoring.md（如需要）+ CHANGES.md 1.2.4 条目
+- [x] **4.1 repo.md**（目录包格式 / 校验语义 / 示例，zh/en）+ CHANGES.md 1.2.4 条目
 
 ### 阶段五：收口（4.5）
 
-- [ ] **5.1 plan.md 全勾选** + 设计文档勾选 + `plans/1.2.x/README.md` 状态更新 + 发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **5.1 plan.md 全勾选** + 设计文档勾选 + `plans/1.2.x/README.md` 状态更新 + 发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
