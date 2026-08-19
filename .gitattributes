@@ -1,0 +1,9 @@
+# EazyMake — line-ending normalization.
+#
+# examples/ is the single source of truth for `ezmk example`: files are embedded
+# byte-for-byte at build time (scripts/embed_examples.py) and the anti-drift test
+# compares them exactly. Force LF on every platform so a Windows checkout cannot
+# turn them into CRLF (which would make the embedded table differ from the source
+# tree). All other text files follow the platform default (git autocrlf).
+
+examples/** text eol=lf

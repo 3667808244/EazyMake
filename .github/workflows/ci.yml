@@ -39,11 +39,13 @@ jobs:
 
       # 1.2.3: bootstrap-verify the six built-in examples — `ezmk example <name>`
       # then build/test each. GitHub-hosted runners have full outbound network,
-      # so with-packages installs fmt and with-tests installs catch2.
+      # so with-packages installs fmt and with-tests installs catch2. The runner
+      # is a clean environment: register the official repo first.
       - name: Bootstrap-verify built-in examples (1.2.3)
         run: |
           set -euo pipefail
           EZMK="$GITHUB_WORKSPACE/build/ezmk"
+          "$EZMK" repo add -u https://github.com/3667808244/ezmk-repo.git --name official
           cd "$RUNNER_TEMP"
           for name in hello greeter with-hooks cmake-interop; do
             "$EZMK" example "$name"

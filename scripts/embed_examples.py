@@ -49,7 +49,7 @@ def main():
         description = ""
         desc_path = os.path.join(edir, "description.txt")
         if os.path.isfile(desc_path):
-            with open(desc_path, "r", encoding="utf-8") as f:
+            with open(desc_path, "r", encoding="utf-8", newline="") as f:
                 description = f.read().strip()
 
         files = []
@@ -60,7 +60,11 @@ def main():
                     continue
                 fpath = os.path.join(root, fname)
                 rel = os.path.relpath(fpath, edir).replace("\\", "/")
-                with open(fpath, "r", encoding="utf-8") as f:
+                # newline="" — keep the file's original line endings (CRLF on a
+                # Windows checkout). Text mode would normalize \r\n → \n and the
+                # embedded table would drift from the source tree (the
+                # anti-drift test compares byte-for-byte).
+                with open(fpath, "r", encoding="utf-8", newline="") as f:
                     content = f.read()
                 files.append((rel, content))
 
@@ -88,7 +92,12 @@ def main():
     out.append("}")
     out.append("")
     out.append("} // namespace ezmk::example")
-    print("\n".join(out))
+
+    # Write raw bytes: on Windows, print()/stdout in redirected (text) mode
+    # translates every \n to \r\n, which would corrupt the raw string contents
+    # (a CRLF source line would become CR+CR+LF). buffer.write emits the exact
+    # bytes so the embedded table matches the source files byte-for-byte.
+    sys.stdout.buffer.write(("\n".join(out) + "\n").encode("utf-8"))
 
 
 if __name__ == "__main__":
