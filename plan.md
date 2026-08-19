@@ -1,6 +1,6 @@
 # EazyMake 1.2.4 执行计划
 
-> **状态：已完成**（2026-08-18 执行完毕，待发布）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
+> **状态：已发布**（2026-08-18，tag `v1.2.4`，GitHub Release + Homebrew tap + winget PR #420487 + pacman PKGBUILD 已同步）。1.2.x 系列路线图见 [`plans/1.2.x/README.md`](plans/1.2.x/README.md)。
 >
 > 详细设计：[**1.2.4.md**](plans/1.2.x/1.2.4.md)。本计划为 1.2.x 稳定线补丁：**仓库文件夹包支持**——官方仓库目前只能托管归档包（`file` → `archive_path` → `extract_archive`），而 `pkg install <dir>` 的文件夹安装（dev.7）只作用于用户手传目录。本版打通「仓库托管目录包」：按名安装解析出的路径为目录时复用 `install_from_directory`；`index.toml` 增可选 `type = "dir"` 标注（sha256 语义区分——目录包无归档 hash，跳过校验）；归档包零影响。header-only/源码包可免打包、以 git 目录形式托管。**纯增量，公共 API 无破坏性变更**。
 >

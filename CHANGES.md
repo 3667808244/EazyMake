@@ -31,6 +31,8 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 - **目录包内容哈希 / 增量同步语义**（非归档 sha256）：归 2.0.0 或后续评估；本版以 `is_directory` + 可选 `type` 标注的最小实现为准
 - **官方仓库是否切换 header-only 包为目录形式**：由 ezmk-repo 维护决定，本版只提供能力
+- **macOS Intel（x64）**：仍无预编译产物（`macos-13` runner 在 free tier 不分配，job 持续排队）——与 1.2.0/1.2.1 相同
+- **winget**：1.2.4 PR（`microsoft/winget-pkgs#420487`）已提交，待 CI + 版主人工审批（1.2.1 PR `#419171` 仍在队列）
 
 ---
 
