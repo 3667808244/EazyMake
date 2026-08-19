@@ -30,14 +30,23 @@ fs::path find_examples_dir() {
     return {};
 }
 
-// All regular files under an example dir, as forward-slash relative paths
-// (excluding description.txt — it is metadata, not generated content).
+// All scaffolded files under an example dir, as forward-slash relative paths
+// (excluding description.txt — metadata, not generated content, and the
+// generated build/.ezmk dirs + binary artifacts — matching embed_examples.py,
+// so the embedded table and the source tree are compared on the same set).
 std::set<std::string> list_files(const fs::path& dir) {
     std::set<std::string> files;
     for (auto& e : fs::recursive_directory_iterator(dir)) {
         if (e.is_regular_file()) {
             auto rel = fs::relative(e.path(), dir).generic_string();
             if (rel == "description.txt") continue;
+            auto first = rel.substr(0, rel.find('/'));
+            if (first == "build" || first == ".ezmk" || first == ".git") continue;
+            auto ext = e.path().extension().string();
+            if (ext == ".exe" || ext == ".o" || ext == ".obj" || ext == ".a" ||
+                ext == ".lib" || ext == ".dll" || ext == ".so" || ext == ".dylib" ||
+                ext == ".zst" || ext == ".tar" || ext == ".gz" || ext == ".zip")
+                continue;
             files.insert(rel);
         }
     }

@@ -25,6 +25,21 @@ namespace ezmk::build {
 
 // ---- helpers ----
 
+// 1.2.4-fix: the test-compile cache was never signature-validated — the
+// record's compile_options_signature stayed empty, so every test source
+// recompiled on each `ezmk test`. Mirror the build path: set the signature
+// and drop cached entries when it changes.
+static void validate_test_cache_signature(cache::CacheRecord& record,
+                                          const cache::CompileInput& cin) {
+    auto cur_sig = cache::compile_options_signature(cin.compile, cin.extra_includes,
+                                                    cin.lang.std_flag, cin.stdlib,
+                                                    cin.use_pic);
+    if (record.compile_options_signature != cur_sig) {
+        record.compile_options_signature = cur_sig;
+        record.files.clear();
+    }
+}
+
 // 0.2.2+: Check if a string is a plain integer (no quoting needed for -D flags)
 static bool is_plain_integer(const std::string& s) {
     if (s.empty()) return false;
@@ -1829,6 +1844,7 @@ void run_tests(const config::EzConfig& cfg,
         if (!user_has_main && !test_main_cpp.empty()) cin.sources.push_back(test_main_cpp);
         fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
         auto test_record = cache::load_record(test_record_path);
+        validate_test_cache_signature(test_record, cin);
         auto comp_result = cache::compile_sources(cin, test_record);
         cache::save_record(test_record, test_record_path);
         if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
@@ -2009,6 +2025,7 @@ void run_tests(const config::EzConfig& cfg,
         // 1.2.0-dev.11: shared test compile cache (per-test entries accumulate)
         fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
         auto test_record = cache::load_record(test_record_path);
+        validate_test_cache_signature(test_record, cin);
 
         for (auto& ts : test_sources) {
             auto test_start = std::chrono::steady_clock::now();

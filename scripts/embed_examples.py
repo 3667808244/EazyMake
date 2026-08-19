@@ -54,9 +54,17 @@ def main():
 
         files = []
         for root, dirs, fnames in os.walk(edir):
-            dirs.sort()
+            # Prune generated directories — examples are buildable in-repo and
+            # `ezmk build`/`test` produce build/, .ezmk/ (cache/pkg/obj). These
+            # are NOT part of the scaffold and must not be embedded (also: binary
+            # objects can't be read as UTF-8).
+            dirs[:] = [d for d in dirs if d not in ("build", ".ezmk", ".git")]
             for fname in sorted(fnames):
                 if fname == "description.txt":
+                    continue
+                if os.path.splitext(fname)[1].lower() in (
+                        ".exe", ".o", ".obj", ".a", ".lib", ".dll", ".so", ".dylib",
+                        ".zst", ".tar", ".gz", ".zip", ".png", ".jpg", ".ico"):
                     continue
                 fpath = os.path.join(root, fname)
                 rel = os.path.relpath(fpath, edir).replace("\\", "/")
