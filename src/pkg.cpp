@@ -1382,6 +1382,10 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
     fs::path input(pkg_file);
 
+    // 1.2.4: holds the repo-provided sha256 copy — expected_sha256 is a
+    // string_view param and must not point into the short-lived search_result.
+    std::string repo_sha;
+
     // 1.2.0-dev.7: directory install — a source directory is a valid package
     // source (include/ + src/ + ezmk.toml, or precompiled/header-only). No
     // archive → no SHA-256 verification (emit a notice if --sha256 was given).
@@ -1438,9 +1442,14 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 util::fatal(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_file}});
             }
             archive_path = search_result.archive_path;
-            // Use sha256 from index.toml if user didn't provide one explicitly
+            // Use sha256 from index.toml if user didn't provide one explicitly.
+            // expected_sha256 is a string_view param — bind it to a local copy
+            // (repo_sha) that outlives this block: search_result dies at the end
+            // of the if, and a string_view into its sha256 would dangle (the
+            // later SHA-256 check would read freed memory — CI-only corruption).
             if (expected_sha256.empty() && !search_result.sha256.empty()) {
-                expected_sha256 = search_result.sha256;
+                repo_sha = search_result.sha256;
+                expected_sha256 = repo_sha;
             }
             util::info(ezmk::i18n::I18nKey::found_in_repo, {{"path", archive_path.string()}});
 
