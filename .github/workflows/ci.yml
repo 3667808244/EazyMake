@@ -46,6 +46,9 @@ jobs:
           set -euo pipefail
           EZMK="$GITHUB_WORKSPACE/build/ezmk"
           "$EZMK" repo add -u https://github.com/3667808244/ezmk-repo.git --name official
+          # Debug: inspect the cached index.toml's catch2 sha256 line (CI-only
+          # SHA-256 mismatch investigation).
+          grep -A2 'name = "catch2"' "$HOME/.local/ezmk/repo/.cache/official/index.toml" | od -c | head -20
           cd "$RUNNER_TEMP"
           for name in hello greeter with-hooks cmake-interop; do
             "$EZMK" example "$name"
