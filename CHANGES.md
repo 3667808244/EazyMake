@@ -32,7 +32,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 - **源码包与预编译包归档同名**（`<name>-<version>.tar.gz`）：一次 pack 仅一种格式；同时发布两格式需用不同 `--output` 目录
 - **macOS Intel（x64）**：仍无预编译产物（`macos-13` runner 在 free tier 不分配，job 持续排队）——与 1.2.0/1.2.1 相同
-- **winget**：1.2.4 PR（`microsoft/winget-pkgs#420487`）已提交，待 CI + 版主人工审批（1.2.1 PR `#419171` 仍在队列）
+- **winget**：1.2.5 PR（`microsoft/winget-pkgs#421464`）已提交，待 CI + 版主人工审批（1.2.4 PR `#420487`、1.2.1 PR `#419171` 仍在队列）
 
 ---
 
