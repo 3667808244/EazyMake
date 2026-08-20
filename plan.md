@@ -23,13 +23,14 @@
 | 1 | 独立配置文件 `ezmk-workspace.toml` + `locate_workspace_root()` 定位 | P0 |
 | 2 | 成员依赖声明：成员 `ezmk.toml` 的 `[depends] workspace = ["<成员名>"]`（命名空间区别于外部包） | P0 |
 | 3 | 依赖约束：**单向非循环**（环在配置校验期拒绝）+ 被依赖成员为 `static`（产物 `build/lib<name>.a`）；无版本（开发中即改即用） | P0 |
-| 4 | 顶层 `ezmk workspace` 命令组（list/build/test/clean/--member（含依赖闭包）/--stop-on-error） | P0 |
-| 5 | 构建语义：Kahn 拓扑分层（依赖层先构建）+ 层内并行 + 兄弟产物自动注入（`-I include` + `-L build -l<name>`） | P0 |
+| 4 | 顶层 `ezmk workspace` 命令组（list/build/test/clean/--member（含依赖闭包）/--stop-on-error）+ `build/test/clean` 附 `-w` 重定向 | P0 |
+| 5 | 构建语义：Kahn 拓扑分层（依赖层先构建）+ 层内并行 + 兄弟产物自动注入（**成员自发现，零环境变量**） | P0 |
 | 6 | 增量：改库 `.cpp` → 库重编 + 消费者仅重链接；改库 `.h` → 消费者经 depfile 自动重编 | P0 |
 | 7 | 安全边界：路径逃逸拒绝 + 环拒绝 + 依赖成员类型校验 | P0 |
-| 8 | 测试（单元 + 集成）+ 全量零回归 | P0 |
-| 9 | 文档：cli.md / README / 教程 / CHANGES.md 1.3.0 条目 + non-goals「多项目工作区」条款更新 | P1 |
-| 10 | 公共 API 无破坏性变更 | P0 |
+| 8 | **命令行长度兜底**：编译/链接命令超阈值 → GCC 响应文件（大型项目不炸） | P1 |
+| 9 | 测试（单元 + 集成，含坑位锁定用例）+ 全量零回归 | P0 |
+| 10 | 文档：cli.md / README / 教程 / CHANGES.md 1.3.0 条目 + non-goals「多项目工作区」条款更新 | P1 |
+| 11 | 公共 API 无破坏性变更 | P0 |
 
 ## 3 执行阶段（每阶段一个 commit）
 
@@ -43,18 +44,20 @@
 
 ### dev.2 — 命令、拓扑与注入（1.3.0-dev.2）
 
-- [ ] **2.1 `Command::Workspace*` + cli 解析**（list/build/test/clean/--member/--stop-on-error/-j）+ main 分发 + `-w` 开关
+- [ ] **2.1 `Command::Workspace*` + cli 解析**（list/build/test/clean/--member/--stop-on-error/-j）+ main 分发 + `-w` 重定向 + help 文本
 - [ ] **2.2 Kahn 拓扑分层**：`topo_layers(ws)`（依赖层先构建，同层并行）
-- [ ] **2.3 子进程执行器**（`src/workspace_build.cpp`）：每成员子进程（`--no-workspace`）+ 层内 ThreadPool + 输出成员前缀 + 结果汇总（成功/失败/耗时/skipped）+ 退出码
-- [ ] **2.4 兄弟产物注入**：build.cpp 读 `EZK_WS_*` 环境变量追加 `-I/-L/-l`（签名含注入参数 → 依赖库参数变化自动重编）
-- [ ] **2.5 跨成员增量**：库 `.cpp` → 依赖者重链；库 `.h` → 依赖者经 depfile 重编
-- [ ] **2.6 i18n**：`workspace_*` key（X-macro 三向一致，`check_i18n.py` 通过）
+- [ ] **2.3 子进程执行器**（`src/workspace_build.cpp`）：每成员子进程 + 层内 ThreadPool + 输出成员前缀 + 结果汇总（成功/失败/耗时/skipped）+ 退出码；`--stop-on-error` = 失败后停派发（本层未启动 + 后续层 skipped）、不 kill 在跑成员
+- [ ] **2.4 兄弟产物注入 = 成员自发现**：build.cpp 读 `[depends] workspace` → locate/load（复用 dev.1）→ 拼 `-I/-L/-l`（存在性门控）；**零环境变量**（坑 1）；签名含注入参数
+- [ ] **2.5 命令行长度兜底**：编译/链接命令 >16K → GCC 响应文件 `@<rsp>`（坑 1 兜底）
+- [ ] **2.6 跨成员增量**：库 `.cpp` → 依赖者重链；库 `.h` → 依赖者经 depfile 重编
+- [ ] **2.7 i18n**：`workspace_*` key（X-macro 三向一致，`check_i18n.py` 通过）
 
 ### dev.3 — 测试与 CI（1.3.0-dev.3）
 
-- [ ] **3.1 集成测试**：3 成员 workspace（1 库 + 2 可执行，带 `[depends] workspace`）→ list / build -j / test / 依赖构建顺序 / 跨成员增量（库 .cpp→重链、库 .h→重编）/ clean / 失败汇总 + --stop-on-error / --member 含闭包 / 校验拒绝（路径逃逸、环、非 static 被依赖、嵌套、成员缺失）
-- [ ] **3.2 CI**：ubuntu job 追加 workspace 冒烟步骤（含依赖成员 + 二次构建增量断言）
-- [ ] **3.3 全量回归**：`bash build.sh test-all` 零失败（基线 793/3755 + workspace 用例）
+- [ ] **3.1 集成测试**：3 成员 workspace（1 库 + 2 可执行，带 `[depends] workspace`）→ list / build -j / test / 依赖构建顺序 / 跨成员增量（库 .cpp→重链、库 .h→重编）/ clean / 失败汇总 + --stop-on-error（停派发 + skipped 计数）/ --member 含闭包 / **成员内独立构建（注入已存在产物、不触发闭包）** / **注入零环境变量** / 校验拒绝（路径逃逸、环、非 static 被依赖、嵌套、成员缺失）
+- [ ] **3.2 单测补全**：自发现注入解析（存在性门控、无 `EZK_WS_*`）+ 响应文件阈值触发（含空格路径）
+- [ ] **3.3 CI**：ubuntu job 追加 workspace 冒烟步骤（含依赖成员 + 二次构建增量断言）
+- [ ] **3.4 全量回归**：`bash build.sh test-all` 零失败（基线 793/3755 + workspace 用例）
 
 ### pre.1 — 文档与发布收口（1.3.0-pre.1）
 
@@ -79,7 +82,11 @@
 | 依赖图 = 最小形态 | **单向非循环** + 被依赖须 `static` + 无版本；环/类型在配置期 fail-fast |
 | 拓扑分层 + 层内并行 | Kahn 算法；无依赖成员 = 第 0 层（纯批量退化为特例） |
 | 子进程执行模型 | 每成员独立 `<ezmk> build/test/clean` 子进程（cwd/缓存/Lua 状态天然隔离） |
-| 产物注入走环境变量 | `EZK_WS_*` 注入 `-I/-L/-l`，**不写入**成员 `ezmk.toml`；成员文件零变更 |
+| 产物注入 = 成员自发现 | 成员进程自行 locate/load + 解析自身 `[depends] workspace` 拼 `-I/-L/-l`（存在性门控）；**零环境变量**——长度与规模无关，大型项目不炸（坑 1） |
+| 命令行长度兜底 | 编译/链接命令 >16K → GCC 响应文件 `@<rsp>`（Windows 32767 上限的通用加固，坑 1 兜底） |
+| `--member` = 含依赖闭包 | 目标成员 + 依赖按拓扑先构建（坑 2）；单成员不构建闭包 → `cd <member> && ezmk build` |
+| `--stop-on-error` 精确语义 | 失败后停派发（本层未启动 + 后续层 skipped）、在跑成员自然结束不 kill、摘要含 skipped（坑 3）；`clean` 不支持 |
+| `-w` = 重定向 | `ezmk build -w` ≡ `ezmk workspace build`；**非**「项目 + workspace 都构建」（坑 4） |
 | 复用单项目管线 | `build_compile_args` / 增量缓存 / 测试缓存按成员天然隔离 |
 | 顶层 build 不隐式降级 | workspace 纯容器根提示用 `ezmk workspace build` |
 | 与包模型互补 | 成员依赖 = 开发中源码即改即用；包（目录包/归档包）= 分发与快照隔离 |
