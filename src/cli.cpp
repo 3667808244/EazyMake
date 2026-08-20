@@ -250,9 +250,11 @@ namespace ezmk::cli
             std::vector<OptionSpec> spec = {
                 {'v', "verbose", false},
                 {'\0', "output", true},
+                {'\0', "precompiled", false},  // 1.2.5
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project pack");
             if (p.has("verbose"))     opts.verbose = true;
+            if (p.has("precompiled")) opts.precompiled = true;  // 1.2.5
             if (auto v = p.value("output"))
                 opts.output_dir = *v;
             else
@@ -949,7 +951,7 @@ namespace ezmk::cli
         // ── §2: Project init ─────────────────────────────────────
         std::cout << get(I18nKey::help_section_init) << "\n";
         row("ezmk project new  <name> [--type <t>]", I18nKey::help_project_new);
-        row("ezmk project pack [--output <dir>]", I18nKey::help_project_pack);
+        row("ezmk project pack [--output <dir>] [--precompiled]", I18nKey::help_project_pack);
         row("ezmk project cc   [-o <path>] [--profile <p>]", I18nKey::help_project_cc);
         row("ezmk project export cmake [flags]", I18nKey::help_project_export);
         row("ezmk project import [--from <fmt>] [--overwrite]", I18nKey::help_project_import);

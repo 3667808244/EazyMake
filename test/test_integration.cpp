@@ -697,6 +697,93 @@ TEST_CASE("integration: pkg install from a local packed archive (dev.11)", "[int
     REQUIRE((l.out + l.err).find("arc") != std::string::npos);
 }
 
+// 1.2.5: project pack default = source package (src/ + include/ + ezmk.toml,
+// no precompiled marker — compiled on the consumer side); --precompiled keeps
+// the legacy prebuilt archive (include/ + lib/ + precompiled marker).
+TEST_CASE("integration: project pack source default + --precompiled (1.2.5)", "[integration][1.2.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    // A static library project (include/ + src/ + ezmk.toml) to pack.
+    fs::path pkg_dir = tmp.path / "pkg125";
+    fs::create_directories(pkg_dir / "include" / "pkg125");
+    fs::create_directories(pkg_dir / "src");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"pkg125\"\ntype = \"static\"\nversion = \"1.0.0\"\n");
+    file_write(pkg_dir / "include" / "pkg125" / "pkg125.hpp",
+        "#pragma once\nint pkg125_answer();\n");
+    file_write(pkg_dir / "src" / "pkg125.cpp",
+        "#include \"pkg125/pkg125.hpp\"\nint pkg125_answer() { return 125; }\n");
+
+    fs::path out_dir = tmp.path / "out";
+    fs::create_directories(out_dir);
+
+    // 1) Default pack → source package; installing it compiles on the consumer
+    //    side (no precompiled marker shipped).
+    ProcResult pack_r = run_ezmk("project pack --output \"" + out_dir.string() + "\"", pkg_dir);
+    INFO("pack stderr: " << pack_r.err);
+    REQUIRE(pack_r.exit_code == 0);
+    fs::path archive = out_dir / "pkg125-1.0.0.tar.gz";
+    REQUIRE(fs::exists(archive));
+
+    std::string proj_name = "app125";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore", tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    ProcResult inst_r = run_ezmk("pkg install \"" + archive.string() + "\" -p -y", proj_dir);
+    INFO("source install stderr: " << inst_r.err);
+    REQUIRE(inst_r.exit_code == 0);
+    std::string installed_toml = file_read(proj_dir / ".ezmk" / "pkg" / "pkg125" / "ezmk.toml");
+    REQUIRE(installed_toml.find("precompiled") == std::string::npos);
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "pkg125" / "include" / "pkg125" / "pkg125.hpp"));
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "pkg125" / "build" / "libpkg125.a"));
+
+    // 2) --precompiled → legacy prebuilt archive (marker + lib/ artifacts).
+    fs::path out2 = tmp.path / "out2";
+    fs::create_directories(out2);
+    ProcResult pc_r = run_ezmk(
+        "project pack --precompiled --output \"" + out2.string() + "\"", pkg_dir);
+    INFO("--precompiled stderr: " << pc_r.err);
+    REQUIRE(pc_r.exit_code == 0);
+    fs::path archive2 = out2 / "pkg125-1.0.0.tar.gz";
+    REQUIRE(fs::exists(archive2));
+
+    std::string proj2 = "app125b";
+    ProcResult new2 = run_ezmk(
+        "project new " + proj2 + " --disable-git-init --disable-gitignore", tmp.path);
+    REQUIRE(new2.exit_code == 0);
+    fs::path proj2_dir = tmp.path / proj2;
+    ProcResult inst2 = run_ezmk("pkg install \"" + archive2.string() + "\" -p -y", proj2_dir);
+    INFO("--precompiled install stderr: " << inst2.err);
+    REQUIRE(inst2.exit_code == 0);
+    std::string installed2_toml = file_read(proj2_dir / ".ezmk" / "pkg" / "pkg125" / "ezmk.toml");
+    REQUIRE(installed2_toml.find("precompiled") != std::string::npos);
+    REQUIRE(fs::exists(proj2_dir / ".ezmk" / "pkg" / "pkg125" / "lib" / "libpkg125.a"));
+
+    // 3) --precompiled on a non-static project → fatal.
+    fs::path exe_dir = tmp.path / "exe125";
+    fs::create_directories(exe_dir / "src");
+    file_write(exe_dir / "ezmk.toml",
+        "[project]\nname = \"exe125\"\ntype = \"executable\"\nversion = \"1.0.0\"\n");
+    file_write(exe_dir / "src" / "main.cpp", "int main() { return 0; }\n");
+    ProcResult bad_r = run_ezmk(
+        "project pack --precompiled --output \"" + out2.string() + "\"", exe_dir);
+    REQUIRE(bad_r.exit_code != 0);
+
+    // 4) Source pack of an executable project is allowed (type relaxed) and
+    //    never triggers a build-first step.
+    ProcResult exe_pack = run_ezmk(
+        "project pack --output \"" + out2.string() + "\"", exe_dir);
+    INFO("exe source pack stderr: " << exe_pack.err);
+    REQUIRE(exe_pack.exit_code == 0);
+    REQUIRE(fs::exists(out2 / "exe125-1.0.0.tar.gz"));
+}
+
 // Scenario 7: version and help commands work
 // ==============================================================
 TEST_CASE("integration: basic CLI commands", "[integration]") {

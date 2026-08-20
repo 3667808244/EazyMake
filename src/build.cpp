@@ -1418,42 +1418,58 @@ void install_project(const config::EzConfig& cfg,
          {"size", size_str}}));
 }
 
-// 1.1.0-dev.2: pack_project — create a distributable .tar.gz from a static project
+// 1.2.5: copy a directory tree into the pack staging dir, pruning build
+// residue (build/ .ezmk/ .git) and binary artifacts so they never leak into
+// a source package.
+static void copy_pack_source_dir(const fs::path& from, const fs::path& to) {
+    std::error_code ec;
+    fs::create_directories(to, ec);
+    static const std::set<std::string> prune_dirs = {"build", ".ezmk", ".git"};
+    static const std::set<std::string> prune_exts = {
+        ".o", ".obj", ".a", ".lib", ".so", ".dylib", ".dll", ".exe",
+        ".rsp", ".log"};
+    for (auto it = fs::directory_iterator(from, ec);
+         !ec && it != fs::directory_iterator(); it.increment(ec)) {
+        const fs::path& p = it->path();
+        std::string name = p.filename().string();
+        if (it->is_directory(ec)) {
+            if (prune_dirs.count(name)) continue;
+            copy_pack_source_dir(p, to / name);
+        } else if (it->is_regular_file(ec)) {
+            if (name.size() > 7 &&
+                name.compare(name.size() - 7, 7, ".tar.gz") == 0)
+                continue;
+            if (prune_exts.count(p.extension().string())) continue;
+            fs::copy_file(p, to / name, fs::copy_options::overwrite_existing, ec);
+            if (ec)
+                throw std::runtime_error("failed to copy " + p.string() +
+                                         " (" + ec.message() + ")");
+        }
+        ec.clear();
+    }
+}
+
+// 1.1.0-dev.2: pack_project — create a distributable .tar.gz from a project.
+// 1.2.5: default output is a SOURCE package (src/ + include/ + ezmk.toml,
+// platform-independent, compiled on the consumer side); --precompiled keeps
+// the legacy prebuilt archive (include/ + lib/ + precompiled marker).
 void pack_project(const config::EzConfig& cfg,
                   const cli::ProjectPackOptions& opts,
                   const fs::path& proj_root) {
     std::string name = cfg.project.name;
     std::string version = cfg.project.version;
+    const bool precompiled = opts.precompiled;  // 1.2.5
 
-    // Step 1: Validate project type
-    if (cfg.project.type != "static") {
-        util::fatal("project pack requires type=\"static\", got type=\"" +
+    // 1.2.5: the static-only restriction applies to --precompiled (a prebuilt
+    // archive must ship a compiled static lib). The default source package is
+    // platform-independent and accepts any project type — installed packages
+    // are always compiled as static libs anyway (compile_package).
+    if (precompiled && cfg.project.type != "static") {
+        util::fatal("project pack --precompiled requires type=\"static\", got type=\"" +
                      cfg.project.type + "\"");
     }
 
-    // Step 2: Build the project if needed
-    // 1.2.0-dev.11: archive name comes from project_artifact_paths() — the
-    // old "lib<name>.a then lib<name>.lib" probe missed MSVC static output
-    // (<name>.lib, no "lib" prefix).
-    bool is_msvc = (toolchain::detect_toolchain().family ==
-                    toolchain::CompilerFamily::Msvc);
-    auto archive_path =
-        project_artifact_paths(proj_root / "build", name, cfg.project.type, is_msvc).primary;
-
-    if (!util::file_exists(archive_path)) {
-        util::info("building project before packing...");
-        cli::BuildOptions build_opts;
-        build_opts.jobs = 0; // auto-detect
-        build_project(cfg, build_opts);
-
-        // Re-check
-        if (!util::file_exists(archive_path)) {
-            util::fatal("build did not produce " + archive_path.filename().string() +
-                        " — cannot pack");
-        }
-    }
-
-    // Step 3: Create staging directory
+    // Step 1: Create staging directory
     fs::path output_dir = fs::absolute(opts.output_dir);
     std::string archive_name = name + "-" + version + ".tar.gz";
     std::string stage_name = name + "-" + version;
@@ -1466,56 +1482,112 @@ void pack_project(const config::EzConfig& cfg,
         std::error_code ec;
         fs::remove_all(stage_dir, ec);
     }
-    fs::create_directories(stage_dir / "lib");
+    fs::create_directories(stage_dir);
 
-    // Step 4: Copy files
-    // include/
-    auto include_src = proj_root / "include";
-    if (util::file_exists(include_src)) {
-        util::copy_recursive(include_src, stage_dir / "include");
+    if (precompiled) {
+        // ---- --precompiled: prebuilt archive (legacy default) ----
+        // 1.2.0-dev.11: archive name comes from project_artifact_paths() — the
+        // old "lib<name>.a then lib<name>.lib" probe missed MSVC static output
+        // (<name>.lib, no "lib" prefix).
+        bool is_msvc = (toolchain::detect_toolchain().family ==
+                        toolchain::CompilerFamily::Msvc);
+        auto archive_path =
+            project_artifact_paths(proj_root / "build", name, cfg.project.type, is_msvc).primary;
+
+        if (!util::file_exists(archive_path)) {
+            util::info("building project before packing...");
+            cli::BuildOptions build_opts;
+            build_opts.jobs = 0; // auto-detect
+            build_project(cfg, build_opts);
+
+            // Re-check
+            if (!util::file_exists(archive_path)) {
+                util::fatal("build did not produce " + archive_path.filename().string() +
+                            " — cannot pack");
+            }
+        }
+
+        fs::create_directories(stage_dir / "lib");
+
+        // include/
+        auto include_src = proj_root / "include";
+        if (util::file_exists(include_src)) {
+            util::copy_recursive(include_src, stage_dir / "include");
+        }
+
+        // lib/lib<name>.a
+        auto lib_dst = stage_dir / "lib" / archive_path.filename();
+        fs::copy_file(archive_path, lib_dst);
+
+        // ezmk.toml — the packed artifact ships include/ + lib/ only (no src/),
+        // so it IS a precompiled package. Mark it precompiled so install
+        // validation accepts it (validate_pkg's "missing src/" check).
+        {
+            std::string toml = util::file_read(proj_root / "ezmk.toml");
+            const char* ins = "\nprecompiled = true  # added by ezmk project pack --precompiled — archive ships include/ + lib/ only\n";
+            auto proj_end = toml.find("\n[", 1);  // next section header after [project]
+            if (proj_end == std::string::npos) toml += ins;
+            else toml.insert(proj_end, ins);
+            util::file_write(stage_dir / "ezmk.toml", toml);
+        }
+    } else {
+        // ---- 1.2.5: source package (default) — src_dirs + include/ + ezmk.toml ----
+        for (const auto& d : cfg.compile.src_dirs) {
+            fs::path src = d;
+            if (src.is_relative()) src = proj_root / src;
+            if (!util::file_exists(src)) {
+                util::warn(std::string("source directory not found, skipping: ") + d);
+                continue;
+            }
+            // Keep the declared relative layout (e.g. src/ → stage/src/);
+            // absolute src_dirs fall back to their basename.
+            fs::path dest = d;
+            if (!dest.is_relative()) dest = dest.filename();
+            if (util::file_exists(stage_dir / dest)) continue;  // already copied
+            copy_pack_source_dir(src, stage_dir / dest);
+        }
+        auto include_src = proj_root / "include";
+        if (util::file_exists(include_src)) {
+            copy_pack_source_dir(include_src, stage_dir / "include");
+        }
+
+        // ezmk.toml as-is — no precompiled marker (the consumer compiles the
+        // package for its own platform/toolchain).
+        std::error_code ec;
+        fs::copy_file(proj_root / "ezmk.toml", stage_dir / "ezmk.toml",
+                      fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            throw std::runtime_error("failed to copy ezmk.toml into package (" +
+                                     ec.message() + ")");
+        }
     }
 
-    // lib/lib<name>.a
-    auto lib_dst = stage_dir / "lib" / archive_path.filename();
-    fs::copy_file(archive_path, lib_dst);
-
-    // ezmk.toml — 1.2.0-dev.11: the packed artifact ships include/ + lib/
-    // only (no src/), so it IS a precompiled package. Mark it precompiled so
-    // install validation accepts it; previously the packed config (type=static,
-    // no precompiled) failed validate_pkg's "missing src/" check.
-    {
-        std::string toml = util::file_read(proj_root / "ezmk.toml");
-        const char* ins = "\nprecompiled = true  # added by ezmk project pack — archive ships include/ + lib/ only\n";
-        auto proj_end = toml.find("\n[", 1);  // next section header after [project]
-        if (proj_end == std::string::npos) toml += ins;
-        else toml.insert(proj_end, ins);
-        util::file_write(stage_dir / "ezmk.toml", toml);
-    }
-
-    // Step 5: Create archive
+    // Step: Create archive
     fs::path output_archive = output_dir / archive_name;
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_creating,
                                 {{"file", archive_name}}));
     util::create_targz(stage_dir, output_archive);
 
-    // Step 6: SHA-256
+    // Step: SHA-256
     std::string sha = crypto::sha256_file(output_archive);
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_sha256,
                                 {{"sha256", sha}}));
 
-    // Step 7: Cleanup staging (best-effort — failure to remove a temp dir should
+    // Step: Cleanup staging (best-effort — failure to remove a temp dir should
     // not fail the pack command)
     { std::error_code ec; fs::remove_all(stage_dir, ec); }
 
-    // Step 8: Verbose output — index.toml snippet
+    // Step: Verbose output — index.toml snippet
     if (opts.verbose) {
         util::info_line("-- index.toml entry --");
         std::string entry = "[[packages]]\n"
                             "name = \"" + name + "\"\n"
                             "version = \"" + version + "\"\n"
-                            "file = \"" + archive_name + "\"\n"
-                            "platform = \"" + util::detect_platform_tag() + "\"\n"
-                            "sha256 = \"" + sha + "\"\n";
+                            "file = \"" + archive_name + "\"\n";
+        if (precompiled) {  // platform-tagged artifact
+            entry += "platform = \"" + util::detect_platform_tag() + "\"\n";
+        }
+        entry += "sha256 = \"" + sha + "\"\n";
         util::info_line(entry);
     }
 

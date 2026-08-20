@@ -273,7 +273,7 @@
     "help_project_install": "Install build artifacts to prefix",
 "help_project_watch": "Watch sources and rebuild on change",
     "help_project_test": "Build and run project tests",
-    "help_project_pack": "Create distributable package (.tar.gz)",
+    "help_project_pack": "Create a distributable package (.tar.gz; source by default, --precompiled for a prebuilt archive)",
     "help_project_cc": "Generate compile_commands.json for clangd",
     "help_project_export": "Generate CMakeLists.txt from ezmk.toml",
     "help_project_import": "Import a CMake project into ezmk.toml (experimental)",

@@ -273,7 +273,7 @@
     "help_project_install": "安装构建产物到指定前缀",
 "help_project_watch": "监听源文件变更并自动重建",
     "help_project_test": "构建并运行项目测试",
-    "help_project_pack": "创建可分发的构建包 (.tar.gz)",
+    "help_project_pack": "创建可分发的包 (.tar.gz；默认源码包，--precompiled 生成预编译包)",
     "help_project_cc": "为 clangd 生成 compile_commands.json",
     "help_project_export": "从 ezmk.toml 生成 CMakeLists.txt",
     "help_project_import": "导入 CMake 项目为 ezmk.toml（实验性）",

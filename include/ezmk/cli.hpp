@@ -62,6 +62,7 @@ struct ProjectInstallOptions {
 // 1.1.0-dev.2: project pack options
 struct ProjectPackOptions {
     std::string output_dir;    // --output <dir> (default: ".")
+    bool precompiled = false;  // 1.2.5: --precompiled (default: source package)
     bool verbose = false;      // -v: show index.toml snippet
 };
 
