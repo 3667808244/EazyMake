@@ -46,10 +46,16 @@ When a requirement hits one of these, the recommended move is to grow into CMake
 ### Multi-project workspaces / inter-project references
 
 - **What**: one "workspace" where projects reference and build each other.
-- **Why not**: the configuration model has no workspace or sub-project concept. Cross-project reuse goes through packages (`[depends]` + `ezmk pkg install`), not project references.
+- **Supported since 1.3.0 (minimal form)**: `ezmk-workspace.toml` defines the member set (`[workspace] members`), with `ezmk workspace build / test / clean` for batch management. Members may declare **one-directional acyclic dependencies** (`[depends] workspace = [...]` in the member's own `ezmk.toml`); builds are topologically ordered with static-library artifact reuse (`-I <ws>/<m>/include` + `-L <ws>/<m>/build -l<m>` injected automatically) — covering the most common monorepo shape: a shared base library plus several executables.
+- **Still not designed (non-goal boundary)**:
+  - Dependency **cycles** (A→B→A, self-cycles) — rejected at configuration time; member dependency graphs must be **one-directional and acyclic**.
+  - Dependencies on members whose type is not `static` (`executable` / `shared` cannot be depended on; shared runtime dependencies are deferred).
+  - Dependency **version constraints / platform matrix / programmable build graphs** — versioning and snapshot semantics go through packages (`[depends]` + `ezmk pkg install`); the workspace is for live source-level development only.
+  - Multiple build targets inside a single project (see the "Multiple build targets" entry) — the member dependency graph does **not** open the door to per-project multi-target; each member still has exactly one artifact.
 - **Instead**:
-  - Independent projects + shared packages.
-  - For an interlocked monorepo, use CMake's multi-target model.
+  - Members with no dependencies → flat batch (plain workspace, all members build in parallel on layer 0).
+  - Versioned / distributable reuse → independent projects + shared packages.
+  - An interlocked monorepo needing a full build graph (cycles / versions / platform matrix / programmable) → use CMake's multi-target model.
 
 ## The migration path
 
