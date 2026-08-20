@@ -155,6 +155,8 @@ Header-only 包：
 适用于难以从源码编译的库（如需要 CMake、平台特定配置或复杂构建系统）。包在 `lib/` 中提供预编译的 `.a`/`.lib` 文件，而非 `src/` 中的源码。
 
 > **为什么做成可选字段？** `precompiled = true` 是用可移植性换安装速度：源码包在任何平台都能编译，预编译产物则只能在它所构建的那个平台和架构上运行。做成显式开关能让默认的源码路径保持可移植，把预编译留给真正需要的库。
+>
+> **`ezmk project pack`（1.2.5+）默认产出源码包**（`src/` + `include/` + `ezmk.toml` 原样，平台无关、消费者侧编译）；需要预编译归档时用 `ezmk project pack --precompiled`（仅 `static` 项目，产物 = `include/` + `lib/` + `precompiled = true` 标记）——与本节"优先源码包"的立场一致。
 
 ```toml
 [project]

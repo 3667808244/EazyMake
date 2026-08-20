@@ -173,6 +173,8 @@ For libraries that are difficult to build from source (e.g. require CMake, platf
 > the exact platform and architecture it was built for. Making it opt-in keeps the
 > default (source-based) path portable and reserves precompiled builds for
 > libraries that genuinely need them.
+>
+> **`ezmk project pack` (1.2.5+) produces a source package by default** (`src/` + `include/` + `ezmk.toml` as-is; platform-independent, compiled on the consumer side). Use `ezmk project pack --precompiled` for a prebuilt archive (`static` projects only; ships `include/` + `lib/` + a `precompiled = true` marker) — consistent with the "source first" stance above.
 
 ```toml
 [project]

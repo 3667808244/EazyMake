@@ -66,7 +66,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk run [build-opts] [-- <program args>]` | 构建并运行（完整形式：`ezmk project run`） |
 | `ezmk clean` | 清除缓存和临时文件（完整形式：`ezmk project clean`） |
 | `ezmk install [install-opts]` | 安装构建产物到指定前缀，1.1.0+（完整形式：`ezmk project install`） |
-| `ezmk pack [--output <dir>]` | 打包静态库项目为 `.tar.gz`，1.1.0+（完整形式：`ezmk project pack`） |
+| `ezmk pack [--output <dir>] [--precompiled]` | 打包为 `.tar.gz`（默认**源码包**，平台无关；`--precompiled` 生成预编译包，仅 `static`），1.1.0+（完整形式：`ezmk project pack`） |
 | `ezmk watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建（完整形式：`ezmk project watch`） |
 | `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
 | `ezmk project cc [-o <path>] [--profile <p>]` | 生成 `compile_commands.json`（clangd/LSP），1.2.0+ |

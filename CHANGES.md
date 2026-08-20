@@ -12,6 +12,30 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.2.5 (2026-08-19) — 测试缓存签名修复 + 默认包格式改为源码包
+
+1.2.x 稳定线补丁，合并两项：① 合入 1.2.4 之后 main 上未发布的修复（`ezmk test` 测试源缓存签名校验、`embed_examples.py` 剪枝）；② **`ezmk project pack` 默认包格式改为源码包**——`src/`（按 `[compile].src_dirs`）+ `include/` + `ezmk.toml`（原样），平台无关、消费者侧编译；旧预编译行为收敛为显式 `--precompiled`（产物逐字节等价）。**公共 API 无破坏性变更**（新 flag 纯新增；默认值调整以 `--precompiled` 显式兼容）。
+
+### 新增 / 行为变更
+
+- **`ezmk project pack` 默认源码包**（`src/build.cpp`）：默认产出源码包（`src_dirs` + `include/` + `ezmk.toml` 原样、无 `precompiled` 标记）；类型校验放宽为任意类型（安装侧本就按静态库编译）；不要求先构建；打包前剪枝 `build/` / `.ezmk/` / `.git` 与二进制残留
+- **`--precompiled`**（`src/cli.cpp` + `include/ezmk/cli.hpp`）：保留旧行为——仅 `static` 项目、产物缺失自动构建、归档 `include/` + `lib/` + 追加 `precompiled = true` 标记（与旧默认逐字节等价）；`-v` 的 index.toml 片段 `platform` 字段仅预编译包输出（源码包平台无关）
+- **修复（合入 01807bb，随本版发布）**：`ezmk test` 测试源缓存从未做编译选项签名校验（`record.compile_options_signature` 永空 → 每次全量重编译）——新增 `validate_test_cache_signature`（Catch2 与 ezmk 框架两路径），第二次 `ezmk test` 即缓存命中；`embed_examples.py` 剪枝构建残留与二进制扩展名（UnicodeDecodeError）
+- 同批祖先修复随行：CI 双失败修复（.gitattributes eol=lf / embed 字节精确输出 / bootstrap repo add）、pkg `expected_sha256` string_view 悬垂 UB 修复
+
+### 测试
+
+- 新增集成测试（`[1.2.5]`）：源码包 `pkg install` 端到端（消费者侧编译、无 precompiled 标记）+ `--precompiled` 回归（标记 + `lib/` 产物）+ 非 static 项目 `--precompiled` 拒绝 + 任意类型源码包打包成功
+- 全量回归：**794 用例 / 3769 断言零失败**（基线 793 / 3755，+1 用例；3 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **源码包与预编译包归档同名**（`<name>-<version>.tar.gz`）：一次 pack 仅一种格式；同时发布两格式需用不同 `--output` 目录
+- **macOS Intel（x64）**：仍无预编译产物（`macos-13` runner 在 free tier 不分配，job 持续排队）——与 1.2.0/1.2.1 相同
+- **winget**：1.2.4 PR（`microsoft/winget-pkgs#420487`）已提交，待 CI + 版主人工审批（1.2.1 PR `#419171` 仍在队列）
+
+---
+
 ## 1.2.4 (2026-08-18) — 仓库文件夹包支持（repo 托管目录形式包）
 
 1.2.x 稳定线补丁：打通「仓库托管目录包」——按名安装解析出的包路径为目录时复用 dev.7 的文件夹安装（`install_from_directory`），`index.toml` 增可选 `type = "dir"` 标注（目录包无归档 hash，sha256 省略且跳过校验）；header-only / 源码包可免打包、以 git 目录形式托管。**归档包零影响，公共 API 无破坏性变更**（index 字段纯增量，命令/配置不变）。
