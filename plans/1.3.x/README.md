@@ -17,7 +17,7 @@
 | [1.3.0-dev.1](1.3.0-dev.1.md) | workspace 配置、定位与依赖校验 | `ezmk-workspace.toml` 解析（`[workspace]` + `[workspace.options]`）+ `locate_workspace_root()` + 成员校验（路径逃逸 / 存在性 / 嵌套）+ **`[depends] workspace` 解析 + 环检测 + 被依赖类型约束** + 单测 | ✅ 已完成（2026-08-19，dev.1） |
 | [1.3.0-dev.2](1.3.0-dev.2.md) | `ezmk workspace` 命令组与拓扑构建 | `list` / `build` / `test` / `clean` / `--member`（含依赖闭包）/ `--stop-on-error` + **Kahn 拓扑分层 + 层内并行** + **兄弟产物注入（成员自发现，零环境变量）** + **响应文件兜底** + 跨成员增量 + `-w` 重定向 + i18n key | ✅ 已完成（2026-08-21，dev.2） |
 | [1.3.0-dev.3](1.3.0-dev.3.md) | 测试与 CI | 集成测试（依赖构建顺序 / 跨成员增量 / 并行 / 失败汇总 / 校验拒绝）+ CI 步骤 + 全量零回归 | ✅ 已完成（2026-08-21，dev.3） |
-| [1.3.0-dev.4](1.3.0-dev.4.md) | **i18n 语言变体** | **BCP 47 变体标签解析**（`zh_CN`/`zh-CN.UTF-8` → `zh-CN`）+ **继承式变体文件**（`locale/zh-TW.json` 只写差异键，缺键回退基础语言）+ **回退链**（变体 → 基础 → 英文）+ `check_i18n.py` 变体校验 + 单测 | 规划中 |
+| [1.3.0-dev.4](1.3.0-dev.4.md) | **i18n 语言变体** | **BCP 47 变体标签解析**（`zh_CN`/`zh-CN.UTF-8` → `zh-CN`）+ **继承式变体文件**（`locale/zh-TW.json` 只写差异键，缺键回退基础语言）+ **回退链**（变体 → 基础 → 英文）+ `check_i18n.py` 变体校验 + 单测 | ✅ 已完成（2026-08-21，dev.4） |
 | [1.3.0-dev.5](1.3.0-dev.5.md) | **消费命令总是自动构建** | `ezmk test` / `ezmk project pack --precompiled` 移除存在性门控，**一律先增量构建再消费**（消除「改源码后旧产物仍在 → 跑旧代码/打旧包」的陈旧产物陷阱）；utils 例外保留 + 回归用例锁定 | 规划中 |
 | [1.3.0-pre.1](1.3.0-pre.1.md) | 文档与发布收口 | cli.md / README / 教程 / CHANGES.md + **non-goals「多项目工作区」条款更新** + 发布门槛复核（API 无破坏性变更 + 全量零回归） | 规划中 |
 | [1.3.0](1.3.0.md) | 正式发布 | 聚合 dev.1 ~ dev.5 + pre.1；发布门槛 + 分发（winget/Homebrew/pacman） | 规划中 |

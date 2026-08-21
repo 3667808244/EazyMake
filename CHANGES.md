@@ -105,6 +105,33 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.0-dev.4 (2026-08-21) — i18n 语言变体（locale variants）
+
+1.3.0 第四个开发子版本（与 workspace 主线并行），落地**语言变体**支持：BCP 47 风格变体标签（`zh-TW`/`en-US`/`zh_CN`/`zh_CN.UTF-8` 等）可显式选择并命中变体专属文案；变体文件**继承基础语言**（只写差异键，缺键回退）；回退链 **变体 → 基础 → 英文** 保证任何新键（如 workspace 的 `workspace_*`）在变体未转写时不出现 `{???}`。首个变体文件 `locale/zh-TW.json`（繁体中文 365 键全量转写）。**公共 API 无破坏性变更**（`i18n.hpp` 仅新增 `normalize_locale_tag`；`EZMK_LANG=en`/`zh` 精确值结果与现状逐字节一致）。
+
+### 新增 / 行为变更
+
+- **`normalize_locale_tag()`**（`src/i18n.cpp`，新公共 API）：BCP 47 风格标签归一化——去 `.编码` 后缀（`zh_CN.UTF-8` → `zh_CN`）、`_`/`-` 统一分隔、首段小写语言（2-3 字母）+ 次段大写地区（2 字母）→ 规范形 `zh-TW`；非法输入（空 / 非字母 / 超两段，含脚本标签 `zh-Hant-TW`）→ 空串回退检测逻辑
+- **`detect_language()` 重写**：EZMK_LANG / Windows `GetUserDefaultLocaleName` / POSIX `$LANG`/`$LC_ALL` 三路统一走 `normalize_locale_tag`；有数据守卫放宽为「规范标签或其首段有 embedded/runtime 数据」——`zh-CN` 现返回完整标签 `zh-CN`（init 层回退到 `zh`，行为等同现状）；`zh-TW` 系统/POSIX `zh_TW.UTF-8` 现命中繁体
+- **`init()` 继承加载**：目标标签拆分为**基础语言 + 变体**——先加载基础语言（runtime > embedded，优先级不变），再叠加变体文件（`locale/<tag>.json` 存在则逐键覆盖，缺键继承基础；不存在 → 纯回退不报错）；`g_current_lang` 记录实际生效标签（纯回退时记基础语言）；未知基础语言 → 英文兜底
+- **`parse_locale_json` 覆盖模式**（overlay 参数）：变体加载时不 `g_strings.clear()`，逐键覆盖；新增 `meta.language` 与加载标签一致性校验（变体文件必须声明自己的标签）
+- **`locale/zh-TW.json`**（365 键全量繁体转写）：术语对齐（構建/編譯/連結/快取/封存/標頭檔/原始碼/原始檔/依賴/專案/測試/執行/監聽/偵測/組態/範圍/使用者/全域/鉤子/巨集/字串/陣列/布林值/函式/回傳/指令/儲存庫/套件/範例/預設/建立/產生/旗標/指令碼/執行緒 等），占位符/路径/命令名/代码记号原样保留；`meta.extends = "zh"` 继承式
+- **`check_i18n.py` 变体规则**：自动发现 `locale/*.json` 中除 en/zh 外的变体——键**只允许子集**（缺键=继承，合法）/ **多余键报错**（防漂移）/ `meta.language` 必须等于文件名 / `meta.extends` 缺省取标签首段、显式声明时基文件必须存在
+
+### 测试
+
+- 新增 `test/test_i18n.cpp` **8 用例**：归一化（规范形/下划线/编码后缀/大小写/前导尾随分隔符宽容/非法含脚本标签）+ detect 全路径（`zh-TW` 完整标签 / `zh_CN.UTF-8` 归一化 / 未知标签回退不粘滞）+ 继承加载（`zh-TW` 覆写 `zh` 且互异 / `zh-CN` 无变体文件回退 `zh`（含下划线拼写）/ 临时部分变体 `zh-HK.json` 验证缺键继承基础 + 占位符可格式化 / `xx` 英文兜底）+ **穷举回归扩到 en/zh/zh-TW 三语言**（365 键 × 3 语言零 `{???}`）
+- `check_i18n.py` 通过（365 键 × 2 基础 + 1 变体）；负向验证：变体多键 → 报漂移错误
+- 全量回归：**861 用例 / 4990 断言零失败**（dev.3 基线 853 / 4229，+8 用例 / +761 断言——穷举回归新增 zh-TW 语言 365 键；3 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **仅 `zh-TW` 一个变体**：`en-GB`/`en-US`（英文变体差异极小，收益低）与完整 BCP 47（脚本/地区扩展如 `zh-Hant-TW`）按需添加——机制已就绪（`normalize_locale_tag` 对超两段标签返回空串回退，属明确收口）；归 2.0.0 或后续评估
+- **`zh-TW.json` 术语以台湾 IT 习惯转写**：个别术语如后续需微调（如「快取」vs「緩存」），直接改差异键即可，回退链保证不缺键
+- **dev.5（消费命令总是自动构建）**：与主线并行的最后一个 dev 子版本，规划中
+
+---
+
 ## 1.2.5 (2026-08-19) — 测试缓存签名修复 + 默认包格式改为源码包
 
 1.2.x 稳定线补丁，合并两项：① 合入 1.2.4 之后 main 上未发布的修复（`ezmk test` 测试源缓存签名校验、`embed_examples.py` 剪枝）；② **`ezmk project pack` 默认包格式改为源码包**——`src/`（按 `[compile].src_dirs`）+ `include/` + `ezmk.toml`（原样），平台无关、消费者侧编译；旧预编译行为收敛为显式 `--precompiled`（产物逐字节等价）。**公共 API 无破坏性变更**（新 flag 纯新增；默认值调整以 `--precompiled` 显式兼容）。
