@@ -93,4 +93,23 @@ void run_tests(const config::EzConfig& cfg,
 cache::CompileInput prepare_compile_input(const config::EzConfig& cfg,
                                           const cli::BuildOptions& opts);
 
+// 1.3.0-dev.2: sibling artifact injection = member self-discovery (dev.2 §3.4).
+// A member declaring `[depends] workspace` injects its siblings' artifacts
+// into its own build: `-I <ws>/<m>/include` (exists), `-L <ws>/<m>/build`
+// + `-l<m>` (GCC) or the full `<m>.lib` path (MSVC), all existence-gated.
+// Zero environment variables — the workspace file is the single source of
+// truth, so injection length does not grow with workspace size.
+struct WsInjection {
+    std::vector<fs::path> include_dirs;   // -I dirs (exist)
+    std::vector<fs::path> link_dirs;      // -L dirs (exist)
+    std::vector<std::string> link_names;  // -l<name> (lib exists)
+    std::vector<fs::path> msvc_archives;  // MSVC: full lib paths (no -L/-l)
+    std::vector<std::string> missing;     // deps whose sibling artifacts are absent
+    std::string error;                    // non-empty when the workspace could
+                                          // not be loaded/resolved (caller warns)
+};
+WsInjection resolve_ws_injection(const fs::path& start_dir,
+                                 const std::vector<std::string>& ws_deps,
+                                 bool is_msvc);
+
 } // namespace ezmk::build

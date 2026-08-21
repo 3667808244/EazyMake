@@ -5,6 +5,7 @@
 #include "nlohmann_json.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <ctime>
 #include <set>
 #include <sstream>
@@ -498,6 +499,34 @@ std::string join_shell_args(const std::vector<std::string>& args) {
     return r;
 }
 
+JoinedCommand join_args_with_response_file(const std::vector<std::string>& args,
+                                           const fs::path& rsp_dir) {
+    std::string joined = join_shell_args(args);
+    if (joined.size() <= kResponseFileThreshold) return {std::move(joined), {}};
+    if (args.size() < 2) return {std::move(joined), {}};  // nothing to offload
+
+    // GCC/Clang response file: one literal argument per line (no shell
+    // quoting/escaping — a line IS an arg, so paths with spaces are safe).
+    // args[0] (the compiler executable) stays on the command line: `g++ @file`.
+    static std::atomic<unsigned> counter{0};
+    fs::path rsp = rsp_dir / ("ezmk-rsp-" + std::to_string(counter.fetch_add(1)) +
+                              ".rsp.tmp");
+    std::error_code ec;
+    fs::create_directories(rsp_dir, ec);
+    std::string content;
+    for (size_t i = 1; i < args.size(); ++i) {
+        content += args[i];
+        content += '\n';
+    }
+    if (!util::file_write(rsp, content)) {
+        // Response file could not be written — fall back to the plain command
+        // (it may still work; otherwise the compiler's own error is clearer).
+        return {std::move(joined), {}};
+    }
+    std::vector<std::string> cmd_args = {args[0], "@" + rsp.string()};
+    return {join_shell_args(cmd_args), rsp};
+}
+
 // ===================================================================
 // 0.2.3+: Single-source compile (thread-safe — read-only on record)
 //
@@ -675,7 +704,12 @@ SingleCompileResult compile_one_source(const fs::path& src,
 
     // 1.1.1: single-source command construction — shared with compile_db
     auto args = build_compile_args(in, src, obj_tmp);
-    std::string cmd = join_shell_args(args);
+    // 1.3.0-dev.2: command-line length fallback — >16K joined command becomes
+    // `compiler @<rsp>` (GCC/Clang only; MSVC has its own rsp syntax and the
+    // threshold simply never triggers there — see dev.2 §3.5).
+    JoinedCommand jc = is_msvc ? JoinedCommand{join_shell_args(args), {}}
+                               : join_args_with_response_file(args, in.obj_dir);
+    std::string cmd = jc.cmd;
 
     if (in.verbose) {
         util::info(util::color_msg(util::color::dim, "    cmd: " + cmd));
@@ -690,6 +724,15 @@ SingleCompileResult compile_one_source(const fs::path& src,
     util::RunOptions opts;
     if (!sde_str.empty()) opts.env["SOURCE_DATE_EPOCH"] = sde_str;
     auto res = util::run_command(cmd, opts);
+
+    // 1.3.0-dev.2: the response file is transient — remove it right after the
+    // run (a crashed run leaks a .rsp.tmp that the next build's stale-temp
+    // cleanup reaps).
+    if (!jc.rsp_file.empty()) {
+        std::error_code ec;
+        fs::remove(jc.rsp_file, ec);
+    }
+
     if (res.exit_code != 0) {
         std::ostringstream err;
         err << ezmk::i18n::fmt(ezmk::i18n::I18nKey::compilation_failed,

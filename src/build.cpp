@@ -10,6 +10,7 @@
 #include "ezmk/toolchain.hpp"
 #include "ezmk/util.hpp"
 #include "ezmk/version.hpp"
+#include "ezmk/workspace.hpp"   // 1.3.0-dev.2: sibling member self-discovery
 
 #include <chrono>
 #include <iomanip>
@@ -268,44 +269,62 @@ std::string detect_compiler(const std::string& language) {
     return {}; // unreachable
 }
 
-// GCC/Clang link command builder
-static std::string make_gcc_link_cmd(const std::vector<fs::path>& objs,
-                                     const std::vector<fs::path>& archives,
-                                     const fs::path& output,
-                                     const config::LinkSection& link,
-                                     const config::LanguageInfo& lang,
-                                     bool shared = false) {
-    std::ostringstream cmd;
-    cmd << (lang.detected_compiler.empty() ? lang.compiler : lang.detected_compiler);
+// GCC/Clang link command builder. 1.3.0-dev.2: builds an argv and runs it
+// through cache::join_args_with_response_file (command >16K → `g++ @<rsp>`);
+// rsp_dir is where the transient response file is written (callers must keep
+// the returned JoinedCommand's rsp_file alive during the run, then remove it).
+static cache::JoinedCommand make_gcc_link_cmd(
+    const std::vector<fs::path>& objs,
+    const std::vector<fs::path>& archives,
+    const fs::path& output,
+    const config::LinkSection& link,
+    const config::LanguageInfo& lang,
+    const fs::path& rsp_dir,
+    bool shared = false) {
+    std::vector<std::string> args;
+    args.push_back(lang.detected_compiler.empty() ? lang.compiler
+                                                  : lang.detected_compiler);
 
+    // Raw args — cache::join_shell_args applies quoting/escaping when building
+    // the command line, and the response-file path writes each arg verbatim.
     for (auto& o : objs) {
-        cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
+        args.push_back(o.string());
     }
     for (auto& a : archives) {
-        cmd << " \"" << util::escape_shell_arg(a.string()) << "\"";
+        args.push_back(a.string());
     }
 
-    cmd << " -o \"" << util::escape_shell_arg(output.string()) << "\"";
+    args.push_back("-o");
+    args.push_back(output.string());
 
     if (shared) {
-        cmd << " -shared";
+        args.push_back("-shared");
     }
 
     for (auto& f : link.flags) {
-        // 1.1.3 S4: 与 link_dirs 一致双引号包裹 — 含 `;|&` 等的 flags 在 POSIX
-        // `sh -c` 下会被当 shell 语法执行（命令注入）；Windows 走 CreateProcessA
-        // 不解释这些字符，但一致转义无害。
-        cmd << " \"" << util::escape_shell_arg(f) << "\"";
+        args.push_back(f);
     }
     for (auto& d : link.link_dirs) {
-        cmd << " -L\"" << util::escape_shell_arg(d) << "\"";
+        args.push_back("-L" + d);
     }
     for (auto& t : link.system_targets) {
-        cmd << " -l" << util::escape_shell_arg(t);
+        args.push_back("-l" + t);
     }
 
-    return cmd.str();
+    return cache::join_args_with_response_file(args, rsp_dir);
 }
+
+// 1.3.0-dev.2: RAII cleanup for a transient GCC response file — removed on
+// scope exit, including exception unwinding from execute_link's fatal.
+struct RspGuard {
+    fs::path path;
+    ~RspGuard() {
+        if (!path.empty()) {
+            std::error_code ec;
+            fs::remove(path, ec);
+        }
+    }
+};
 
 // MSVC link command builder — executable
 static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
@@ -717,6 +736,39 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                     util::warn(std::string("skipping precompiled archive for '") +
                                entry.path().filename().string() + "': " + e.what());
                 }
+            }
+        }
+    }
+
+    // 1.3.0-dev.2: sibling artifact injection = member self-discovery (§3.4).
+    // Only active when this project declares [depends] workspace; otherwise
+    // zero impact (single-project path unchanged). The injected -I dirs enter
+    // st.extra_includes → compile_options_signature, so a change to the
+    // injected parameters recompiles the member automatically (dev.2 §3.6).
+    if (!cfg.depends.workspace.empty()) {
+        auto inj = resolve_ws_injection(st.proj_root, cfg.depends.workspace,
+                                        st.is_msvc);
+        if (!inj.error.empty()) {
+            util::warn(ezmk::i18n::I18nKey::workspace_inject_load_failed,
+                       {{"member", cfg.project.name}, {"reason", inj.error}});
+        } else {
+            st.extra_includes.insert(st.extra_includes.end(),
+                                     inj.include_dirs.begin(),
+                                     inj.include_dirs.end());
+            for (const auto& d : inj.link_dirs) {
+                st.pkg_link_dirs.push_back(d.string());
+            }
+            for (const auto& n : inj.link_names) {
+                st.pkg_system_targets.push_back(n);
+            }
+            for (const auto& a : inj.msvc_archives) {
+                st.pkg_archives.push_back(a);
+            }
+            for (const auto& miss : inj.missing) {
+                // 独立构建时兄弟产物可能还没构建 —— 提示后继续（链接失败会自然
+                // 报错，且带着上面的提示）。
+                util::warn(ezmk::i18n::I18nKey::workspace_inject_missing,
+                           {{"member", cfg.project.name}, {"dep", miss}});
             }
         }
     }
@@ -1190,8 +1242,12 @@ fs::path link_phase(const BuildState& st,
 #endif
                 fs::path lib = st.build_dir / lib_name;
                 fs::path lib_tmp = st.build_dir / (lib_name + ".tmp");
-                return execute_link(make_gcc_link_cmd(objects, st.pkg_archives, lib_tmp, merged_link, st.lang, true),
-                                    lib, lib_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                // 1.3.0-dev.2: response-file fallback (command >16K).
+                auto jc = make_gcc_link_cmd(objects, st.pkg_archives, lib_tmp,
+                                            merged_link, st.lang, st.temp_dir, true);
+                RspGuard rsp_guard{jc.rsp_file};
+                return execute_link(jc.cmd, lib, lib_tmp, opts.verbose,
+                                    ezmk::i18n::I18nKey::linking,
                                     lib.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
             });
         }
@@ -1215,8 +1271,12 @@ fs::path link_phase(const BuildState& st,
 #ifdef EZMK_WIN
                 exe_tmp += ".exe";
 #endif
-                return execute_link(make_gcc_link_cmd(objects, st.pkg_archives, exe_tmp, merged_link, st.lang),
-                                    exe, exe_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                // 1.3.0-dev.2: response-file fallback (command >16K).
+                auto jc = make_gcc_link_cmd(objects, st.pkg_archives, exe_tmp,
+                                            merged_link, st.lang, st.temp_dir);
+                RspGuard rsp_guard{jc.rsp_file};
+                return execute_link(jc.cmd, exe, exe_tmp, opts.verbose,
+                                    ezmk::i18n::I18nKey::linking,
                                     exe.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
             });
         }
@@ -1224,6 +1284,70 @@ fs::path link_phase(const BuildState& st,
 }
 
 } // anonymous namespace
+
+// 1.3.0-dev.2: sibling artifact injection = member self-discovery (dev.2 §3.4).
+// Public (declared in build.hpp) so unit tests can exercise the injection
+// resolution directly. Locate + load the workspace from `start_dir` (reusing
+// dev.1 validation), then resolve each `[depends] workspace` ref to its
+// member's include dir and built static archive — both existence-gated. Zero
+// environment variables: the workspace file is the single source of truth, so
+// the injected command line does not grow with workspace size (pit 1).
+WsInjection resolve_ws_injection(const fs::path& start_dir,
+                                 const std::vector<std::string>& ws_deps,
+                                 bool is_msvc) {
+    WsInjection out;
+    if (ws_deps.empty()) return out;
+
+    std::optional<workspace::Workspace> ws;
+    try {
+        ws = workspace::load_from(start_dir);
+    } catch (const std::exception& e) {
+        out.error = e.what();
+        return out;
+    }
+    if (!ws) {
+        out.error = "no ezmk-workspace.toml found upward from " +
+                    start_dir.string();
+        return out;
+    }
+
+    for (const auto& ref : ws_deps) {
+        auto idx = workspace::resolve_member_ref(*ws, ref);
+        if (!idx) {
+            out.error = "unknown workspace member '" + ref + "'";
+            return out;
+        }
+        const auto& m = ws->members[*idx];
+        if (!m.valid) {
+            out.error = "sibling member '" + m.name + "' is invalid" +
+                        (m.error.empty() ? "" : " (" + m.error + ")");
+            return out;
+        }
+        // Defensive re-check of the dev.1 "dependency must be static" rule.
+        if (m.type != "static") {
+            out.error = "sibling member '" + m.name + "' has type '" + m.type +
+                        "' — only 'static' members can be workspace dependencies";
+            return out;
+        }
+
+        auto inc = m.path / "include";
+        if (util::file_exists(inc)) out.include_dirs.push_back(inc);
+
+        fs::path lib = is_msvc ? m.path / "build" / (m.basename + ".lib")
+                               : m.path / "build" / ("lib" + m.basename + ".a");
+        if (util::file_exists(lib)) {
+            if (is_msvc) {
+                out.msvc_archives.push_back(lib);
+            } else {
+                out.link_dirs.push_back(lib.parent_path());
+                out.link_names.push_back(m.basename);
+            }
+        } else {
+            out.missing.push_back(m.basename);
+        }
+    }
+    return out;
+}
 
 // ===================================================================
 // Build — public entry point
@@ -1963,9 +2087,12 @@ void run_tests(const config::EzConfig& cfg,
             }
         }
 
-        std::string link_cmd = is_msvc
-            ? make_msvc_exe_cmd(objs, archives, runner, test_link)
-            : make_gcc_link_cmd(objs, archives, runner, test_link, lang_info);
+        // 1.3.0-dev.2: response-file fallback for the test-runner link too.
+        auto jc = is_msvc
+            ? cache::JoinedCommand{make_msvc_exe_cmd(objs, archives, runner, test_link), {}}
+            : make_gcc_link_cmd(objs, archives, runner, test_link, lang_info, cache_dir);
+        RspGuard rsp_guard{jc.rsp_file};
+        std::string link_cmd = jc.cmd;
         if (verbose) util::info("  " + link_cmd);
         auto link_res = util::run_command(link_cmd);
         if (link_res.exit_code != 0) {
@@ -2138,9 +2265,12 @@ void run_tests(const config::EzConfig& cfg,
 #endif
             std::vector<fs::path> objs = project_objs;
             objs.push_back(test_obj);
-            std::string comp_cmd = is_msvc
-                ? make_msvc_exe_cmd(objs, {}, test_exe, test_link)
-                : make_gcc_link_cmd(objs, {}, test_exe, test_link, lang_info);
+            // 1.3.0-dev.2: response-file fallback for the per-test link.
+            auto jc = is_msvc
+                ? cache::JoinedCommand{make_msvc_exe_cmd(objs, {}, test_exe, test_link), {}}
+                : make_gcc_link_cmd(objs, {}, test_exe, test_link, lang_info, cache_dir);
+            RspGuard rsp_guard{jc.rsp_file};
+            std::string comp_cmd = jc.cmd;
 
             if (verbose) util::info("  " + comp_cmd);
             auto comp_res = util::run_command(comp_cmd);

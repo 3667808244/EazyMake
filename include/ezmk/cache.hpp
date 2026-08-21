@@ -107,6 +107,28 @@ uint64_t resolve_source_date_epoch(const config::CompileSection& compile);
 // run_command() parses them intact (paths with spaces); others are emitted bare.
 std::string join_shell_args(const std::vector<std::string>& args);
 
+// 1.3.0-dev.2: command string + optional GCC response file to clean up after
+// the run (the .rsp.tmp suffix also lets the build's stale-temp cleanup reap
+// leftovers from crashed runs).
+struct JoinedCommand {
+    std::string cmd;
+    fs::path rsp_file;  // non-empty when a response file was written
+};
+
+// 1.3.0-dev.2: command-line length fallback — compile/link commands exceeding
+// the Windows CreateProcess limit fail cryptically ("command line too long"),
+// and injected workspace sibling args (-I/-L/-l) make large projects hit it
+// easily. When the joined command would exceed kResponseFileThreshold (16K
+// chars, conservative vs the 32767 limit), the args (minus argv[0] = the
+// compiler) are written one-per-line into a GCC response file under rsp_dir
+// and the command becomes `compiler @<rsp>` (GCC/Clang native response-file
+// support; each line is one literal arg, so paths with spaces survive
+// without shell quoting). Only used on the GCC/Clang path (MSVC has its own
+// response-file syntax and is out of scope — see dev.2 §3.5).
+inline constexpr size_t kResponseFileThreshold = 16 * 1024;
+JoinedCommand join_args_with_response_file(const std::vector<std::string>& args,
+                                           const fs::path& rsp_dir);
+
 // Parse .d file (gcc -MMD output) and hash every listed header.
 // Returns vector of {path, sha256} for each dependency.
 std::vector<DepEntry> parse_depfile_and_hash(const fs::path& depfile);
