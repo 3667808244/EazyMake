@@ -36,6 +36,39 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.0-dev.2 (2026-08-21) — workspace 构建命令与并行
+
+1.3.0（Workspace 工作区）第二个开发子版本，落地工作区功能的**命令与执行层**：`ezmk workspace` 命令组（`list`/`build`/`test`/`clean`）+ 成员依赖图的拓扑执行（Kahn 分层、层内并行）+ **兄弟产物注入（成员自发现，零环境变量）** + 命令行长度兜底（响应文件）。至此「共享基础库 + 多个可执行文件」的 monorepo 可一次命令全量构建，增量语义正确（改库 `.cpp` → 依赖者只重链；改库 `.h` → 依赖者经 depfile 自动重编）。**公共 API 无破坏性变更**（新命令组 + `-w` 重定向 + 新 flag 均为纯增量，单项目路径零改动）。
+
+### 新增 / 行为变更
+
+- **`ezmk workspace` 命令组**（`src/workspace_build.cpp` + `src/main.cpp`）：
+  - `list`：打印根路径与每成员（name/type/deps），invalid 成员标 `(invalid: <原因>)`
+  - `build` / `test`：`[-j N] [--stop-on-error] [--member <name>...]`；`test` 无测试的成员跳过（不报错）
+  - `clean`：按拓扑逆序逐成员 `ezmk clean`（不支持 `--stop-on-error`，parse 期拒绝）
+  - **`--member` = 目标成员 + 依赖闭包**（按拓扑先构建依赖保证产物新鲜）；单成员不构建闭包 → `cd <member> && ezmk build`
+  - **`-w` / `--workspace` 重定向**（附在 `build`/`test`/`clean` 上）：`ezmk build -w` ≡ `ezmk workspace build`；非「项目 + workspace 叠加」
+  - 纯容器根（有 `ezmk-workspace.toml` 无 `ezmk.toml`）`ezmk build` → 提示改用 `ezmk workspace build`
+- **Kahn 拓扑分层**（`src/workspace.cpp` `topo_layers`）：依赖层先构建、同层互相无依赖可并行；环已在 dev.1 配置期拒绝，此处仅防御断言
+- **子进程执行模型**：每成员独立 `<ezmk> build/test/clean` 子进程（cwd = 成员目录，缓存/Lua 状态/输出天然隔离）；层内 `util::ThreadPool` 并行；输出带成员前缀；摘要含 succeeded/failed/skipped；**`--stop-on-error` 精确语义**：失败后停派发（本层未启动 + 后续层 skipped）、在跑成员自然结束不 kill、`clean` 不支持
+- **兄弟产物注入 = 成员自发现**（`src/build.cpp` `resolve_ws_injection`）：成员 `[depends] workspace` 非空时，构建进程自行 locate/load workspace → 注入 `-I <ws>/<m>/include`（存在才加）+ `-L <ws>/<m>/build -l<m>`（`lib<m>.a` 存在才加；MSVC 走完整 `<m>.lib` 路径）；**零环境变量**（长度与 workspace 规模无关，大型项目不炸，坑 1）；注入 `-I` 进入 `extra_includes` → **编译签名含注入参数**（注入变化 → 依赖者自动重编）；兄弟产物缺失 → 提示「先 `ezmk workspace build`」后继续（链接失败自然报错）
+- **命令行长度兜底**（`src/cache.cpp` `join_args_with_response_file`）：编译/链接命令 >16K 字符 → 改写为 GCC 响应文件 `@<rsp>`（参数逐行写入 `<tmp>/ezmk-<n>.rsp.tmp`，一行一个参数、含空格路径天然安全）；`<compiler> @<rsp>` 保持命令短小；使用后删除、残留由既有 stale-temp 清理兜底；MSVC 侧不触发（其响应文件语法不同，见 dev.2 §3.5）
+- **增量语义验证**（2.6）：库 `.cpp` 变 → 库重编 + 依赖者**重新链接**（main.o 缓存命中不重编）；库 `.h` 变 → 依赖者**重新编译**（注入 `-I` 进入预处理器，depfile `-MD` 自动收录兄弟头文件，头哈希驱动重编）
+- **i18n**：新增 `workspace_*`/`help_*` 命令相关 28 键（X-macro 三向一致，`check_i18n.py` 通过）
+
+### 测试
+
+- 新增 `test/test_workspace_build.cpp` **14 用例 / 204 断言**：拓扑分层（无依赖单层/线链/菱形/扇出/无效成员排除）+ 注入解析（include 注入/产物缺失上报/`-L -l` 拼装/MSVC `<name>.lib` 命名/无 workspace/未知引用/非 static 拒绝）+ 响应文件（阈值不触发保持原样/超阈值 `compiler @<rsp>` 与内容逐行校验/含空格路径引号与单行语义）+ **子进程冒烟**（临时 lib+app workspace：构建成功与产物、应用运行输出、noop 重建 main.o 字节不变、库 `.cpp` 变只重链不重编（输出 sum=5→6）、库 `.h` 变触发重编（OFFSET 内联 → main.o 变化 + sum=106）、clean 语义与重建）
+- 全量回归：**836 用例 / 4126 断言零失败**（dev.1 基线 822 / 3922，+14 用例 / +204 断言；3 跳过为既有环境限制；Windows 子进程冒烟带 AV 文件锁重试守卫）
+
+### 已知限制 / 跟进项
+
+- **`ezmk workspace test` 的 `[test-opts]` 透传**（`--framework`/`--filter` 等）与集成测试（3 成员依赖构建顺序 / 失败汇总 / 校验拒绝矩阵 / CI 冒烟步骤）归 **dev.3**
+- **dev.3 依赖本版**：集成测试消费命令组、拓扑执行与摘要格式
+- **Windows 平台**：成员子进程链接重写产物偶发 `Permission denied`（杀软占用，与既有 rename 测试同类）——冒烟测试已带单次重试守卫；`workspace clean` 与单项目 `clean` 一致只清缓存/临时目录（`build/` 产物保留）
+
+---
+
 ## 1.2.5 (2026-08-19) — 测试缓存签名修复 + 默认包格式改为源码包
 
 1.2.x 稳定线补丁，合并两项：① 合入 1.2.4 之后 main 上未发布的修复（`ezmk test` 测试源缓存签名校验、`embed_examples.py` 剪枝）；② **`ezmk project pack` 默认包格式改为源码包**——`src/`（按 `[compile].src_dirs`）+ `include/` + `ezmk.toml`（原样），平台无关、消费者侧编译；旧预编译行为收敛为显式 `--precompiled`（产物逐字节等价）。**公共 API 无破坏性变更**（新 flag 纯新增；默认值调整以 `--precompiled` 显式兼容）。
