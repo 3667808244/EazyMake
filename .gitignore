@@ -37,3 +37,4 @@ include/ezmk/version.hpp
 
 !.claude/skills/
 sessions.md
+include/ezmk/logo.gen.h
