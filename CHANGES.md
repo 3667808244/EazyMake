@@ -12,6 +12,30 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.0-dev.1 (2026-08-19) — Workspace 配置、定位与依赖校验
+
+1.3.0（Workspace 工作区）第一个开发子版本，落地工作区功能的**配置与定位层**：定义独立于 `ezmk.toml` 的 `ezmk-workspace.toml`（`[workspace]` 的 `name` 可选 / `members` 必填非空 + `[workspace.options]` 的 `default_jobs` / `stop_on_error`），`locate_workspace_root()` 从任意子目录最多向上 5 层定位工作区根（与 `locate_project_root` 对称、互不干扰），并在配置期完成**成员校验**（路径逃逸 / 存在性+ezmk.toml / 嵌套）与**成员依赖校验**（`[depends] workspace` 引用解析、DFS 环检测含自环、被依赖成员类型须 `static`）。**公共 API 无破坏性变更**（新配置文件 + `config.hpp` 新可选字段，均为纯增量；不暴露 CLI，命令组归 dev.2）。
+
+### 新增 / 行为变更
+
+- **`include/ezmk/workspace.hpp` + `src/workspace.cpp`**：独立于单项目解析的 workspace 模块——`Options` / `Member` / `Workspace` 结构；`locate_workspace_root()`（5 层上溯）；`load_from()`（定位 + 解析 + 成员校验 + 依赖校验一站式）；`validate_member()`（路径安全违规抛错，存在性/嵌套标记 `valid=false`）；`validate_ws_deps()`（引用解析按「完整相对路径或唯一末段」，歧义末段报错要求全路径；三色 DFS 环检测含自环，错误携带环路径如 `a -> b -> a`；被依赖成员非 `static` → 配置期报错；依赖无效成员 → 引用方标记无效）
+- **`ezmk-workspace.toml` 解析**（`src/workspace.cpp`）：复用 toml11；`[workspace]`（`name` 可选、`members` 必填非空字符串数组）+ `[workspace.options]`（`default_jobs` 非负整数缺省 0、`stop_on_error` 布尔缺省 false）；非法格式（缺/空 members、非字符串数组、负 jobs、未知节/键）→ 明确报错（含文件路径与字段名）
+- **成员安全校验**：相对路径、无 `..` 逃逸、无绝对/盘符/UNC；`weakly_canonical` 解析后仍在根内（符号链接出根 → 拒绝）；成员目录不存在 / 无 `ezmk.toml` / 内含 `ezmk-workspace.toml`（嵌套）→ 标记 invalid（执行时跳过不阻断）
+- **`[depends] workspace` 新字段**（`include/ezmk/config.hpp` `DependsSection` + `src/config.cpp`）：成员 `ezmk.toml` 可声明对兄弟成员的依赖（末段或完整相对路径）；未声明时为空向量，既有解析/构建零影响
+- **i18n**：新增 `workspace_err_*` 16 键（X-macro 三向一致，`check_i18n.py` 通过）
+
+### 测试
+
+- 新增 `test/test_workspace.cpp` **28 用例 / 89 断言**：解析（members/options/缺省/非法格式）+ 定位（0/5 层/无文件/与项目根互不干扰）+ 成员校验各拒绝分支（缺失目录 / 无 ezmk.toml / 嵌套 / `../` / 绝对路径 / 盘符 / 符号链接出根）+ 依赖（basename/完整路径引用、未知引用、自环、A→B→A 环、非 static 被依赖、依赖无效成员、同名末段歧义）
+- 全量回归：**822 用例 / 3922 断言零失败**（基线 794 / 3769，+28 用例；3 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **`ezmk workspace` 命令组未落地**（`list`/`build`/`test`/`clean` 与拓扑构建、并行执行、兄弟产物注入归 **dev.2**）：本版仅提供配置/定位/校验能力，`Workspace` 结构由 dev.2 消费
+- **dev.2 依赖本版**：命令执行消费 `Workspace` 结构与校验结果；拓扑排序消费 `ws_deps`；环与类型在配置期 fail-fast 已由本版保证
+
+---
+
 ## 1.2.5 (2026-08-19) — 测试缓存签名修复 + 默认包格式改为源码包
 
 1.2.x 稳定线补丁，合并两项：① 合入 1.2.4 之后 main 上未发布的修复（`ezmk test` 测试源缓存签名校验、`embed_examples.py` 剪枝）；② **`ezmk project pack` 默认包格式改为源码包**——`src/`（按 `[compile].src_dirs`）+ `include/` + `ezmk.toml`（原样），平台无关、消费者侧编译；旧预编译行为收敛为显式 `--precompiled`（产物逐字节等价）。**公共 API 无破坏性变更**（新 flag 纯新增；默认值调整以 `--precompiled` 显式兼容）。

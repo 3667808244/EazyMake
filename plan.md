@@ -6,7 +6,7 @@
 >
 > **范围边界**：纯增量——新命令组 `ezmk workspace` + 新配置文件 `ezmk-workspace.toml` + 成员 `[depends] workspace` 新字段；**公共 API 无破坏性变更**（单项目路径 `project`/`pkg`/`repo`/`example` 零改动，破坏性变更仍仅归 2.0.0）。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 793 用例 / 3755 断言）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 794 用例 / 3769 断言，1.2.5 后）。
 
 ---
 
@@ -34,13 +34,13 @@
 
 ## 3 执行阶段（每阶段一个 commit）
 
-### dev.1 — 配置、定位与依赖校验（1.3.0-dev.1）
+### dev.1 — 配置、定位与依赖校验（1.3.0-dev.1）✅
 
-- [ ] **1.1 数据结构与解析**：`include/ezmk/workspace.hpp` + `src/workspace.cpp`（toml11 解析 `[workspace]`/`[workspace.options]` + 缺省 + 非法格式报错）
-- [ ] **1.2 定位**：`locate_workspace_root()`（5 层上溯，与 `locate_project_root` 对称互不干扰）
-- [ ] **1.3 成员校验**：路径逃逸（`../`/绝对/盘符/符号链接出根）、存在性 + `ezmk.toml`、无嵌套
-- [ ] **1.4 成员依赖校验**：`config.hpp` `DependsSection::workspace` + `validate_ws_deps`（引用解析 / DFS 环检测含自环 / 被依赖类型须 static）
-- [ ] **1.5 单测**（`test/test_workspace.cpp`：解析 / 定位 / 校验各拒绝分支 / 依赖、环、类型）+ 全量回归（基线 793/3755）
+- [x] **1.1 数据结构与解析**：`include/ezmk/workspace.hpp` + `src/workspace.cpp`（toml11 解析 `[workspace]`/`[workspace.options]` + 缺省 + 非法格式报错）
+- [x] **1.2 定位**：`locate_workspace_root()`（5 层上溯，与 `locate_project_root` 对称互不干扰）
+- [x] **1.3 成员校验**：路径逃逸（`../`/绝对/盘符/符号链接出根）、存在性 + `ezmk.toml`、无嵌套
+- [x] **1.4 成员依赖校验**：`config.hpp` `DependsSection::workspace` + `validate_ws_deps`（引用解析 / DFS 环检测含自环 / 被依赖类型须 static）
+- [x] **1.5 单测**（`test/test_workspace.cpp`：解析 / 定位 / 校验各拒绝分支 / 依赖、环、类型）+ 全量回归（基线 794/3769 → 822/3922，零回归）
 
 ### dev.2 — 命令、拓扑与注入（1.3.0-dev.2）
 
