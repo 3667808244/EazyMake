@@ -69,6 +69,42 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.0-dev.3 (2026-08-21) — workspace 测试与 CI
+
+1.3.0（Workspace 工作区）第三个开发子版本，用**集成测试 + CI 自举**把 dev.1/dev.2 的行为固化：依赖构建顺序（库先于可执行文件）、跨成员增量（库 `.cpp` → 依赖者只重链；库 `.h` → 依赖者经 depfile 重编）、并行构建、失败汇总与 `--stop-on-error`、`--member` 闭包、成员内独立构建、注入零环境变量、以及全部校验拒绝分支（路径逃逸 / 环 / 非 static 被依赖 / 嵌套 / 成员缺失）都有可重复的断言；CI 追加 workspace 冒烟步骤。**公共 API 无破坏性变更**（本版无产品代码变更，仅一处可测试性重构：`resolve_jobs` 从匿名命名空间提取为公共纯函数，行为逐字节不变）。
+
+### 新增 / 行为变更
+
+- **集成测试**（`test/test_integration.cpp`，tag `[integration][workspace][1.3.0]`，15 用例，夹具为含空格路径的 3 成员 workspace）：
+  - `workspace list` 成员/类型/依赖展示；`workspace build -j 2` 全成功 + 产物落位 + 应用运行输出
+  - **依赖构建顺序**：strutil 层输出先于两个 app 层（层序确定性，层内顺序不断言）
+  - **跨成员增量①（库 .cpp 变）**：strutil 重编（"0 cached, 1 compiled"）+ 两 app 缓存命中（"1 cached, 0 compiled"）→ 只重链（运行输出 sum=5→6）
+  - **跨成员增量②（库 .h 变）**：三成员全部重编（"0 cached, 1 compiled" ×3，依赖者 depfile 含注入 `-I` 的库头）→ 重编生效（输出 sum=105）
+  - `workspace test`：tool-a 带 `[test]`（ezmk 框架）→ `[PASS]`；无测试成员跳过（不报错）
+  - `workspace clean`：清各成员 `.ezmk/cache`（与单项目 clean 语义一致，`build/` 产物保留——设计文档同步修正）
+  - **失败汇总**：tool-b 编译失败 → strutil/tool-a 完成 + "2 succeeded, 1 failed"，退出码非零
+  - **`--stop-on-error`（坑 3 锁定）**：strutil（依赖层）失败 → 两个依赖者整层 skipped（"0 succeeded, 1 failed, 2 skipped"），无产物残留
+  - **`--member` 闭包（坑 2 锁定）**：`--member tool-a` 构建 tool-a + 依赖 strutil（tool-b 不构建）；完整相对路径等价；未知成员 → fatal
+  - **成员内独立构建**：`cd apps/tool-a && ezmk build` 只构建 tool-a（注入已存在产物、无 "Archiving libstrutil.a"、不触发闭包）
+  - **注入零环境变量（坑 1 锁定）**：`EZK_WS_DEPS`/`EZK_WS_ROOT` 置垃圾值 → 构建仍成功（注入来自 workspace 文件自发现，非环境变量）
+  - **校验拒绝**：`../` 逃逸 / tool-a↔strutil 环 / 依赖 executable 非 static / 嵌套 workspace 文件（成员 + 引用方标记 invalid，剩余成员照常构建）/ 缺失成员目录（invalid 标记 + 不阻断）
+  - **纯容器根提示**：仅 workspace 文件无 ezmk.toml → `ezmk build` fatal 提示；根同时是项目 → 行为不变
+- **单元测试补全**（`test/test_workspace.cpp` + `test/test_workspace_build.cpp`）：`resolve_member_ref`（完整路径优先 / 唯一末段 / 未知 / 歧义末段 → nullopt）+ `resolve_jobs`（`-j` 显式 > `default_jobs` > hardware_concurrency）
+- **CI**（`.github/workflows/ci.yml`）：ubuntu job 追加「Workspace smoke (1.3.0-dev.3)」——`$RUNNER_TEMP` 内构造 3 成员 workspace → `workspace list` + `build -j 3` + **二次构建增量断言**（`grep -qE "[1-9] compiled"` 不命中 = 零重编）+ 产物落位检查 + `workspace clean`（`EZMK_LANG=en` 保证断言确定性）
+
+### 测试
+
+- 新增 **17 用例**：2 单测（`resolve_member_ref` / `resolve_jobs`）+ 15 集成（workspace）
+- 全量回归：**853 用例 / 4229 断言零失败**（dev.2 基线 836 / 4126，+17 用例 / +103 断言；3 跳过为既有环境限制；workspace 集成测试 5 连跑稳定）
+
+### 已知限制 / 跟进项
+
+- **dev.4（i18n 语言变体）与 dev.5（消费命令总是自动构建）**：与 workspace 主线并行，规划中
+- **`--stop-on-error` 同层并行成员**：失败时同层尚未启动的成员按调度时机计 skipped 或已完成——确定性断言用「依赖层失败 → 后续层整层 skipped」的构型（本版用例 9）；同层时序用例留待后续评估
+- **CI workspace 冒烟**：增量断言依赖英文 locale（已显式 `EZMK_LANG=en`）；GitHub runner 默认 en_US 一致
+
+---
+
 ## 1.2.5 (2026-08-19) — 测试缓存签名修复 + 默认包格式改为源码包
 
 1.2.x 稳定线补丁，合并两项：① 合入 1.2.4 之后 main 上未发布的修复（`ezmk test` 测试源缓存签名校验、`embed_examples.py` 剪枝）；② **`ezmk project pack` 默认包格式改为源码包**——`src/`（按 `[compile].src_dirs`）+ `include/` + `ezmk.toml`（原样），平台无关、消费者侧编译；旧预编译行为收敛为显式 `--precompiled`（产物逐字节等价）。**公共 API 无破坏性变更**（新 flag 纯新增；默认值调整以 `--precompiled` 显式兼容）。
