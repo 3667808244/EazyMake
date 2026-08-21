@@ -340,6 +340,34 @@ TEST_CASE("response file: rsp path with spaces is quoted, one arg per line", "[w
 }
 
 // ===================================================================
+// resolve_jobs() — parallel-job precedence (dev.3 §3.2)
+// ===================================================================
+
+TEST_CASE("workspace resolve_jobs: explicit -j > default_jobs > auto", "[workspace][1.3.0-dev.3]") {
+    TempDir tmp;
+    write_ws_toml(tmp.path,
+                  "[workspace]\nmembers = [\"a\"]\n\n"
+                  "[workspace.options]\ndefault_jobs = 4\n");
+    write_member(tmp.path, "a");
+
+    auto ws = load_from(tmp.path);
+    REQUIRE(ws.has_value());
+    REQUIRE(ezmk::workspace_build::resolve_jobs(0, *ws) == 4);   // default_jobs
+    REQUIRE(ezmk::workspace_build::resolve_jobs(8, *ws) == 8);   // explicit wins
+    REQUIRE(ezmk::workspace_build::resolve_jobs(-1, *ws) == 4);  // negative → default
+
+    // No default_jobs and no -j → hardware_concurrency (≥ 1).
+    TempDir tmp2;
+    write_ws_toml(tmp2.path, "[workspace]\nmembers = [\"a\"]\n");
+    write_member(tmp2.path, "a");
+    auto ws2 = load_from(tmp2.path);
+    REQUIRE(ws2.has_value());
+    int hw = static_cast<int>(std::thread::hardware_concurrency());
+    if (hw < 1) hw = 1;
+    REQUIRE(ezmk::workspace_build::resolve_jobs(0, *ws2) == hw);
+}
+
+// ===================================================================
 // Subprocess smoke — real lib + app workspace through run_build() (§4.7)
 // ===================================================================
 

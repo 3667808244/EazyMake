@@ -27,6 +27,12 @@ fs::path ezmk_exe_path();
 // (name / type / workspace deps) and invalid members with their reason.
 void list_workspace(const workspace::Workspace& ws);
 
+// 1.3.0-dev.3: effective parallel-job count for build/test —
+// explicit `-j/--jobs` > `[workspace.options].default_jobs` > hardware
+// concurrency (1 when the platform reports none). Extracted so the
+// precedence rule is unit-testable.
+int resolve_jobs(int cli_jobs, const workspace::Workspace& ws);
+
 // `ezmk workspace build` — topological subprocess build with intra-layer
 // parallelism. Returns the process exit code (0 = all members succeeded).
 int run_build(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts);

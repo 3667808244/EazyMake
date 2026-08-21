@@ -15,6 +15,7 @@ using ezmk::workspace::Member;
 using ezmk::workspace::Workspace;
 using ezmk::workspace::load_from;
 using ezmk::workspace::locate_workspace_root;
+using ezmk::workspace::resolve_member_ref;
 
 namespace {
 
@@ -458,4 +459,31 @@ TEST_CASE("workspace deps: diamond dependency validates", "[workspace][1.3.0-dev
     auto ws = load_from(tmp.path);
     REQUIRE(ws.has_value());
     for (const auto& m : ws->members) REQUIRE(m.valid);
+}
+
+// 1.3.0-dev.3: resolve_member_ref — shared by --member selection and the
+// sibling-injection path (dev.2 §3.4 / §3.1).
+TEST_CASE("workspace resolve_member_ref: exact path / basename / unknown / ambiguous", "[workspace][1.3.0-dev.3]") {
+    TempDir tmp;
+    write_ws_toml(tmp.path,
+                  "[workspace]\nmembers = [\"app\", \"libs/strutil\", \"ext/strutil\"]\n");
+    write_member(tmp.path, "libs/strutil", "static");
+    write_member(tmp.path, "ext/strutil", "static");
+    write_member(tmp.path, "app", "executable", {"libs/strutil"});
+
+    auto ws = load_from(tmp.path);
+    REQUIRE(ws.has_value());
+
+    // Exact full-relative-path match wins even when the basename is ambiguous.
+    REQUIRE(resolve_member_ref(*ws, "libs/strutil").value_or(999) == 1);
+    REQUIRE(resolve_member_ref(*ws, "ext/strutil").value_or(999) == 2);
+    // Unique basename resolves to the only member with that basename.
+    REQUIRE(resolve_member_ref(*ws, "app").value_or(999) == 0);
+    // Ambiguous basename (two strutil members) → nullopt (caller must use the
+    // full path).
+    REQUIRE_FALSE(resolve_member_ref(*ws, "strutil").has_value());
+    // Unknown ref → nullopt.
+    REQUIRE_FALSE(resolve_member_ref(*ws, "nope").has_value());
+    // Empty ref → nullopt (no crash).
+    REQUIRE_FALSE(resolve_member_ref(*ws, "").has_value());
 }

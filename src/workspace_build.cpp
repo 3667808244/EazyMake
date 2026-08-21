@@ -171,13 +171,7 @@ bool run_member(const workspace::Member& m, const std::string& action,
 int run_workspace_action(const workspace::Workspace& ws,
                          const std::string& action,
                          const cli::WorkspaceOptions& opts) {
-    // Jobs: -j/--jobs > [workspace.options].default_jobs > hardware_concurrency.
-    int jobs = opts.jobs;
-    if (jobs <= 0) jobs = ws.options.default_jobs;
-    if (jobs <= 0) {
-        jobs = static_cast<int>(std::thread::hardware_concurrency());
-        if (jobs <= 0) jobs = 1;
-    }
+    int jobs = resolve_jobs(opts.jobs, ws);
 
     auto layers = workspace::topo_layers(ws);
     auto sel = select_layers(ws, layers, opts.members);
@@ -269,6 +263,19 @@ int run_workspace_action(const workspace::Workspace& ws,
 }
 
 } // anonymous namespace
+
+// 1.3.0-dev.3: effective parallel-job count for build/test —
+// explicit `-j/--jobs` > `[workspace.options].default_jobs` > hardware
+// concurrency (1 when the platform reports none). Public for unit tests.
+int resolve_jobs(int cli_jobs, const workspace::Workspace& ws) {
+    int jobs = cli_jobs;
+    if (jobs <= 0) jobs = ws.options.default_jobs;
+    if (jobs <= 0) {
+        jobs = static_cast<int>(std::thread::hardware_concurrency());
+        if (jobs <= 0) jobs = 1;
+    }
+    return jobs;
+}
 
 fs::path ezmk_exe_path() {
     // Tests (build.sh test / test-all) set EZMK_TEST_BIN to build/ezmk — the
