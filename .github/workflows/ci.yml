@@ -59,6 +59,48 @@ jobs:
           (cd with-packages && "$EZMK" pkg install fmt -p -y && "$EZMK" build)
           echo "OK: example with-packages builds"
 
+      # 1.3.0-dev.3: workspace smoke — topological build + cross-member
+      # incremental + clean, against a clean 3-member workspace in RUNNER_TEMP
+      # (no repo/network dependency; members are minimal local projects).
+      - name: Workspace smoke (1.3.0-dev.3)
+        run: |
+          set -euo pipefail
+          export EZMK_LANG=en   # deterministic cache-summary output for the grep below
+          EZMK="$GITHUB_WORKSPACE/build/ezmk"
+          WS="$RUNNER_TEMP/ws-smoke"
+          rm -rf "$WS"
+          mkdir -p "$WS/apps/a/src" "$WS/apps/b/src" "$WS/libs/l/src" "$WS/libs/l/include"
+          printf '[workspace]\nmembers = ["apps/a", "apps/b", "libs/l"]\n' > "$WS/ezmk-workspace.toml"
+          printf '[project]\nname = "l"\ntype = "static"\nversion = "0.1.0"\n' > "$WS/libs/l/ezmk.toml"
+          cat > "$WS/libs/l/include/l.hpp" <<'EOF'
+          #pragma once
+          namespace l { int val(); }
+          EOF
+          cat > "$WS/libs/l/src/l.cpp" <<'EOF'
+          #include "l.hpp"
+          namespace l { int val() { return 7; } }
+          EOF
+          for app in a b; do
+            printf '[project]\nname = "%s"\ntype = "executable"\nversion = "0.1.0"\n\n[depends]\nworkspace = ["l"]\n' "$app" > "$WS/apps/$app/ezmk.toml"
+            cat > "$WS/apps/$app/src/main.cpp" <<'EOF'
+          #include "l.hpp"
+          #include <cstdio>
+          int main() { std::printf("v=%d\n", l::val()); return 0; }
+          EOF
+          done
+          cd "$WS"
+          "$EZMK" workspace list
+          "$EZMK" workspace build -j 3
+          # Second build must be fully cached — no member recompiles (lib
+          # artifact + headers unchanged → dependents untouched).
+          if "$EZMK" workspace build -j 3 2>&1 | grep -qE "[1-9] compiled"; then
+            echo "FAIL: second workspace build recompiled something" >&2
+            exit 1
+          fi
+          test -f apps/a/build/a.exe -o -f apps/a/build/a   # artifact landed
+          "$EZMK" workspace clean
+          echo "OK: workspace smoke passed"
+
       - name: Emit test report on failure
         if: failure()
         run: |
