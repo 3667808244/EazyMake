@@ -90,7 +90,7 @@ SRC="$COMMON_SRC src/main.cpp"
 # replaces main.cpp.
 LUA_RUNTIME_SRC="$COMMON_SRC src/ezmk_lua_main.cpp"
 # Exclude main.cpp for tests (it has its own main() function; catch2_impl.cpp provides main)
-TEST_SRC="src/build.cpp src/cache.cpp src/compile_db.cpp src/export.cpp src/import.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/example_data.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lockfile.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/workspace.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
+TEST_SRC="src/build.cpp src/cache.cpp src/compile_db.cpp src/export.cpp src/import.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/example_data.cpp src/file_watcher.cpp src/i18n.cpp src/locale_data.cpp src/lockfile.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/workspace.cpp src/workspace_build.cpp src/vendor/*.c src/vendor/catch2_impl.cpp src/vendor/lua/*.c"
 INCLUDES="-I include/ -I include/vendor/ -I include/vendor/lua/"
 LUA_DEFINES="-DLUA_COMPAT_5_3"
 OUTPUT="build/ezmk"
