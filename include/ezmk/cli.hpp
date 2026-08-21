@@ -31,6 +31,10 @@ enum class Command {
     PkgList,         // 0.2.3+
     PkgUpdate,       // 0.2.3+
     Example,         // 1.2.3
+    WorkspaceList,   // 1.3.0-dev.2
+    WorkspaceBuild,  // 1.3.0-dev.2
+    WorkspaceTest,   // 1.3.0-dev.2
+    WorkspaceClean,  // 1.3.0-dev.2
     Version,
     Help,
 };
@@ -95,6 +99,14 @@ struct ExampleOptions {
     std::string output_dir;   // -o/--output <dir> (default: ".")
 };
 
+// 1.3.0-dev.2: workspace command options — `ezmk workspace build/test/clean`
+// (also filled for the `-w` redirect on build/test/clean).
+struct WorkspaceOptions {
+    int jobs = 0;                            // -j/--jobs (0 = auto)
+    bool stop_on_error = false;              // --stop-on-error (build/test only)
+    std::vector<std::string> members;        // --member <name> (repeatable)
+};
+
 struct InstallOptions {
     Scope scope = Scope::Project;
     std::string pkg_file;    // local path or URL
@@ -146,6 +158,9 @@ struct CliArgs {
 
     // Only valid for Example (1.2.3)
     std::optional<ExampleOptions> example_opts;
+
+    // Only valid for Workspace* commands (1.3.0-dev.2)
+    std::optional<WorkspaceOptions> workspace_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;

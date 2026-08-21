@@ -385,6 +385,39 @@ EZMK_I18N_KEY(workspace_err_dep_cycle)          // dependency cycle
 EZMK_I18N_KEY(workspace_err_dep_not_static)     // dependency not type=static
 EZMK_I18N_KEY(workspace_err_dep_invalid)        // referencing an invalid member
 
+// ---- workspace commands (1.3.0-dev.2) ----
+EZMK_I18N_KEY(workspace_not_found)              // no workspace found upward
+EZMK_I18N_KEY(workspace_list_header)            // list: header with member count + root
+EZMK_I18N_KEY(workspace_list_member)            // list: one valid member row
+EZMK_I18N_KEY(workspace_list_deps)              // list: member dependency line
+EZMK_I18N_KEY(workspace_list_invalid)           // list: invalid member row with reason
+EZMK_I18N_KEY(workspace_build_start)            // build: start line (count + jobs)
+EZMK_I18N_KEY(workspace_test_start)             // test: start line (count + jobs)
+EZMK_I18N_KEY(workspace_clean_start)            // clean: start line (count)
+EZMK_I18N_KEY(workspace_member_start)           // per-member start (member + action)
+EZMK_I18N_KEY(workspace_member_ok)              // per-member success (member + time)
+EZMK_I18N_KEY(workspace_member_fail)            // per-member failure (member + exit code)
+EZMK_I18N_KEY(workspace_member_skip)            // per-member skipped
+EZMK_I18N_KEY(workspace_test_no_tests)          // member skipped: no tests configured
+EZMK_I18N_KEY(workspace_summary)                // action summary (succeeded/failed/skipped)
+EZMK_I18N_KEY(workspace_clean_done)             // clean completion (count)
+EZMK_I18N_KEY(workspace_err_unknown_member)     // --member name not found
+EZMK_I18N_KEY(workspace_err_pure_container)     // container root without ezmk.toml
+EZMK_I18N_KEY(workspace_err_clean_stop_on_error)// clean does not support --stop-on-error
+EZMK_I18N_KEY(workspace_inject_missing)         // sibling artifact missing hint
+EZMK_I18N_KEY(workspace_inject_load_failed)     // workspace load failed during injection
+
+// ---- help: workspace (1.3.0-dev.2) ----
+EZMK_I18N_KEY(help_section_workspace)
+EZMK_I18N_KEY(help_workspace_list)
+EZMK_I18N_KEY(help_workspace_build)
+EZMK_I18N_KEY(help_workspace_test)
+EZMK_I18N_KEY(help_workspace_clean)
+EZMK_I18N_KEY(help_flag_workspace)
+EZMK_I18N_KEY(help_flag_stop_on_error)
+EZMK_I18N_KEY(help_flag_member)
+EZMK_I18N_KEY(cli_flag_needs_workspace)        // flag requires -w/--workspace
+
 // ---- general ----
 EZMK_I18N_KEY(fatal_prefix)
 EZMK_I18N_KEY(error_prefix)

@@ -88,6 +88,69 @@ namespace ezmk::cli
     }
 
     // ===================================================================
+    // 1.3.0-dev.2: `ezmk workspace` command group helpers
+    //   workspace list
+    //   workspace build [-j N] [--stop-on-error] [--member <name>...]
+    //   workspace test  [-j N] [--stop-on-error] [--member <name>...]
+    //   workspace clean [--member <name>...]
+    // Declared before parse_project_args so the -w redirect (build/test/clean)
+    // can reuse them.
+    // ===================================================================
+
+    // Option spec shared by workspace build/test (clean has its own reduced
+    // spec — no -j, no --stop-on-error). `-w` is accepted and ignored: the
+    // redirect (`ezmk build -w`) re-parses the same argv with this spec, so
+    // the -w token must not be an "unknown option".
+    static std::vector<OptionSpec> workspace_cmd_spec()
+    {
+        return {
+            {'w', "workspace", false},
+            {'j', "jobs", true},
+            {'\0', "stop-on-error", false},
+            {'\0', "member", true},
+        };
+    }
+
+    // Read workspace-level options from a parsed option set — -j/--jobs
+    // (0 = auto), --stop-on-error, repeatable --member.
+    static WorkspaceOptions parse_workspace_opts(const ParsedOptions &p)
+    {
+        WorkspaceOptions w;
+        if (auto v = p.value("jobs"))
+        {
+            int j = 0;
+            try
+            {
+                size_t pos = 0;
+                j = std::stoi(*v, &pos);
+                if (pos != v->size())
+                    util::fatal(ezmk::i18n::I18nKey::cli_invalid_jobs, {{"val", *v}});
+            }
+            catch (...)
+            {
+                util::fatal(ezmk::i18n::I18nKey::cli_invalid_jobs, {{"val", *v}});
+            }
+            if (j < 0)
+                util::fatal(ezmk::i18n::I18nKey::cli_jobs_negative);
+            w.jobs = j;
+        }
+        if (p.has("stop-on-error"))
+            w.stop_on_error = true;
+        return w;
+    }
+
+    // Collect every --member value in order of appearance
+    // (ParsedOptions.options keeps occurrences in order).
+    static void fill_members(const ParsedOptions &p, WorkspaceOptions &w)
+    {
+        for (const auto &[k, v] : p.options)
+        {
+            if (k == "member")
+                w.members.push_back(v);
+        }
+    }
+
+    // ===================================================================
     // Command-group parsers
     // ===================================================================
 
@@ -175,6 +238,11 @@ namespace ezmk::cli
             {
                 args.cmd = Command::ProjectBuild;
                 cmd_name = "ezmk project build";
+                // 1.3.0-dev.2: -w/--workspace redirect → `ezmk workspace build`
+                // (not for run/watch — only build/test/clean per the design).
+                spec.push_back({'w', "workspace", false});
+                spec.push_back({'\0', "stop-on-error", false});
+                spec.push_back({'\0', "member", true});
             }
             else if (action == "run")
             {
@@ -190,6 +258,30 @@ namespace ezmk::cli
 
             auto p = parse_options(argc, argv, 3, spec, cmd_name);
             fill_build_opts(p, args.build_opts);
+
+            if (action == "build" && p.has("workspace"))
+            {
+                // 1.3.0-dev.2: `ezmk build -w` ≡ `ezmk workspace build`. Re-parse
+                // with the authoritative workspace spec so workspace-foreign
+                // flags (--profile, --disable-cache, ...) are rejected.
+                args.cmd = Command::WorkspaceBuild;
+                auto wp = parse_options(argc, argv, 3, workspace_cmd_spec(),
+                                        "ezmk workspace build");
+                WorkspaceOptions w = parse_workspace_opts(wp);
+                fill_members(wp, w);
+                reject_positionals(wp, "ezmk workspace build");
+                args.workspace_opts = std::move(w);
+                return args;
+            }
+            if (action == "build" &&
+                (p.has("stop-on-error") || p.has("member")))
+            {
+                // 1.3.0-dev.2: workspace-only flags without -w are a usage error.
+                std::string flag = p.has("stop-on-error") ? "--stop-on-error"
+                                                          : "--member";
+                util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
+                            {{"flag", flag}});
+            }
 
             if (action == "run")
             {
@@ -214,8 +306,31 @@ namespace ezmk::cli
             // 1.2.0-dev.11: clean previously accepted any garbage silently
             // (--bogus / positionals) — parse it like every other subcommand.
             args.cmd = Command::ProjectClean;
-            auto p = parse_options(argc, argv, 3, {}, "ezmk project clean");
+            std::vector<OptionSpec> spec = {
+                // 1.3.0-dev.2: -w/--workspace redirect → `ezmk workspace clean`;
+                // --member is workspace-only (rejected without -w below).
+                {'w', "workspace", false},
+                {'\0', "member", true},
+            };
+            auto p = parse_options(argc, argv, 3, spec, "ezmk project clean");
             reject_positionals(p, "ezmk project clean");
+
+            if (p.has("workspace"))
+            {
+                args.cmd = Command::WorkspaceClean;
+                auto wp = parse_options(argc, argv, 3, workspace_cmd_spec(),
+                                        "ezmk workspace clean");
+                WorkspaceOptions w = parse_workspace_opts(wp);
+                fill_members(wp, w);
+                reject_positionals(wp, "ezmk workspace clean");
+                if (w.stop_on_error)
+                    util::fatal(ezmk::i18n::I18nKey::workspace_err_clean_stop_on_error);
+                args.workspace_opts = std::move(w);
+                return args;
+            }
+            if (p.has("member"))
+                util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
+                            {{"flag", "--member"}});
             return args;
         }
 
@@ -357,8 +472,33 @@ namespace ezmk::cli
                 {'v', "verbose", false},
                 {'V', "verbose", false},
                 {'\0', "profile", true},   // 1.2.0-dev.12
+                // 1.3.0-dev.2: -w redirect + workspace-only flags (rejected
+                // without -w below).
+                {'w', "workspace", false},
+                {'j', "jobs", true},
+                {'\0', "stop-on-error", false},
+                {'\0', "member", true},
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project test");
+            if (p.has("workspace"))
+            {
+                args.cmd = Command::WorkspaceTest;
+                auto wp = parse_options(argc, argv, 3, workspace_cmd_spec(),
+                                        "ezmk workspace test");
+                WorkspaceOptions w = parse_workspace_opts(wp);
+                fill_members(wp, w);
+                reject_positionals(wp, "ezmk workspace test");
+                args.workspace_opts = std::move(w);
+                return args;
+            }
+            if (p.has("jobs") || p.has("stop-on-error") || p.has("member"))
+            {
+                std::string flag = p.has("jobs") ? "-j/--jobs"
+                                   : p.has("stop-on-error") ? "--stop-on-error"
+                                                            : "--member";
+                util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
+                            {{"flag", flag}});
+            }
             if (auto v = p.value("framework"))
                 args.test_framework = *v;
             if (auto v = p.value("filter"))
@@ -637,6 +777,51 @@ namespace ezmk::cli
         return args;
     }
 
+    // ===================================================================
+    // 1.3.0-dev.2: `ezmk workspace` command group parser
+    // ===================================================================
+
+    static CliArgs parse_workspace_args(int argc, char **argv)
+    {
+        CliArgs args;
+        std::string_view action = argv[2];
+
+        if (action == "list")
+        {
+            args.cmd = Command::WorkspaceList;
+            auto p = parse_options(argc, argv, 3, {}, "ezmk workspace list");
+            reject_positionals(p, "ezmk workspace list");
+            return args;
+        }
+
+        if (action == "build" || action == "test" || action == "clean")
+        {
+            std::string cmd_name = "ezmk workspace " + std::string(action);
+            if (action == "build")
+                args.cmd = Command::WorkspaceBuild;
+            else if (action == "test")
+                args.cmd = Command::WorkspaceTest;
+            else
+                args.cmd = Command::WorkspaceClean;
+
+            auto p = parse_options(argc, argv, 3, workspace_cmd_spec(), cmd_name);
+            WorkspaceOptions w = parse_workspace_opts(p);
+            fill_members(p, w);
+            reject_positionals(p, cmd_name);
+
+            // 1.3.0-dev.2: clean is a plain batch operation — no dependency
+            // semantics, so --stop-on-error is rejected explicitly.
+            if (action == "clean" && w.stop_on_error)
+                util::fatal(ezmk::i18n::I18nKey::workspace_err_clean_stop_on_error);
+
+            args.workspace_opts = std::move(w);
+            return args;
+        }
+
+        util::fatal(ezmk::i18n::I18nKey::cli_unknown_subcommand,
+                    {{"group", "workspace"}, {"sub", std::string(action)}});
+    }
+
     // 1.2.3: `ezmk example` — list built-in examples or scaffold one:
     //   ezmk example                    → list
     //   ezmk example list               → list
@@ -886,13 +1071,19 @@ namespace ezmk::cli
             result.shorthand_expansion = std::move(args.shorthand_expansion);
             return result;
         }
+        if (group == "workspace") {   // 1.3.0-dev.2
+            auto result = parse_workspace_args(argc, argv);
+            result.shorthand_expansion = std::move(args.shorthand_expansion);
+            return result;
+        }
 
         util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_unknown_command,
                                     {{"cmd", std::string(group)}}));
         // 0.9.4+: suggest closest matching command
         {
             std::vector<std::string> cmds = {
-                "project", "pkg", "repo", "utils", "example", "help", "version"
+                "project", "pkg", "repo", "utils", "example", "workspace",
+                "help", "version"
             };
             auto matches = util::closest_match(std::string(group), cmds, 2);
             if (!matches.empty()) {
@@ -981,6 +1172,15 @@ namespace ezmk::cli
         row("ezmk version", I18nKey::help_version);
         std::cout << "\n";
 
+        // ── §4.5: Workspace (1.3.0-dev.2) ─────────────────────────
+        std::cout << get(I18nKey::help_section_workspace) << "\n";
+        row("ezmk workspace list", I18nKey::help_workspace_list);
+        row("ezmk workspace build [-j N] [--stop-on-error] [--member <n>]", I18nKey::help_workspace_build);
+        row("ezmk workspace test  [-j N] [--stop-on-error] [--member <n>]", I18nKey::help_workspace_test);
+        row("ezmk workspace clean [--member <n>]", I18nKey::help_workspace_clean);
+        sub(get(I18nKey::help_full_form) + ": build/test/clean accept -w to redirect");
+        std::cout << "\n";
+
         // ── §5: Common options ────────────────────────────────────
         std::cout << get(I18nKey::help_section_options) << "\n";
         std::cout << get(I18nKey::cli_usage_scopes) << "\n";
@@ -994,6 +1194,9 @@ namespace ezmk::cli
         row("-j, --jobs <N>", I18nKey::help_flag_jobs);
         row("--profile <name>", I18nKey::help_flag_profile);
         row("--auto-update", I18nKey::help_flag_auto_update);
+        row("-w, --workspace", I18nKey::help_flag_workspace);   // 1.3.0-dev.2
+        row("--stop-on-error", I18nKey::help_flag_stop_on_error);   // 1.3.0-dev.2
+        row("--member <name>", I18nKey::help_flag_member);     // 1.3.0-dev.2
         row("--sha256 <hash>", I18nKey::help_flag_sha256);
         row("-y, --yes", I18nKey::help_flag_yes);
         row("--color=<mode>", I18nKey::help_flag_color);
