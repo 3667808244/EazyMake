@@ -565,6 +565,10 @@ static void parse_depends(const toml::table& root, EzConfig& cfg) {
         cfg.depends.libs = extract_depends_array(deps->get("lib"));
         // 0.2.2+: optional dependencies
         cfg.depends.want = extract_depends_array(deps->get("want"));
+        // 1.3.0-dev.1: workspace sibling dependencies — plain member refs
+        // (basename or relative path), validated by workspace::validate_ws_deps.
+        cfg.depends.workspace =
+            extract_string_array(deps->get("workspace"), "depends.workspace");
     }
 }
 

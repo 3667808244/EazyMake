@@ -367,6 +367,24 @@ EZMK_I18N_KEY(example_exists)
 EZMK_I18N_KEY(example_generating)
 EZMK_I18N_KEY(help_example)
 
+// ---- workspace (1.3.0-dev.1) ----
+EZMK_I18N_KEY(workspace_err_no_section)         // [workspace] section missing
+EZMK_I18N_KEY(workspace_err_members_required)   // members missing/empty
+EZMK_I18N_KEY(workspace_err_members_type)       // non-string member entry
+EZMK_I18N_KEY(workspace_err_unknown_key)        // unknown section/key
+EZMK_I18N_KEY(workspace_err_default_jobs)       // default_jobs not int ≥ 0
+EZMK_I18N_KEY(workspace_err_stop_on_error)      // stop_on_error not bool
+EZMK_I18N_KEY(workspace_err_member_path)        // unsafe member path (abs/../..)
+EZMK_I18N_KEY(workspace_err_member_escape)      // symlink/canonical escape
+EZMK_I18N_KEY(workspace_err_member_missing)     // member dir does not exist
+EZMK_I18N_KEY(workspace_err_member_no_config)   // member has no ezmk.toml
+EZMK_I18N_KEY(workspace_err_member_nested)      // member contains nested workspace
+EZMK_I18N_KEY(workspace_err_dep_unknown)        // unknown workspace dep ref
+EZMK_I18N_KEY(workspace_err_dep_ambiguous)      // basename matches multiple members
+EZMK_I18N_KEY(workspace_err_dep_cycle)          // dependency cycle
+EZMK_I18N_KEY(workspace_err_dep_not_static)     // dependency not type=static
+EZMK_I18N_KEY(workspace_err_dep_invalid)        // referencing an invalid member
+
 // ---- general ----
 EZMK_I18N_KEY(fatal_prefix)
 EZMK_I18N_KEY(error_prefix)

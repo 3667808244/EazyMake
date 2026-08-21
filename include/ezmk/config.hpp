@@ -73,6 +73,11 @@ struct DependsEntry {
 struct DependsSection {
     std::vector<DependsEntry> libs;   // 0.9.6+: changed from std::vector<std::string>
     std::vector<DependsEntry> want;   // 0.2.2+ optional dependencies
+    // 1.3.0-dev.1: workspace sibling dependencies — `[depends] workspace = [...]`
+    // values are member basenames or full relative paths within the enclosing
+    // workspace. Empty when not declared; workspace validation lives in
+    // workspace.cpp (reference resolution / cycle detection / static constraint).
+    std::vector<std::string> workspace;
 };
 
 // 0.2.3+ — Build profile configuration for debug/release/etc.
