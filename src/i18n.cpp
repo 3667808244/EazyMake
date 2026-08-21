@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 #ifdef EZMK_WIN
 #ifndef WIN32_LEAN_AND_MEAN
@@ -88,8 +89,14 @@ namespace ezmk::i18n
         }
 
         // Parse a locale JSON string and populate g_strings.
+        // overlay=false (default): replaces g_strings entirely (base language).
+        // overlay=true: keeps existing entries and overrides only the keys the
+        // file declares — used to layer a variant file over its base language
+        // (inheritance: variant files only list their differences).
         // Returns true on success.
-        bool parse_locale_json(const std::string &json_text, const std::string &expected_lang)
+        bool parse_locale_json(const std::string &json_text,
+                               const std::string &expected_lang,
+                               bool overlay = false)
         {
             try
             {
@@ -124,6 +131,19 @@ namespace ezmk::i18n
                     }
                 }
 
+                // 1.3.0-dev.4: meta.language must match the tag being loaded —
+                // a variant file must declare its own tag; a base file the base.
+                if (root.contains("meta") && root["meta"].contains("language"))
+                {
+                    std::string declared = root["meta"].value("language", std::string(""));
+                    if (!declared.empty() && declared != expected_lang)
+                    {
+                        util::warn(std::string("locale file for '") + expected_lang +
+                                   "' declares meta.language '" + declared + "' — mismatch");
+                        return false;
+                    }
+                }
+
                 // Load strings
                 if (!root.contains("strings") || !root["strings"].is_object())
                 {
@@ -132,7 +152,10 @@ namespace ezmk::i18n
                     return false;
                 }
 
-                g_strings.clear();
+                if (!overlay)
+                {
+                    g_strings.clear();
+                }
                 for (auto &[key, val] : root["strings"].items())
                 {
                     g_strings[key] = val.get<std::string>();
@@ -216,35 +239,69 @@ namespace ezmk::i18n
 
     void init(std::string_view lang)
     {
-        std::string target_lang;
-        if (lang.empty())
+        // 1.3.0-dev.4: target is a canonical locale tag (e.g. "zh-TW").
+        // Explicit lang args are normalized too ("zh_CN" → "zh-CN") so the
+        // inheritance split below is always well-formed.
+        std::string target_lang =
+            lang.empty() ? detect_language()
+                         : normalize_locale_tag(std::string(lang));
+
+        // Split into base language + optional variant:
+        //   "zh-TW" → base "zh", variant "zh-TW"
+        // The variant overlays the base (inheritance); a missing variant file
+        // is a pure fallback to the base language (never an error).
+        std::string base = target_lang;
+        std::string variant;
+        auto dash = target_lang.find('-');
+        if (dash != std::string::npos)
         {
-            target_lang = detect_language();
-        }
-        else
-        {
-            target_lang = std::string(lang);
+            base = target_lang.substr(0, dash);
+            variant = target_lang;
         }
 
-        // 1. Try runtime locale file first (allows user override)
-        std::string file_json = load_runtime_locale_file(target_lang);
-        if (!file_json.empty() && parse_locale_json(file_json, target_lang))
+        // 1. Base language: runtime locale file first (user override), then
+        //    embedded data (unchanged priority).
+        bool base_loaded = false;
+        std::string file_json = load_runtime_locale_file(base);
+        if (!file_json.empty() && parse_locale_json(file_json, base))
         {
-            audit_missing_keys();
-            return;
+            base_loaded = true;
+        }
+        if (!base_loaded)
+        {
+            auto it = get_embedded_locales().find(base);
+            if (it != get_embedded_locales().end() && !it->second.empty() &&
+                parse_locale_json(it->second, base))
+            {
+                base_loaded = true;
+            }
         }
 
-        // 2. Try embedded data
-        auto it = get_embedded_locales().find(target_lang);
-        if (it != get_embedded_locales().end() && !it->second.empty() &&
-            parse_locale_json(it->second, target_lang))
+        // 2. Variant overlay: locale/<tag>.json overrides only the keys it
+        //    declares; when absent (or unparseable) the base language stays.
+        if (base_loaded && !variant.empty())
         {
-            audit_missing_keys();
-            return;
+            std::string v_json = load_runtime_locale_file(variant);
+            if (v_json.empty())
+            {
+                auto it = get_embedded_locales().find(variant);
+                if (it != get_embedded_locales().end() && !it->second.empty())
+                {
+                    v_json = it->second;
+                }
+            }
+            if (!v_json.empty())
+            {
+                parse_locale_json(v_json, variant, /*overlay=*/true);
+            }
         }
 
-        // 3. Fallback to English
-        load_en_fallback();
+        // 3. Unknown base language → English fallback.
+        if (!base_loaded)
+        {
+            load_en_fallback();
+        }
+
         audit_missing_keys();
     }
 
@@ -319,62 +376,63 @@ namespace ezmk::i18n
 
     std::string detect_language()
     {
-        // 1. Check EZMK_LANG environment variable
+        // 1.3.0-dev.4: true when a normalized tag OR its base language has
+        // locale data (embedded or a runtime file). The guard is deliberately
+        // permissive about variants: "zh-TW" is accepted when embedded/runtime
+        // data exists for "zh-TW" itself OR for "zh" (the variant inherits the
+        // base — init() layers it, and a missing variant file falls back).
+        auto has_data = [](const std::string &tag) -> bool {
+            if (tag.empty())
+                return false;
+            if (get_embedded_locales().count(tag) ||
+                !load_runtime_locale_file(tag).empty())
+            {
+                return true;
+            }
+            auto dash = tag.find('-');
+            if (dash == std::string::npos)
+                return false;
+            std::string base = tag.substr(0, dash);
+            return get_embedded_locales().count(base) ||
+                   !load_runtime_locale_file(base).empty();
+        };
+
+        // 1. Check EZMK_LANG environment variable (normalized tag).
         const char *env_lang = std::getenv("EZMK_LANG");
         if (env_lang && env_lang[0] != '\0')
         {
-            std::string lang(env_lang);
-            // Normalize: "zh-CN" → "zh", "en-US" → "en", etc.
-            auto dash = lang.find('-');
-            if (dash != std::string::npos)
-                lang = lang.substr(0, dash);
-            auto dot = lang.find('.');
-            if (dot != std::string::npos)
-                lang = lang.substr(0, dot);
-            // Only return if we actually have data for this language
-            if (get_embedded_locales().count(lang) || !load_runtime_locale_file(lang).empty())
+            std::string tag = normalize_locale_tag(env_lang);
+            if (has_data(tag))
             {
-                return lang;
+                return tag;
             }
         }
 
-        // 2. Platform-specific system language detection
+        // 2. Platform-specific system language detection (also normalized).
 #ifdef EZMK_WIN
-        // Windows: GetUserDefaultLocaleName
+        // Windows: GetUserDefaultLocaleName (already BCP 47, e.g. "zh-TW").
         wchar_t localeName[LOCALE_NAME_MAX_LENGTH]{};
         if (GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH) > 0)
         {
             std::wstring wlang(localeName);
             std::string lang(wlang.begin(), wlang.end());
-            // e.g. "zh-CN" → "zh"
-            auto dash = lang.find('-');
-            if (dash != std::string::npos)
-                lang = lang.substr(0, dash);
-            if (get_embedded_locales().count(lang) || !load_runtime_locale_file(lang).empty())
+            std::string tag = normalize_locale_tag(lang);
+            if (has_data(tag))
             {
-                return lang;
+                return tag;
             }
         }
 #else
-        // Linux/macOS: check $LANG, $LC_ALL
+        // Linux/macOS: check $LANG, $LC_ALL (e.g. "zh_TW.UTF-8").
         for (const char *var : {"LANG", "LC_ALL"})
         {
             const char *val = std::getenv(var);
             if (val && val[0] != '\0')
             {
-                std::string lang(val);
-                auto dot = lang.find('.');
-                if (dot != std::string::npos)
-                    lang = lang.substr(0, dot);
-                auto underscore = lang.find('_');
-                if (underscore != std::string::npos)
-                    lang = lang.substr(0, underscore);
-                auto dash = lang.find('-');
-                if (dash != std::string::npos)
-                    lang = lang.substr(0, dash);
-                if (get_embedded_locales().count(lang) || !load_runtime_locale_file(lang).empty())
+                std::string tag = normalize_locale_tag(val);
+                if (has_data(tag))
                 {
-                    return lang;
+                    return tag;
                 }
             }
         }
@@ -382,6 +440,79 @@ namespace ezmk::i18n
 
         // 3. Default to English
         return "en";
+    }
+
+    std::string normalize_locale_tag(std::string_view raw)
+    {
+        // Strip an encoding suffix: "zh_CN.UTF-8" → "zh_CN".
+        auto dot = raw.find('.');
+        if (dot != std::string_view::npos)
+            raw = raw.substr(0, dot);
+
+        // Split on '_' or '-' (both are valid BCP-47 separators).
+        std::vector<std::string> parts;
+        std::string cur;
+        for (char c : raw)
+        {
+            if (c == '_' || c == '-')
+            {
+                if (!cur.empty())
+                {
+                    parts.push_back(std::move(cur));
+                    cur.clear();
+                }
+            }
+            else
+            {
+                cur.push_back(c);
+            }
+        }
+        if (!cur.empty())
+            parts.push_back(std::move(cur));
+
+        auto is_alpha = [](char c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        };
+
+        // Language segment: 2-3 ASCII letters, lowercased.
+        if (parts.empty() || parts[0].size() < 2 || parts[0].size() > 3)
+            return {};
+        for (char c : parts[0])
+        {
+            if (!is_alpha(c))
+                return {};
+        }
+        std::string out;
+        for (char c : parts[0])
+        {
+            out.push_back(static_cast<char>(
+                std::tolower(static_cast<unsigned char>(c))));
+        }
+
+        // Optional region segment: exactly 2 letters, uppercased.
+        if (parts.size() == 2)
+        {
+            if (parts[1].size() != 2)
+                return {};
+            for (char c : parts[1])
+            {
+                if (!is_alpha(c))
+                    return {};
+            }
+            out += '-';
+            for (char c : parts[1])
+            {
+                out.push_back(static_cast<char>(
+                    std::toupper(static_cast<unsigned char>(c))));
+            }
+        }
+        else if (parts.size() > 2)
+        {
+            // Script/extension tags ("zh-Hant-TW") are out of scope — invalid.
+            return {};
+        }
+
+        return out;
     }
 
 } // namespace ezmk::i18n
