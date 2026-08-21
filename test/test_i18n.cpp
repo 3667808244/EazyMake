@@ -207,10 +207,10 @@ TEST_CASE("detect_language() respects EZMK_LANG=en", "[i18n][detect]") {
     REQUIRE(lang == "en");
 }
 
-TEST_CASE("detect_language() normalizes zh-CN to zh", "[i18n][detect]") {
+TEST_CASE("detect_language() normalizes zh-CN to the full variant tag", "[i18n][detect]") {
     EnvGuard guard("EZMK_LANG", "zh-CN");
     std::string lang = detect_language();
-    REQUIRE(lang == "zh");
+    REQUIRE(lang == "zh-CN");  // 1.3.0-dev.4: full canonical tag, not just "zh"
 }
 
 // ===================================================================
@@ -455,9 +455,9 @@ static const char* const kAllKeyNames[] = {
 constexpr size_t kAllKeyCount = sizeof(kAllKeys) / sizeof(kAllKeys[0]);
 } // namespace
 
-TEST_CASE("Every I18nKey resolves (no missing-key fallback) in en and zh",
+TEST_CASE("Every I18nKey resolves (no missing-key fallback) in en, zh and zh-TW",
           "[i18n][keys][regression]") {
-    for (const char* lang : {"en", "zh"}) {
+    for (const char* lang : {"en", "zh", "zh-TW"}) {  // zh-TW: 1.3.0-dev.4 variant
         init(lang);
         for (size_t i = 0; i < kAllKeyCount; ++i) {
             std::string s = get(kAllKeys[i]);
@@ -496,4 +496,112 @@ TEST_CASE("0.2.6 i18n: cli error templates format correctly", "[i18n][0.2.6]") {
 
     std::string c = fmt(I18nKey::cli_invalid_color, {{"val", "bogus"}});
     REQUIRE(c.find("bogus") != std::string::npos);
+}
+
+// ===================================================================
+// 1.3.0-dev.4: locale variants — tag normalization, detection paths,
+// inheritance (variant → base → English fallback chain).
+// ===================================================================
+
+// RAII: remove a file on scope exit (variant-inheritance test writes a temp
+// runtime variant next to the test binary).
+struct FileGuard {
+    fs::path path;
+    ~FileGuard() {
+        std::error_code ec;
+        fs::remove(path, ec);
+    }
+};
+
+TEST_CASE("normalize_locale_tag canonicalizes BCP-47 tags (1.3.0-dev.4)", "[i18n][1.3.0-dev.4]") {
+    // Canonical forms pass through unchanged.
+    REQUIRE(normalize_locale_tag("en") == "en");
+    REQUIRE(normalize_locale_tag("zh") == "zh");
+    REQUIRE(normalize_locale_tag("zh-TW") == "zh-TW");
+    REQUIRE(normalize_locale_tag("en-US") == "en-US");
+    // Underscore separator, encoding suffix, mixed case → canonical form.
+    REQUIRE(normalize_locale_tag("zh_CN") == "zh-CN");
+    REQUIRE(normalize_locale_tag("zh_CN.UTF-8") == "zh-CN");
+    REQUIRE(normalize_locale_tag("zh-cn") == "zh-CN");
+    REQUIRE(normalize_locale_tag("ZH-cn") == "zh-CN");
+    REQUIRE(normalize_locale_tag("en_US.UTF-8") == "en-US");
+    // Leading/trailing separators are tolerated (lenient → base language).
+    REQUIRE(normalize_locale_tag("_zh") == "zh");
+    REQUIRE(normalize_locale_tag("zh_") == "zh");
+    // Invalid input → empty (callers fall back to detection).
+    REQUIRE(normalize_locale_tag("").empty());
+    REQUIRE(normalize_locale_tag("e").empty());          // 1-letter language
+    REQUIRE(normalize_locale_tag("english").empty());    // >3 letters
+    REQUIRE(normalize_locale_tag("zh-Hant-TW").empty()); // script tag — out of scope
+    REQUIRE(normalize_locale_tag("zh-1").empty());       // non-letter region
+    REQUIRE(normalize_locale_tag("zh-ABC").empty());     // region >2 letters
+}
+
+TEST_CASE("detect_language() returns the full variant tag (1.3.0-dev.4)", "[i18n][detect][1.3.0-dev.4]") {
+    EnvGuard guard("EZMK_LANG", "zh-TW");
+    REQUIRE(detect_language() == "zh-TW");
+}
+
+TEST_CASE("detect_language() normalizes underscore + encoding variants (1.3.0-dev.4)", "[i18n][detect][1.3.0-dev.4]") {
+    EnvGuard guard("EZMK_LANG", "zh_CN.UTF-8");
+    REQUIRE(detect_language() == "zh-CN");
+}
+
+TEST_CASE("detect_language() falls through for unknown variant tags (1.3.0-dev.4)", "[i18n][detect][1.3.0-dev.4]") {
+    // "zz-ZZ" has neither base nor variant data → the EZMK_LANG value must
+    // NOT stick; detection falls back to the platform locale / English.
+    EnvGuard guard("EZMK_LANG", "zz-ZZ");
+    std::string lang = detect_language();
+    REQUIRE(lang != "zz-ZZ");
+    REQUIRE(!lang.empty());
+}
+
+TEST_CASE("init(zh-TW) loads the Traditional variant over the zh base (1.3.0-dev.4)", "[i18n][1.3.0-dev.4]") {
+    init("zh-TW");
+    std::string building = get(I18nKey::building);
+    REQUIRE(building.find("建置") != std::string::npos);   // variant override
+    // Differs from the simplified zh base.
+    init("zh");
+    std::string zh_building = get(I18nKey::building);
+    REQUIRE(zh_building.find("构建") != std::string::npos);
+    REQUIRE(building != zh_building);
+}
+
+TEST_CASE("init(zh-CN) has no variant file → falls back to the zh base (1.3.0-dev.4)", "[i18n][1.3.0-dev.4]") {
+    // zh-CN is a canonical tag but no locale/zh-CN.json exists — the base
+    // language (zh) is used and behavior matches the pre-variant release.
+    init("zh-CN");
+    REQUIRE(get(I18nKey::building).find("构建") != std::string::npos);
+    // Underscore spelling reaches the same state via normalization.
+    init("zh_CN");
+    REQUIRE(get(I18nKey::building).find("构建") != std::string::npos);
+}
+
+TEST_CASE("variant inheritance: missing keys fall back to the base language (1.3.0-dev.4)", "[i18n][1.3.0-dev.4]") {
+    // Drop a PARTIAL runtime variant (few keys) next to the test binary — the
+    // runtime file takes priority over embedded data. Keys it declares must
+    // override the base; keys it omits must inherit the base (zh).
+    fs::path variant_file =
+        ezmk::util::get_exe_dir() / ".." / "locale" / "zh-HK.json";
+    REQUIRE_FALSE(fs::exists(variant_file));  // must not clobber a real file
+    ezmk::util::file_write(variant_file,
+        "{\"meta\":{\"language\":\"zh-HK\",\"language_name\":\"測試變體\","
+        "\"version\":\"1\",\"extends\":\"zh\"},\"strings\":{"
+        "\"build_success\":\"建置成功: {path}\"}}\n");
+    FileGuard guard{variant_file};
+
+    init("zh-HK");
+    // Override key: declared by the variant.
+    REQUIRE(get(I18nKey::build_success).find("建置") != std::string::npos);
+    // Inherited key: NOT declared by the variant → the zh base value.
+    REQUIRE(get(I18nKey::building).find("构建") != std::string::npos);
+    // Placeholders still format on the inherited template.
+    std::string r = fmt(I18nKey::building,
+                        {{"name", "x"}, {"type", "executable"}, {"lang", "C++17"}});
+    REQUIRE(r.find("x") != std::string::npos);
+}
+
+TEST_CASE("init(xx) still falls back to English (1.3.0-dev.4)", "[i18n][1.3.0-dev.4]") {
+    init("xx");  // 2-letter tag, no data → English fallback (unchanged).
+    REQUIRE(get(I18nKey::building).find("Building") != std::string::npos);
 }
