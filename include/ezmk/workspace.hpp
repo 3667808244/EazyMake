@@ -82,4 +82,20 @@ void validate_member(const Workspace& ws, Member& m);
 // non-static dependencies throw std::runtime_error.
 void validate_ws_deps(Workspace& ws);
 
+// 1.3.0-dev.2: Resolve a `[depends] workspace` reference (member basename or
+// full relative path) against the member list — exact full-relative-path match
+// first, then a UNIQUE basename match. Returns the member index, or nullopt
+// when the ref matches nothing or is ambiguous (basename collision).
+// Used by the sibling-injection path (build.cpp) and --member selection.
+std::optional<size_t> resolve_member_ref(const Workspace& ws,
+                                         const std::string& ref);
+
+// 1.3.0-dev.2: Kahn topological layering over the member dependency graph.
+// Returns layers of member indices: every member in layer N depends only on
+// members in layers < N, so layers can be executed in order with intra-layer
+// parallelism. Invalid members are excluded (they are never built). Cycles
+// were rejected at config time (validate_ws_deps) — this is a defensive
+// re-check that throws std::runtime_error if one somehow exists.
+std::vector<std::vector<size_t>> topo_layers(const Workspace& ws);
+
 } // namespace ezmk::workspace

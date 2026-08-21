@@ -105,24 +105,15 @@ void read_member_config(Member& m) {
 size_t resolve_dep_ref(const Workspace& ws, size_t member_idx,
                        const std::string& ref) {
     const auto& m = ws.members[member_idx];
+    auto resolved = resolve_member_ref(ws, ref);
+    if (resolved) return *resolved;
 
-    // 1) Exact full relative path match.
-    for (size_t i = 0; i < ws.members.size(); ++i) {
-        if (ws.members[i].name == ref) return i;
-    }
-
-    // 2) Basename match — must be unambiguous. Self-basename matches are
-    //    resolved too (they surface as self-loops in cycle detection).
-    size_t match = ws.members.size();
+    // Distinguish ambiguous (multiple basename matches) from unknown so the
+    // error message can tell the user to use the full relative path.
     size_t count = 0;
     for (size_t i = 0; i < ws.members.size(); ++i) {
-        if (ws.members[i].basename == ref) {
-            match = i;
-            ++count;
-        }
+        if (ws.members[i].basename == ref) ++count;
     }
-    if (count == 1) return match;
-
     if (count > 1) {
         throw std::runtime_error(
             i18n::fmt(I18nKey::workspace_err_dep_ambiguous,
@@ -398,6 +389,89 @@ void validate_ws_deps(Workspace& ws) {
             }
         }
     }
+}
+
+// ---- 1.3.0-dev.2: member resolution + topological layering ----
+
+std::optional<size_t> resolve_member_ref(const Workspace& ws,
+                                         const std::string& ref) {
+    // 1) Exact full relative path match.
+    for (size_t i = 0; i < ws.members.size(); ++i) {
+        if (ws.members[i].name == ref) return i;
+    }
+    // 2) Basename match — must be unambiguous. Self-basename matches resolve
+    //    too (they surface as self-loops in cycle detection upstream).
+    size_t match = ws.members.size();
+    size_t count = 0;
+    for (size_t i = 0; i < ws.members.size(); ++i) {
+        if (ws.members[i].basename == ref) {
+            match = i;
+            ++count;
+        }
+    }
+    if (count == 1) return match;
+    // Unknown ref or ambiguous basename collision — nullopt.
+    return std::nullopt;
+}
+
+std::vector<std::vector<size_t>> topo_layers(const Workspace& ws) {
+    const size_t n = ws.members.size();
+
+    // Re-resolve the dependency graph over VALID members. validate_ws_deps
+    // already guarantees: a valid member's ws_deps all resolve and point to
+    // valid members (referencers of invalid members were marked invalid).
+    // Everything below is defensive against internal drift.
+    // Edge direction: dep → i (prerequisite edge); indeg[i] counts i's
+    // dependencies, so zero-in-degree members have no dependencies and build
+    // first.
+    std::vector<std::vector<size_t>> edges(n);
+    std::vector<size_t> indeg(n, 0);
+    for (size_t i = 0; i < n; ++i) {
+        const auto& m = ws.members[i];
+        if (!m.valid) continue;
+        edges[i].reserve(m.ws_deps.size());
+        for (const auto& ref : m.ws_deps) {
+            auto dep = resolve_member_ref(ws, ref);
+            if (!dep || !ws.members[*dep].valid) {
+                throw std::runtime_error(
+                    "workspace: internal error: unresolved dependency '" + ref +
+                    "' for member '" + m.name + "'");
+            }
+            edges[*dep].push_back(i);
+            ++indeg[i];
+        }
+    }
+
+    // Kahn: peel zero-in-degree members into successive layers. Members in
+    // the same layer have no dependency between them → intra-layer parallelism.
+    std::vector<std::vector<size_t>> layers;
+    std::vector<bool> done(n, false);
+    size_t remaining = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (ws.members[i].valid) ++remaining;
+    }
+
+    while (remaining > 0) {
+        std::vector<size_t> layer;
+        for (size_t i = 0; i < n; ++i) {
+            if (!ws.members[i].valid || done[i]) continue;
+            if (indeg[i] == 0) layer.push_back(i);
+        }
+        if (layer.empty()) {
+            // Cycle — validate_ws_deps rejects these at config time; reaching
+            // here means an internal invariant broke.
+            throw std::runtime_error(
+                "workspace: internal error: dependency cycle detected during "
+                "topological layering");
+        }
+        for (size_t i : layer) {
+            done[i] = true;
+            --remaining;
+            for (size_t d : edges[i]) --indeg[d];
+        }
+        layers.push_back(std::move(layer));
+    }
+    return layers;
 }
 
 } // namespace ezmk::workspace
