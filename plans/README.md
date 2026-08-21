@@ -32,7 +32,7 @@ plans/
 
 ## 当前执行
 
-- **[1.3.0](1.3.x/1.3.0.md)** — Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；编译期互不依赖的项目集合，批量 + 并行管理；dev.1 配置与定位 ✅ → dev.2 命令与并行 → dev.3 测试与 CI → dev.4 i18n 语言变体 → pre.1 文档收口）
+- **[1.3.0](1.3.x/1.3.0.md)** — Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；编译期互不依赖的项目集合，批量 + 并行管理；dev.1 配置与定位 ✅ → dev.2 命令与并行 → dev.3 测试与 CI → dev.4 i18n 语言变体 → dev.5 消费命令总是自动构建 → pre.1 文档收口）
 
 ## 未来规划
 
@@ -54,7 +54,7 @@ plans/
 | 1.0.0 | 打磨发布 | 一键安装 / 默认仓库 / 文档多语言 / 捆绑包迁移 / 跨平台测试 / 正式版发布 | [1.0.0/README.md](1.0.0/README.md) |
 | 1.1.x | 正式版 + 补丁 | 1.1.0 包编译与开发体验 + 1.1.1 cc 拦截 + 1.1.2 安全与正确性 + 1.1.3 安全收敛二轮/健壮性收口 | [1.1.x/README.md](1.1.x/README.md) |
 | 1.2.x | 正式版 + 补丁 | 1.2.0 工具链互操作与开箱工程化 + 1.2.1 模板差异化（库骨架 .hpp/.cpp）+ 1.2.2 教程分类重组 + 1.2.3 `ezmk example` 命令组与内置示例 + 1.2.4 仓库文件夹包支持 + 1.2.5 测试缓存修复与默认源码包（已发布） | [1.2.x/README.md](1.2.x/README.md) |
-| 1.3.x | 功能版本 | 1.3.0 Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；批量 + 并行）+ i18n 语言变体（dev.4，`zh-TW` 继承式变体） | [1.3.x/README.md](1.3.x/README.md) |
+| 1.3.x | 功能版本 | 1.3.0 Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；批量 + 并行）+ i18n 语言变体（dev.4，`zh-TW` 继承式变体）+ 消费命令总是自动构建（dev.5） | [1.3.x/README.md](1.3.x/README.md) |
 
 ## 依赖关系图
 
@@ -64,7 +64,7 @@ graph TD
     v100["1.0.0 正式版发布"]
     v11x["1.1.x 正式版 + 补丁系列"]
     v12x["1.2.x 正式版 + 补丁系列"]
-    v13x["1.3.x 功能版本（1.3.0 Workspace + i18n 语言变体）"]
+    v13x["1.3.x 功能版本（1.3.0 Workspace + i18n 变体 + 消费命令总是构建）"]
     v200["2.0.0 (未来，破坏性变更)"]
 
     v0xx --> v100
