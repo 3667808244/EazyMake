@@ -50,6 +50,8 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **更多语言变体**（`en-GB`/`en-US`）与完整 BCP 47（脚本/地区扩展）：机制就绪，按需添加
 - **产物新鲜度时间戳校验**：本版采用「总是构建」语义，不引入时间戳比较；归 2.0.0 评估
 - **AUR**：新账户注册未开放，`publish/arch/PKGBUILD` 自取 + `makepkg -si` 为主；账户开通后补 AUR 提交
+- **winget**：1.3.0 PR（`microsoft/winget-pkgs#422754`）已提交，待 CI + 版主人工审批（1.2.1 `#419171` / 1.2.4 `#420487` / 1.2.5 `#421464` 仍在队列，为发布后跟进项）
+- **macOS Intel（x64）**：仍无预编译产物（`macos-13` runner 在 free tier 不分配）——与 1.2.x 相同；Homebrew 公式仅 arm64 + Linux
 
 ---
 

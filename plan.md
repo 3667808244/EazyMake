@@ -85,9 +85,9 @@
 - [x] **6.2 non-goals 条款更新**：`docs/zh/non-goals.md`（中文基准先行）→ `docs/en/non-goals.md`：允许**单向非循环成员依赖**；完整构建图（环 / 版本 / 平台矩阵 / 可编程图）仍拒绝（条款已在 1.3.0 设计阶段落地 `e25232d`，本版复核与实现一致）
 - [x] **6.3 发布门槛复核**：API 无破坏性变更 + 全量零回归（基线 863/5007）；`plans/1.3.x/README.md` 与 plan.md 收口
 
-### 1.3.0 — 正式发布
+### 1.3.0 — 正式发布 ✅
 
-- [ ] **7.1 聚合发布**：版本置 1.3.0 + tag + Release + 三渠道分发（winget/Homebrew/pacman）
+- [x] **7.1 聚合发布**：版本置 1.3.0 + tag + Release + 三渠道分发（winget/Homebrew/pacman）——tag `v1.3.0` + Release 已发布（多平台资产构建完成；macos-x64 因 runner 未分配与 1.2.x 一致缺失）；Homebrew 公式双处同步（tap `e718d04`）；winget PR `microsoft/winget-pkgs#422754`（审批为跟进项）；PKGBUILD `pkgver=1.3.0` + 真实 digest；独立产物 ezmk.exe/ezmk.exe.sha256 契约与运行验证通过
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
