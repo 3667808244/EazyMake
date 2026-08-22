@@ -32,7 +32,7 @@ plans/
 
 ## 当前执行
 
-- **[1.3.0](1.3.x/1.3.0.md)** — Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；编译期互不依赖的项目集合，批量 + 并行管理；dev.1 配置与定位 ✅ → dev.2 命令与并行 ✅ → dev.3 测试与 CI ✅ → dev.4 i18n 语言变体 ✅ → dev.5 消费命令总是自动构建 ✅ → pre.1 文档收口）
+- **[1.3.0](1.3.x/1.3.0.md)** — Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；编译期互不依赖的项目集合，批量 + 并行管理；dev.1 配置与定位 ✅ → dev.2 命令与并行 ✅ → dev.3 测试与 CI ✅ → dev.4 i18n 语言变体 ✅ → dev.5 消费命令总是自动构建 ✅ → pre.1 文档收口 ✅）
 
 ## 未来规划
 

@@ -8,7 +8,48 @@ As of v1.1.0, the following public APIs are **permanently stable**:
 
 **Configuration:** `[project]`, `[compile]`, `[link]`, `[depends]`, `[test]`, `[install]` core fields in `ezmk.toml`.
 
+**Extended in v1.3.0 (1.3.0-pre.1):**
+
+- **Commands:** `workspace list/build/test/clean` (with `-w` / `--workspace` redirect on `build`/`test`/`clean`, `--member` including the dependency closure, `--stop-on-error`, `-j` / `--jobs`).
+- **Configuration:** `ezmk-workspace.toml` (`[workspace]` `name`/`members`, `[workspace.options]` `default_jobs`/`stop_on_error`); the `workspace` field of `[depends]` in member `ezmk.toml` files.
+- **Environment:** `EZMK_LANG` variant tags — BCP 47 normalization (`zh_CN`/`zh-CN`/`zh_CN.UTF-8` → canonical) and the variant → base → English fallback chain.
+
 Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
+
+---
+
+## 1.3.0 (pre.1 收口) — Workspace 工作区 + i18n 语言变体 + 消费命令总是自动构建
+
+1.3.0 是 1.2.x 收官后的**首个功能 minor**（延续 1.0.0 → 1.1.0 → 1.2.0 的节奏），按 dev（功能）→ pre（收口）两阶段推进。dev.1 ~ dev.5 落地三大主题，pre.1 完成用户触达文档与发布门槛预核对。**公共 API 无破坏性变更**（新增命令组 / 配置文件 / 字段 / 变体标签均为纯增量，单项目路径零改动；`test`/`pack --precompiled` 行为收敛为总是增量构建属修复性变更）。
+
+### 新增 / 行为变更（dev 汇总）
+
+- **Workspace（工作区）**：`ezmk-workspace.toml`（`[workspace] members` + `[workspace.options]`）声明成员集合；`ezmk workspace list/build/test/clean` 批量管理；Kahn 拓扑分层 + 层内并行；`-w` 重定向（`ezmk build -w` ≡ `ezmk workspace build`）、`--member` 含依赖闭包、`--stop-on-error` 停派发；成员 `[depends] workspace` 声明**单向非循环依赖**，构建时兄弟产物**自发现注入**（`-I/-L/-l` 存在性门控、零环境变量）；编译/链接命令 >16K 走 GCC 响应文件兜底；跨成员增量（库 `.cpp` → 依赖者只重链、库 `.h` → 依赖者经 depfile 重编）
+- **i18n 语言变体**：BCP 47 标签归一化（`zh_CN`/`zh-CN`/`zh_CN.UTF-8` → `zh-CN`）；`locale/zh-TW.json` 繁体变体（继承式，只写差异键）；回退链 变体 → 基础 → 英文；`check_i18n.py` 变体校验（子集合法 / 多余键报错 / extends 校验）
+- **消费命令总是自动构建**：`ezmk test` / `pack --precompiled` 移除产物存在性门控，一律先增量构建再消费（消除陈旧产物陷阱）
+- 各 dev 子版本的详细条目见下（dev.1 ~ dev.5）
+
+### pre.1 文档收口
+
+- `docs/cli.md`（zh/en）：新增 `workspace` 命令组节（命令表 + `-w`/`--member`/`--stop-on-error`/`-j` 语义 + 注入与增量说明 + 纯容器根提示）；`EZMK_LANG` 变体标签与回退链说明；`test`/`pack --precompiled` 总是先构建说明
+- `docs/config_file.md`（zh/en）：`[depends] workspace` 字段与约束说明
+- README（zh/en）：命令速览补 workspace；高级特性表新增工作区批量管理
+- 教程（zh/en）：新增第 15 章「工作区：批量管理一组项目」+ 索引
+- non-goals「多项目工作区」条款复核（`e25232d` 已落地，与实现一致）
+- **API 稳定性承诺扩展**（本条目上方）：workspace 命令组 / `ezmk-workspace.toml` / `[depends] workspace` / `EZMK_LANG` 变体标签纳入永久稳定
+
+### 测试
+
+- 全量回归：**863 用例 / 5007 断言零失败**（dev.5 基线；3 跳过为既有环境限制）；i18n 三向一致（`check_i18n.py`，365 键 × en/zh + zh-TW 变体）
+- dev 各子版本测试汇总：workspace 单测 42 用例（解析/定位/校验/拓扑/注入/响应文件）+ 集成 15 用例 + i18n 变体 8 用例 + 陈旧产物陷阱 2 用例
+
+### 已知限制 / 跟进项
+
+- **shared 运行时成员依赖 / 成员级过滤（按标签）/ `cc` 批量生成**：归 2.0.0 或后续评估
+- **完整构建图**（环 / 版本约束 / 平台矩阵 / 可编程图）：non-goals，明确拒绝（见 `docs/zh|en/non-goals.md`）
+- **更多语言变体**（`en-GB`/`en-US`）与完整 BCP 47（脚本/地区扩展）：机制就绪，按需添加
+- **产物新鲜度时间戳校验**：本版采用「总是构建」语义，不引入时间戳比较；归 2.0.0 评估
+- **发布流水线**（winget/Homebrew/pacman）与 AUR：需真实 Release 验证，正式发布阶段落地
 
 ---
 
