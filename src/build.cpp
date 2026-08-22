@@ -1618,17 +1618,20 @@ void pack_project(const config::EzConfig& cfg,
         auto archive_path =
             project_artifact_paths(proj_root / "build", name, cfg.project.type, is_msvc).primary;
 
-        if (!util::file_exists(archive_path)) {
-            util::info("building project before packing...");
+        // 1.3.0-dev.5: always build first (incremental) so the precompiled
+        // archive is packed from FRESH artifacts — the old existence-only gate
+        // packed a stale lib<name>.a when sources changed. The post-build
+        // artifact check stays: a build that fails to produce the archive must
+        // not silently pack an outdated one.
+        util::info("building project before packing...");
+        {
             cli::BuildOptions build_opts;
             build_opts.jobs = 0; // auto-detect
             build_project(cfg, build_opts);
-
-            // Re-check
-            if (!util::file_exists(archive_path)) {
-                util::fatal("build did not produce " + archive_path.filename().string() +
-                            " — cannot pack");
-            }
+        }
+        if (!util::file_exists(archive_path)) {
+            util::fatal("build did not produce " + archive_path.filename().string() +
+                        " — cannot pack");
         }
 
         fs::create_directories(stage_dir / "lib");
@@ -1833,40 +1836,20 @@ void run_tests(const config::EzConfig& cfg,
         ? cfg.test.framework
         : config::normalize_lang(test_framework_override);
 
-    // Build project first if needed
-    bool project_built = false;
-    auto check_built = [&]() -> bool {
-        if (cfg.project.type == "executable") {
-#ifdef EZMK_WIN
-            return util::file_exists(build_dir / (cfg.project.name + ".exe"));
-#else
-            return util::file_exists(build_dir / cfg.project.name);
-#endif
-        } else if (cfg.project.type == "static") {
-            return util::file_exists(build_dir / ("lib" + cfg.project.name + ".a")) ||
-                   util::file_exists(build_dir / ("lib" + cfg.project.name + ".lib"));
-        } else if (cfg.project.type == "shared") {
-            // Check the actual shared-library artifact, not the import library —
-            // a dangling .lib with a deleted .dll must still trigger a rebuild.
-#ifdef EZMK_WIN
-            return util::file_exists(build_dir / (cfg.project.name + ".dll")) ||   // MSVC
-                   util::file_exists(build_dir / ("lib" + cfg.project.name + ".dll")); // MinGW
-#else
-            return util::file_exists(build_dir / ("lib" + cfg.project.name + ".so"));
-#endif
-        }
-        // utils (Lua-tool package): there is no compiled artifact to check and
-        // building produces nothing meaningful — skip the build-first step.
-        return true;
-    };
-
-    if (!check_built()) {
-        util::info("project not built — building first...");
+    // 1.3.0-dev.5: always build first (incremental) so tests run against FRESH
+    // artifacts. The old existence-only gate (check_built) silently ran tests
+    // against stale .o files when sources changed but the old artifact
+    // remained — the classic stale-artifact trap. Incremental caching keeps a
+    // fresh build near zero-cost (one "building" line + a cache hit).
+    // utils projects have no compiled artifact and building them is
+    // meaningless — skipped, exactly like the old gate returned "built" for
+    // them.
+    if (cfg.project.type != "utils") {
+        util::info("building project before tests...");
         cli::BuildOptions build_opts;
         build_opts.jobs = 0; // auto-detect
         try {
             build_project(cfg, build_opts);
-            project_built = true;
         } catch (const std::exception& e) {
             util::fatal(std::string("project build failed, cannot run tests: ") + e.what());
         }
