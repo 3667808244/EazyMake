@@ -18,7 +18,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.3.0 (pre.1 收口) — Workspace 工作区 + i18n 语言变体 + 消费命令总是自动构建
+## 1.3.0 (2026-08-21) — Workspace 工作区 + i18n 语言变体 + 消费命令总是自动构建
 
 1.3.0 是 1.2.x 收官后的**首个功能 minor**（延续 1.0.0 → 1.1.0 → 1.2.0 的节奏），按 dev（功能）→ pre（收口）两阶段推进。dev.1 ~ dev.5 落地三大主题，pre.1 完成用户触达文档与发布门槛预核对。**公共 API 无破坏性变更**（新增命令组 / 配置文件 / 字段 / 变体标签均为纯增量，单项目路径零改动；`test`/`pack --precompiled` 行为收敛为总是增量构建属修复性变更）。
 
@@ -49,7 +49,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **完整构建图**（环 / 版本约束 / 平台矩阵 / 可编程图）：non-goals，明确拒绝（见 `docs/zh|en/non-goals.md`）
 - **更多语言变体**（`en-GB`/`en-US`）与完整 BCP 47（脚本/地区扩展）：机制就绪，按需添加
 - **产物新鲜度时间戳校验**：本版采用「总是构建」语义，不引入时间戳比较；归 2.0.0 评估
-- **发布流水线**（winget/Homebrew/pacman）与 AUR：需真实 Release 验证，正式发布阶段落地
+- **AUR**：新账户注册未开放，`publish/arch/PKGBUILD` 自取 + `makepkg -si` 为主；账户开通后补 AUR 提交
 
 ---
 
