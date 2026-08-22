@@ -79,9 +79,11 @@
 
 ### pre.1 — 文档与发布收口（1.3.0-pre.1）
 
-- [ ] **6.1 文档**：cli.md（workspace 节，zh/en 中文基准先行）/ README 命令速览 / 教程（新章或并入 06）/ CHANGES.md 1.3.0 条目；cli.md `EZMK_LANG` 说明更新（变体标签 + 回退链）
-- [ ] **6.2 non-goals 条款更新**：`docs/zh/non-goals.md`（中文基准先行）→ `docs/en/non-goals.md`：允许**单向非循环成员依赖**；完整构建图（环 / 版本 / 平台矩阵 / 可编程图）仍拒绝
-- [ ] **6.3 发布门槛复核**：API 无破坏性变更 + 全量零回归；`plans/1.3.x/README.md` 与 plan.md 收口
+> 详细设计：[**1.3.0-pre.1.md**](plans/1.3.x/1.3.0-pre.1.md)（用户触达打磨 + 全量文档检查 + 发布门槛预核对）。
+
+- [ ] **6.1 文档**：cli.md（workspace 节，zh/en 中文基准先行）/ README 命令速览 / 教程新章（dev/05-workspace）/ CHANGES.md 1.3.0 聚合条目 + API 稳定性承诺扩展；cli.md `EZMK_LANG` 说明更新（变体标签 + 回退链）；config_file.md `[depends] workspace` 字段
+- [ ] **6.2 non-goals 条款更新**：`docs/zh/non-goals.md`（中文基准先行）→ `docs/en/non-goals.md`：允许**单向非循环成员依赖**；完整构建图（环 / 版本 / 平台矩阵 / 可编程图）仍拒绝（条款已在 1.3.0 设计阶段落地 `e25232d`，本版复核与实现一致）
+- [ ] **6.3 发布门槛复核**：API 无破坏性变更 + 全量零回归（基线 863/5007）；`plans/1.3.x/README.md` 与 plan.md 收口
 
 ### 1.3.0 — 正式发布
 
