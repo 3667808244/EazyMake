@@ -3093,3 +3093,121 @@ TEST_CASE("integration: pure container root hints at workspace build (1.3.0)", "
         REQUIRE(fs::exists(root / "build/root-proj" EZMK_EXE_SUFFIX));
     }
 }
+
+// ==============================================================
+// 1.3.0-dev.5: consumer commands always build fresh artifacts first —
+// `ezmk test` and `ezmk project pack --precompiled` no longer gate on
+// artifact existence (stale-artifact trap lock).
+// ==============================================================
+
+// 1.3.0-dev.5: `ezmk test` must ALWAYS build first (incremental). The lock:
+// change the project source + the test expectation, then run `ezmk test`
+// directly — the fresh build recompiles the project object, so the test links
+// the NEW value and passes. The old existence-only gate skipped the build,
+// linked the stale object and the test FAILED (the stale-artifact trap).
+TEST_CASE("integration: ezmk test always builds fresh artifacts (1.3.0-dev.5)", "[integration][1.3.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    std::string proj_name = "staletest";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    // Project source with a value the EZMK-framework test checks (the test
+    // links the project's own objects minus main.o).
+    file_write(proj_dir / "src" / "answer.cpp", "int answer() { return 1; }\n");
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "test" / "t.cpp",
+        "int answer();\nint main() { return answer() == 1 ? 0 : 1; }\n");
+    {
+        std::ofstream of(proj_dir / "ezmk.toml");
+        of << "[project]\nname = \"" << proj_name << "\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = [\"-Wall\"]\n\n"
+              "[depends]\nlib = []\n\n"
+              "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n";
+    }
+
+    // 1) Baseline: test passes against answer() == 1.
+    ProcResult r1 = run_ezmk("test", proj_dir);
+    INFO("baseline stderr: " << r1.err);
+    REQUIRE(r1.exit_code == 0);
+    REQUIRE((r1.out + r1.err).find("[PASS]") != std::string::npos);
+
+    // 2) Change the PROJECT source AND the test expectation, then run
+    //    `ezmk test` DIRECTLY (no `ezmk build` in between). Always-build
+    //    recompiles answer.o → the test links the new value → passes.
+    file_write(proj_dir / "src" / "answer.cpp", "int answer() { return 2; }\n");
+    file_write(proj_dir / "test" / "t.cpp",
+        "int answer();\nint main() { return answer() == 2 ? 0 : 1; }\n");
+    ProcResult r2 = run_ezmk("test", proj_dir);
+    INFO("post-change stderr: " << r2.err);
+    REQUIRE(r2.exit_code == 0);
+    std::string out2 = r2.out + "\n" + r2.err;
+    REQUIRE(out2.find("building project before tests") != std::string::npos);
+
+    // 3) Fresh artifacts → the always-build is incremental (cache hit, no
+    //    recompile) and the test still passes. The project build (2 sources:
+    //    main.cpp + answer.cpp) reports a full cache hit.
+    ProcResult r3 = run_ezmk("test", proj_dir);
+    REQUIRE(r3.exit_code == 0);
+    std::string out3 = r3.out + "\n" + r3.err;
+    REQUIRE(out3.find("0 cached, 1 compiled") == std::string::npos);  // no recompile
+    REQUIRE(out3.find("2 cached, 0 compiled") != std::string::npos);
+    REQUIRE(out3.find("[PASS]") != std::string::npos);
+}
+
+// 1.3.0-dev.5: `pack --precompiled` must ALWAYS build first (incremental).
+// The lock: change the static-lib source, then pack directly — the fresh
+// build embeds the NEW lib in the archive (different sha256). The old
+// existence-only gate packed the stale archive (identical hash).
+TEST_CASE("integration: pack --precompiled always builds fresh artifacts (1.3.0-dev.5)", "[integration][1.3.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "stale-pack";
+    fs::create_directories(pkg_dir / "src");
+    fs::create_directories(pkg_dir / "include");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"stale-pack\"\ntype = \"static\"\nversion = \"1.0.0\"\n");
+    file_write(pkg_dir / "include" / "sp.hpp", "#pragma once\nint sp_answer();\n");
+    file_write(pkg_dir / "src" / "sp.cpp", "#include \"sp.hpp\"\nint sp_answer() { return 1; }\n");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+
+    // 1) Baseline pack.
+    ProcResult p1 = run_ezmk(
+        "project pack --precompiled --output \"" + out.string() + "\"", pkg_dir);
+    INFO("pack1 stderr: " << p1.err);
+    REQUIRE(p1.exit_code == 0);
+    fs::path arch = out / "stale-pack-1.0.0.tar.gz";
+    REQUIRE(fs::exists(arch));
+    std::string h1 = ezmk::crypto::sha256_file(arch);
+
+    // 2) Change the source, then pack DIRECTLY (no `ezmk build` in between).
+    //    Always-build recompiles sp.o → the archive embeds the NEW lib →
+    //    different hash (the old gate produced an identical archive).
+    file_write(pkg_dir / "src" / "sp.cpp", "#include \"sp.hpp\"\nint sp_answer() { return 2; }\n");
+    ProcResult p2 = run_ezmk(
+        "project pack --precompiled --output \"" + out.string() + "\"", pkg_dir);
+    INFO("pack2 stderr: " << p2.err);
+    REQUIRE(p2.exit_code == 0);
+    REQUIRE(fs::exists(arch));
+    std::string h2 = ezmk::crypto::sha256_file(arch);
+    REQUIRE(h2 != h1);  // fresh artifacts packed
+
+    // 3) Fresh artifacts → incremental build (no recompile) before packing.
+    ProcResult p3 = run_ezmk(
+        "project pack --precompiled --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(p3.exit_code == 0);
+    std::string out3 = p3.out + "\n" + p3.err;
+    REQUIRE(out3.find("0 cached, 1 compiled") == std::string::npos);  // no recompile
+    REQUIRE(out3.find("1 cached, 0 compiled") != std::string::npos);
+}
