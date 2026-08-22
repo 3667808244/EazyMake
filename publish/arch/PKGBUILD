@@ -1,15 +1,15 @@
 # EazyMake — pacman 分发（Arch Linux / MSYS2）
 #
 # 自取 PKGBUILD + makepkg -si（需 base-devel）。AUR 提交延后（账户开通后补）。
-# pkgver 指向 v1.2.5 正式 tag；sha256sums 为 v1.2.5 tag 源码 tarball 的真实 digest
-# （https://codeload.github.com/3667808244/EazyMake/tar.gz/refs/tags/v1.2.5，2026-08-19 实测下载）
+# pkgver 指向 v1.3.0 正式 tag；sha256sums 为 v1.3.0 tag 源码 tarball 的真实 digest
+# （https://codeload.github.com/3667808244/EazyMake/tar.gz/refs/tags/v1.3.0，2026-08-21 实测下载）
 #
 # 构建说明：build.sh 在 Linux 产出静态链接二进制（LDFLAGS="-static"），
 # 故 depends 为空、makedepends 仅 gcc + python；ezmk-lua 为 dev.8 新增的
 # CMake 导出钩子独立运行时，随包一并安装；_ezmk 为 zsh 补全。
 
 pkgname=eazymake
-pkgver=1.2.5
+pkgver=1.3.0
 pkgrel=1
 pkgdesc="A simple C/C++ build tool (GCC/Clang/MSVC)"
 arch=('x86_64')
@@ -17,7 +17,7 @@ url="https://github.com/3667808244/EazyMake"
 license=('MIT')
 makedepends=('gcc' 'python')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/3667808244/EazyMake/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('c9fe17c98349f15c51a04c312bb52860a002bf541795efdb9482616268da2b02')
+sha256sums=('91d2a55bf48183c48980f9d0772467a2563520f77dc7ccf391086aa2cd2e2f53')
 
 build() {
   cd "EazyMake-$pkgver"
