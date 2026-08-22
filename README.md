@@ -164,6 +164,13 @@ ezmk utils cc                   # generate compile_commands.json (deprecated sin
 # Examples (1.2.3+)
 ezmk example list               # list built-in examples
 ezmk example hello              # scaffold an example into ./hello/
+
+# Workspaces (1.3.0+) — manage a set of projects as one unit
+ezmk workspace list             # list workspace members
+ezmk workspace build [flags]    # build all members (topological, parallel)
+ezmk workspace test [flags]     # run member tests
+ezmk workspace clean [flags]    # clean member caches
+# build/test/clean accept -w to redirect: ezmk build -w ≡ ezmk workspace build
 ```
 
 Full reference: [`docs/en/cli.md`](docs/en/cli.md)
@@ -178,6 +185,7 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 | Third-party / private repos | `ezmk repo add <url>` wires in git-repo third-party sources | [`docs/en/repo.md`](docs/en/repo.md) · Tutorial [Pkg 03](tutorial/en/packages/03-third-party-repos.md) |
 | CMake interop | `project export cmake` to export / `project import --from cmake` to import (experimental) | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Interop 01](tutorial/en/interop/01-import-cmake.md) |
 | compile_commands | `project cc` generates compile_commands.json for clangd/IDEs | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Dev 02](tutorial/en/dev/02-utils.md) |
+| Workspace batch management (1.3.0+) | `ezmk-workspace.toml` declares a member set; `workspace build/test/clean` with topological ordering + parallelism; one-way acyclic member deps with automatic static-library artifact injection | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Dev 05](tutorial/en/dev/05-workspace.md) |
 
 ## Documentation
 

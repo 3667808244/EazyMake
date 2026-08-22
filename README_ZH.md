@@ -163,6 +163,13 @@ ezmk utils cc                   # 生成 compile_commands.json（自 1.2.0 起�
 # 示例（1.2.3+）
 ezmk example list               # 列出内置示例
 ezmk example hello              # 生成示例到 ./hello/
+
+# 工作区（1.3.0+）——批量管理一组项目
+ezmk workspace list             # 列出工作区成员
+ezmk workspace build [flags]    # 拓扑构建全部成员（依赖层先构建、同层并行）
+ezmk workspace test [flags]     # 运行成员测试
+ezmk workspace clean [flags]    # 清理成员缓存
+# build/test/clean 附 -w 重定向：ezmk build -w ≡ ezmk workspace build
 ```
 
 完整参考：[`docs/zh/cli.md`](docs/zh/cli.md)
@@ -177,6 +184,7 @@ ezmk example hello              # 生成示例到 ./hello/
 | 第三方 / 私有仓库 | `ezmk repo add <url>` 接入 git 仓库形式的第三方源 | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [包 03](tutorial/zh/packages/03-third-party-repos.md) |
 | CMake 互操作 | `project export cmake` 导出 / `project import --from cmake` 导入（实验性） | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [互操作 01](tutorial/zh/interop/01-import-cmake.md) |
 | compile_commands | `project cc` 为 clangd/IDE 生成 compile_commands.json | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 02](tutorial/zh/dev/02-utils.md) |
+| 工作区批量管理（1.3.0+） | `ezmk-workspace.toml` 声明成员集合；`workspace build/test/clean` 拓扑排序 + 并行；成员间单向非循环依赖、静态库产物自动注入 | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 05](tutorial/zh/dev/05-workspace.md) |
 
 ## 文档
 
