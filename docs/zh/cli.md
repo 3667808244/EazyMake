@@ -155,6 +155,58 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 
 `ezmk run`（及其完整形式 `ezmk project run`）将 `--` 之后的所有内容传递给构建后的程序。
 
+> **`test` 总是先构建（1.3.0+）：** `ezmk test` 总是先执行一次**增量构建**再收集/编译/运行测试——产物新鲜时开销趋近于零（仅一行提示 + 缓存命中）；这消除了「改了源码但旧产物仍在 → 测试跑旧代码」的陈旧产物陷阱。`utils` 类型项目无编译产物，跳过构建。
+
+> **`pack --precompiled` 总是先构建（1.3.0+）：** `--precompiled` 生成预编译包前总是先执行一次**增量构建**，保证打包的是新鲜产物；打包前复核产物存在，构建异常不静默打包过期产物。默认源码包（平台无关、消费者侧编译）不触发构建。
+
+---
+
+## `workspace` — 批量管理项目集合（1.3.0+）
+
+工作区（workspace）是**一个目录下若干独立项目（成员）的集合**：`ezmk-workspace.toml` 声明成员，`ezmk workspace build / test / clean` 批量管理；成员间可声明**单向非循环依赖**，构建时拓扑排序 + 并行 + 兄弟产物自动注入——覆盖最常见的 monorepo 形态：共享基础库 + 多个可执行文件。
+
+| 命令 | 描述 |
+|---|---|
+| `ezmk workspace list` | 列出成员（名称 / 类型 / workspace 依赖），无效成员标注原因 |
+| `ezmk workspace build [-j N] [--stop-on-error] [--member <name>...]` | 拓扑构建全部成员（依赖层先构建、同层并行） |
+| `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...]` | 运行成员测试；无测试的成员跳过（不报错） |
+| `ezmk workspace clean [--member <name>...]` | 按依赖逆序清理成员（与单项目 `ezmk clean` 语义一致：清缓存/临时目录，`build/` 产物保留） |
+
+配置文件为 **`ezmk-workspace.toml`**（独立于 `ezmk.toml`；根可同时是项目与工作区）：
+
+```toml
+[workspace]
+name = "my-ws"                    # 可选
+members = ["apps/tool-a", "apps/tool-b", "libs/strutil"]   # 必填，非空
+
+[workspace.options]
+default_jobs = 4                  # 可选，默认 0 = 自动（硬件并发）
+stop_on_error = false             # 可选，默认 false
+```
+
+成员各自持有 `ezmk.toml`；声明兄弟依赖只需加一行（成员自己的配置零其他改动）：
+
+```toml
+[depends]
+workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径）
+```
+
+依赖约束：**单向非循环**（环 / 自环在配置期拒绝）+ 被依赖成员必须是 `type = "static"`（产物 `build/lib<name>.a` 复用）；无版本（开发中即改即用，版本/快照语义走包）。详见 [`config_file.md`](config_file.md) 的 `[depends]` 节。
+
+**`-w` / `--workspace` 重定向（附在 `build` / `test` / `clean` 上）：** `ezmk build -w` ≡ `ezmk workspace build`（从工作区内任意子目录自动向上定位工作区根）。**不是**「项目 + workspace 都构建」；不加 `-w` 的成员内 `ezmk build` 仍是单项目语义（只构建当前成员，注入**已存在**的兄弟产物）。
+
+**`--member <name>` = 目标成员 + 依赖闭包：** 只构建指定成员及其**依赖**（依赖按拓扑先构建，保证产物新鲜）；`--member apps/tool-a` 与 `--member tool-a`（末段）等价。只想构建**单个成员、不构建闭包** → `cd <member> && ezmk build`。未知成员 → 报错。
+
+**`--stop-on-error`（`build` / `test`）：** 首个失败发生后**停止派发新任务**——本层未启动的成员与所有后续层标记 `skipped`；已在运行的成员**自然结束、不 kill**。摘要含 succeeded / failed / skipped；任一失败退出码非零。不设该标志 → 全部成员跑完再汇总。`clean` **不支持**该标志（无依赖语义）。
+
+**`-j N` / `--jobs N`：** 层内并行任务数；优先级 `-j` > `[workspace.options].default_jobs` > 硬件并发。
+
+**兄弟产物注入（成员自发现，零环境变量）：** 成员构建进程自行定位工作区、解析自身 `[depends] workspace`，注入 `-I <ws>/<m>/include`（存在才加）+ `-L <ws>/<m>/build -l<m>`（`lib<m>.a` 存在才加）——**不读取任何 `EZK_WS_*` 环境变量**，注入长度与工作区规模无关。注入 `-I` 进入编译签名：注入参数变化 → 依赖者自动重编。兄弟产物缺失（独立构建时）→ 提示「先 `ezmk workspace build`」后继续，链接失败会自然报错。
+
+**增量语义：** 改库 `.cpp` → 库重编 + 依赖者**只重链接**；改库 `.h` → 依赖者**自动重编**（depfile 收录注入头）。无需手动 `clean`。
+
+**纯容器根：** 目录只有 `ezmk-workspace.toml`、没有 `ezmk.toml` 时，`ezmk build` 会提示改用 `ezmk workspace build`（或 `ezmk build -w`）；根同时是项目时行为不变。
+
 ---
 
 ## `pkg` — 管理包
@@ -343,7 +395,7 @@ include_dirs = ["include", "@link:shared/include"]
 
 | 变量 | 作用范围 | 用途 |
 |---|---|---|
-| `EZMK_LANG` | 运行时 | 界面语言（`zh` / `en`），覆盖系统检测（`src/i18n.cpp`） |
+| `EZMK_LANG` | 运行时 | 界面语言（`en` / `zh` / 变体标签如 `zh-TW`，1.3.0+），覆盖系统检测（`src/i18n.cpp`） |
 | `NO_COLOR` | 运行时 | 禁用彩色输出（仅 `--color=auto` 时遵守）（`src/util.cpp`） |
 | `CXX` / `CC` | 运行时 + 构建 | 覆盖编译器检测（0.1.8+） |
 | `CXXFLAGS` | 构建 | 额外编译器标志，由 `build.sh` 透传 |
@@ -353,6 +405,8 @@ include_dirs = ["include", "@link:shared/include"]
 | `EZMK_NO_COMPLETIONS` | 安装 | 设为 `1` 跳过 zsh 补全安装（`install.sh`） |
 | `EZMK_NO_DEFAULT_REPO` | 安装 | 设为 `1` 跳过官方仓库预注册（`install.sh`） |
 | `EZMK_TEST_BIN` | 测试 | 集成测试使用的 `ezmk` 二进制路径（默认 `build/ezmk[.exe]`） |
+
+**界面语言变体（1.3.0+）：** `EZMK_LANG` 接受 BCP 47 风格标签并归一化——`zh_CN` / `zh-CN` / `zh_CN.UTF-8` / 大小写混合统一为规范形（如 `zh-CN`）。变体标签（如 `zh-TW`）命中对应变体文案（`locale/zh-TW.json`），未转写的键**继承**基础语言；回退链为 **变体 → 基础语言 → 英文**，任一环节缺失静默降级，永不出现 `{???}`。未设置时系统检测（Windows 区域 / POSIX `$LANG`）同样走标签归一化——`zh-TW` 系统自动使用繁体。
 
 ---
 

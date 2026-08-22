@@ -197,6 +197,58 @@ deliberately not shown).
 
 `ezmk run` (and its full form `ezmk project run`) passes everything after `--` to the built program.
 
+> **`test` always builds first (1.3.0+):** `ezmk test` always runs an **incremental build** before collecting/compiling/running tests — near-zero cost when artifacts are fresh (one info line + cache hit); this removes the stale-artifact trap where tests ran against old objects after sources changed. `utils` projects have no compiled artifact and skip the build.
+
+> **`pack --precompiled` always builds first (1.3.0+):** `--precompiled` runs an **incremental build** before packing, so the archive is always packed from fresh artifacts; the post-build artifact check stays — a build that fails to produce the archive does not silently pack a stale one. The default source package (platform-independent, compiled on the consumer side) does not trigger a build.
+
+---
+
+## `workspace` — manage a set of projects (1.3.0+)
+
+A workspace is a **collection of independent projects (members) under one directory**: `ezmk-workspace.toml` declares the members and `ezmk workspace build / test / clean` manages them in batch. Members may declare **one-way acyclic dependencies**; builds are topologically ordered with intra-layer parallelism and sibling artifacts injected automatically — covering the most common monorepo shape: a shared base library plus several executables.
+
+| Command | Description |
+|---|---|
+| `ezmk workspace list` | List members (name / type / workspace deps); invalid members show their reason |
+| `ezmk workspace build [-j N] [--stop-on-error] [--member <name>...]` | Build all members topologically (dependency layers first, parallel within a layer) |
+| `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...]` | Run member tests; members without tests are skipped (not an error) |
+| `ezmk workspace clean [--member <name>...]` | Clean members in reverse dependency order (same semantics as single-project `ezmk clean`: caches/temp only, `build/` artifacts kept) |
+
+The config file is **`ezmk-workspace.toml`** (independent of `ezmk.toml`; a root may be both a project and a workspace):
+
+```toml
+[workspace]
+name = "my-ws"                    # optional
+members = ["apps/tool-a", "apps/tool-b", "libs/strutil"]   # required, non-empty
+
+[workspace.options]
+default_jobs = 4                  # optional, default 0 = auto (hardware concurrency)
+stop_on_error = false             # optional, default false
+```
+
+Each member keeps its own `ezmk.toml`; declaring a sibling dependency is one line (nothing else changes in the member's config):
+
+```toml
+[depends]
+workspace = ["strutil"]           # sibling member (basename or full relative path)
+```
+
+Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at config time) + the depended-on member must be `type = "static"` (its `build/lib<name>.a` is reused); no versions (develop-and-use; version/snapshot semantics belong to packages). See the `[depends]` section of [`config_file.md`](config_file.md).
+
+**`-w` / `--workspace` redirect (on `build` / `test` / `clean`):** `ezmk build -w` ≡ `ezmk workspace build` (the workspace root is located upward from any subdirectory). It is **not** "build both the project and the workspace"; without `-w`, a member-internal `ezmk build` keeps single-project semantics (builds only the current member, injecting **already-existing** sibling artifacts).
+
+**`--member <name>` = target member + dependency closure:** builds only the named member and its **dependencies** (dependencies build first in topological order so artifacts are fresh); `--member apps/tool-a` and `--member tool-a` (basename) are equivalent. To build **a single member without the closure** → `cd <member> && ezmk build`. An unknown member is an error.
+
+**`--stop-on-error` (`build` / `test`):** after the first failure the scheduler **stops dispatching new tasks** — not-yet-started members of the current layer and all later layers are marked `skipped`; members already running **finish naturally, never killed**. The summary reports succeeded / failed / skipped; any failure gives a non-zero exit. Without the flag, all members run and failures are summarized. `clean` does **not** support the flag (no dependency semantics).
+
+**`-j N` / `--jobs N`:** intra-layer parallelism; precedence `-j` > `[workspace.options].default_jobs` > hardware concurrency.
+
+**Sibling artifact injection (member self-discovery, zero environment variables):** the member's build process locates the workspace, resolves its own `[depends] workspace`, and injects `-I <ws>/<m>/include` (only if it exists) + `-L <ws>/<m>/build -l<m>` (only if `lib<m>.a` exists) — **no `EZK_WS_*` environment variable is read**, so injection size does not grow with workspace size. The injected `-I` enters the compile signature: injected parameters change → dependents recompile automatically. When a sibling artifact is missing (standalone build), a hint to run `ezmk workspace build` first is printed and the build continues — a missing link will fail naturally.
+
+**Incremental semantics:** changing a library `.cpp` → the library rebuilds + dependents **relink only**; changing a library `.h` → dependents **recompile automatically** (their depfile tracks the injected headers). No manual `clean` needed.
+
+**Pure container root:** a directory with only `ezmk-workspace.toml` (no `ezmk.toml`) makes `ezmk build` print a hint to use `ezmk workspace build` (or `ezmk build -w`); when the root is also a project, behavior is unchanged.
+
 ---
 
 ## `pkg` — manage packages
@@ -413,7 +465,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 
 | Variable | Scope | Purpose |
 |---|---|---|
-| `EZMK_LANG` | runtime | UI language (`zh` / `en`), overrides system detection (`src/i18n.cpp`) |
+| `EZMK_LANG` | runtime | UI language (`en` / `zh` / variant tags like `zh-TW`, 1.3.0+), overrides system detection (`src/i18n.cpp`) |
 | `NO_COLOR` | runtime | Disable colored output (honored only by `--color=auto`) (`src/util.cpp`) |
 | `CXX` / `CC` | runtime + build | Override compiler detection (0.1.8+) |
 | `CXXFLAGS` | build | Extra compiler flags, passed through by `build.sh` |
@@ -423,6 +475,8 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `EZMK_NO_COMPLETIONS` | install | Set to `1` to skip zsh completion install (`install.sh`) |
 | `EZMK_NO_DEFAULT_REPO` | install | Set to `1` to skip official repo pre-registration (`install.sh`) |
 | `EZMK_TEST_BIN` | test | Path to the `ezmk` binary for integration tests (default `build/ezmk[.exe]`) |
+
+**UI language variants (1.3.0+):** `EZMK_LANG` accepts BCP-47-style tags and normalizes them — `zh_CN` / `zh-CN` / `zh_CN.UTF-8` / mixed case all map to a canonical form (e.g. `zh-CN`). A variant tag (e.g. `zh-TW`) selects the corresponding variant text (`locale/zh-TW.json`); keys it does not translate **inherit** the base language. The fallback chain is **variant → base language → English**, silently degrading at any missing step — `{???}` never appears. When unset, system detection (Windows locale / POSIX `$LANG`) goes through the same normalization — a `zh-TW` system automatically gets Traditional Chinese.
 
 ---
 
