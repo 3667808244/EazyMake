@@ -105,6 +105,32 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.0-dev.5 (2026-08-21) — 消费命令总是自动构建
+
+1.3.0 第五个开发子版本（与 workspace 主线并行的最后一个 dev），把**消费构建产物**的命令语义统一为「**先增量构建 → 产物新鲜 → 再消费**」：`ezmk test` 与 `ezmk project pack --precompiled` 移除「产物存在性门控」，改为**总是先 `build_project`**（增量缓存保证产物新鲜时仅一行提示 + 秒过），消除「改源码后旧产物仍在 → 测试跑旧代码 / 打包打旧包」的陈旧产物陷阱。**公共 API 无破坏性变更**（纯行为收敛，无新命令/配置/文件；`run`/`install`/`watch` 本就总是构建、源码包 `pack` 与 `cc`/`export`/`import`/`clean` 维持现状）。
+
+### 新增 / 行为变更
+
+- **`ezmk test` 总是先构建**（`src/build.cpp` `run_tests()`）：删除 `check_built()` 存在性门控与 `project_built` 变量，无条件 `build_project`（增量）后再收集/编译/运行测试；`utils` 类型例外保留（无编译产物，构建无意义，与旧门控对 utils 恒返回「已构建」一致）；构建失败 → fatal「project build failed, cannot run tests」
+- **`ezmk project pack --precompiled` 总是先构建**（`pack_project()`）：`--precompiled` 分支删除存在性门控，无条件 `build_project`（增量）；**打包前产物复核保留**——构建未产出 `lib<name>.a` 时 fatal，不静默打包过期产物
+- **源码包（默认 `pack`）不变**：平台无关、消费者侧编译，打包 `src/`+`include/`+`ezmk.toml` 与产物无关，不触发构建
+- **语义统一表**：run / install / watch（总是构建，不变）| test（存在性门控 → **总是构建**，utils 除外）| pack --precompiled（存在性门控 → **总是构建**）| pack 源码包 / cc / export / import / clean（不消费产物，不变）
+- **workspace 联动**（自动受益）：`ezmk workspace test` 逐成员透传单项目 `ezmk test`，成员测试同样获得「总是构建」语义，无需额外改动
+
+### 测试
+
+- 新增 `test/test_integration.cpp` **2 用例**（`[integration][1.3.0-dev.5]`，陈旧产物陷阱回归锁定）：
+  - **`ezmk test` 用新产物**：改项目源码（`answer()` 1→2）+ 改测试预期后**直接** `ezmk test`（中间不构建）——总是构建重编 `answer.o`，测试链接新值通过（旧门控下跳过构建、链接旧 `.o`、测试必失败）；产物新鲜时第二次 `ezmk test` 全缓存命中（"2 cached, 0 compiled"，无重编译）
+  - **`pack --precompiled` 用新产物**：改静态库源码后**直接** pack——总是构建重编 `sp.o`，归档 sha256 变化（旧门控下打包过期 `lib<a>.a`、hash 相同）；产物新鲜时再次 pack 全缓存命中（"1 cached, 0 compiled"，无重编译）
+- 全量回归：**863 用例 / 5007 断言零失败**（dev.4 基线 861 / 4990，+2 用例 / +17 断言；3 跳过为既有环境限制；连续两轮稳定）
+
+### 已知限制 / 跟进项
+
+- **`check_built` 产物新鲜度校验**（比较时间戳而非存在性）未引入：本版采用最简「总是构建」语义，增量缓存保证近零开销；如需时间戳比较归 **2.0.0** 或后续评估
+- **dev 阶段全部完成**：dev.1 ~ dev.5 收口；下一阶段 **pre.1（文档与发布收口）**——cli.md workspace 节 / README 命令速览 / 教程 / `EZMK_LANG` 变体说明 / non-goals 条款更新 / 发布门槛复核
+
+---
+
 ## 1.3.0-dev.4 (2026-08-21) — i18n 语言变体（locale variants）
 
 1.3.0 第四个开发子版本（与 workspace 主线并行），落地**语言变体**支持：BCP 47 风格变体标签（`zh-TW`/`en-US`/`zh_CN`/`zh_CN.UTF-8` 等）可显式选择并命中变体专属文案；变体文件**继承基础语言**（只写差异键，缺键回退）；回退链 **变体 → 基础 → 英文** 保证任何新键（如 workspace 的 `workspace_*`）在变体未转写时不出现 `{???}`。首个变体文件 `locale/zh-TW.json`（繁体中文 365 键全量转写）。**公共 API 无破坏性变更**（`i18n.hpp` 仅新增 `normalize_locale_tag`；`EZMK_LANG=en`/`zh` 精确值结果与现状逐字节一致）。
