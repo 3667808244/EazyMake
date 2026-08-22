@@ -32,6 +32,7 @@
 2. [Utils 工具（clangd 集成）](dev/02-utils.md)
 3. [测试你的项目](dev/03-test.md)
 4. [顶层别名（快速参考）](dev/04-top-level-aliases.md)
+5. [工作区：批量管理一组项目](dev/05-workspace.md)（1.3.0+）
 
 ### 工具链互操作
 

@@ -35,6 +35,7 @@ Read on demand, in any order:
 2. [Utils tools (clangd integration)](dev/02-utils.md)
 3. [Testing your project](dev/03-test.md)
 4. [Top-level aliases (quick reference)](dev/04-top-level-aliases.md)
+5. [Workspaces: managing a set of projects](dev/05-workspace.md) (1.3.0+)
 
 ### Toolchain interop
 
