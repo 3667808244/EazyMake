@@ -145,6 +145,8 @@ These implementation-relevant flags are not documented in the README command tab
 | `--profile <name>` | `project build/run/watch` | Apply a build profile (e.g. debug/release) |
 | `--no-build-on-start` | `project watch` | Skip initial build in watch mode |
 
+> Planned (1.3.4, not yet implemented): `ezmk watch --run` / `-r` — blockingly run the built executable after each successful rebuild (reuses the exe path returned by `build_project()`; see `plans/1.3.x/1.3.4.md`).
+
 Additional commands not yet in README:
 - `ezmk project install [-v] [--prefix <path>] [--dry-run] [--no-headers] [--no-data]` — install build artifacts
 - `ezmk pkg list [-p|-u|-g]` — list installed packages
@@ -155,13 +157,15 @@ Scope flags (`-p`/`-u`/`-g`): `install` and `repo add` accept only one; others a
 
 ### Command shorthands
 
-`cli::parse()` expands top-level aliases in `argv[1]` before any other parsing:
-- Project: `pn/pb/pr/pc/pi/pw` → `project new/build/run/compile/install/watch`
-- Pkg: `ki/kr/ks/kn/kl/ku` → `pkg install/remove/search/info/list/update`
-- Repo: `ra/rr/rl/ru/ri` → `repo add/remove/list/update/info`
-- Utils: `u`/`h`/`v` → `utils`/`help`/`version`
+`cli::parse()` expands top-level aliases in `argv[1]` before any other parsing. **Source of truth: `kAliases` table in `src/cli.cpp`.** They only apply at the command position — `ezmk project pn` is still an unknown subcommand. Deliberately **not** added to `completions/_ezmk`.
 
-Only apply at the command position; `ezmk project pn` is still an unknown subcommand. Deliberately **not** added to `completions/_ezmk`.
+- **Single-letter (3)**: `u`→`utils`, `h`→`help`, `v`→`version`
+- **Two-letter — Project (8)**: `pn` new · `pb` build · `pr` run · `pc` clean · `pi` install · `pp` pack · `pw` watch · `pt` test
+- **Two-letter — Pkg (6)**: `ki` install · `kr` remove · `ks` search · `kn` info · `kl` list · `ku` update
+- **Two-letter — Repo (5)**: `ra` add · `rr` remove · `rl` list · `ru` update · `ri` info
+- **Natural-language top-level aliases (1.1.0-pre.1, same table)**: `build`/`run`/`clean`/`watch`/`install`/`test`/`pack` → `project *`
+
+`workspace` (1.3.0) has **no** shorthands yet — `wl`/`wb`/`wt`/`wc` are planned in 1.3.3. `example` (1.2.3) will **never** get shorthands (deliberate decision: low-frequency one-shot command; `e`/`ex` collide with shell conventions — see `plans/1.3.x/1.3.3.md` §3.5). `-w` on `project build/test/clean` is a *flag* redirect to the workspace command group — orthogonal to command-position aliases.
 
 ### Global `--color=<mode>`
 
