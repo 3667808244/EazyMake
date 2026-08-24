@@ -18,6 +18,40 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.1 (2026-08-24) — 区间语言标准 + 包/消费者标准兼容校验
+
+1.3.1 是 1.3.0 发布后的**补丁版本**，围绕 `[project].language` 的区间语法与安装期标准兼容校验。语义定死为 A（元数据 + 校验）：区间只表达**最低要求**（可选上界仅元数据），编译仍用单一精确标准（取 min）；**工具链能力表 + 编译协商（语义 B/C）预留 1.4.0**。**公共 API 无破坏性变更**（新语法 + 新字段 + 新警告，纯增量）。
+
+### 新增 / 行为变更
+
+- **区间语言标准**：`parse_language()` 支持 `">=C++11"`（单边下界）与 `"C++11..C++17"`（双边区间）；`LanguageInfo` 新增 `min_ver` / `max_ver`，`std_flag` 语义变为**生效标志**（取 min，与精确写法完全一致——`EZMK_LANG` 宏、缓存签名对精确/区间写法定点不变，改 max 不触发重建）
+- **非法区间拒绝**：`C++17..C++11`（max < min）、`>C++11`（只支持 `>=`）、`C++11+`（不支持 `+` 后缀）、空区间端、`>=X..Y`、跨语言族区间（`C11..C++17`）
+- **安装期标准兼容校验**：源码包（`compile_package`）与预编译包（`select_precompiled_archive`，ABI 措辞加强）在安装前比对包 `min_ver` 与消费者项目 `min_ver`，包最低要求更高 → **警告不 fail**（信息性，避免破坏现有包生态；严格化开关预留 1.4.0）；无消费者 `ezmk.toml`（全局/用户级安装）跳过；消费者 language 非法 → 警告并跳过
+- **CMake 导出修复**：区间 `normalized_lang` 裸数字提取 bug（`"CPP11..CPP17"` → `CXX_STANDARD 1117`）改为直接读 `lang.min_ver`（→ `CXX_STANDARD 11`；CMake 语义「至少 N」与 min 天然对齐）
+
+### 文档
+
+- `docs/config_file.md`（zh/en）：`language` 新增「区间语法」小节（语法表 + 语义 + 非法形式）；`language` 字段说明更新
+- `docs/package_authoring.md` / `docs/pkg.md`（zh/en）：包作者应声明**最低**兼容标准（区间写法）
+- `docs/faq.md`（zh/en）：「invalid language format」补区间正例与语义；修正无版本号写法（`"C++"` → C++17 / `"C"` → C11 按默认值）
+- `CHANGES.md` 本条目
+
+### 测试
+
+- 解析层：区间合法/非法/精确值回归单测（含 `>=GNUCPP11` / `>=C` 默认 11 / `C++03` min=3）
+- 安装校验：高/低/无消费者项目三态 + 区间声明参与 + 预编译 ABI 措辞（stderr 捕获断言）
+- 导出：区间导出 `CXX_STANDARD 11`（防 1117）+ 精确值导出不变回归
+- i18n：新增 `config_err_invalid_lang_range` / `pkg_warn_std_mismatch` / `pkg_warn_std_mismatch_precompiled` 三向一致 + `config_err_invalid_lang` 文案更新；`check_i18n.py` 通过
+
+### 已知限制 / 跟进项
+
+- **工具链能力表**（`max_supported_std(family, version)`，语义 C 铺路）与**编译协商（语义 B）**（包按 `max(包min, 消费者标准)` 重编）：**预留 1.4.0**，本版明确收口不实现
+- **标准校验严格化开关**（warn → error 可配）与 **import.cpp `CXX_STANDARD` 映射**（`src/import.cpp:446-447` 硬编码 C++17）：预留 1.4.0
+- **`+` 后缀别名 / 双边区间「验证到 max」（CI 矩阵）/ header-only 包标准声明**：1.4.0 或后续评估
+- **旧二进制（<1.3.1）读区间配置** → 报 invalid language：可接受（新语法需 ≥1.3.1）
+
+---
+
 ## 1.3.0 (2026-08-21) — Workspace 工作区 + i18n 语言变体 + 消费命令总是自动构建
 
 1.3.0 是 1.2.x 收官后的**首个功能 minor**（延续 1.0.0 → 1.1.0 → 1.2.0 的节奏），按 dev（功能）→ pre（收口）两阶段推进。dev.1 ~ dev.5 落地三大主题，pre.1 完成用户触达文档与发布门槛预核对。**公共 API 无破坏性变更**（新增命令组 / 配置文件 / 字段 / 变体标签均为纯增量，单项目路径零改动；`test`/`pack --precompiled` 行为收敛为总是增量构建属修复性变更）。

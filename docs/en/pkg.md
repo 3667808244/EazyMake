@@ -40,7 +40,7 @@ Utils tool packages (`type = "utils"`, see `utils.md` for details):
 | `name` | string | **Yes** | — | Package name (lowercase, hyphens allowed, e.g. `"my-lib"`) |
 | `version` | string | **Yes** | — | Semantic version, e.g. `"1.2.3"` |
 | `type` | string | No | `"executable"` | Package type (see value table below) |
-| `language` | string | No | `"C++17"` | Format: `<lang><version>`, e.g. `"C11"`, `"C++17"`, `"C++20"` |
+| `language` | string | No | `"C++17"` | Format: `<lang><version>`, e.g. `"C11"`, `"C++17"`, `"C++20"`. **1.3.1+** range syntax (`">=C++11"` / `"C++11..C++17"`) declares a minimum standard; install-time compatibility check warns when the package's minimum exceeds the consuming project's standard |
 | `header_only` | bool | No | `false` | **0.9.7+** Header-only library (no `src/`, skip compilation) |
 | `precompiled` | bool | No | `false` | **0.9.7+** Precompiled package (`lib/` provides pre-built `.a`, no `src/`). See [Package Authoring Guide](package_authoring.md#33-precompiled-package-precompiled--true-097) |
 | `precompiled_strict` | bool | No | `false` | **1.2.0-dev.10+** Precompiled-package strict mode: toolchain fallback (L2/L1, possibly ABI-incompatible) becomes a fail-fast error |

@@ -40,7 +40,7 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 | `name` | string | **是** | — | 包名（小写，可用连字符，如 `"my-lib"`） |
 | `version` | string | **是** | — | 语义化版本号，如 `"1.2.3"` |
 | `type` | string | 否 | `"executable"` | 包类型（见下方取值表） |
-| `language` | string | 否 | `"C++17"` | 格式：`<语言><版本>`，如 `"C11"`、`"C++17"`、`"C++20"` |
+| `language` | string | 否 | `"C++17"` | 格式：`<语言><版本>`，如 `"C11"`、`"C++17"`、`"C++20"`。**1.3.1+** 区间语法（`">=C++11"` / `"C++11..C++17"`）可声明最低标准；安装期标准兼容校验会在包的最低要求高于消费者项目编译标准时给出警告 |
 | `header_only` | bool | 否 | `false` | **0.9.7+** Header-only 库（无需 `src/`，跳过编译） |
 | `precompiled` | bool | 否 | `false` | **0.9.7+** 预编译包（`lib/` 提供预编译 `.a`，无需 `src/`），详见 [包制作指南](package_authoring.md#33-预编译包precompiled--true097) |
 | `precompiled_strict` | bool | 否 | `false` | **1.2.0-dev.10+** 预编译包严格模式：工具链降级（L2/L1，可能 ABI 不兼容）改为 fail-fast 报错 |

@@ -249,7 +249,11 @@ Valid types are:
 
 **Solution**:
 Valid examples: `"C++17"`, `"C++20"`, `"C++23"`, `"C11"`, `"C17"`, `"C23"`, `"C99"`.
-Do not use standalone names like `"C"` or `"C++"` — include the version number.
+Version-less forms default: `"C++"` → C++17, `"C"` → C11.
+Since 1.3.1 you can also declare a **minimum standard** with range syntax —
+`">=C++11"` (at least C++11) or `"C++11..C++17"` (min..max, the max is metadata;
+compilation always uses the min). Invalid range forms (e.g. `"C++17..C++11"`,
+`">C++11"`, `"C++11+"`) are rejected.
 
 ---
 

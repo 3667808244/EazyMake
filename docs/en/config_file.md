@@ -9,7 +9,7 @@
 | `name` | string | Yes | — | Project name |
 | `type` | string | No | `"executable"` | Project type: `"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | Yes | — | Project version; SemVer format recommended (e.g. `"0.1.0"`) |
-| `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified |
+| `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified. **1.3.1+** range syntax: `">=C++11"` (minimum) / `"C++11..C++17"` (min..max) |
 | `stdlib` | string | No | `"libstdc++"` | **1.1.0-dev.4+** Standard library: `"libstdc++"` (default) or `"libc++"`. Aliases: `"glibcxx"` / `"gnu"` → `libstdc++`; `"llvm"` → `libc++`. Case-insensitive |
 | `precompiled_strict` | bool | No | `false` | **1.2.0-dev.10+** Precompiled-package strict mode: L2/L1 toolchain fallback (possibly ABI-incompatible) becomes a fail-fast error. Only affects packages (with `precompiled = true`); see [Package Authoring Guide](package_authoring.md#33-precompiled-package-precompiled--true-097) |
 
@@ -60,6 +60,37 @@ Prefix `GNU` before the language to enable GNU compiler extensions:
 > **Why warn on GNU extensions?** GNU extensions are non-portable — code that relies
 > on them may not compile under a strict or different compiler. The warning nudges
 > users toward the standard spelling rather than forbidding the feature.
+
+#### Range Syntax (1.3.1+)
+
+Declare a **minimum compatibility standard** — useful for library authors whose
+code supports a baseline standard (optionally up to a documented upper bound):
+
+| User input | min | max | Effective `-std=` | Meaning |
+|------------|-----|-----|-------------------|---------|
+| `C++11` | 11 | — | `-std=c++11` | exact standard (unchanged behavior) |
+| `>=C++11` | 11 | — | `-std=c++11` | at least C++11 |
+| `C++11..C++17` | 11 | 17 | `-std=c++11` | C++11 minimum, C++17 documented upper bound |
+| `>=GNUCPP11` | 11 | — | `-std=gnu++11` | at least GNU C++11 |
+| `>=C` | 11 | — | `-std=c11` | at least C11 (missing-version defaults apply) |
+
+- The **minimum** is the *effective* standard: compilation always uses `min`, for
+  maximum predictability and artifact compatibility.
+- The **maximum** (range form only) is **metadata**: it documents how far the
+  project is known to work, but never changes the compile flags or the cache
+  signature (a max-only edit does not trigger a rebuild).
+- `EZMK_LANG` keeps the min canonical form (`">=C++11"` → `"CPP11"`) — identical to
+  the exact spelling, so existing `#ifdef` code is unaffected.
+- Invalid forms are rejected: `C++17..C++11` (max < min), `>C++11` (only `>=` is
+  supported), `C++11+` (no `+` suffix), empty range ends (`C++11..` / `..C++17`),
+  `>=C++11..C++17`, and mixed-family ranges (`C11..C++17`).
+
+> **When to use a range?** Package authors should declare the *lowest* standard
+> their code compiles at (e.g. `">=C++11"` when C++11 is the baseline and newer
+> standards are optional). Since 1.3.1, the install-time standard compatibility
+> check warns when a package requires a higher minimum than the consuming project
+> compiles at — see [Package Authoring Guide](package_authoring.md) and
+> [Packages](pkg.md).
 
 ---
 

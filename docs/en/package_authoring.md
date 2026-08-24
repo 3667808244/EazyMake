@@ -50,7 +50,7 @@ A **utils** package (`type = "utils"`) provides Lua-based tools:
 | `name` | string | **Yes** | — | Package name (lowercase, hyphens OK, e.g. `"my-lib"`) |
 | `version` | string | **Yes** | — | Semantic version, e.g. `"1.2.3"` |
 | `type` | string | No | `"executable"` | `"static"` (library), `"shared"` (shared lib), `"utils"` (Lua tools) |
-| `language` | string | No | `"C++17"` | Format: `<Lang><Ver>`, e.g. `"C11"`, `"C++17"`, `"C++20"` |
+| `language` | string | No | `"C++17"` | Format: `<Lang><Ver>`, e.g. `"C11"`, `"C++17"`, `"C++20"`. **1.3.1+** declare a *minimum* compatibility standard with range syntax, e.g. `">=C++11"` or `"C++11..C++17"` — write the **lowest** standard your code compiles at |
 | `header_only` | bool | No | `false` | **0.9.7+** Set to `true` to skip compilation (no `src/` required) |
 | `precompiled` | bool | No | `false` | **0.9.7+** Set to `true` to use pre-built `lib/*.a` (no `src/` required). See §3.2 below. |
 
