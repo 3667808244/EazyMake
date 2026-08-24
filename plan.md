@@ -1,6 +1,6 @@
 # EazyMake 1.3.1 执行计划
 
-> **状态：规划中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
 > 详细设计：[**1.3.1.md**](plans/1.3.x/1.3.1.md)。本计划为 1.3.0 发布后的**补丁版本**：`[project].language` 支持**区间语法**（`">=C++11"` 单边下界、`"C++11..C++17"` 双边区间），让库作者能声明"最低兼容标准"；安装期新增**标准兼容校验**（包 min > 消费者 min → 警告，防预编译库 ABI 断裂）；顺带修复 CMake 导出的裸数字提取 bug。
 >
@@ -32,34 +32,34 @@
 
 ### 阶段一：解析层
 
-- [ ] **1.1 `LanguageInfo` 扩展**（`include/ezmk/config.hpp:190-196`）：加 `int min_ver = 0` / `int max_ver = 0`；`std_flag` 语义注释为"生效标志（区间取 min）"
-- [ ] **1.2 `parse_language()` 区间支持**（`src/config.cpp:230-327`）：`normalize_lang()` 后**约束剥离**（`>=` / `..`，拆 min/max，先行于 GNU 前缀识别 `:261`）；ver_map 校验；生成 `std_flag` = min；回填 `min_ver`/`max_ver`
-- [ ] **1.3 非法区间拒绝**：`C++17..C++11`（max<min）/ `>C++11` / `C++11+` → 抛错（新 i18n key `config_err_invalid_lang_range`）
-- [ ] **1.4 `normalized_lang` 定点**：区间时返回 min 规范形（`">=C++11"` → `"CPP11"`），`EZMK_LANG` 宏（`src/build.cpp:101-106`）不变
-- [ ] **1.5 单测**（`test/test_config.cpp`）：`>=C++11` / `C++11..C++17` / `>=GNUCPP11` / `>=C`（默认 11）/ 各非法形式 / 精确值回归
+- [x] **1.1 `LanguageInfo` 扩展**（`include/ezmk/config.hpp:190-196`）：加 `int min_ver = 0` / `int max_ver = 0`；`std_flag` 语义注释为"生效标志（区间取 min）"
+- [x] **1.2 `parse_language()` 区间支持**（`src/config.cpp:230-327`）：`normalize_lang()` 后**约束剥离**（`>=` / `..`，拆 min/max，先行于 GNU 前缀识别 `:261`）；ver_map 校验；生成 `std_flag` = min；回填 `min_ver`/`max_ver`
+- [x] **1.3 非法区间拒绝**：`C++17..C++11`（max<min）/ `>C++11` / `C++11+` → 抛错（新 i18n key `config_err_invalid_lang_range`）
+- [x] **1.4 `normalized_lang` 定点**：区间时返回 min 规范形（`">=C++11"` → `"CPP11"`），`EZMK_LANG` 宏（`src/build.cpp:101-106`）不变
+- [x] **1.5 单测**（`test/test_config.cpp`）：`>=C++11` / `C++11..C++17` / `>=GNUCPP11` / `>=C`（默认 11）/ 各非法形式 / 精确值回归
 
 ### 阶段二：安装期标准兼容校验
 
-- [ ] **2.1 helper**（`src/pkg.cpp`）：`int std_min_of(const std::string& language)` + `std::optional<int> consumer_std_min()`（`locate_project_root()` → `parse_config` → `project.language` 的 min；无 ezmk.toml → nullopt）
-- [ ] **2.2 调用点**：`compile_package()`（`pkg.cpp:638`）与 `select_precompiled_archive()`（`pkg.cpp:605`）开头校验，包 min > 消费者 min → 警告（新 key `pkg_warn_std_mismatch`；预编译措辞加强）；消费者 language 非法 → 警告并跳过
-- [ ] **2.3 测试**：高/低/无消费者项目三态；全量回归
+- [x] **2.1 helper**（`src/pkg.cpp`）：`int std_min_of(const std::string& language)` + `std::optional<int> consumer_std_min()`（`locate_project_root()` → `parse_config` → `project.language` 的 min；无 ezmk.toml → nullopt）
+- [x] **2.2 调用点**：`compile_package()`（`pkg.cpp:638`）与 `select_precompiled_archive()`（`pkg.cpp:605`）开头校验，包 min > 消费者 min → 警告（新 key `pkg_warn_std_mismatch`；预编译措辞加强）；消费者 language 非法 → 警告并跳过
+- [x] **2.3 测试**：高/低/无消费者项目三态；全量回归
 
 ### 阶段三：导出与宏一致性
 
-- [ ] **3.1 `export.cpp` 修复**（`:257-259`）：兜底改读 `lang.min_ver`，消除裸数字提取（坑 1）
-- [ ] **3.2 `test_export` 回归**：区间 language 导出 `CXX_STANDARD 11`（防 1117）；精确值导出不变
-- [ ] **3.3 `EZMK_LANG` 语义确认**（坑 2）+ 缓存签名语义确认（max 不进签名，坑 3）
+- [x] **3.1 `export.cpp` 修复**（`:257-259`）：兜底改读 `lang.min_ver`，消除裸数字提取（坑 1）
+- [x] **3.2 `test_export` 回归**：区间 language 导出 `CXX_STANDARD 11`（防 1117）；精确值导出不变
+- [x] **3.3 `EZMK_LANG` 语义确认**（坑 2）+ 缓存签名语义确认（max 不进签名，坑 3）
 
 ### 阶段四：文档 + i18n
 
-- [ ] **4.1 文档**：`docs/en|zh/config_file.md` §language Format 区间小节；`docs/en|zh/package_authoring.md` / `docs/en|zh/pkg.md` language 字段；FAQ「invalid language format」补区间正例；`CHANGES.md` 1.3.1 条目
-- [ ] **4.2 i18n**：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `config_err_invalid_lang_range` / `pkg_warn_std_mismatch`，更新 `config_err_invalid_lang` 文案；重新生成 `locale_data.cpp`（`scripts/embed_locale.py`）；`check_i18n.py` 通过
+- [x] **4.1 文档**：`docs/en|zh/config_file.md` §language Format 区间小节；`docs/en|zh/package_authoring.md` / `docs/en|zh/pkg.md` language 字段；FAQ「invalid language format」补区间正例；`CHANGES.md` 1.3.1 条目
+- [x] **4.2 i18n**：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `config_err_invalid_lang_range` / `pkg_warn_std_mismatch`，更新 `config_err_invalid_lang` 文案；重新生成 `locale_data.cpp`（`scripts/embed_locale.py`）；`check_i18n.py` 通过
 
 ### 阶段五：收口
 
-- [ ] **5.1 全量零回归**（基线 863/5007）
-- [ ] **5.2 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
-- [ ] **5.3 发布门槛复核**：API 无破坏性变更 + 计划清单收口（工具链能力表/编译协商明确延后 1.4.0）
+- [x] **5.1 全量零回归**（基线 863/5007）
+- [x] **5.2 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
+- [x] **5.3 发布门槛复核**：API 无破坏性变更 + 计划清单收口（工具链能力表/编译协商明确延后 1.4.0）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
