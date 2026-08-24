@@ -189,10 +189,12 @@ std::string normalize_lang(const std::string& input);
 // Returns {"g++", "-std=c++17"} for C++; {"gcc", "-std=c11"} for C.
 struct LanguageInfo {
     std::string compiler;            // default compiler from config ("g++" or "gcc")
-    std::string std_flag;            // e.g. "-std=c++17" or "-std=gnu++17"
+    std::string std_flag;            // 1.3.1: effective flag — a range takes min ("-std=c++17" / "-std=gnu++17")
     std::string detected_compiler;   // runtime-detected compiler, empty if not yet probed
     bool gnu_extensions = false;     // 1.1.0-dev.4: true if GNU prefix detected
-    std::string normalized_lang;     // 1.1.0-dev.4: e.g. "CPP17" (for EZMK_LANG macro)
+    std::string normalized_lang;     // 1.1.0-dev.4: e.g. "CPP17" (for EZMK_LANG macro); a range yields the min canonical form
+    int min_ver = 0;                 // 1.3.1: parsed lower bound (0 = not declared); exact values fill this too
+    int max_ver = 0;                 // 1.3.1: upper bound (0 = no upper bound / not declared)
 };
 LanguageInfo parse_language(std::string_view language);
 

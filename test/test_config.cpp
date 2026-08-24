@@ -122,6 +122,148 @@ TEST_CASE("parse_language: invalid inputs", "[config]") {
 }
 
 // ===================================================================
+// 1.3.1: range syntax — ">=C++11" (single-sided) / "C++11..C++17" (range)
+// ===================================================================
+
+TEST_CASE("parse_language: range — single-sided >= lower bound", "[config][1.3.1]") {
+    using namespace ezmk::config;
+
+    SECTION(">=C++11 → min=11, max=0, effective flag c++11") {
+        auto info = parse_language(">=C++11");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++11");
+        REQUIRE(info.min_ver == 11);
+        REQUIRE(info.max_ver == 0);
+        REQUIRE(info.normalized_lang == "CPP11");  // min canonical form
+    }
+
+    SECTION(">=CPP11 alias") {
+        auto info = parse_language(">=CPP11");
+        REQUIRE(info.min_ver == 11);
+        REQUIRE(info.max_ver == 0);
+        REQUIRE(info.std_flag == "-std=c++11");
+    }
+
+    SECTION(">=C → default C11 lower bound") {
+        auto info = parse_language(">=C");
+        REQUIRE(info.compiler == "gcc");
+        REQUIRE(info.std_flag == "-std=c11");
+        REQUIRE(info.min_ver == 11);
+        REQUIRE(info.max_ver == 0);
+    }
+
+    SECTION(">=GNUCPP11 → GNU preserved") {
+        auto info = parse_language(">=GNUCPP11");
+        REQUIRE(info.std_flag == "-std=gnu++11");
+        REQUIRE(info.gnu_extensions);
+        REQUIRE(info.min_ver == 11);
+        REQUIRE(info.max_ver == 0);
+        REQUIRE(info.normalized_lang == "GNUCPP11");
+    }
+}
+
+TEST_CASE("parse_language: range — double-sided C++11..C++17", "[config][1.3.1]") {
+    using namespace ezmk::config;
+
+    SECTION("C++11..C++17 → min=11, max=17, effective flag = min") {
+        auto info = parse_language("C++11..C++17");
+        REQUIRE(info.compiler == "g++");
+        REQUIRE(info.std_flag == "-std=c++11");
+        REQUIRE(info.min_ver == 11);
+        REQUIRE(info.max_ver == 17);
+        REQUIRE(info.normalized_lang == "CPP11");  // min canonical form
+    }
+
+    SECTION("C11..C17 → C language range") {
+        auto info = parse_language("C11..C17");
+        REQUIRE(info.compiler == "gcc");
+        REQUIRE(info.std_flag == "-std=c11");
+        REQUIRE(info.min_ver == 11);
+        REQUIRE(info.max_ver == 17);
+    }
+
+    SECTION("upper bound is metadata only — EZMK_LANG/std_flag fixed at min") {
+        // 坑 2 + 坑 3 锁定:区间写法的宏值/生效标志与精确写法完全一致,
+        // 因此 max 变更不会进入缓存签名(签名只含 std_flag)。
+        auto exact = parse_language("C++11");
+        auto range = parse_language("C++11..C++17");
+        auto single = parse_language(">=C++11");
+        REQUIRE(range.std_flag == exact.std_flag);
+        REQUIRE(single.std_flag == exact.std_flag);
+        REQUIRE(range.normalized_lang == exact.normalized_lang);
+        REQUIRE(single.normalized_lang == exact.normalized_lang);
+        REQUIRE(range.max_ver == 17);
+        REQUIRE(exact.max_ver == 0);
+    }
+}
+
+TEST_CASE("parse_language: exact values keep min_ver/max_ver semantics", "[config][1.3.1]") {
+    using namespace ezmk::config;
+
+    SECTION("C++17 → min=17, max=0") {
+        auto info = parse_language("C++17");
+        REQUIRE(info.min_ver == 17);
+        REQUIRE(info.max_ver == 0);
+    }
+
+    SECTION("C++03 → min=3 (numeric comparison)") {
+        auto info = parse_language("C++03");
+        REQUIRE(info.min_ver == 3);
+        REQUIRE(info.max_ver == 0);
+        REQUIRE(info.std_flag == "-std=c++03");
+    }
+}
+
+TEST_CASE("parse_language: invalid range forms rejected", "[config][1.3.1]") {
+    using namespace ezmk::config;
+
+    SECTION("C++17..C++11 (max < min) throws") {
+        REQUIRE_THROWS_AS(parse_language("C++17..C++11"), std::runtime_error);
+    }
+
+    SECTION(">C++11 (unsupported operator) throws") {
+        REQUIRE_THROWS_AS(parse_language(">C++11"), std::runtime_error);
+    }
+
+    SECTION("C++11+ (unsupported suffix) throws") {
+        REQUIRE_THROWS_AS(parse_language("C++11+"), std::runtime_error);
+    }
+
+    SECTION("empty range end throws") {
+        REQUIRE_THROWS_AS(parse_language("C++11.."), std::runtime_error);
+        REQUIRE_THROWS_AS(parse_language("..C++17"), std::runtime_error);
+    }
+
+    SECTION(">= combined with .. throws") {
+        REQUIRE_THROWS_AS(parse_language(">=C++11..C++17"), std::runtime_error);
+    }
+
+    SECTION("bare >= throws") {
+        REQUIRE_THROWS_AS(parse_language(">="), std::runtime_error);
+    }
+
+    SECTION("mixed family range throws") {
+        REQUIRE_THROWS_AS(parse_language("C11..C++17"), std::runtime_error);
+    }
+
+    SECTION("unknown version in range end throws") {
+        REQUIRE_THROWS_AS(parse_language("C++11..C++42"), std::runtime_error);
+    }
+
+    SECTION("error message carries the range text") {
+        try {
+            parse_language("C++17..C++11");
+            FAIL("expected a throw");
+        } catch (const std::runtime_error& e) {
+            std::string m = e.what();
+            REQUIRE(m.find("C++17..C++11") != std::string::npos);
+            REQUIRE(m.find("17") != std::string::npos);
+            REQUIRE(m.find("11") != std::string::npos);
+        }
+    }
+}
+
+// ===================================================================
 // 1.1.0-dev.4: normalize_lang() tests
 // ===================================================================
 

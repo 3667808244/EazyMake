@@ -229,9 +229,13 @@ static std::string normalize_stdlib(const std::string& input) {
 
 LanguageInfo parse_language(std::string_view language) {
     // 1.1.0-dev.4: Normalize first, then parse.
-    // Format after normalization: [GNU]CPP<Ver> or [GNU]C<Ver>
+    // 1.3.1: range constraints are stripped BEFORE C++/CXX→CPP replacement and
+    // GNU prefix detection, so ">=GNUCPP11" works naturally.
+    // Format after normalization: [>=]<Lang>[..<Lang>], each <Lang> = [GNU]CPP<Ver> / [GNU]C<Ver>
     // e.g. "C++17" → "CPP17" → std=c++17
     //      "GNUCPP17" → "GNUCPP17" → std=gnu++17
+    //      ">=C++11" → min=11, max=0 → std=c++11
+    //      "C++11..C++17" → min=11, max=17 → std=c++11 (effective flag = min)
     LanguageInfo info;
 
     std::string normalized = normalize_lang(std::string(language));
@@ -241,52 +245,118 @@ LanguageInfo parse_language(std::string_view language) {
                             {{"lang", std::string(language)}}));
     }
 
-    // Unify C++/CXX → CPP for language identification
+    // ---- 1.3.1: strip range constraints (">=" single-sided, ".." double-sided) ----
+    std::string min_part;
+    std::string max_part;  // empty = no upper bound
     {
+        if (normalized.rfind(">=", 0) == 0) {
+            // ">=C++11" — single-sided lower bound, no upper bound allowed.
+            min_part = normalized.substr(2);
+            auto dd = min_part.find("..");
+            if (dd != std::string::npos) {
+                throw std::runtime_error(
+                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang_range,
+                                    {{"lang", std::string(language)},
+                                     {"min", min_part.substr(0, dd)},
+                                     {"max", min_part.substr(dd + 2)}}));
+            }
+        } else if (normalized[0] == '>') {
+            // ">C++11" — only ">=" is supported.
+            throw std::runtime_error(
+                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
+                                {{"lang", std::string(language)}}));
+        } else {
+            auto dotdot = normalized.find("..");
+            if (dotdot != std::string::npos) {
+                min_part = normalized.substr(0, dotdot);
+                max_part = normalized.substr(dotdot + 2);
+                if (min_part.empty() || max_part.empty()) {
+                    throw std::runtime_error(
+                        ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang_range,
+                                        {{"lang", std::string(language)},
+                                         {"min", min_part},
+                                         {"max", max_part}}));
+                }
+            } else {
+                min_part = normalized;
+            }
+        }
+        if (min_part.empty()) {
+            // bare ">=" — nothing to parse.
+            throw std::runtime_error(
+                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
+                                {{"lang", std::string(language)}}));
+        }
+    }
+
+    // Unify C++/CXX → CPP for language identification (both range ends).
+    auto unify_cpp = [](std::string& s) {
         size_t pos = 0;
-        while ((pos = normalized.find("C++", pos)) != std::string::npos) {
-            normalized.replace(pos, 3, "CPP");
+        while ((pos = s.find("C++", pos)) != std::string::npos) {
+            s.replace(pos, 3, "CPP");
             pos += 3;
         }
         pos = 0;
-        while ((pos = normalized.find("CXX", pos)) != std::string::npos) {
-            normalized.replace(pos, 3, "CPP");
+        while ((pos = s.find("CXX", pos)) != std::string::npos) {
+            s.replace(pos, 3, "CPP");
             pos += 3;
         }
-    }
+    };
+    unify_cpp(min_part);
+    if (!max_part.empty()) unify_cpp(max_part);
 
-    // Detect GNU prefix
-    bool gnu = false;
-    std::string_view remainder(normalized);
-    if (remainder.size() >= 3 && remainder.substr(0, 3) == "GNU") {
-        gnu = true;
-        remainder = remainder.substr(3);
-    }
+    // Parse a single language part → family + GNU prefix + version string.
+    struct LangPart {
+        bool gnu = false;
+        bool is_cxx = true;
+        std::string ver;
+    };
+    auto parse_part = [&](const std::string& part) -> LangPart {
+        LangPart out;
+        std::string_view remainder(part);
+        if (remainder.size() >= 3 && remainder.substr(0, 3) == "GNU") {
+            out.gnu = true;
+            remainder = remainder.substr(3);
+        }
+        if (remainder.size() >= 3 && remainder.substr(0, 3) == "CPP") {
+            out.is_cxx = true;
+            out.ver = std::string(remainder.substr(3));
+        } else if (!remainder.empty() && remainder[0] == 'C') {
+            out.is_cxx = false;
+            out.ver = std::string(remainder.substr(1));
+        } else if (out.gnu && !remainder.empty() &&
+                   std::isdigit(static_cast<unsigned char>(remainder[0]))) {
+            // GNU + version only (e.g., GNU11, GNU17) → C language with GNU extensions
+            out.is_cxx = false;
+            out.ver = std::string(remainder);
+        } else {
+            // Not recognized — provide a helpful error
+            throw std::runtime_error(
+                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
+                                {{"lang", std::string(language)}}));
+        }
+        // 1.3.1: "+" suffix ("C++11+") is not supported — reject explicitly.
+        if (out.ver.find('+') != std::string::npos) {
+            throw std::runtime_error(
+                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
+                                {{"lang", std::string(language)}}));
+        }
+        return out;
+    };
 
-    // Parse CPP<Ver> or C<Ver> (or plain version for GNU C, e.g. GNU11)
-    bool is_cxx = false;
-    std::string_view ver_str;
-    if (remainder.size() >= 3 && remainder.substr(0, 3) == "CPP") {
-        is_cxx = true;
-        ver_str = remainder.substr(3);
-    } else if (!remainder.empty() && remainder[0] == 'C') {
-        is_cxx = false;
-        ver_str = remainder.substr(1);
-    } else if (gnu && !remainder.empty() && std::isdigit(static_cast<unsigned char>(remainder[0]))) {
-        // GNU + version only (e.g., GNU11, GNU17) → C language with GNU extensions
-        is_cxx = false;
-        ver_str = remainder;
-    } else {
-        // Not recognized — provide a helpful error
+    LangPart lo = parse_part(min_part);
+    LangPart hi;
+    if (!max_part.empty()) hi = parse_part(max_part);
+
+    // Default version when missing (C++17 or C11)
+    if (lo.ver.empty()) lo.ver = lo.is_cxx ? "17" : "11";
+    if (!max_part.empty() && hi.ver.empty()) hi.ver = hi.is_cxx ? "17" : "11";
+
+    // 1.3.1: both ends of a range must be the same language family.
+    if (!max_part.empty() && lo.is_cxx != hi.is_cxx) {
         throw std::runtime_error(
             ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang,
                             {{"lang", std::string(language)}}));
-    }
-
-    // Default version when missing
-    if (ver_str.empty()) {
-        // Default: C++17 or C11
-        ver_str = is_cxx ? "17" : "11";
     }
 
     // Map version string to -std= flag
@@ -296,28 +366,50 @@ LanguageInfo parse_language(std::string_view language) {
         {"17", "17"}, {"20", "20"}, {"23", "23"}, {"26", "26"},
     };
 
-    auto it = ver_map.find(std::string(ver_str));
+    auto it = ver_map.find(lo.ver);
     if (it == ver_map.end()) {
         throw std::runtime_error(
-            std::string("unknown language version: '") + std::string(ver_str) +
+            std::string("unknown language version: '") + lo.ver +
             "'. Supported: 89, 99, 11, 14, 17, 20, 23");
     }
-
-    if (is_cxx) {
-        info.compiler = "g++";
-        info.std_flag = gnu ? ("-std=gnu++" + it->second) : ("-std=c++" + it->second);
-    } else {
-        info.compiler = "gcc";
-        info.std_flag = gnu ? ("-std=gnu" + it->second) : ("-std=c" + it->second);
+    if (!max_part.empty()) {
+        if (ver_map.find(hi.ver) == ver_map.end()) {
+            throw std::runtime_error(
+                std::string("unknown language version: '") + hi.ver +
+                "'. Supported: 89, 99, 11, 14, 17, 20, 23");
+        }
     }
 
-    info.gnu_extensions = gnu;
-    info.normalized_lang = gnu ? ("GNU" + std::string(remainder)) : normalized;
+    // 1.3.1: numeric bounds — the effective -std= flag comes from MIN.
+    int min_ver = std::stoi(lo.ver);
+    int max_ver = max_part.empty() ? 0 : std::stoi(hi.ver);
+    if (max_ver != 0 && max_ver < min_ver) {
+        throw std::runtime_error(
+            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang_range,
+                            {{"lang", std::string(language)},
+                             {"min", std::to_string(min_ver)},
+                             {"max", std::to_string(max_ver)}}));
+    }
+
+    if (lo.is_cxx) {
+        info.compiler = "g++";
+        info.std_flag = lo.gnu ? ("-std=gnu++" + it->second) : ("-std=c++" + it->second);
+    } else {
+        info.compiler = "gcc";
+        info.std_flag = lo.gnu ? ("-std=gnu" + it->second) : ("-std=c" + it->second);
+    }
+
+    info.gnu_extensions = lo.gnu;
+    // 1.3.1: normalized_lang = the MIN canonical form (min_part after unify),
+    // so EZMK_LANG stays identical for "C++11" and ">=C++11" / "C++11..C++17".
+    info.normalized_lang = min_part;
+    info.min_ver = min_ver;
+    info.max_ver = max_ver;
 
     // Warn about non-ISO extensions
-    if (gnu) {
-        std::string suggestion = is_cxx ? "CPP" : "C";
-        suggestion += std::string(ver_str);
+    if (lo.gnu) {
+        std::string suggestion = lo.is_cxx ? "CPP" : "C";
+        suggestion += lo.ver;
         util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_warn_gnu_extensions,
                                    {{"lang", std::string(language)},
                                     {"suggestion", suggestion}}));
