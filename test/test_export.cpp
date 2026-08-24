@@ -121,6 +121,31 @@ TEST_CASE("export cmake: C project → LANGUAGES C + *.c glob + C_STANDARD", "[e
     REQUIRE(t.find("${CMAKE_CURRENT_SOURCE_DIR}/src/*.c") != std::string::npos);
 }
 
+// 1.3.1: range languages export the MIN standard — the old bare digit
+// extraction produced "CXX_STANDARD 1117" for "C++11..C++17" (坑 1).
+TEST_CASE("export cmake: range language exports min standard (1.3.1)", "[export][1.3.1]") {
+    auto cfg = make_exe_config();
+    cfg.project.language = "C++11..C++17";
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("CXX_STANDARD 11") != std::string::npos);
+    REQUIRE(t.find("CXX_STANDARD 1117") == std::string::npos);
+}
+
+TEST_CASE("export cmake: >= range exports min standard (1.3.1)", "[export][1.3.1]") {
+    auto cfg = make_exe_config();
+    cfg.project.language = ">=C++11";
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("CXX_STANDARD 11") != std::string::npos);
+    REQUIRE(t.find("CXX_STANDARD 1117") == std::string::npos);
+}
+
+TEST_CASE("export cmake: exact language export unchanged (1.3.1)", "[export][1.3.1]") {
+    auto cfg = make_exe_config();
+    cfg.project.language = "C++17";
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("CXX_STANDARD 17") != std::string::npos);
+}
+
 // ===================================================================
 // Compile mapping
 // ===================================================================

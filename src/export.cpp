@@ -255,8 +255,9 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         }
     }
     if (std_num == 0) {
-        for (char c : lang.normalized_lang)
-            if (c >= '0' && c <= '9') std_num = std_num * 10 + (c - '0');
+        // 1.3.1: read the parsed minimum standard directly — the old bare
+        // digit extraction mangled range languages ("CPP11..CPP17" → 1117).
+        std_num = lang.min_ver;
     }
 
     // ezmk standard macros + [compile].macros + -D flags.
