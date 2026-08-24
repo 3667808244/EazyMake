@@ -1,6 +1,7 @@
 // Unit tests for pkg.cpp
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
+#include "test_helpers.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/cli.hpp"
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -776,4 +778,177 @@ TEST_CASE("precompiled: MSVC tie prefers .lib over .a (dev.11)", "[pkg][1.2.0-de
     auto r2 = select_precompiled_variant(lib2, "ex", "win-x64", "gcc13", "abi11", false);
     fs::remove_all(lib2);
     REQUIRE(r2.filename() == "libex.win-x64.a");
+}
+
+// ===================================================================
+// 1.3.1: install-time language-standard compatibility check (warn, never fail)
+// ===================================================================
+
+namespace {
+
+// Capture everything written to std::cerr during `fn` and return it.
+template <typename F>
+std::string capture_cerr(F&& fn) {
+    std::ostringstream captured;
+    auto* old = std::cerr.rdbuf(captured.rdbuf());
+    fn();
+    std::cerr.rdbuf(old);
+    return captured.str();
+}
+
+// A consumer project root (ezmk.toml with the given language) + CWD guard.
+// CWD must be inside the project for locate_project_root() to find it.
+struct ConsumerProject {
+    fs::path root;
+    std::unique_ptr<CwdGuard> guard;
+
+    explicit ConsumerProject(const std::string& language,
+                             const std::string& name = "consumer") {
+        guard = std::make_unique<CwdGuard>();
+        root = guard->temp_dir;
+        std::ofstream(root / "ezmk.toml")
+            << "[project]\nname = \"" << name << "\"\ntype = \"executable\"\n"
+            << "version = \"0.1.0\"\nlanguage = \"" << language << "\"\n\n"
+            << "[compile]\ninclude_dirs = [\"include\"]\nsrc_dirs = [\"src\"]\n";
+        fs::create_directories(root / "src");
+    }
+};
+
+// A source package that compiles to a static library.
+fs::path stdtest_source_pkg(const std::string& tag, const std::string& language) {
+    auto pkg = fs::temp_directory_path() / ("ezmk_pkg_std131_" + tag + "_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(pkg / "include");
+    fs::create_directories(pkg / "src");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"stdpkg\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "language = \"" << language << "\"\n";
+    std::ofstream(pkg / "src" / "s.cpp") << "int stdpkg_value() { return 1; }\n";
+    return pkg;
+}
+
+// A precompiled package dir (lib/ + bare archive).
+fs::path stdtest_precompiled_pkg(const std::string& tag, const std::string& language) {
+    auto pkg = fs::temp_directory_path() / ("ezmk_pkg_std131pc_" + tag + "_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(pkg / "lib");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"stdpkg\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "precompiled = true\nlanguage = \"" << language << "\"\n";
+    std::ofstream(pkg / "lib" / "libstdpkg.a", std::ios::binary) << "dummy";
+    return pkg;
+}
+
+} // namespace
+
+// Package needs MORE than the consumer → warn, but install still proceeds.
+TEST_CASE("std compat: package min > consumer min warns (source pkg)", "[pkg][1.3.1]") {
+    ConsumerProject consumer("C++11");
+    auto pkg = stdtest_source_pkg("hi", "C++17");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+            REQUIRE(r.filename() == "libstdpkg.a");
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least C++17") != std::string::npos);
+    REQUIRE(out.find("compiles at C++11") != std::string::npos);
+}
+
+// Package needs LESS than the consumer → no warning.
+TEST_CASE("std compat: package min <= consumer min is silent (source pkg)", "[pkg][1.3.1]") {
+    ConsumerProject consumer("C++17");
+    auto pkg = stdtest_source_pkg("lo", "C++11");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least") == std::string::npos);
+}
+
+// Range declarations work on both sides: ">=C++17" package vs C++11 consumer.
+TEST_CASE("std compat: range declarations participate (source pkg)", "[pkg][1.3.1]") {
+    ConsumerProject consumer("C++11");
+    auto pkg = stdtest_source_pkg("range", ">=C++17");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least C++17") != std::string::npos);
+}
+
+// No consumer project (CWD has no ezmk.toml) → check skipped, no warning.
+TEST_CASE("std compat: no consumer project → skipped", "[pkg][1.3.1]") {
+    CwdGuard empty_cwd;  // empty temp dir, no ezmk.toml anywhere above
+    auto pkg = stdtest_source_pkg("noconsumer", "C++17");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least") == std::string::npos);
+}
+
+// Precompiled package over the consumer's standard → ABI-flavored warning.
+TEST_CASE("std compat: precompiled pkg warns with ABI wording", "[pkg][1.3.1]") {
+    ConsumerProject consumer("C++11");
+    auto pkg = stdtest_precompiled_pkg("pc", "C++17");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+            REQUIRE(r.filename() == "libstdpkg.a");
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least C++17") != std::string::npos);
+    REQUIRE(out.find("ABI mismatch") != std::string::npos);
+}
+
+// Precompiled package within the consumer's standard → silent.
+TEST_CASE("std compat: precompiled pkg within consumer standard is silent", "[pkg][1.3.1]") {
+    ConsumerProject consumer("C++17");
+    auto pkg = stdtest_precompiled_pkg("pcok", "C++11");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least") == std::string::npos);
 }

@@ -19,6 +19,7 @@
 #include <deque>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -129,6 +130,93 @@ static std::string scope_to_string(cli::Scope scope) {
     return (scope == cli::Scope::Global) ? "global"
          : (scope == cli::Scope::User)   ? "user"
          :                                 "project";
+}
+
+// ===================================================================
+// 1.3.1: install-time language-standard compatibility check.
+// Semantics (design A): [project].language may declare a RANGE whose minimum
+// is the effective compile standard. A package requiring a higher minimum
+// than the consumer project compiles at risks failing to compile / link
+// (ABI mismatch for precompiled archives). We WARN (never fail) — a strict
+// error would break the existing package ecosystem (坑 4; strict switch is
+// deferred to 1.4.0).
+// ===================================================================
+
+// The minimum standard a language declaration requires (parse_language's
+// min_ver — an exact value fills min_ver too). 0 = unparseable/undeclared →
+// treated as "no bound" (skip the check).
+static int std_min_of(const std::string& language) {
+    if (language.empty()) return 0;
+    try {
+        return config::parse_language(language).min_ver;
+    } catch (...) {
+        return 0;
+    }
+}
+
+// The consumer project's minimum standard, resolved from the located project
+// root (upward search from CWD). nullopt → no consumer ezmk.toml (global/user
+// scope installs) or an unparseable consumer config → skip the check (with a
+// warning for a malformed consumer language).
+static std::optional<int> consumer_std_min() {
+    try {
+        auto root = util::locate_project_root(fs::current_path());
+        if (!root) return std::nullopt;
+        auto cfg = config::parse_config(*root / "ezmk.toml");
+        if (cfg.project.language.empty()) return std::nullopt;
+        int min = std_min_of(cfg.project.language);
+        if (min == 0) {
+            util::warn("cannot check package language compatibility — consumer "
+                       "[project].language is invalid: " + cfg.project.language);
+            return std::nullopt;
+        }
+        return min;
+    } catch (const std::exception& e) {
+        util::warn("cannot check package language compatibility: " + std::string(e.what()));
+        return std::nullopt;
+    }
+}
+
+// Human-readable minimum standard for warning text: "C++17" / "C11" /
+// "GNUC++11" from a language declaration (falls back to the raw string).
+static std::string std_label(const std::string& language) {
+    try {
+        std::string s = config::parse_language(language).normalized_lang;
+        size_t p = s.find("CPP");
+        if (p != std::string::npos) s.replace(p, 3, "C++");
+        return s;
+    } catch (...) {
+        return language;
+    }
+}
+
+// Warn when the package's minimum standard exceeds the consumer's.
+// precompiled=true uses the ABI-flavored wording (预编译 ABI 风险更高).
+static void check_std_compat(const std::string& pkg_name,
+                             const std::string& pkg_language,
+                             bool precompiled) {
+    int pkg_min = std_min_of(pkg_language);
+    if (pkg_min == 0) return;                 // package declares no usable bound
+    auto consumer_min = consumer_std_min();
+    if (!consumer_min || pkg_min <= *consumer_min) return;  // compatible
+
+    // Resolve the consumer's declared language for the warning text (rare path).
+    std::string consumer_lang;
+    try {
+        auto root = util::locate_project_root(fs::current_path());
+        if (root) {
+            auto cfg = config::parse_config(*root / "ezmk.toml");
+            consumer_lang = cfg.project.language;
+        }
+    } catch (...) {}
+
+    util::warn(ezmk::i18n::fmt(
+        precompiled ? ezmk::i18n::I18nKey::pkg_warn_std_mismatch_precompiled
+                    : ezmk::i18n::I18nKey::pkg_warn_std_mismatch,
+        {{"pkg", pkg_name},
+         {"pkg_std", std_label(pkg_language)},
+         {"consumer_std", consumer_lang.empty() ? std::to_string(*consumer_min)
+                                                : std_label(consumer_lang)}}));
 }
 
 static bool confirm(std::string_view msg, bool assume_yes = false) {
@@ -602,6 +690,8 @@ fs::path select_precompiled_variant(const fs::path& lib_dir,
 // 1.1.0-dev.2: Select the best precompiled archive for the current platform.
 // 1.2.0-dev.10: resolves the consumer's platform/compiler/abi tags and the
 // package's own precompiled_strict flag, then runs the pure matching core.
+// 1.3.1: checks the package's declared minimum standard against the consumer
+// project BEFORE archive selection (precompiled ABI risk — stronger wording).
 fs::path select_precompiled_archive(const fs::path& lib_dir,
                                     const std::string& pkg_name) {
     auto tc = toolchain::detect_toolchain();
@@ -610,12 +700,17 @@ fs::path select_precompiled_archive(const fs::path& lib_dir,
     std::string abi = default_abi_tag(tc);
 
     bool strict = false;
+    std::string pkg_language;
     try {
         auto cfg = config::parse_config(lib_dir.parent_path() / "ezmk.toml");
+        pkg_language = cfg.project.language;
         strict = cfg.project.precompiled_strict;
     } catch (...) {
         // Malformed package config → proceed non-strict; the install/build
         // paths surface the config error where the package is processed.
+    }
+    if (!pkg_language.empty()) {
+        check_std_compat(pkg_name, pkg_language, /*precompiled=*/true);
     }
     return select_precompiled_variant(lib_dir, pkg_name, platform, compiler, abi, strict);
 }
@@ -653,6 +748,10 @@ fs::path compile_package(const fs::path& pkg_dir,
     // header-only package without any src_dirs never triggers the
     // src_dir_missing / no_source_files fatal.
     if (cfg.project.header_only) return {};
+
+    // 1.3.1: source-package standard compatibility check (precompiled is
+    // checked inside select_precompiled_archive with stronger wording).
+    check_std_compat(name, cfg.project.language, /*precompiled=*/false);
 
     fs::path build_dir = pkg_dir / "build";
     fs::create_directories(build_dir);
