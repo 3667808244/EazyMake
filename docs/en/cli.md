@@ -173,7 +173,14 @@ pure comments have zero parse impact, and the fields match the `[test]` config
 exactly (including the 1.2.0-dev.12 additions; the deprecated `flags` is
 deliberately not shown).
 
-**`watch`-only flag:** `--no-build-on-start` — skip the initial build; wait for the first change.
+**`watch`-only flags:**
+
+| Flag | Purpose |
+|---|---|
+| `--no-build-on-start` | Skip the initial build; wait for the first change |
+| `--run` / `-r` | **1.3.4+** Run the executable after each **successful** rebuild (blocking); watch resumes when the program exits |
+
+**`watch --run` (1.3.4+):** after every successful rebuild the freshly built executable runs **blockingly** on the watcher thread — change detection is naturally paused while the program runs and resumes when it exits (zero process management). Non-zero exits only **warn** (watch keeps looping). Only valid for `executable` projects (`static`/`shared`/`utils` + `--run` → startup error). The **initial** build does not run — the first run happens after the first change. Behavior without `--run` is unchanged. Ctrl+C terminates the child and watch together (same foreground process group). A long-running program (server/GUI) pauses watching until it exits — press Ctrl+C to stop.
 
 **`install`-only flags:**
 

@@ -18,6 +18,38 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.4 (2026-08-25) — watch 重建后自动运行（`ezmk watch --run`）
+
+1.3.4 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间、1.3.2 测试报告、1.3.3 简写相互独立、可并行）：`ezmk watch --run` / `-r` —— 每次**成功**重建后**阻塞运行**产物，程序退出后 watch 继续监听（"改代码自动重跑"）。watcher 线程阻塞 = 程序运行期间天然暂停变更检测，退出后自动恢复——零进程管理。**公共 API 无破坏性变更**（纯新增 flag + i18n key）。
+
+### 新增 / 行为变更
+
+- **`ezmk watch --run` / `-r`**：每次成功重建后在 watcher 线程阻塞运行新产物；复用 `running` key / `run_command` / stdout-stderr 回显（与 `ezmk run` 的 I/O 行为一致）
+- **生命周期（定死边界）**：阻塞运行，程序自行退出 → watch 恢复；非零退出 → `watch_run_exit_nonzero` **警告不退出**（watch 是循环非一次性 run）；Ctrl+C 与子进程同前台进程组一起终止（用户意图"全停"）；**拒绝** kill-重启 / detached 启动 / 仅缓存未命中时运行
+- **类型门禁**：仅 `executable` 项目；`static`/`shared`/`utils` + `--run` → 启动 fatal（`cli_err_run_needs_executable`）
+- **构建失败不运行**：只在 try 成功分支运行（绝不运行旧产物），catch 分支继续 watch
+- **首次运行发生在第一次变更后**：初始构建不运行，与 `--no-build-on-start` 正交
+- **默认行为完全不变**：无 `--run` 时与现状一致（`build_project()` 返回值本已存在，watch 不再丢弃）
+
+### 文档
+
+- `docs/cli.md`（zh/en）：watch 节补 `--run` 标志表 + 语义/生命周期说明（阻塞运行/非零退出警告/Ctrl+C 同进程组/长驻程序暂停检测）
+- `CHANGES.md` 本条目
+
+### 测试
+
+- CLI 解析：`watch --run` / `-r` / 默认关闭 / 与 `--no-build-on-start` 正交
+- 集成：① executable + `--run`：改源 → 轮询断言标记输出出现（两次变更 → 运行两次；初始构建不运行）② 编译错误 → 不运行、watch 存活、修复后恢复运行 ③ 非 executable + `--run` → 启动 fatal ④ 无 `--run` → 只有构建输出、无程序输出
+- i18n：新增 `cli_err_run_needs_executable` / `watch_run_exit_nonzero` 三向一致；`check_i18n.py` 通过（373 keys）
+
+### 已知限制 / 跟进项
+
+- **`--run` 的 `--` 参数透传**（watch 现 `reject_positionals`）与 **`workspace watch` 命令组**：归 1.4.0 或后续评估。
+- **kill-重启 / detached 启动 / 仅缓存未命中时运行**：§3.2 决策记录，定死边界不做。
+- **旧二进制（<1.3.4）**：不认识 `--run`/`-r` → 报 unknown option；新 flag 需 ≥1.3.4。
+
+---
+
 ## 1.3.3 (2026-08-25) — workspace 双字母命令简写
 
 1.3.3 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间、1.3.2 测试报告相互独立、可并行）：为 1.3.0 的 **`workspace` 命令组**补齐双字母简写——`wl`/`wb`/`wt`/`wc` → `workspace list/build/test/clean`（`kAliases` 表加 4 行，沿用「组首字母 + 子命令首字母」规则，与 p/k/r 一致；无任何 `w*` 键冲突，与 `-w` 重定向 flag 正交）。**公共 API 无破坏性变更**（纯增量别名）。

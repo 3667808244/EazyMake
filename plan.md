@@ -1,6 +1,6 @@
 # EazyMake 1.3.4 执行计划
 
-> **状态：执行中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
 > 详细设计：[**1.3.4.md**](plans/1.3.x/1.3.4.md)。本计划为 1.3.0 发布后的**补丁版本**：`ezmk watch --run` / `-r` —— 每次**成功**重建后**阻塞运行**产物，程序退出后 watch 继续监听（"改代码自动重跑"）。watcher 线程阻塞 = 程序运行期间天然暂停变更检测，无需进程管理。
 >
@@ -31,25 +31,25 @@
 
 ### 阶段一：flag 解析
 
-- [ ] **1.1 watch spec 加 `{'r', "run", false}`**（`src/cli.cpp:280-282`）+ `CliArgs.watch_run`（`include/ezmk/cli.hpp`，`watch_no_build_on_start` 旁）+ `p.has("run")` 读取
-- [ ] **1.2 i18n key**：`cli_err_run_needs_executable` / `watch_run_exit_nonzero`（三向一致 + `check_i18n.py` 通过 + 重新生成 `locale_data.cpp`）
+- [x] **1.1 watch spec 加 `{'r', "run", false}`**（`src/cli.cpp:280-282`）+ `CliArgs.watch_run`（`include/ezmk/cli.hpp`，`watch_no_build_on_start` 旁）+ `p.has("run")` 读取
+- [x] **1.2 i18n key**：`cli_err_run_needs_executable` / `watch_run_exit_nonzero`（三向一致 + `check_i18n.py` 通过 + 重新生成 `locale_data.cpp`）
 
 ### 阶段二：执行逻辑
 
-- [ ] **2.1 类型门禁**：watch 启动时（初始构建前）`cfg.project.type != "executable"` && `watch_run` → fatal（`cli_err_run_needs_executable`）
-- [ ] **2.2 共享运行 helper**：watch case 内抽取（复用 `running` key / `run_command` / stdout/stderr 回显）；非零退出 → `watch_run_exit_nonzero` 警告（不退出）
-- [ ] **2.3 两条回调路径接入**：config 变更（`:352-363`）与源/头变更（`:366-376`）的成功分支捕获 `build_project()` 返回值 → `--run` 时阻塞运行；catch 分支不运行（坑 4）
+- [x] **2.1 类型门禁**：watch 启动时（初始构建前）`cfg.project.type != "executable"` && `watch_run` → fatal（`cli_err_run_needs_executable`）
+- [x] **2.2 共享运行 helper**：watch case 内抽取（复用 `running` key / `run_command` / stdout/stderr 回显）；非零退出 → `watch_run_exit_nonzero` 警告（不退出）
+- [x] **2.3 两条回调路径接入**：config 变更（`:352-363`）与源/头变更（`:366-376`）的成功分支捕获 `build_project()` 返回值 → `--run` 时阻塞运行；catch 分支不运行（坑 4）
 
 ### 阶段三：集成测试
 
-- [ ] **3.1 用例**：① executable + `--run`：改源 → 轮询断言标记输出出现（后台进程 + poll 模式）② 构建失败不运行、watch 存活 ③ 非 executable + `--run` → 启动 fatal ④ 无 `--run` → 只有构建输出、无程序输出
-- [ ] **3.2 全量回归**（基线 899/5203）
+- [x] **3.1 用例**：① executable + `--run`：改源 → 轮询断言标记输出出现（后台进程 + poll 模式）② 构建失败不运行、watch 存活 ③ 非 executable + `--run` → 启动 fatal ④ 无 `--run` → 只有构建输出、无程序输出
+- [x] **3.2 全量回归**（基线 899/5203）
 
 ### 阶段四：文档 + 收口
 
-- [ ] **4.1 cli.md（en/zh）**：watch 节补 `--run` 语义 + 生命周期说明（阻塞运行/非零退出警告/Ctrl+C 同进程组/长驻程序暂停检测）
-- [ ] **4.2 CHANGES.md**：1.3.4 条目
-- [ ] **4.3 收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **4.1 cli.md（en/zh）**：watch 节补 `--run` 语义 + 生命周期说明（阻塞运行/非零退出警告/Ctrl+C 同进程组/长驻程序暂停检测）
+- [x] **4.2 CHANGES.md**：1.3.4 条目
+- [x] **4.3 收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 

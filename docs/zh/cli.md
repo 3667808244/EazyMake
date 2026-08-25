@@ -131,7 +131,14 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 
 库模板的**文件名保留原始项目名**（`my-lib` → `include/my-lib.hpp` + `src/my-lib.cpp`），C++ **namespace 将 `-` / `.` / 空格替换为 `_`**（`my-lib` → `namespace my_lib`）；头文件用 `#pragma once` 保护。生成的 `ezmk.toml` 末尾还附带**注释掉的 `[test]` 示例节**（`# [test]` / `# framework` / `# dirs` / `# default_profile` / `# include_dirs` / `# link_targets`）——取消注释并填写后即可 `ezmk test`；纯注释对解析零影响，字段与 `[test]` 配置完全一致（含 1.2.0-dev.12 新字段，刻意不展示已弃用的 `flags`）。
 
-**`watch` 专属标志：** `--no-build-on-start` — 跳过初始构建，等待文件首次变更。
+**`watch` 专属标志：**
+
+| 标志 | 用途 |
+|---|---|
+| `--no-build-on-start` | 跳过初始构建，等待文件首次变更 |
+| `--run` / `-r` | **1.3.4+** 每次**成功**重建后阻塞运行产物；程序退出后 watch 恢复监听 |
+
+**`watch --run`（1.3.4+）：** 每次成功重建后在 watcher 线程上**阻塞运行**新产物——程序运行期间天然暂停变更检测，退出后自动恢复（零进程管理）。非零退出只**警告**（watch 是持续循环）。仅适用于 `executable` 项目（`static`/`shared`/`utils` + `--run` → 启动报错）。**初始构建不运行**——首次运行发生在第一次变更之后。无 `--run` 时行为完全不变。Ctrl+C 与子进程同前台进程组一起终止（用户意图"全停"）。长驻程序（服务器/GUI）会暂停监听直到退出——按 Ctrl+C 停止。
 
 **`install` 专属标志：**
 
