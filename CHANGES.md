@@ -18,7 +18,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.3.3 (2026-08-24) — workspace 双字母命令简写
+## 1.3.3 (2026-08-25) — workspace 双字母命令简写
 
 1.3.3 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间、1.3.2 测试报告相互独立、可并行）：为 1.3.0 的 **`workspace` 命令组**补齐双字母简写——`wl`/`wb`/`wt`/`wc` → `workspace list/build/test/clean`（`kAliases` 表加 4 行，沿用「组首字母 + 子命令首字母」规则，与 p/k/r 一致；无任何 `w*` 键冲突，与 `-w` 重定向 flag 正交）。**公共 API 无破坏性变更**（纯增量别名）。
 
