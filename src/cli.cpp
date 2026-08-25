@@ -103,13 +103,19 @@ namespace ezmk::cli
     // the -w token must not be an "unknown option".
     static std::vector<OptionSpec> workspace_cmd_spec()
     {
-        return {
+        std::vector<OptionSpec> spec = {
             {'w', "workspace", false},
             {'j', "jobs", true},
             {'\0', "stop-on-error", false},
             {'\0', "member", true},
             {'\0', "report", true},   // 1.3.2: test only — forwarded to members
         };
+        // 1.3.3: accept -v/--verbose so the shorthand expansion hint
+        // (`ezmk wb -v` → "wb → workspace build") can display — consistent
+        // with every other command group (0.9.8 design). Workspace has no
+        // per-command verbose semantics; the flag is accepted and ignored.
+        add_verbose_spec(spec);
+        return spec;
     }
 
     // 1.3.2: --report is test-only; reject it on workspace build/clean/list.
@@ -824,7 +830,11 @@ namespace ezmk::cli
         if (action == "list")
         {
             args.cmd = Command::WorkspaceList;
-            auto p = parse_options(argc, argv, 3, {}, "ezmk workspace list");
+            // 1.3.3: accept -v/--verbose (accepted + ignored) so the shorthand
+            // expansion hint (`ezmk wl -v` → "wl → workspace list") displays.
+            std::vector<OptionSpec> spec;
+            add_verbose_spec(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk workspace list");
             reject_positionals(p, "ezmk workspace list");
             return args;
         }
@@ -1025,6 +1035,9 @@ namespace ezmk::cli
                 {"ku", {"pkg", "update"}},    {"ra", {"repo", "add"}},
                 {"rr", {"repo", "remove"}},   {"rl", {"repo", "list"}},
                 {"ru", {"repo", "update"}},   {"ri", {"repo", "info"}},
+                // 1.3.3: workspace two-letter shorthands (组首字母 + 子命令首字母)
+                {"wl", {"workspace", "list"}},  {"wb", {"workspace", "build"}},
+                {"wt", {"workspace", "test"}},  {"wc", {"workspace", "clean"}},
                 {"u", {"utils", nullptr}},    {"h", {"help", nullptr}},
                 {"v", {"version", nullptr}},
             };
