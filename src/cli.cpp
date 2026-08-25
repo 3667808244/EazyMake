@@ -280,6 +280,7 @@ namespace ezmk::cli
                 args.cmd = Command::ProjectWatch;
                 cmd_name = "ezmk project watch";
                 spec.push_back({'\0', "no-build-on-start", false});
+                spec.push_back({'r', "run", false});   // 1.3.4: run after each successful rebuild
             }
 
             auto p = parse_options(argc, argv, 3, spec, cmd_name);
@@ -319,6 +320,8 @@ namespace ezmk::cli
             {
                 if (p.has("no-build-on-start"))
                     args.watch_no_build_on_start = true;
+                if (p.has("run"))
+                    args.watch_run = true;   // 1.3.4: --run / -r
                 reject_positionals(p, "ezmk project watch");
             }
             else // build

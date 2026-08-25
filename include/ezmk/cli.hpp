@@ -181,6 +181,7 @@ struct CliArgs {
 
     // 0.2.3+: Watch mode flags
     bool watch_no_build_on_start = false;   // --no-build-on-start
+    bool watch_run = false;                 // 1.3.4: --run / -r — run the executable after each successful rebuild
 
     // 1.1.0-dev.6: Test options
     std::string test_framework;     // --framework override (empty = use config)

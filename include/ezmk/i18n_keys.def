@@ -300,6 +300,8 @@ EZMK_I18N_KEY(watch_skip_initial)
 EZMK_I18N_KEY(watch_config_changed)
 EZMK_I18N_KEY(watch_detected_change)
 EZMK_I18N_KEY(watch_stopping)
+EZMK_I18N_KEY(watch_run_exit_nonzero)       // 1.3.4: --run — program exited non-zero, watch continues
+EZMK_I18N_KEY(cli_err_run_needs_executable) // 1.3.4: --run requires an executable project
 
 // ---- test (1.1.0-dev.6) ----
 EZMK_I18N_KEY(test_summary)

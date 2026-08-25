@@ -180,6 +180,8 @@
     "watch_config_changed": "ezmk.toml 已变更 — 重新解析配置并全量重编译",
     "watch_detected_change": "检测到变更: {path}",
     "watch_stopping": "正在停止文件监听...",
+    "watch_run_exit_nonzero": "{exe} 以退出码 {code} 结束 — watch 保持运行",
+    "cli_err_run_needs_executable": "--run 仅适用于可执行项目（type = \"executable\"），当前类型为 \"{type}\"",
 
     "test_summary": "{total} 个测试: {passed} 通过, {failed} 失败",
     "test_failed": "部分测试失败",

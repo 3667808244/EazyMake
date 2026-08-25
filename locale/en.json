@@ -180,6 +180,8 @@
     "watch_config_changed": "ezmk.toml changed — re-parsing config and rebuilding from scratch",
     "watch_detected_change": "detected change: {path}",
     "watch_stopping": "Stopping file watcher...",
+    "watch_run_exit_nonzero": "{exe} exited with code {code} — keeping watch alive",
+    "cli_err_run_needs_executable": "--run requires an executable project (type = \"executable\"), got type \"{type}\"",
 
     "test_summary": "{total} tests: {passed} passed, {failed} failed",
     "test_failed": "Some tests failed",
