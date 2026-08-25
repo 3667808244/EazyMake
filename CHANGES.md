@@ -45,6 +45,13 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **`-w` 与 `w*` 简写组合的文档示例**：归 1.4.0 或后续评估。
 - **旧二进制（<1.3.3）**：不认识 `wl`/`wb`/`wt`/`wc` → 报未知命令；新简写需 ≥1.3.3。
 
+### 发布（2026-08-25，tag `v1.3.3`）
+
+- **GitHub Release**：windows-x64 zip + linux-x64 / macos-arm64 tar.gz + 独立 `ezmk.exe`/`ezmk-lua.exe`（含 `.sha256` 边车）已上传（`macos-x64` 仍无资产——`macos-13` runner 在 free tier 不分配，与 1.2.x/1.3.0 相同）
+- **winget**：split manifests 已提交 `microsoft/winget-pkgs#423828`（`InstallerSha256` 取 Release 资产真实 digest `e9a152c4…`；`license/cla` 已 pass，CI 校验进行中，版主审批为发布后跟进项，不阻塞发布）
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.3.3（macos-arm64 `c74424b5…` / linux-x64 `a92f2264…` 真实 digest；仓库副本 `publish/homebrew/ezmk.rb` 同步）
+- **pacman**：`publish/arch/PKGBUILD` `pkgver=1.3.3` + 源码 tarball 真实 digest `f67602c7…`（2026-08-25 实测下载）；AUR 仍延后
+
 ---
 
 ## 1.3.2 (2026-08-24) — 单元测试机器可读报告（`ezmk test --report`）
