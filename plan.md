@@ -1,6 +1,6 @@
 # EazyMake 1.3.3 执行计划
 
-> **状态：执行中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
 > 详细设计：[**1.3.3.md**](plans/1.3.x/1.3.3.md)。本计划为 1.3.0 发布后的**补丁版本**：为 1.3.0 的 **`workspace` 命令组**补齐双字母简写——`wl`/`wb`/`wt`/`wc` → `workspace list/build/test/clean`（`kAliases` 表加 4 行，沿用「组首字母 + 子命令首字母」规则，与 p/k/r 一致；无任何 `w*` 键冲突）。
 >
@@ -29,25 +29,25 @@
 
 ### 阶段一：别名表
 
-- [ ] **1.1 `kAliases` 加 4 行**（`src/cli.cpp:1016-1027` 区域）：`wl`/`wb`/`wt`/`wc` → `workspace list/build/test/clean`；展开逻辑零改动（`shorthand_expansion`/下游 `Command::Workspace*` 分发自动生效）
+- [x] **1.1 `kAliases` 加 4 行**（`src/cli.cpp:1016-1027` 区域）：`wl`/`wb`/`wt`/`wc` → `workspace list/build/test/clean`；展开逻辑零改动（`shorthand_expansion`/下游 `Command::Workspace*` 分发自动生效）
 
 ### 阶段二：单测
 
-- [ ] **2.1 展开断言**（`test/test_cli.cpp`）：`wl`/`wb`/`wt`/`wc` → `Command::WorkspaceList/Build/Test/Clean`
-- [ ] **2.2 命令位置限定**：`ezmk workspace wb` → 未知子命令错误
-- [ ] **2.3 `--verbose` 展开记录**：`wb → workspace build`；既有 p/k/r/u/h/v 简写断言回归（无键冲突）
+- [x] **2.1 展开断言**（`test/test_cli.cpp`）：`wl`/`wb`/`wt`/`wc` → `Command::WorkspaceList/Build/Test/Clean`
+- [x] **2.2 命令位置限定**：`ezmk workspace wb` → 未知子命令错误
+- [x] **2.3 `--verbose` 展开记录**：`wb → workspace build`；既有 p/k/r/u/h/v 简写断言回归（无键冲突）
 
 ### 阶段三：文档
 
-- [ ] **3.1 cli.md（en/zh）**：命令简写说明补 workspace 4 个（现状只描述 p/k/r 简写）
-- [ ] **3.2 CHANGES.md**：1.3.3 条目
-- [ ] **3.3 无新 i18n key**（全部复用既有错误消息）——`.def`/JSON/`locale_data.cpp` 零改动
+- [x] **3.1 cli.md（en/zh）**：命令简写说明补 workspace 4 个（现状只描述 p/k/r 简写）
+- [x] **3.2 CHANGES.md**：1.3.3 条目
+- [x] **3.3 无新 i18n key**（全部复用既有错误消息）——`.def`/JSON/`locale_data.cpp` 零改动
 
 ### 阶段四：收口
 
-- [ ] **4.1 全量零回归**（基线 895/5185）
-- [ ] **4.2 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
-- [ ] **4.3 发布门槛复核**：API 无破坏性变更 + 计划清单收口（`example` 组/`w` 单字母/补全明确不做）
+- [x] **4.1 全量零回归**（基线 895/5185）
+- [x] **4.2 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
+- [x] **4.3 发布门槛复核**：API 无破坏性变更 + 计划清单收口（`example` 组/`w` 单字母/补全明确不做）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
