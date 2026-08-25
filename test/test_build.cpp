@@ -1,6 +1,7 @@
 // Unit tests for build.cpp
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
+#include "test_helpers.hpp"
 #include "ezmk/build.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/cli.hpp"
@@ -691,4 +692,108 @@ TEST_CASE("build: profile with macros override from base", "[build][0.2.3][profi
     REQUIRE(merged.macros["API_KEY"] == "default");
     // Profile flag appended
     REQUIRE(merged.flags[1] == "-O2");
+}
+
+// ===================================================================
+// 1.3.2 — EZMK built-in framework: minimal JUnit emitter
+// ===================================================================
+
+namespace {
+
+std::string read_file_str(const fs::path& p) {
+    return ezmk::util::file_read(p);
+}
+
+EzmkTestRecord rec(const std::string& fname, EzmkTestRecord::Status st,
+                   std::string out = {}, std::string err = {},
+                   double elapsed = 1.25) {
+    return {fname, elapsed, st, std::move(out), std::move(err)};
+}
+
+} // namespace
+
+TEST_CASE("junit emitter: all-pass suite", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    emit_ezmk_junit(out, {rec("a_test.cpp", EzmkTestRecord::Status::Pass),
+                          rec("b_test.cpp", EzmkTestRecord::Status::Pass)}, 2.5);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("<testsuites tests=\"2\" failures=\"0\" errors=\"0\"") != std::string::npos);
+    REQUIRE(s.find("<testsuite name=\"a_test.cpp\" tests=\"1\" failures=\"0\" errors=\"0\"")
+            != std::string::npos);
+    REQUIRE(s.find("<testcase name=\"a_test.cpp\"") != std::string::npos);
+    // No failure/error elements at all.
+    REQUIRE(s.find("<failure") == std::string::npos);
+    REQUIRE(s.find("<error") == std::string::npos);
+    // Atomic write leaves no .tmp behind.
+    REQUIRE_FALSE(fs::exists(out.string() + ".tmp"));
+}
+
+TEST_CASE("junit emitter: FAIL → <failure> with stdout/stderr", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    emit_ezmk_junit(out, {rec("f_test.cpp", EzmkTestRecord::Status::Fail,
+                              "stdout-line\n", "stderr-line\n")}, 1.0);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("failures=\"1\"") != std::string::npos);
+    REQUIRE(s.find("<failure message=\"test failed\">") != std::string::npos);
+    REQUIRE(s.find("stdout:") != std::string::npos);
+    REQUIRE(s.find("stdout-line") != std::string::npos);
+    REQUIRE(s.find("stderr:") != std::string::npos);
+    REQUIRE(s.find("stderr-line") != std::string::npos);
+    REQUIRE(s.find("<error") == std::string::npos);
+}
+
+TEST_CASE("junit emitter: TIMEOUT → <failure> timed out", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    emit_ezmk_junit(out, {rec("t_test.cpp", EzmkTestRecord::Status::Timeout, "", "hung")}, 30.0);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("<failure message=\"test timed out (30s)\">") != std::string::npos);
+    REQUIRE(s.find("hung") != std::string::npos);
+}
+
+TEST_CASE("junit emitter: compile/link failure → <error>", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    emit_ezmk_junit(out, {rec("c_test.cpp", EzmkTestRecord::Status::CompileFail, "", "syntax error"),
+                          rec("l_test.cpp", EzmkTestRecord::Status::LinkFail, "", "undefined ref")}, 0.5);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("errors=\"2\"") != std::string::npos);
+    REQUIRE(s.find("<error message=\"compilation failed\">") != std::string::npos);
+    REQUIRE(s.find("syntax error") != std::string::npos);
+    REQUIRE(s.find("<error message=\"linking failed\">") != std::string::npos);
+    REQUIRE(s.find("undefined ref") != std::string::npos);
+    REQUIRE(s.find("<failure") == std::string::npos);
+}
+
+TEST_CASE("junit emitter: XML escaping of user output (坑 2)", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    emit_ezmk_junit(out, {rec("e_test.cpp", EzmkTestRecord::Status::Fail,
+                              "a<b & c>d \"quoted\" 'apos'", "")}, 1.0);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("a&lt;b &amp; c&gt;d &quot;quoted&quot; &apos;apos&apos;") != std::string::npos);
+    // Raw XML metacharacters from user output must never appear.
+    REQUIRE(s.find("<b") == std::string::npos);
+}
+
+TEST_CASE("junit emitter: long output truncated (坑 5)", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    std::string big(10000, 'x');
+    emit_ezmk_junit(out, {rec("x_test.cpp", EzmkTestRecord::Status::Fail, big, "")}, 1.0);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("[truncated]") != std::string::npos);
+    // 4096-byte cap + marker — well under the raw 10000.
+    REQUIRE(s.size() < 10000);
+}
+
+TEST_CASE("junit emitter: filenames escaped in attributes", "[build][1.3.2]") {
+    TempDir tmp;
+    auto out = tmp.path / "junit.xml";
+    emit_ezmk_junit(out, {rec("a&b<c>d_test.cpp", EzmkTestRecord::Status::Pass)}, 0.1);
+    auto s = read_file_str(out);
+    REQUIRE(s.find("a&amp;b&lt;c&gt;d_test.cpp") != std::string::npos);
+    REQUIRE(s.find("<testsuite name=\"a&b") == std::string::npos);
 }

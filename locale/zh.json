@@ -185,6 +185,7 @@
     "test_failed": "部分测试失败",
     "test_catch2_not_found": "未找到 Catch2。安装方式:\n  ezmk pkg install catch2\n或将 catch2.hpp 放入 include/vendor/catch2.hpp",
     "test_flags_deprecated": "[test].flags 已弃用（1.2.0-dev.12+）——请改用 [compile.profile.<name>] + [test].default_profile，或 [test].include_dirs / [test].link_targets。将在 2.0.0 移除。",
+    "test_report_not_supported": "EZMK 测试框架不支持报告格式 '{fmt}' —— '{fmt}' 报告请使用 Catch2 框架项目，或改用 'junit'",
 
     "pkg_info_name": "包名",
     "pkg_info_version": "  版本",

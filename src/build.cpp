@@ -1810,6 +1810,97 @@ std::vector<fs::path> collect_test_sources(
 
 } // anonymous namespace
 
+// ===================================================================
+// 1.3.2: minimal JUnit XML emitter for the EZMK built-in test framework
+// (declared in build.hpp for unit tests)
+// ===================================================================
+
+// <testsuites> → one <testsuite> per test file → one <testcase>; failures and
+// timeouts get <failure>, compile/link failures get <error> (distinct JUnit
+// semantics). stdout/stderr bodies are truncated (坑 5) and fully XML-escaped
+// (坑 2). Written atomically (temp → rename, the cache/record.json convention).
+void emit_ezmk_junit(const fs::path& out_path,
+                     const std::vector<EzmkTestRecord>& records,
+                     double total_time) {
+    auto xml_escape = [](const std::string& s) {
+        std::string r;
+        r.reserve(s.size() + 8);
+        for (char c : s) {
+            switch (c) {
+                case '&': r += "&amp;"; break;
+                case '<': r += "&lt;"; break;
+                case '>': r += "&gt;"; break;
+                case '"': r += "&quot;"; break;
+                case '\'': r += "&apos;"; break;
+                default:  r += c;
+            }
+        }
+        return r;
+    };
+    auto truncate = [](const std::string& s) {
+        constexpr size_t kMax = 4096;
+        if (s.size() <= kMax) return s;
+        return s.substr(0, kMax) + "\n...[truncated]";
+    };
+    auto is_fail = [](EzmkTestRecord::Status st) {
+        return st == EzmkTestRecord::Status::Fail ||
+               st == EzmkTestRecord::Status::Timeout;
+    };
+    auto is_error = [](EzmkTestRecord::Status st) {
+        return st == EzmkTestRecord::Status::CompileFail ||
+               st == EzmkTestRecord::Status::LinkFail;
+    };
+
+    int n_fail = 0, n_error = 0;
+    for (const auto& r : records) {
+        if (is_fail(r.status)) n_fail++;
+        if (is_error(r.status)) n_error++;
+    }
+
+    std::ostringstream xml;
+    xml << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+    xml << "<testsuites tests=\"" << records.size()
+        << "\" failures=\"" << n_fail
+        << "\" errors=\"" << n_error
+        << "\" time=\"" << std::fixed << std::setprecision(3) << total_time << "\">\n";
+    for (const auto& r : records) {
+        std::string name = xml_escape(r.fname);
+        xml << "  <testsuite name=\"" << name << "\" tests=\"1\""
+            << " failures=\"" << (is_fail(r.status) ? 1 : 0)
+            << "\" errors=\"" << (is_error(r.status) ? 1 : 0)
+            << "\" time=\"" << std::fixed << std::setprecision(3) << r.elapsed << "\">\n";
+        xml << "    <testcase name=\"" << name << "\" classname=\"ezmk.test\""
+            << " time=\"" << std::fixed << std::setprecision(3) << r.elapsed << "\">\n";
+        if (is_fail(r.status)) {
+            std::string msg = r.status == EzmkTestRecord::Status::Timeout
+                ? "test timed out (30s)" : "test failed";
+            std::string body;
+            if (!r.out.empty()) body += "stdout:\n" + truncate(r.out) + "\n";
+            if (!r.err.empty()) body += "stderr:\n" + truncate(r.err) + "\n";
+            if (body.empty()) body = msg;
+            xml << "      <failure message=\"" << xml_escape(msg) << "\">"
+                << xml_escape(body) << "</failure>\n";
+        } else if (is_error(r.status)) {
+            std::string msg = r.status == EzmkTestRecord::Status::CompileFail
+                ? "compilation failed" : "linking failed";
+            std::string body = truncate(r.err.empty() ? r.out : r.err);
+            if (body.empty()) body = msg;
+            xml << "      <error message=\"" << xml_escape(msg) << "\">"
+                << xml_escape(body) << "</error>\n";
+        }
+        xml << "    </testcase>\n";
+        xml << "  </testsuite>\n";
+    }
+    xml << "</testsuites>\n";
+
+    // Atomic write: temp → rename.
+    fs::path tmp = out_path;
+    tmp += ".tmp";
+    util::file_write(tmp, xml.str());
+    util::atomic_rename(tmp, out_path);
+    util::info("  report written: " + out_path.string());
+}
+
 void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
@@ -2235,6 +2326,8 @@ void run_tests(const config::EzConfig& cfg,
         fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
         auto test_record = cache::load_record(test_record_path);
         validate_test_cache_signature(test_record, cin);
+        // 1.3.2: per-file records for the JUnit report (emitted after the loop).
+        std::vector<EzmkTestRecord> records;
 
         for (auto& ts : test_sources) {
             auto test_start = std::chrono::steady_clock::now();
@@ -2264,6 +2357,8 @@ void run_tests(const config::EzConfig& cfg,
             } catch (const ezmk::fatal_error&) {
                 util::error(std::string("  compilation failed: ") + ts.filename().string());
                 failed++;
+                records.push_back({ts.filename().string(), 0.0,
+                                   EzmkTestRecord::Status::CompileFail, {}, {}});
                 continue;
             }
 
@@ -2288,6 +2383,8 @@ void run_tests(const config::EzConfig& cfg,
                 util::error(std::string("  link failed: ") + ts.filename().string());
                 if (!comp_res.err.empty()) util::error(comp_res.err);
                 failed++;
+                records.push_back({ts.filename().string(), 0.0,
+                                   EzmkTestRecord::Status::LinkFail, {}, comp_res.err});
                 continue;
             }
 
@@ -2302,6 +2399,8 @@ void run_tests(const config::EzConfig& cfg,
             if (run_res.timed_out) {
                 util::error("  [TIMEOUT] " + fname + "  (exceeded 30s)");
                 timed_out++;
+                records.push_back({fname, elapsed, EzmkTestRecord::Status::Timeout,
+                                   run_res.out, run_res.err});
             } else if (run_res.exit_code == 0) {
                 util::info("  [PASS] " + fname + "  (" +
                            std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
@@ -2309,6 +2408,8 @@ void run_tests(const config::EzConfig& cfg,
                     util::info("    stdout: " + run_res.out);
                 }
                 passed++;
+                records.push_back({fname, elapsed, EzmkTestRecord::Status::Pass,
+                                   verbose ? run_res.out : "", ""});
             } else {
                 util::error("  [FAIL] " + fname + "  (" +
                           std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
@@ -2319,9 +2420,23 @@ void run_tests(const config::EzConfig& cfg,
                     util::error("    stderr: " + run_res.err);
                 }
                 failed++;
+                records.push_back({fname, elapsed, EzmkTestRecord::Status::Fail,
+                                   run_res.out, run_res.err});
             }
         }
         cache::save_record(test_record, test_record_path);
+
+        // 1.3.2: machine-readable report — EZMK framework only emits junit
+        // (其他格式显式提示用 Catch2 框架，坑 3)。Report is written BEFORE the
+        // failure gate so CI sees the failures in the file.
+        if (!report_fmt.empty()) {
+            if (report_fmt != "junit") {
+                util::fatal(ezmk::i18n::fmt(
+                    ezmk::i18n::I18nKey::test_report_not_supported,
+                    {{"fmt", report_fmt}}));
+            }
+            emit_ezmk_junit(report_path, records, total_time);
+        }
 
         int total = passed + failed + timed_out;
         // Fold timeouts into the failed bucket for the summary so the numbers

@@ -91,6 +91,21 @@ void run_tests(const config::EzConfig& cfg,
                const std::string& test_profile_override = {},
                const std::string& test_report = {});
 
+// 1.3.2: minimal JUnit emitter for the EZMK built-in test framework — one
+// record per test file (PASS/FAIL/TIMEOUT/compile/link), exposed for tests.
+struct EzmkTestRecord {
+    std::string fname;
+    double elapsed = 0.0;
+    enum class Status { Pass, Fail, Timeout, CompileFail, LinkFail } status = Status::Pass;
+    std::string out;  // stdout / compile-error summary
+    std::string err;  // stderr / link-error summary
+};
+// Writes <testsuites>/<testsuite>/<testcase> with <failure> (fail/timeout) and
+// <error> (compile/link), XML-escaped + truncated, atomically (temp → rename).
+void emit_ezmk_junit(const fs::path& out_path,
+                     const std::vector<EzmkTestRecord>& records,
+                     double total_time);
+
 // 1.1.1: Prepare a cache::CompileInput exactly as a real build would —
 // include collection, profile merge, macro folding, dependency package
 // extra_includes. Shared by compile_commands.json generation
