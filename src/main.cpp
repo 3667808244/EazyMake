@@ -303,11 +303,39 @@ int main(int argc, char** argv) {
             auto proj_root = require_project_root();
             auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
 
+            // 1.3.4: --run only makes sense for executable projects — reject
+            // static/shared/utils at startup (config-time gate, 坑 3).
+            if (args.watch_run && cfg.project.type != "executable") {
+                ezmk::util::fatal(
+                    ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_err_run_needs_executable,
+                                    {{"type", cfg.project.type}}));
+            }
+
             // SIGINT handler for graceful exit
             static std::atomic<bool> sigint_received{false};
             auto prev_handler = std::signal(SIGINT, [](int) {
                 sigint_received = true;
             });
+
+            // 1.3.4: run the freshly-built executable after a SUCCESSFUL
+            // rebuild. The blocking run happens on the watcher thread — change
+            // detection is naturally paused while the program runs, and watch
+            // resumes when it exits (zero process management). Non-zero exit →
+            // warn, keep watching (watch is a loop, not a one-shot run).
+            auto run_watched_exe = [&](const std::filesystem::path& exe) {
+                if (!args.watch_run || exe.empty()) return;
+                ezmk::util::info(ezmk::i18n::I18nKey::running,
+                                 {{"exe", exe.filename().string()}});
+                auto res = ezmk::util::run_command("\"" + exe.string() + "\"");
+                if (!res.out.empty()) std::cout << res.out;
+                if (!res.err.empty()) std::cerr << res.err;
+                if (res.exit_code != 0) {
+                    ezmk::util::warn(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::watch_run_exit_nonzero,
+                        {{"exe", exe.filename().string()},
+                         {"code", std::to_string(res.exit_code)}}));
+                }
+            };
 
             // Initial build (unless --no-build-on-start)
             if (!args.watch_no_build_on_start) {
@@ -354,7 +382,9 @@ int main(int argc, char** argv) {
                         ezmk::cache::clear_cache();
                         try {
                             auto new_cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
-                            ezmk::build::build_project(new_cfg, args.build_opts);
+                            // 1.3.4: capture the exe and run it on success (坑 4: never run on failure).
+                            auto exe = ezmk::build::build_project(new_cfg, args.build_opts);
+                            run_watched_exe(exe);
                             ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                         } catch (const std::exception& e) {
                             ezmk::util::error(std::string("build failed: ") + e.what());
@@ -368,7 +398,9 @@ int main(int argc, char** argv) {
                                      {{"path", changed_abs}});
                     try {
                         auto cur_cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
-                        ezmk::build::build_project(cur_cfg, args.build_opts);
+                        // 1.3.4: capture the exe and run it on success (坑 4).
+                        auto exe = ezmk::build::build_project(cur_cfg, args.build_opts);
+                        run_watched_exe(exe);
                         ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                     } catch (const std::exception& e) {
                         ezmk::util::error(std::string("build failed: ") + e.what());
