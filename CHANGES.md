@@ -18,6 +18,35 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.3 (2026-08-24) — workspace 双字母命令简写
+
+1.3.3 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间、1.3.2 测试报告相互独立、可并行）：为 1.3.0 的 **`workspace` 命令组**补齐双字母简写——`wl`/`wb`/`wt`/`wc` → `workspace list/build/test/clean`（`kAliases` 表加 4 行，沿用「组首字母 + 子命令首字母」规则，与 p/k/r 一致；无任何 `w*` 键冲突，与 `-w` 重定向 flag 正交）。**公共 API 无破坏性变更**（纯增量别名）。
+
+### 新增 / 行为变更
+
+- **workspace 简写**：`wl`/`wb`/`wt`/`wc` 在命令位置展开（`ezmk wb` ≡ `ezmk workspace build`），下游 `Command::Workspace*` 分发与 `--verbose` 展开记录（`wb → workspace build`）自动生效
+- **命令位置限定不变**：`ezmk workspace wb` 仍报未知子命令（简写只在 `argv[1]` 生效）
+- **workspace 命令接受 `-v`/`--verbose`**（1.3.3 附带）：此前 workspace 命令组（与 `-w` 重定向）会拒绝 `-v`——与其他命令组不一致，也使简写展开提示无法展示；现接受并忽略（workspace 无逐命令 verbose 语义）。纯增量（原报错输入现可解析）
+
+### 文档
+
+- `docs/cli.md`（zh/en）：命令简写表补 workspace 4 个 + workspace 简写说明（与 `-w` 正交、`w` 单字母与 `example` 组刻意不做）
+- `CHANGES.md` 本条目
+- **无新 i18n key**（全部复用既有错误消息）——`.def`/JSON/`locale_data.cpp` 零改动
+
+### 测试
+
+- CLI 解析：4 个展开断言（→ `Command::WorkspaceList/Build/Test/Clean`）+ flag/positional 透传（`--report`/`--member`/`-j`）+ 命令位置限定（`workspace wb` 报错）+ `--verbose` 展开记录 + 既有 p/k/r/u/h/v 简写回归
+- i18n：三向一致性零改动（`check_i18n.py` 仍通过，371 keys）
+
+### 已知限制 / 跟进项
+
+- **刻意不做**：`completions/_ezmk` 加简写（与既有设计决定一致）、`w` 单字母（workspace 有子命令，单字母歧义）、**`example` 组简写（定死边界，不留后续评估）**。
+- **`-w` 与 `w*` 简写组合的文档示例**：归 1.4.0 或后续评估。
+- **旧二进制（<1.3.3）**：不认识 `wl`/`wb`/`wt`/`wc` → 报未知命令；新简写需 ≥1.3.3。
+
+---
+
 ## 1.3.2 (2026-08-24) — 单元测试机器可读报告（`ezmk test --report`）
 
 1.3.2 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间相互独立、可并行）：`ezmk test --report <fmt>[:<path>]` 产**机器可读测试报告**（JUnit XML 写文件，交给已有仪表盘/CI 渲染）——non-goals「原生单元测试仪表盘」条款（形态 A/B 拒绝）的**形态 C 替代方案**，文档与实现互相引用。**只做发射不做 UI**：历史/图表/HTML 渲染明确不做。**公共 API 无破坏性变更**（纯新增 flag）。

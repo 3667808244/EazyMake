@@ -425,7 +425,16 @@ unknown subcommand. Shorthands are typing sugar and are **not** part of zsh comp
 | `pw` | `project watch` | `ku` | `pkg update` | | |
 | `pp` | `project pack` | | | | |
 | `pt` | `project test` | | | | |
+| `wl` | `workspace list` (1.3.3+) | `wc` | `workspace clean` (1.3.3+) | | |
+| `wb` | `workspace build` (1.3.3+) | | | | |
+| `wt` | `workspace test` (1.3.3+) | | | | |
 | `u` | `utils` | | | `h` / `v` | `help` / `version` |
+
+> **Workspace shorthands (1.3.3+):** `wl`/`wb`/`wt`/`wc` expand at the command
+> position exactly like the p/k/r shorthands (`ezmk wb` ≡ `ezmk workspace build`;
+> `ezmk workspace wb` is still an unknown subcommand). They are orthogonal to the
+> `-w` redirect flag (a build/test/clean *option*). `w` alone and the `example`
+> group deliberately have **no** shorthand — see the 1.3.3 plan.
 
 ---
 

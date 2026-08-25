@@ -360,7 +360,12 @@ include_dirs = ["include", "@link:shared/include"]
 | `pw` | `project watch` | `ku` | `pkg update` | | |
 | `pp` | `project pack` | | | | |
 | `pt` | `project test` | | | | |
+| `wl` | `workspace list`（1.3.3+） | `wc` | `workspace clean`（1.3.3+） | | |
+| `wb` | `workspace build`（1.3.3+） | | | | |
+| `wt` | `workspace test`（1.3.3+） | | | | |
 | `u` | `utils` | | | `h` / `v` | `help` / `version` |
+
+> **workspace 简写（1.3.3+）：** `wl`/`wb`/`wt`/`wc` 在命令位置展开，与 p/k/r 简写完全一致（`ezmk wb` ≡ `ezmk workspace build`；`ezmk workspace wb` 仍为未知子命令）。与 `-w` 重定向 flag（build/test/clean 的**参数位**选项）正交。`w` 单字母与 `example` 组**刻意不做**简写——见 1.3.3 计划。
 
 ---
 
