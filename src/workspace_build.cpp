@@ -146,7 +146,7 @@ bool member_has_tests(const fs::path& member_dir, const config::EzConfig& cfg) {
 // The stop-check lives in the caller (task body) so a not-yet-started task
 // counts as `skipped`, not `failed`.
 bool run_member(const workspace::Member& m, const std::string& action,
-                std::mutex& print_mutex) {
+                std::mutex& print_mutex, const std::string& test_report = {}) {
     {
         std::lock_guard<std::mutex> lk(print_mutex);
         util::info(I18nKey::workspace_member_start,
@@ -154,6 +154,11 @@ bool run_member(const workspace::Member& m, const std::string& action,
     }
 
     std::string cmd = "\"" + ezmk_exe_path().string() + "\" " + action;
+    if (action == "test" && !test_report.empty()) {
+        // 1.3.2: forward --report to the member subprocess — each member
+        // writes its own report file (default: <member>/.ezmk/test-results/...).
+        cmd += " --report \"" + util::escape_shell_arg(test_report) + "\"";
+    }
     util::RunOptions ro;
     ro.cwd = m.path;
     auto res = util::run_command(cmd, ro);
@@ -232,7 +237,8 @@ int run_workspace_action(const workspace::Workspace& ws,
                     skipped.fetch_add(1);
                     return;
                 }
-                bool ok = run_member(ws.members[idx], action, print_mutex);
+                bool ok = run_member(ws.members[idx], action, print_mutex,
+                                     opts.test_report);
                 if (ok) {
                     succeeded.fetch_add(1);
                 } else {

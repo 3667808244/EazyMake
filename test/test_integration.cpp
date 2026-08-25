@@ -3211,3 +3211,211 @@ TEST_CASE("integration: pack --precompiled always builds fresh artifacts (1.3.0-
     REQUIRE(out3.find("0 cached, 1 compiled") == std::string::npos);  // no recompile
     REQUIRE(out3.find("1 cached, 0 compiled") != std::string::npos);
 }
+
+// ==============================================================
+// 1.3.2: `ezmk test --report <fmt>[:<path>]` — machine-readable reports
+// ==============================================================
+
+namespace {
+
+// EZMK-framework project with one passing and one failing test file.
+void write_ezmk_test_proj(const fs::path& proj_dir, const std::string& proj_name) {
+    fs::create_directories(proj_dir / "src");
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "src" / "main.cpp", "int main() { return 0; }\n");
+    file_write(proj_dir / "test" / "pass_test.cpp",
+        "#include <cstdio>\nint main() { std::printf(\"pass-test-ok\\n\"); return 0; }\n");
+    file_write(proj_dir / "test" / "fail_test.cpp",
+        "#include <cstdio>\nint main() { std::printf(\"fail-test-ran\\n\"); return 1; }\n");
+    file_write(proj_dir / "ezmk.toml",
+        "[project]\nname = \"" + proj_name + "\"\ntype = \"executable\"\n"
+        "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[compile]\nflags = [\"-Wall\"]\ninclude_dirs = [\"include\"]\n\n"
+        "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+        "[depends]\nlib = []\n\n"
+        "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n");
+}
+
+// Minimal EZMK-framework project: a single passing test + src/main.cpp.
+void write_ezmk_pass_proj(const fs::path& proj_dir, const std::string& proj_name) {
+    fs::create_directories(proj_dir / "src");
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "src" / "main.cpp", "int main() { return 0; }\n");
+    file_write(proj_dir / "test" / "ok_test.cpp", "int main() { return 0; }\n");
+    file_write(proj_dir / "ezmk.toml",
+        "[project]\nname = \"" + proj_name + "\"\ntype = \"executable\"\n"
+        "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[compile]\ninclude_dirs = [\"include\"]\n\n"
+        "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n");
+}
+
+} // anonymous namespace
+
+// EZMK framework: report file written BEFORE the failure gate, so CI sees the
+// failures even though `ezmk test` exits non-zero. Console summary intact.
+TEST_CASE("integration: ezmk test --report junit with failures (1.3.2)", "[integration][1.3.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "rpt_fail";
+    write_ezmk_test_proj(proj_dir, "rpt_fail");
+
+    ProcResult r = run_ezmk("test --report junit", proj_dir);
+    INFO("stderr: " << r.err);
+    std::string combined = r.out + "\n" + r.err;
+    // Console summary unchanged (坑 1: report never clobbers stdout).
+    REQUIRE(combined.find("2 tests: 1 passed, 1 failed") != std::string::npos);
+    REQUIRE(combined.find("[PASS] pass_test.cpp") != std::string::npos);
+    REQUIRE(combined.find("[FAIL] fail_test.cpp") != std::string::npos);
+    // Failure gate preserved.
+    REQUIRE(r.exit_code != 0);
+
+    // Report file exists at the default path with the failure recorded.
+    fs::path report = proj_dir / ".ezmk" / "test-results" / "junit.xml";
+    REQUIRE(fs::exists(report));
+    std::string xml = file_read(report);
+    REQUIRE(xml.find("<testsuites tests=\"2\" failures=\"1\" errors=\"0\"") != std::string::npos);
+    REQUIRE(xml.find("<failure message=\"test failed\">") != std::string::npos);
+    REQUIRE(xml.find("fail-test-ran") != std::string::npos);
+    REQUIRE(xml.find("<testcase name=\"pass_test.cpp\"") != std::string::npos);
+    REQUIRE(xml.find("<failure") != std::string::npos);
+}
+
+TEST_CASE("integration: ezmk test --report junit all-pass (1.3.2)", "[integration][1.3.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "rpt_pass";
+    write_ezmk_pass_proj(proj_dir, "rpt_pass");
+
+    ProcResult r = run_ezmk("test --report junit", proj_dir);
+    INFO("stderr: " << r.err);
+    REQUIRE(r.exit_code == 0);
+    fs::path report = proj_dir / ".ezmk" / "test-results" / "junit.xml";
+    REQUIRE(fs::exists(report));
+    std::string xml = file_read(report);
+    REQUIRE(xml.find("<testsuites tests=\"1\" failures=\"0\" errors=\"0\"") != std::string::npos);
+    REQUIRE(xml.find("<failure") == std::string::npos);
+}
+
+TEST_CASE("integration: ezmk test --report custom path (1.3.2)", "[integration][1.3.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "rpt_path";
+    write_ezmk_pass_proj(proj_dir, "rpt_path");
+
+    // Relative path resolves against the project root.
+    ProcResult r = run_ezmk("test --report junit:custom/results.xml", proj_dir);
+    INFO("stderr: " << r.err);
+    REQUIRE(r.exit_code == 0);
+    fs::path report = proj_dir / "custom" / "results.xml";
+    REQUIRE(fs::exists(report));
+    REQUIRE(file_read(report).find("<testsuites") != std::string::npos);
+    // The default-path file must NOT exist (custom path won).
+    REQUIRE_FALSE(fs::exists(proj_dir / ".ezmk" / "test-results" / "junit.xml"));
+}
+
+TEST_CASE("integration: ezmk framework rejects non-junit report formats (1.3.2)", "[integration][1.3.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "rpt_json";
+    write_ezmk_pass_proj(proj_dir, "rpt_json");
+
+    ProcResult r = run_ezmk("test --report json", proj_dir);
+    std::string combined = r.out + "\n" + r.err;
+    REQUIRE(r.exit_code != 0);
+    // Explicit hint to use Catch2 for non-junit formats (坑 3).
+    REQUIRE(combined.find("not supported") != std::string::npos);
+    REQUIRE(combined.find("Catch2") != std::string::npos);
+}
+
+// Catch2 path: `-r junit::out=<file>` — the console reporter stays default and
+// the summary parse still works; the JUnit file carries the same result.
+TEST_CASE("integration: catch2 test --report junit writes report (1.3.2)", "[integration][1.3.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "rpt_catch2";
+    fs::create_directories(proj_dir / "src");
+    fs::create_directories(proj_dir / "test");
+    file_write(proj_dir / "src" / "main.cpp", "int main() { return 0; }\n");
+    file_write(proj_dir / "test" / "test_math.cpp",
+        "#include <catch2/catch_test_macros.hpp>\n"
+        "TEST_CASE(\"addition works\", \"[math]\") { REQUIRE(1 + 1 == 2); }\n");
+    file_write(proj_dir / "ezmk.toml",
+        "[project]\nname = \"rpt_catch2\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[compile]\ninclude_dirs = [\"include\"]\n\n"
+        "[depends]\nlib = [\"catch2\"]\n\n"
+        "[test]\ndirs = [\"test\"]\nframework = \"catch2\"\n");
+
+    ProcResult inst = run_ezmk("pkg install catch2 -p -y", proj_dir);
+    if (inst.exit_code != 0) {
+        SKIP("catch2 install failed (no repo / offline) — skipping");
+    }
+
+    ProcResult r = run_ezmk("test --report junit", proj_dir);
+    INFO("stderr: " << r.err);
+    std::string combined = r.out + "\n" + r.err;
+    if (r.exit_code != 0 && combined.find("Catch2 not found") != std::string::npos) {
+        SKIP("catch2 not available — skipping");
+    }
+    REQUIRE(r.exit_code == 0);
+    // Console summary parse untouched (坑 1).
+    REQUIRE(combined.find("failed: 0") != std::string::npos);
+    fs::path report = proj_dir / ".ezmk" / "test-results" / "junit.xml";
+    REQUIRE(fs::exists(report));
+    std::string xml = file_read(report);
+    REQUIRE(xml.find("<testsuites") != std::string::npos);
+    REQUIRE(xml.find("addition works") != std::string::npos);
+}
+
+// 1.3.2: `workspace test --report` forwards the flag to every member — each
+// member writes its OWN report file (default path under its project root).
+TEST_CASE("integration: workspace test --report writes per-member reports (1.3.2)", "[integration][workspace][1.3.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws_rpt";
+    write_ws_fixture(root);  // tool-a has [test] ezmk + test dir
+
+    // Give tool-b a test dir + [test] section so TWO members write reports.
+    fs::create_directories(root / "apps/tool-b" / "test");
+    file_write(root / "apps/tool-b" / "test" / "b_test.cpp",
+        "#include <cstdio>\nint main() { std::printf(\"b-ok\\n\"); return 0; }\n");
+    file_write(root / "apps/tool-b" / "ezmk.toml",
+        "[project]\nname = \"tool-b\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[depends]\nworkspace = [\"strutil\"]\n\n"
+        "[test]\ndirs = [\"test\"]\nframework = \"ezmk\"\n");
+
+    // Members link against sibling artifacts — build the workspace first.
+    ProcResult b = run_ezmk("workspace build -j 2", root);
+    REQUIRE(b.exit_code == 0);
+
+    ProcResult r = run_ezmk("workspace test --report junit -j 2", root);
+    INFO("stderr: " << r.err);
+    REQUIRE(r.exit_code == 0);
+
+    // Each tested member wrote its own report (default per-member path).
+    fs::path rpt_a = root / "apps/tool-a" / ".ezmk" / "test-results" / "junit.xml";
+    fs::path rpt_b = root / "apps/tool-b" / ".ezmk" / "test-results" / "junit.xml";
+    REQUIRE(fs::exists(rpt_a));
+    REQUIRE(fs::exists(rpt_b));
+    REQUIRE(file_read(rpt_a).find("<testcase name=\"test_smoke.cpp\"") != std::string::npos);
+    REQUIRE(file_read(rpt_b).find("<testcase name=\"b_test.cpp\"") != std::string::npos);
+    // The workspace root itself has no report (members are the units).
+    REQUIRE_FALSE(fs::exists(root / ".ezmk" / "test-results" / "junit.xml"));
+}
