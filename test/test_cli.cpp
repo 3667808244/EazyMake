@@ -719,6 +719,48 @@ TEST_CASE("cli parse: alias only applies at command position", "[cli][0.2.6][ali
 }
 
 // ===================================================================
+// 1.3.3 — workspace two-letter shorthands (wl/wb/wt/wc)
+// ===================================================================
+
+TEST_CASE("cli parse: workspace aliases expand (1.3.3)", "[cli][1.3.3][alias]") {
+    REQUIRE(TestArgs({"wl"}).parse().cmd == Command::WorkspaceList);
+    REQUIRE(TestArgs({"wb"}).parse().cmd == Command::WorkspaceBuild);
+    REQUIRE(TestArgs({"wt"}).parse().cmd == Command::WorkspaceTest);
+    REQUIRE(TestArgs({"wc"}).parse().cmd == Command::WorkspaceClean);
+}
+
+TEST_CASE("cli parse: workspace alias preserves flags (1.3.3)", "[cli][1.3.3][alias]") {
+    // `wt -w` ≡ `workspace test -w` (the -w token is accepted+ignored by the
+    // workspace spec); `wb --member x -j 2` forwards member/jobs options.
+    auto args = TestArgs({"wt", "-w", "--report", "junit"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceTest);
+    REQUIRE(args.workspace_opts.has_value());
+    REQUIRE(args.workspace_opts->test_report == "junit");
+
+    auto b = TestArgs({"wb", "--member", "libs/a", "-j", "2"}).parse();
+    REQUIRE(b.cmd == Command::WorkspaceBuild);
+    REQUIRE(b.workspace_opts.has_value());
+    REQUIRE(b.workspace_opts->members.size() == 1);
+    REQUIRE(b.workspace_opts->members[0] == "libs/a");
+    REQUIRE(b.workspace_opts->jobs == 2);
+}
+
+TEST_CASE("cli parse: workspace alias only at command position (1.3.3)", "[cli][1.3.3][alias]") {
+    // `workspace wb` is NOT an alias — wb is an unknown workspace subcommand.
+    REQUIRE_THROWS_AS(TestArgs({"workspace", "wb"}).parse(), ezmk::fatal_error);
+    REQUIRE_THROWS_AS(TestArgs({"workspace", "wl"}).parse(), ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: --verbose records workspace alias expansion (1.3.3)", "[cli][1.3.3][alias]") {
+    auto args = TestArgs({"wb", "-v"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceBuild);
+    REQUIRE(args.shorthand_expansion == "wb → workspace build");
+    auto l = TestArgs({"wl", "--verbose"}).parse();
+    REQUIRE(l.cmd == Command::WorkspaceList);
+    REQUIRE(l.shorthand_expansion == "wl → workspace list");
+}
+
+// ===================================================================
 // 0.2.6 — --color=<mode> global option
 // ===================================================================
 
