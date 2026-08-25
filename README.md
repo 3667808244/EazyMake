@@ -209,3 +209,4 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 - [MSVC support](docs/en/technical.md#using-msvc)
 - [zsh completion](docs/en/technical.md#shell-completion-zsh)
 - [Repository](https://github.com/3667808244/ezmk-repo) — official package repository
+- [Gitee mirror](https://gitee.com/egglzh/EazyMake) — main repo mirror (auto-synced from GitHub, for China access)

@@ -208,3 +208,4 @@ ezmk workspace clean [flags]    # 清理成员缓存
 - [MSVC 支持](docs/en/technical.md#using-msvc)
 - [zsh 补全](docs/en/technical.md#shell-completion-zsh)
 - [官方仓库](https://github.com/3667808244/ezmk-repo) — 包仓库
+- [Gitee 镜像](https://gitee.com/egglzh/EazyMake) — 本体仓库国内镜像（自动同步 GitHub）
