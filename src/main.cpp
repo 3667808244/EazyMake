@@ -292,7 +292,8 @@ int main(int argc, char** argv) {
                                     args.test_framework,
                                     args.test_filter,
                                     args.test_verbose,
-                                    args.test_profile);
+                                    args.test_profile,
+                                    args.test_report);
             break;
         }
 

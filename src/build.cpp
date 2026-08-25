@@ -1814,11 +1814,31 @@ void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
                bool verbose,
-               const std::string& test_profile_override) {
+               const std::string& test_profile_override,
+               const std::string& test_report) {
     // 1.2.0-dev.7: located project root (upward search); CWD fallback
     fs::path proj_root = util::locate_project_root(fs::current_path()).value_or(fs::current_path());
     fs::path build_dir = proj_root / "build";
     fs::path cache_dir = proj_root / ".ezmk/cache";
+
+    // 1.3.2: --report <fmt>[:<path>] — split once here, used by both
+    // frameworks. Default path: <proj_root>/.ezmk/test-results/<fmt>.xml
+    // ("junit" → junit.xml per the design doc); a relative path resolves
+    // against proj_root for predictable CI behavior.
+    std::string report_fmt;
+    fs::path report_path;
+    if (!test_report.empty()) {
+        auto colon = test_report.find(':');
+        report_fmt = colon == std::string::npos ? test_report : test_report.substr(0, colon);
+        std::string path_part = colon == std::string::npos ? "" : test_report.substr(colon + 1);
+        if (path_part.empty()) {
+            report_path = proj_root / ".ezmk" / "test-results" / (report_fmt + ".xml");
+        } else {
+            fs::path p(path_part);
+            report_path = p.is_relative() ? proj_root / p : p;
+        }
+        fs::create_directories(report_path.parent_path());
+    }
 
     // 1.2.0-dev.12: [test].flags is deprecated (removed in 2.0.0). Warn at the
     // point of use — not at parse time, since parse_config also runs for every
@@ -2093,6 +2113,13 @@ void run_tests(const config::EzConfig& cfg,
             // 1.2.0-dev.11: escape the filter — it is user input interpolated
             // into a shell command on POSIX (1.1.3 S4 class of injection).
             test_cmd += " \"" + util::escape_shell_arg(test_filter) + "\"";
+        }
+        // 1.3.2: --report — transparently forward to Catch2's own reporter
+        // machinery (`-r <fmt>::out=<file>`). The console reporter stays
+        // default, so the summary-text parsing below is untouched (坑 1).
+        if (!report_fmt.empty()) {
+            test_cmd += " -r " + report_fmt + "::out=\"" +
+                        util::escape_shell_arg(report_path.string()) + "\"";
         }
         auto test_res = util::run_command(test_cmd);
 
