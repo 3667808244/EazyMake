@@ -108,7 +108,16 @@ namespace ezmk::cli
             {'j', "jobs", true},
             {'\0', "stop-on-error", false},
             {'\0', "member", true},
+            {'\0', "report", true},   // 1.3.2: test only — forwarded to members
         };
+    }
+
+    // 1.3.2: --report is test-only; reject it on workspace build/clean/list.
+    static void reject_report_on_non_test(const WorkspaceOptions& w,
+                                          std::string_view cmd) {
+        if (!w.test_report.empty())
+            util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_report_test_only,
+                                        {{"cmd", std::string(cmd)}}));
     }
 
     // Read workspace-level options from a parsed option set — -j/--jobs
@@ -136,6 +145,17 @@ namespace ezmk::cli
         }
         if (p.has("stop-on-error"))
             w.stop_on_error = true;
+        if (auto v = p.value("report")) {
+            // 1.3.2: <fmt>[:<path>] — same shape as `ezmk test --report`.
+            std::string val = *v;
+            auto colon = val.find(':');
+            std::string fmt = colon == std::string::npos ? val : val.substr(0, colon);
+            if (fmt.empty() ||
+                fmt.find_first_of(" \t\r\n") != std::string::npos)
+                util::fatal(ezmk::i18n::I18nKey::cli_err_invalid_report,
+                            {{"val", val}});
+            w.test_report = std::move(val);
+        }
         return w;
     }
 
@@ -270,6 +290,7 @@ namespace ezmk::cli
                 WorkspaceOptions w = parse_workspace_opts(wp);
                 fill_members(wp, w);
                 reject_positionals(wp, "ezmk workspace build");
+                reject_report_on_non_test(w, "ezmk workspace build");
                 args.workspace_opts = std::move(w);
                 return args;
             }
@@ -323,6 +344,7 @@ namespace ezmk::cli
                 WorkspaceOptions w = parse_workspace_opts(wp);
                 fill_members(wp, w);
                 reject_positionals(wp, "ezmk workspace clean");
+                reject_report_on_non_test(w, "ezmk workspace clean");
                 if (w.stop_on_error)
                     util::fatal(ezmk::i18n::I18nKey::workspace_err_clean_stop_on_error);
                 args.workspace_opts = std::move(w);
@@ -472,6 +494,7 @@ namespace ezmk::cli
                 {'v', "verbose", false},
                 {'V', "verbose", false},
                 {'\0', "profile", true},   // 1.2.0-dev.12
+                {'\0', "report", true},    // 1.3.2: <fmt>[:<path>] machine-readable report
                 // 1.3.0-dev.2: -w redirect + workspace-only flags (rejected
                 // without -w below).
                 {'w', "workspace", false},
@@ -507,6 +530,18 @@ namespace ezmk::cli
                 args.test_verbose = true;
             if (auto v = p.value("profile"))
                 args.test_profile = *v;
+            if (auto v = p.value("report")) {
+                // 1.3.2: <fmt>[:<path>] — validate the format segment now;
+                // framework-specific support is checked in run_tests.
+                std::string val = *v;
+                auto colon = val.find(':');
+                std::string fmt = colon == std::string::npos ? val : val.substr(0, colon);
+                if (fmt.empty() ||
+                    fmt.find_first_of(" \t\r\n") != std::string::npos)
+                    util::fatal(ezmk::i18n::I18nKey::cli_err_invalid_report,
+                                {{"val", val}});
+                args.test_report = std::move(val);
+            }
             return args;
         }
 
@@ -813,6 +848,9 @@ namespace ezmk::cli
             // semantics, so --stop-on-error is rejected explicitly.
             if (action == "clean" && w.stop_on_error)
                 util::fatal(ezmk::i18n::I18nKey::workspace_err_clean_stop_on_error);
+            // 1.3.2: --report is test-only.
+            if (action != "test")
+                reject_report_on_non_test(w, cmd_name);
 
             args.workspace_opts = std::move(w);
             return args;

@@ -938,3 +938,58 @@ TEST_CASE("cli parse: project test missing --profile value throws", "[cli][1.2.0
         ezmk::fatal_error
     );
 }
+
+// ===================================================================
+// 1.3.2 — project test --report
+// ===================================================================
+
+TEST_CASE("cli parse: project test --report junit", "[cli][1.3.2]") {
+    auto args = TestArgs({"project", "test", "--report", "junit"}).parse();
+    REQUIRE(args.cmd == Command::ProjectTest);
+    REQUIRE(args.test_report == "junit");
+}
+
+TEST_CASE("cli parse: project test --report junit:custom path", "[cli][1.3.2]") {
+    auto args = TestArgs({"project", "test", "--report", "junit:out/custom.xml"}).parse();
+    REQUIRE(args.cmd == Command::ProjectTest);
+    REQUIRE(args.test_report == "junit:out/custom.xml");
+}
+
+TEST_CASE("cli parse: project test --report empty format throws", "[cli][1.3.2]") {
+    // ":out.xml" has an empty format segment; whitespace-only is invalid too.
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "test", "--report", ":out.xml"}).parse(),
+        ezmk::fatal_error);
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "test", "--report", " "}).parse(),
+        ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: project test -w --report → WorkspaceTest passthrough", "[cli][1.3.2]") {
+    auto args = TestArgs({"project", "test", "-w", "--report", "junit"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceTest);
+    REQUIRE(args.workspace_opts.has_value());
+    REQUIRE(args.workspace_opts->test_report == "junit");
+}
+
+TEST_CASE("cli parse: workspace test --report junit", "[cli][1.3.2]") {
+    auto args = TestArgs({"workspace", "test", "--report", "junit"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceTest);
+    REQUIRE(args.workspace_opts.has_value());
+    REQUIRE(args.workspace_opts->test_report == "junit");
+}
+
+TEST_CASE("cli parse: --report rejected on non-test workspace commands", "[cli][1.3.2]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"workspace", "build", "--report", "junit"}).parse(),
+        ezmk::fatal_error);
+    REQUIRE_THROWS_AS(
+        TestArgs({"workspace", "clean", "--report", "junit"}).parse(),
+        ezmk::fatal_error);
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "build", "-w", "--report", "junit"}).parse(),
+        ezmk::fatal_error);
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "clean", "-w", "--report", "junit"}).parse(),
+        ezmk::fatal_error);
+}

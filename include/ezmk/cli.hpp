@@ -105,6 +105,7 @@ struct WorkspaceOptions {
     int jobs = 0;                            // -j/--jobs (0 = auto)
     bool stop_on_error = false;              // --stop-on-error (build/test only)
     std::vector<std::string> members;        // --member <name> (repeatable)
+    std::string test_report;                 // 1.3.2: --report (test only) — forwarded to members
 };
 
 struct InstallOptions {
@@ -186,6 +187,7 @@ struct CliArgs {
     std::string test_filter;        // --filter pattern
     bool test_verbose = false;      // --verbose
     std::string test_profile;       // 1.2.0-dev.12: --profile override (empty = use [test].default_profile)
+    std::string test_report;        // 1.3.2: --report <fmt>[:<path>] — machine-readable test report
 
     // 0.9.8+: Shorthand expansion hint (e.g. "ri → repo info").
     // Non-empty only when a shorthand alias was expanded AND --verbose was passed.

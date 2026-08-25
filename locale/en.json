@@ -257,6 +257,8 @@
     "cli_all_ignores_name": "'--all' ignores the explicit package name '{name}'",
     "cli_invalid_jobs": "invalid -j value: {val}",
     "cli_jobs_negative": "'-j' value must be >= 0",
+    "cli_err_invalid_report": "invalid --report value: '{val}' — expected <fmt>[:<path>] with a non-empty format (e.g. 'junit' or 'junit:out.xml')",
+    "cli_report_test_only": "--report is only valid for test commands (ezmk test / ezmk workspace test), not {cmd}",
     "cli_invalid_color": "invalid --color value: '{val}' (expected always, auto, or never)",
     "cli_did_you_mean": "  Did you mean: {suggestion}?",
     "cli_unknown_command": "unknown command: {cmd}",
