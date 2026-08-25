@@ -18,6 +18,40 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.2 (2026-08-24) — 单元测试机器可读报告（`ezmk test --report`）
+
+1.3.2 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间相互独立、可并行）：`ezmk test --report <fmt>[:<path>]` 产**机器可读测试报告**（JUnit XML 写文件，交给已有仪表盘/CI 渲染）——non-goals「原生单元测试仪表盘」条款（形态 A/B 拒绝）的**形态 C 替代方案**，文档与实现互相引用。**只做发射不做 UI**：历史/图表/HTML 渲染明确不做。**公共 API 无破坏性变更**（纯新增 flag）。
+
+### 新增 / 行为变更
+
+- **`ezmk test --report <fmt>[:<path>]`**：JUnit XML 写文件；缺省路径 `<proj_root>/.ezmk/test-results/junit.xml`（项目级、可 gitignore），自定义相对路径按项目根解析
+- **Catch2 路径**：透传 vendor 自带 reporter（`-r <fmt>::out=<file>`，`junit`/`json`/`xml`/`sonarqube`…均可）；控制台 reporter 保持默认 → 现有摘要文本解析零回归；`--filter` 与 `--report` 可组合（报告只含过滤后用例）
+- **EZMK 内置框架路径**：最小 JUnit 发射器——每测试文件一个 `<testsuite>`/`<testcase>`，失败/超时 → `<failure>`，编译/链接失败 → `<error>`（语义区分）；stdout/stderr 摘要**截断**（4KB/条）+ **全量 XML 转义**（`& < > " '`）；temp → rename 原子写；报告在失败门禁**之前**写出（CI 能看到失败详情）
+- **格式门禁**：EZMK 仅支持 `junit`；`json` 等格式显式报错并提示改用 Catch2 框架（避免"换框架丢格式"的隐形陷阱）
+- **`ezmk workspace test --report` 透传**（P1）：成员子进程透传 flag，每成员写自己的 `.ezmk/test-results/junit.xml`；成员失败汇总语义不变；build/clean/list 下 `--report` 明确拒绝
+- **报告是附加产物**：`ezmk test` 退出码语义（失败门禁）完全不变
+
+### 文档
+
+- `docs/cli.md`（zh/en）：test 命令新增 `--report` 标志说明（格式/缺省路径/两框架差异/workspace 透传）；`workspace test` 命令行补 `--report`
+- `docs/zh|en/non-goals.md`「原生单元测试仪表盘」条款：替代方案（形态 C）即本版（1.3.2 已引用，核对一致）
+- `CHANGES.md` 本条目
+
+### 测试
+
+- CLI 解析：`--report junit` / `--report junit:路径` / 空格式拒绝 / `-w` 透传 / build/clean 拒绝
+- EZMK 发射器单测：PASS/FAIL/TIMEOUT/编译失败/链接失败 → XML 内容断言；转义（`& < > " '`）；4KB 截断；原子写（无 `.tmp` 残留）；文件名转义
+- 集成：EZMK 框架 `--report junit`（含失败用例 → 报告先于失败门禁写出 + 控制台摘要不变）、全过、自定义路径、非 junit 报错提示；Catch2 路径（离线跳过）；workspace 双成员各写各的报告
+- i18n：新增 `cli_err_invalid_report` / `cli_report_test_only` / `test_report_not_supported` 三向一致；`check_i18n.py` 通过（371 keys）
+
+### 已知限制 / 跟进项
+
+- **历史 / 耗时对比 / 抖动分析 / HTML 渲染**：形态 B，non-goals 拒绝；外部工具。
+- **`[test]` 配置字段**（声明式报告路径）与 **EZMK 侧 JSON 格式**：归 1.4.0 或后续评估。
+- **旧二进制（<1.3.2）**：不认识 `--report` → 报 unknown option；新语法需 ≥1.3.2。
+
+---
+
 ## 1.3.1 (2026-08-24) — 区间语言标准 + 包/消费者标准兼容校验
 
 1.3.1 是 1.3.0 发布后的**补丁版本**，围绕 `[project].language` 的区间语法与安装期标准兼容校验。语义定死为 A（元数据 + 校验）：区间只表达**最低要求**（可选上界仅元数据），编译仍用单一精确标准（取 min）；**工具链能力表 + 编译协商（语义 B/C）预留 1.4.0**。**公共 API 无破坏性变更**（新语法 + 新字段 + 新警告，纯增量）。

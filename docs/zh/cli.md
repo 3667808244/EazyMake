@@ -152,6 +152,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `--filter <pattern>` | 过滤测试名称（Catch2: 测试名；ezmk: 文件名 glob） |
 | `--profile <name>` | **1.2.0-dev.12+** 临时覆盖 `test.default_profile`（与 `ezmk build --profile` 对称） |
 | `--verbose` / `-V` | 展示每个测试的详细输出（即使通过） |
+| `--report <格式>[:<路径>]` | **1.3.2+** 生成机器可读测试报告。格式 `junit`（缺省路径 `<项目根>/.ezmk/test-results/junit.xml`）；自定义相对 `<路径>` 按项目根解析。**Catch2** 额外接受任意 Catch2 reporter 名（`json`、`xml`、`sonarqube`…）——透传为 `-r <格式>::out=<文件>`，控制台摘要不受影响。**EZMK** 内置框架仅支持 `junit`（其他格式报错并提示改用 Catch2）。报告是附加产物，不改变测试退出码。`--filter` 与 `--report` 可组合（报告只含过滤后的用例）。`ezmk workspace test --report ...` 将标志透传给每个成员，各写各的报告文件 |
 
 `ezmk run`（及其完整形式 `ezmk project run`）将 `--` 之后的所有内容传递给构建后的程序。
 
@@ -169,7 +170,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 |---|---|
 | `ezmk workspace list` | 列出成员（名称 / 类型 / workspace 依赖），无效成员标注原因 |
 | `ezmk workspace build [-j N] [--stop-on-error] [--member <name>...]` | 拓扑构建全部成员（依赖层先构建、同层并行） |
-| `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...]` | 运行成员测试；无测试的成员跳过（不报错） |
+| `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...] [--report <格式>[:<路径>]]` | 运行成员测试；无测试的成员跳过（不报错）。**1.3.2+** `--report` 透传给每个成员，各写各的报告文件 |
 | `ezmk workspace clean [--member <name>...]` | 按依赖逆序清理成员（与单项目 `ezmk clean` 语义一致：清缓存/临时目录，`build/` 产物保留） |
 
 配置文件为 **`ezmk-workspace.toml`**（独立于 `ezmk.toml`；根可同时是项目与工作区）：

@@ -1,6 +1,6 @@
 # EazyMake 1.3.2 执行计划
 
-> **状态：执行中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
 > 详细设计：[**1.3.2.md**](plans/1.3.x/1.3.2.md)。本计划为 1.3.0 发布后的**补丁版本**：`ezmk test --report <fmt>[:<path>]` 产**机器可读测试报告**（JUnit XML 写文件，交给已有仪表盘/CI 渲染）——non-goals「原生单元测试仪表盘」条款（形态 A/B 拒绝）的**形态 C 替代方案**。Catch2 路径透传 vendor 自带 reporter（`-r <fmt>::out=<file>`），EZMK 内置框架配**最小 JUnit 发射器**，两路对称。
 >
@@ -33,33 +33,33 @@
 
 ### 阶段一：CLI
 
-- [ ] **1.1 `CliArgs` 加 `test_report`**（`include/ezmk/cli.hpp`）+ `--report` 解析（`src/cli.cpp` test spec）：`<fmt>[:<path>]`，fmt 非空校验；新增 i18n key `cli_err_invalid_report`
-- [ ] **1.2 workspace 侧**（P1 前置）：`WorkspaceOptions.test_report` + `workspace_cmd_spec()` 加 `--report` + `parse_workspace_opts` 读取；build/clean/list 下拒绝（新 key）
+- [x] **1.1 `CliArgs` 加 `test_report`**（`include/ezmk/cli.hpp`）+ `--report` 解析（`src/cli.cpp` test spec）：`<fmt>[:<path>]`，fmt 非空校验；新增 i18n key `cli_err_invalid_report`
+- [x] **1.2 workspace 侧**（P1 前置）：`WorkspaceOptions.test_report` + `workspace_cmd_spec()` 加 `--report` + `parse_workspace_opts` 读取；build/clean/list 下拒绝（新 key）
 
 ### 阶段二：Catch2 路径
 
-- [ ] **2.1 `run_tests` 加 `test_report` 参数**（`build.hpp` + `main.cpp` 调用点）；报告 spec 解析（首个 `:` 分割 fmt/path；缺省路径 `proj_root/.ezmk/test-results/junit.xml`；相对路径按 proj_root 解析）
-- [ ] **2.2 `test_cmd` 追加 `-r <fmt>::out=<file>`**（路径 `escape_shell_arg`）；控制台 reporter 保持默认
-- [ ] **2.3 回归测试**：stdout 摘要不变 + 报告文件生成 + 失败时含 `<failure>` + `--filter` 组合
+- [x] **2.1 `run_tests` 加 `test_report` 参数**（`build.hpp` + `main.cpp` 调用点）；报告 spec 解析（首个 `:` 分割 fmt/path；缺省路径 `proj_root/.ezmk/test-results/junit.xml`；相对路径按 proj_root 解析）
+- [x] **2.2 `test_cmd` 追加 `-r <fmt>::out=<file>`**（路径 `escape_shell_arg`）；控制台 reporter 保持默认
+- [x] **2.3 回归测试**：stdout 摘要不变 + 报告文件生成 + 失败时含 `<failure>` + `--filter` 组合
 
 ### 阶段三：EZMK 路径
 
-- [ ] **3.1 逐文件结果收集**：EZMK 循环内记录 fname/elapsed/状态（PASS/FAIL/TIMEOUT/编译失败/链接失败）+ stdout/stderr 摘要
-- [ ] **3.2 最小 JUnit 发射器**：`<testsuites>` → 每文件 `<testsuite>` → `<testcase>`；失败/超时 `<failure>`、编译/链接失败 `<error>`；**XML 全量转义**（`& < > " '`）+ stdout/stderr 截断（4KB/条）+ temp→rename 原子写
-- [ ] **3.3 格式门禁**：EZMK 下非 `junit` 格式 → 显式报错提示用 Catch2 框架（新 i18n key）
-- [ ] **3.4 单测**：PASS/FAIL/TIMEOUT 三态 → XML 内容断言；转义/截断断言
+- [x] **3.1 逐文件结果收集**：EZMK 循环内记录 fname/elapsed/状态（PASS/FAIL/TIMEOUT/编译失败/链接失败）+ stdout/stderr 摘要
+- [x] **3.2 最小 JUnit 发射器**：`<testsuites>` → 每文件 `<testsuite>` → `<testcase>`；失败/超时 `<failure>`、编译/链接失败 `<error>`；**XML 全量转义**（`& < > " '`）+ stdout/stderr 截断（4KB/条）+ temp→rename 原子写
+- [x] **3.3 格式门禁**：EZMK 下非 `junit` 格式 → 显式报错提示用 Catch2 框架（新 i18n key）
+- [x] **3.4 单测**：PASS/FAIL/TIMEOUT 三态 → XML 内容断言；转义/截断断言
 
 ### 阶段四：workspace 透传（P1）
 
-- [ ] **4.1 `run_member` 透传**（`workspace_build.cpp`）：action == "test" 时成员子命令追加 `--report <value>`，每成员写自己的 `.ezmk/test-results/junit.xml`
-- [ ] **4.2 集成测试**：双成员各写各的报告文件；失败汇总语义不变
+- [x] **4.1 `run_member` 透传**（`workspace_build.cpp`）：action == "test" 时成员子命令追加 `--report <value>`，每成员写自己的 `.ezmk/test-results/junit.xml`
+- [x] **4.2 集成测试**：双成员各写各的报告文件；失败汇总语义不变
 
 ### 阶段五：文档 + 收口
 
-- [ ] **5.1 文档**：`docs/en|zh/cli.md` test 命令 `--report` 节；README 命令表；`CHANGES.md` 1.3.2 条目；non-goals「仪表盘」条款核对（替代方案 = 本版）
-- [ ] **5.2 全量零回归**（基线 876/5091）
-- [ ] **5.3 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
-- [ ] **5.4 发布门槛复核**：API 无破坏性变更 + 计划清单收口（历史/图表/`[test]` 字段明确延后）
+- [x] **5.1 文档**：`docs/en|zh/cli.md` test 命令 `--report` 节；README 命令表；`CHANGES.md` 1.3.2 条目；non-goals「仪表盘」条款核对（替代方案 = 本版）
+- [x] **5.2 全量零回归**（基线 876/5091）
+- [x] **5.3 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
+- [x] **5.4 发布门槛复核**：API 无破坏性变更 + 计划清单收口（历史/图表/`[test]` 字段明确延后）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 

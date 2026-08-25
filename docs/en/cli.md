@@ -194,6 +194,7 @@ deliberately not shown).
 | `--filter <pattern>` | Filter test names (Catch2: test name; ezmk: filename glob) |
 | `--profile <name>` | **1.2.0-dev.12+** Temporarily override `test.default_profile` (symmetric with `ezmk build --profile`) |
 | `--verbose` / `-V` | Show detailed output for every test (even passing ones) |
+| `--report <fmt>[:<path>]` | **1.3.2+** Write a machine-readable test report. Format `junit` (default path `<proj_root>/.ezmk/test-results/junit.xml`); a custom relative `<path>` resolves against the project root. **Catch2** additionally accepts any Catch2 reporter name (`json`, `xml`, `sonarqube`…) — forwarded as `-r <fmt>::out=<file>`, with the console summary untouched. The **EZMK** built-in framework supports only `junit` (other formats error with a hint to use Catch2). The report is an add-on: it never changes the test exit code. `--filter` and `--report` compose (the report covers only the filtered cases). `ezmk workspace test --report ...` forwards the flag to every member, each writing its own report file |
 
 `ezmk run` (and its full form `ezmk project run`) passes everything after `--` to the built program.
 
@@ -211,7 +212,7 @@ A workspace is a **collection of independent projects (members) under one direct
 |---|---|
 | `ezmk workspace list` | List members (name / type / workspace deps); invalid members show their reason |
 | `ezmk workspace build [-j N] [--stop-on-error] [--member <name>...]` | Build all members topologically (dependency layers first, parallel within a layer) |
-| `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...]` | Run member tests; members without tests are skipped (not an error) |
+| `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...] [--report <fmt>[:<path>]]` | Run member tests; members without tests are skipped (not an error). **1.3.2+** `--report` is forwarded to every member — each writes its own report file |
 | `ezmk workspace clean [--member <name>...]` | Clean members in reverse dependency order (same semantics as single-project `ezmk clean`: caches/temp only, `build/` artifacts kept) |
 
 The config file is **`ezmk-workspace.toml`** (independent of `ezmk.toml`; a root may be both a project and a workspace):
