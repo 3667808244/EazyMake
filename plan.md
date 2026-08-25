@@ -1,65 +1,65 @@
-# EazyMake 1.3.1 执行计划
+# EazyMake 1.3.2 执行计划
 
-> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：执行中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
-> 详细设计：[**1.3.1.md**](plans/1.3.x/1.3.1.md)。本计划为 1.3.0 发布后的**补丁版本**：`[project].language` 支持**区间语法**（`">=C++11"` 单边下界、`"C++11..C++17"` 双边区间），让库作者能声明"最低兼容标准"；安装期新增**标准兼容校验**（包 min > 消费者 min → 警告，防预编译库 ABI 断裂）；顺带修复 CMake 导出的裸数字提取 bug。
+> 详细设计：[**1.3.2.md**](plans/1.3.x/1.3.2.md)。本计划为 1.3.0 发布后的**补丁版本**：`ezmk test --report <fmt>[:<path>]` 产**机器可读测试报告**（JUnit XML 写文件，交给已有仪表盘/CI 渲染）——non-goals「原生单元测试仪表盘」条款（形态 A/B 拒绝）的**形态 C 替代方案**。Catch2 路径透传 vendor 自带 reporter（`-r <fmt>::out=<file>`），EZMK 内置框架配**最小 JUnit 发射器**，两路对称。
 >
-> **范围边界**：语义定死为 **A（元数据 + 校验）**——编译仍用单一精确标准（取 min），区间只表达最低要求（上界仅元数据）。**工具链能力表 + 编译协商（语义 B/C）预留 1.4.0**（文档待写）；本版纯增量，**公共 API 无破坏性变更**。
+> **范围边界**：本版只做**发射**（报告写文件），不做 UI/历史/图表（形态 B）；不加 `[test]` 配置字段（CI 命令里写 flag 即可）；失败门禁不变（报告是附加产物，`ezmk test` 退出码语义不动）。**公共 API 无破坏性变更**（纯新增 flag）。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 863 用例 / 5007 断言，1.3.0-dev.5 后）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 876 用例 / 5091 断言，1.3.1 后实测；原基线 863/5007）。
 
 ---
 
 ## 1 背景
 
-- `parse_language()`（`src/config.cpp:230-327`）只接受精确标准（`<语言><版本>`），直接映射唯一 `-std=`，无区间/约束语法。
-- 库作者无法声明"最低兼容标准"（C++11 基础接口 + C++17 拓展接口需在头文件用 `#if __cplusplus` 表达，配置层无对应语义）。
-- 包与消费者之间无标准匹配校验：`compile_package()`（`src/pkg.cpp:638`）用包自己的 `language` 独立编译，消费者用自己的 `language` 编译（`src/build.cpp:602`），预编译库 ABI 断裂风险（`std::__cxx11`，1.2.0-dev.10 已记录）在语言标准维度无门禁。
+- `ezmk test`（`src/build.cpp` `run_tests()` `:1813-2315`）只输出控制台摘要文本，CI 无法直接消费；绕过 ezmk 直接跑测试二进制会脱节（不自动构建、不注入依赖包 include/宏/`-stdlib`）。
+- 1.3.0-dev.5 确立"消费命令总是先增量构建"——报告出口应挂在 `ezmk test` 之后。
+- 两框架不对称：**Catch2**（vendor v3）自带 `-r junit/xml/json` reporter；**EZMK 内置框架**（`build.cpp:2201-2315`）无 reporter 概念——报告出口必须两路对称。
 
 ## 2 目标
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | `parse_language()` 区间语法（`>=` 单边 / `..` 双边）+ `LanguageInfo.min_ver/max_ver` + `std_flag` 取 min | P0 |
-| 2 | 精确值行为完全不变（无约束前缀走原路径） | P0 |
-| 3 | 安装期标准兼容校验：包 min > 消费者 min → 警告（源码/预编译统一，不 fail） | P0 |
-| 4 | CMake 导出修复：区间 `normalized_lang` 裸数字提取 bug（`CXX_STANDARD 1117`） | P0 |
-| 5 | `EZMK_LANG` 宏定点（区间取 min 规范形） | P1 |
-| 6 | 文档 + i18n（新 key 三向一致 + `check_i18n.py` 通过） | P1 |
-| 7 | 工具链能力表 + 编译协商预留 1.4.0，本版收口不实现 | P0 |
+| 1 | `ezmk test --report <fmt>[:<path>]`：JUnit XML 写文件；缺省路径 `<proj_root>/.ezmk/test-results/junit.xml` | P0 |
+| 2 | Catch2 路径：`test_cmd` 追加 `-r <fmt>::out=<file>`；控制台 reporter 保持默认 → 现有摘要解析零回归 | P0 |
+| 3 | EZMK 框架路径：最小 JUnit XML 发射器（逐文件 PASS/FAIL/TIMEOUT/编译失败/链接失败 → `<testsuite>`/`<testcase>`/`<failure>`/`<error>`） | P0 |
+| 4 | 报告写文件不碰 stdout（坑 1）；XML 全量转义（坑 2）；路径 shell 转义（坑 4）；输出截断（坑 5） | P0 |
+| 5 | `ezmk workspace test` 透传 `--report`：每成员写自己的报告文件 | P1 |
+| 6 | 测试：两框架端到端 + 文件内容断言（PASS/FAIL/TIMEOUT → XML）；全量零回归 | P0 |
+| 7 | 文档：cli.md / README / CHANGES.md 1.3.2 条目；non-goals「仪表盘」条款的替代方案引用 | P1 |
+| 8 | 明确不做：历史/耗时对比/抖动分析/HTML 渲染（形态 B）；`[test]` 配置字段归后续 | P0 |
 
 ## 3 执行阶段（每阶段一个 commit）
 
-### 阶段一：解析层
+### 阶段一：CLI
 
-- [x] **1.1 `LanguageInfo` 扩展**（`include/ezmk/config.hpp:190-196`）：加 `int min_ver = 0` / `int max_ver = 0`；`std_flag` 语义注释为"生效标志（区间取 min）"
-- [x] **1.2 `parse_language()` 区间支持**（`src/config.cpp:230-327`）：`normalize_lang()` 后**约束剥离**（`>=` / `..`，拆 min/max，先行于 GNU 前缀识别 `:261`）；ver_map 校验；生成 `std_flag` = min；回填 `min_ver`/`max_ver`
-- [x] **1.3 非法区间拒绝**：`C++17..C++11`（max<min）/ `>C++11` / `C++11+` → 抛错（新 i18n key `config_err_invalid_lang_range`）
-- [x] **1.4 `normalized_lang` 定点**：区间时返回 min 规范形（`">=C++11"` → `"CPP11"`），`EZMK_LANG` 宏（`src/build.cpp:101-106`）不变
-- [x] **1.5 单测**（`test/test_config.cpp`）：`>=C++11` / `C++11..C++17` / `>=GNUCPP11` / `>=C`（默认 11）/ 各非法形式 / 精确值回归
+- [ ] **1.1 `CliArgs` 加 `test_report`**（`include/ezmk/cli.hpp`）+ `--report` 解析（`src/cli.cpp` test spec）：`<fmt>[:<path>]`，fmt 非空校验；新增 i18n key `cli_err_invalid_report`
+- [ ] **1.2 workspace 侧**（P1 前置）：`WorkspaceOptions.test_report` + `workspace_cmd_spec()` 加 `--report` + `parse_workspace_opts` 读取；build/clean/list 下拒绝（新 key）
 
-### 阶段二：安装期标准兼容校验
+### 阶段二：Catch2 路径
 
-- [x] **2.1 helper**（`src/pkg.cpp`）：`int std_min_of(const std::string& language)` + `std::optional<int> consumer_std_min()`（`locate_project_root()` → `parse_config` → `project.language` 的 min；无 ezmk.toml → nullopt）
-- [x] **2.2 调用点**：`compile_package()`（`pkg.cpp:638`）与 `select_precompiled_archive()`（`pkg.cpp:605`）开头校验，包 min > 消费者 min → 警告（新 key `pkg_warn_std_mismatch`；预编译措辞加强）；消费者 language 非法 → 警告并跳过
-- [x] **2.3 测试**：高/低/无消费者项目三态；全量回归
+- [ ] **2.1 `run_tests` 加 `test_report` 参数**（`build.hpp` + `main.cpp` 调用点）；报告 spec 解析（首个 `:` 分割 fmt/path；缺省路径 `proj_root/.ezmk/test-results/junit.xml`；相对路径按 proj_root 解析）
+- [ ] **2.2 `test_cmd` 追加 `-r <fmt>::out=<file>`**（路径 `escape_shell_arg`）；控制台 reporter 保持默认
+- [ ] **2.3 回归测试**：stdout 摘要不变 + 报告文件生成 + 失败时含 `<failure>` + `--filter` 组合
 
-### 阶段三：导出与宏一致性
+### 阶段三：EZMK 路径
 
-- [x] **3.1 `export.cpp` 修复**（`:257-259`）：兜底改读 `lang.min_ver`，消除裸数字提取（坑 1）
-- [x] **3.2 `test_export` 回归**：区间 language 导出 `CXX_STANDARD 11`（防 1117）；精确值导出不变
-- [x] **3.3 `EZMK_LANG` 语义确认**（坑 2）+ 缓存签名语义确认（max 不进签名，坑 3）
+- [ ] **3.1 逐文件结果收集**：EZMK 循环内记录 fname/elapsed/状态（PASS/FAIL/TIMEOUT/编译失败/链接失败）+ stdout/stderr 摘要
+- [ ] **3.2 最小 JUnit 发射器**：`<testsuites>` → 每文件 `<testsuite>` → `<testcase>`；失败/超时 `<failure>`、编译/链接失败 `<error>`；**XML 全量转义**（`& < > " '`）+ stdout/stderr 截断（4KB/条）+ temp→rename 原子写
+- [ ] **3.3 格式门禁**：EZMK 下非 `junit` 格式 → 显式报错提示用 Catch2 框架（新 i18n key）
+- [ ] **3.4 单测**：PASS/FAIL/TIMEOUT 三态 → XML 内容断言；转义/截断断言
 
-### 阶段四：文档 + i18n
+### 阶段四：workspace 透传（P1）
 
-- [x] **4.1 文档**：`docs/en|zh/config_file.md` §language Format 区间小节；`docs/en|zh/package_authoring.md` / `docs/en|zh/pkg.md` language 字段；FAQ「invalid language format」补区间正例；`CHANGES.md` 1.3.1 条目
-- [x] **4.2 i18n**：`i18n_keys.def` + `locale/en.json` + `locale/zh.json` 新增 `config_err_invalid_lang_range` / `pkg_warn_std_mismatch`，更新 `config_err_invalid_lang` 文案；重新生成 `locale_data.cpp`（`scripts/embed_locale.py`）；`check_i18n.py` 通过
+- [ ] **4.1 `run_member` 透传**（`workspace_build.cpp`）：action == "test" 时成员子命令追加 `--report <value>`，每成员写自己的 `.ezmk/test-results/junit.xml`
+- [ ] **4.2 集成测试**：双成员各写各的报告文件；失败汇总语义不变
 
-### 阶段五：收口
+### 阶段五：文档 + 收口
 
-- [x] **5.1 全量零回归**（基线 863/5007）
-- [x] **5.2 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
-- [x] **5.3 发布门槛复核**：API 无破坏性变更 + 计划清单收口（工具链能力表/编译协商明确延后 1.4.0）
+- [ ] **5.1 文档**：`docs/en|zh/cli.md` test 命令 `--report` 节；README 命令表；`CHANGES.md` 1.3.2 条目；non-goals「仪表盘」条款核对（替代方案 = 本版）
+- [ ] **5.2 全量零回归**（基线 876/5091）
+- [ ] **5.3 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新
+- [ ] **5.4 发布门槛复核**：API 无破坏性变更 + 计划清单收口（历史/图表/`[test]` 字段明确延后）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
@@ -69,33 +69,29 @@
 
 | 决策 | 说明 |
 |------|------|
-| 语义 = A（元数据 + 校验） | 区间只表达最低要求（上界仅元数据）；编译仍用单一精确标准（取 min）——产物最大兼容、行为可预测 |
-| 语法复用 `[depends]` 约束集 | `>=` 单边下界 + `..` 双边区间；不引入 `+` 后缀（语法面最小）；`>` / `+` 拒绝 |
-| 约束剥离先行 | 在 GNU 前缀识别之前（`config.cpp:261`），`>=GNUCPP11` 自然支持 |
-| `std_flag` = min | 生效标志取下界；min 变化 → 缓存签名变 → 自动失效（零代码改动） |
-| max 不进缓存签名 | 改 max 只是元数据变更，不触发全量重建 |
-| `normalized_lang` = min 规范形 | `EZMK_LANG` 宏对精确/区间写法定点不变（坑 2） |
-| 校验 = warn 不 fail | 严格 fail 会破坏现有包生态（许多包默认 C++17）；严格化开关留 1.4.0（坑 4） |
-| 预编译措辞加强 | 预编译 ABI 风险更高，警告复用 1.2.0-dev.10 的 ABI 警告风格 |
-| 导入器不改 | CMake `CXX_STANDARD` 映射归 1.4.0，避免范围蔓延 |
+| 只做发射（形态 C） | 报告写文件交给已有仪表盘/CI 渲染；UI/历史/图表（形态 A/B）是 non-goals 拒绝项 |
+| Catch2 透传 vendor reporter | `-r <fmt>::out=<file>` 零成本；控制台 reporter 保持默认，摘要解析零回归 |
+| EZMK 最小发射器 | 循环内已有全部数据，汇总成 JUnit XML；`<error>` 区分编译/链接失败 |
+| 缺省路径项目级 | `<proj_root>/.ezmk/test-results/junit.xml`，可 gitignore，不污染 `build/` |
+| XML 全量转义 | `& < > " '`，含 stdout/stderr 截断内容（坑 2/5） |
+| 原子写 | temp → `util::atomic_rename`（对齐 cache/record.json 惯例） |
+| 格式门禁 | EZMK 仅 `junit`；`json` 等显式提示用 Catch2 框架（坑 3，避免"换框架丢格式"陷阱） |
+| 失败门禁不变 | 报告是附加产物，`ezmk test` 退出码语义不动 |
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| `parse_language` 区间语法 | 纯新增 | 无约束前缀走原路径，精确值行为完全不变 |
-| `LanguageInfo` 加 `min_ver`/`max_ver` | 结构体扩展 | 新增字段有默认值；既有调用点零改动 |
-| 安装期标准校验警告 | 行为增强 | 仅 `包.min > 消费者.min` 时提示；安装照常 |
-| `export.cpp` 修复 | 行为修复 | 区间导出 `CXX_STANDARD` 1117 → 11；精确值不变 |
-| `EZMK_LANG` 宏值 | 定点不变 | 区间配置的宏值 = min 规范形 |
-| 旧二进制读区间配置 | 报 invalid language | 可接受；新语法需 ≥1.3.1 |
+| `ezmk test --report` | 纯新增 flag | 无参数时行为完全不变 |
+| `.ezmk/test-results/` 新目录 | 纯新增 | 项目级、可 gitignore；不触碰 `build/` |
+| Catch2 路径追加 `-r` | 仅 `--report` 时生效 | 控制台 reporter 保持默认，摘要解析零回归 |
+| `run_tests` 签名加参 | 内部 API | `main.cpp` 调用点同步；无外部调用者 |
+| workspace 成员子命令追加 flag | 仅 test + `--report` 时 | 汇总/退出码语义不变 |
 | 公共 API | 无破坏性变更 | 纯增量 |
 
 ## 6 延后项（明确收口）
 
-- **工具链能力表**（`max_supported_std(family, version)`，语义 C 铺路）：**预留 1.4.0**（文档待写）。
-- **编译协商（语义 B）**（包按 `max(包min, 消费者标准)` 编译，需打破包独立编译/共享缓存模型）：**预留 1.4.0**。
-- **标准校验严格化开关**（warn → error 可配）：**预留 1.4.0**。
-- **import.cpp `CXX_STANDARD` 映射**（`src/import.cpp:446-447` 硬编码 C++17 一并处理）：**预留 1.4.0**。
-- **`+` 后缀别名 / 双边区间"验证到 max"（CI 矩阵）/ header-only 包标准声明**：1.4.0 或后续评估。
+- **历史 / 耗时对比 / 抖动分析 / HTML 渲染**：形态 B，non-goals 拒绝；外部工具。
+- **`[test]` 配置字段**（声明式报告路径）：归 1.4.0 或后续评估。
+- **EZMK 侧 JSON 格式**：归 1.4.0 或后续评估。
 - **2.0.0**：保持破坏性变更窗口（`[test].flags` / `ezmk utils cc` 移除等），与本版解耦。
