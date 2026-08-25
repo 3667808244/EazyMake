@@ -3419,3 +3419,201 @@ TEST_CASE("integration: workspace test --report writes per-member reports (1.3.2
     // The workspace root itself has no report (members are the units).
     REQUIRE_FALSE(fs::exists(root / ".ezmk" / "test-results" / "junit.xml"));
 }
+
+// ==============================================================
+// 1.3.4: `ezmk watch --run` / `-r` — run the executable after each
+// successful rebuild (blocking; watch resumes when the program exits).
+// ==============================================================
+namespace {
+
+// Poll `file` until it contains `needle` (or timeout). ezmk logs to stderr
+// unbuffered, so redirected output appears promptly — polling is reliable.
+bool poll_log(const fs::path& file, const std::string& needle,
+              std::chrono::seconds timeout) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (fs::exists(file)) {
+            std::string content = file_read(file);
+            if (content.find(needle) != std::string::npos) return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+    return false;
+}
+
+// Kill all ezmk watch processes (same approach as the existing watch test).
+void kill_watch_processes() {
+#ifdef EZMK_WIN
+    run_command("cmd /c taskkill /F /IM ezmk.exe 2>nul");
+#else
+    run_command("pkill -f \"ezmk project watch\" 2>/dev/null || true");
+#endif
+}
+
+// An executable project whose main.cpp prints a unique marker each run.
+void write_watch_run_proj(const fs::path& proj_dir, const std::string& name) {
+    fs::create_directories(proj_dir / "src");
+    file_write(proj_dir / "src" / "main.cpp",
+        "#include <cstdio>\n"
+        "int main() { std::printf(\"WATCH-RUN-MARKER\\n\"); return 0; }\n");
+    file_write(proj_dir / "ezmk.toml",
+        "[project]\nname = \"" + name + "\"\ntype = \"executable\"\n"
+        "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[compile]\ninclude_dirs = [\"include\"]\n\n"
+        "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+        "[depends]\nlib = []\n");
+}
+
+// Start `ezmk project watch <flags>` in proj_dir (background), wait until the
+// watcher is ready, then return. Caller must kill_watch_processes() at the end.
+void start_watch(const fs::path& proj_dir, const std::string& flags,
+                 const fs::path& log_file) {
+    std::string ezmk_bin = find_ezmk_binary().string();
+    std::string watch_cmd;
+#ifdef EZMK_WIN
+    watch_cmd = "cmd /c start \"\" /D \"" + proj_dir.string() + "\" /B " +
+                escape_shell_arg(ezmk_bin) +
+                " project watch " + flags + " > \"" +
+                escape_shell_arg(log_file.string()) + "\" 2>&1";
+#else
+    watch_cmd = "cd " + escape_shell_arg(proj_dir.string()) + " && " +
+                escape_shell_arg(ezmk_bin) +
+                " project watch " + flags + " > " +
+                escape_shell_arg(log_file.string()) + " 2>&1 &";
+#endif
+    run_command(watch_cmd);
+    bool ready = poll_log(log_file, "Watching for changes", std::chrono::seconds(10));
+    INFO("watch started: " << (ready ? "yes" : "no"));
+}
+
+// Append a marker-bearing source change to trigger a rebuild.
+void touch_source(const fs::path& proj_dir, const std::string& marker) {
+    std::ofstream f(proj_dir / "src" / "main.cpp", std::ios::app);
+    f << "// " << marker << "\n";
+    f.close();
+}
+
+// Count occurrences of a needle in the log (for "ran N times" assertions).
+size_t count_in_log(const fs::path& log_file, const std::string& needle) {
+    if (!fs::exists(log_file)) return 0;
+    std::string content = file_read(log_file);
+    size_t count = 0, pos = 0;
+    while ((pos = content.find(needle, pos)) != std::string::npos) {
+        count++;
+        pos += needle.size();
+    }
+    return count;
+}
+
+} // anonymous namespace
+
+// Executable + --run: after each successful rebuild the program runs (marker
+// appears); the initial build does NOT run (first run after first change).
+TEST_CASE("integration: watch --run runs executable after rebuilds (1.3.4)", "[integration][1.3.4]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "wr_run";
+    write_watch_run_proj(proj_dir, "wr_run");
+
+    fs::path log_file = tmp.path / "watch_run.log";
+    start_watch(proj_dir, "--run", log_file);
+
+    // Initial build succeeded → no marker yet (first run happens after a change).
+    CHECK(count_in_log(log_file, "WATCH-RUN-MARKER") == 0);
+
+    // Change 1 → rebuild → run → marker.
+    touch_source(proj_dir, "change-1");
+    CHECK(poll_log(log_file, "WATCH-RUN-MARKER", std::chrono::seconds(30)));
+
+    // Change 2 → rebuild → run again (marker count grows to ≥ 2).
+    touch_source(proj_dir, "change-2");
+    bool ran_twice = false;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (count_in_log(log_file, "WATCH-RUN-MARKER") >= 2) { ran_twice = true; break; }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+    INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
+    kill_watch_processes();
+    REQUIRE(ran_twice);
+    REQUIRE(count_in_log(log_file, "WATCH-RUN-MARKER") >= 2);
+    REQUIRE(count_in_log(log_file, "Running wr_run.exe") +
+            count_in_log(log_file, "Running wr_run") >= 2);
+}
+
+// Build failure → NO run (never run stale artifacts); watch survives and runs
+// again after the source is fixed.
+TEST_CASE("integration: watch --run skips on build failure (1.3.4)", "[integration][1.3.4]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "wr_fail";
+    write_watch_run_proj(proj_dir, "wr_fail");
+
+    fs::path log_file = tmp.path / "watch_fail.log";
+    start_watch(proj_dir, "--run", log_file);
+
+    // Introduce a compile error → rebuild fails → no run output.
+    file_write(proj_dir / "src" / "main.cpp",
+        "#include <cstdio>\nint main() { this is not valid c++ }\n");
+    bool failed = poll_log(log_file, "build failed", std::chrono::seconds(30));
+    INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
+    REQUIRE(failed);
+    REQUIRE(count_in_log(log_file, "WATCH-RUN-MARKER") == 0);
+
+    // Fix the source → rebuild succeeds → program runs (watch stayed alive).
+    file_write(proj_dir / "src" / "main.cpp",
+        "#include <cstdio>\nint main() { std::printf(\"WATCH-RUN-MARKER\\n\"); return 0; }\n");
+    bool ran_after_fix = poll_log(log_file, "WATCH-RUN-MARKER", std::chrono::seconds(30));
+    kill_watch_processes();
+    REQUIRE(ran_after_fix);
+}
+
+// Non-executable + --run → startup fatal (config-time gate).
+TEST_CASE("integration: watch --run rejected for non-executable projects (1.3.4)", "[integration][1.3.4]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "wr_static";
+    fs::create_directories(proj_dir / "src");
+    file_write(proj_dir / "src" / "lib.cpp", "int f() { return 1; }\n");
+    file_write(proj_dir / "ezmk.toml",
+        "[project]\nname = \"wr_static\"\ntype = \"static\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n");
+
+    ProcResult r = run_ezmk("watch --run", proj_dir);
+    INFO("stderr: " << r.err);
+    std::string combined = r.out + "\n" + r.err;
+    REQUIRE(r.exit_code != 0);
+    REQUIRE(combined.find("requires an executable") != std::string::npos);
+    REQUIRE(combined.find("static") != std::string::npos);
+}
+
+// No --run → behavior unchanged: source change rebuilds but never runs.
+TEST_CASE("integration: watch without --run never runs (1.3.4)", "[integration][1.3.4]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "wr_plain";
+    write_watch_run_proj(proj_dir, "wr_plain");
+
+    fs::path log_file = tmp.path / "watch_plain.log";
+    start_watch(proj_dir, "", log_file);
+
+    touch_source(proj_dir, "change-1");
+    // Rebuild output appears, but the program never runs.
+    bool rebuilt = poll_log(log_file, "Build succeeded", std::chrono::seconds(30));
+    INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
+    kill_watch_processes();
+    REQUIRE(rebuilt);
+    REQUIRE(count_in_log(log_file, "WATCH-RUN-MARKER") == 0);
+    REQUIRE(count_in_log(log_file, "Running wr_plain") == 0);
+}

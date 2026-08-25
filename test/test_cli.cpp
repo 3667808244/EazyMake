@@ -1035,3 +1035,27 @@ TEST_CASE("cli parse: --report rejected on non-test workspace commands", "[cli][
         TestArgs({"project", "clean", "-w", "--report", "junit"}).parse(),
         ezmk::fatal_error);
 }
+
+// ===================================================================
+// 1.3.4 — project watch --run / -r
+// ===================================================================
+
+TEST_CASE("cli parse: project watch --run / -r", "[cli][1.3.4]") {
+    auto a = TestArgs({"watch", "--run"}).parse();
+    REQUIRE(a.cmd == Command::ProjectWatch);
+    REQUIRE(a.watch_run == true);
+
+    auto b = TestArgs({"project", "watch", "-r"}).parse();
+    REQUIRE(b.cmd == Command::ProjectWatch);
+    REQUIRE(b.watch_run == true);
+
+    // Default: no --run → flag stays off (behavior unchanged).
+    auto c = TestArgs({"watch"}).parse();
+    REQUIRE(c.cmd == Command::ProjectWatch);
+    REQUIRE(c.watch_run == false);
+
+    // Orthogonal to --no-build-on-start.
+    auto d = TestArgs({"watch", "--no-build-on-start", "--run"}).parse();
+    REQUIRE(d.watch_no_build_on_start == true);
+    REQUIRE(d.watch_run == true);
+}
