@@ -18,6 +18,38 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.6 (2026-08-25) — 代码质量收口（技术债清理）
+
+1.3.6 是 1.3.0 发布后的**补丁版本**，主题为**代码质量收口**（承接 1.3.5 后的质量分析结论）：`-Wall -Wextra` 清零、错误文案与实现一致、校验去噪、归档/运行逻辑去重、`run_tests` 机械拆分、测试文件按主题拆分。**纯重构零新功能**——不引入新 flag/配置/命令/i18n key；每个重构都有既有测试锁定（等价性/集成/全量回归）。**公共 API 无破坏性变更**。
+
+### 变更
+
+- **`-Wall -Wextra` 清零**：`detect_catch2` 删除未用参数 `depends`（同步唯一调用点）；`export.cpp` 的 `&&`/`||` 表达式补括号（逻辑本正确，纯可读性）
+- **错误文案与实现一致**：`parse_language` 的 unknown-version 报错改为从 `ver_map` 键生成支持列表（旧硬编码文案缺 `98/03/26`，误导用户以为不支持）
+- **校验去噪**：`consumer_std_min` 在消费者 `[project].language` 非法时**每进程只 warn 一次**（多包安装不再刷屏；首次语义不变）
+- **归档遍历共享**：新增 `util::collect_stage_entries()`，`create_targz`/`create_zip` 复用同一遍历（相对路径/`/` 分隔/排序），两种归档布局保持逐文件一致（1.3.5 等价性测试锁定）
+- **运行逻辑共享**：新增 `run_executable(exe, args, warn_on_nonzero)`，`project run` 与 `watch --run` 复用（running key/参数组装/阻塞运行/回显；`run` 转发退出码、watch 警告不退出）
+- **`run_tests` 机械拆分**（~550 行单函数）：提取 `TestRunContext` + `run_catch2_tests`/`run_ezmk_tests`，`run_tests` 变薄调度（前置组装 + 按框架分发）；纯搬运，`git diff -w` 复核 + 全量回归锁定
+- **测试文件按主题拆分**：新增 `test/test_integration_helpers.hpp`（共享 helper，`namespace ezi`）+ `test_integration_workspace.cpp` + `test_integration_report.cpp`（1.3.2/1.3.4/1.3.5）；`test_integration.cpp` 3757 → 2610 行；用例/断言数完全不变
+
+### 文档
+
+- `CHANGES.md` 本条目（无 cli.md/README 变更——零新功能）
+
+### 测试
+
+- 新增 3 个单测：unknown-version 文案含 `98/03/26`、`collect_stage_entries`（子目录/空文件/排序/斜杠）、`consumer_std_min` 去噪（双包安装只 warn 一次）
+- 全量 **911 用例 / 5302 断言零回归**（1.3.5 基线 908/5283，+3 用例/+19 断言）；测试拆分后用例/断言数不变
+
+### 已知限制 / 跟进项
+
+- **build.cpp/pkg.cpp 全面重构**、**Catch2 结构化解析**：归 1.4.0。
+- **cli.cpp 命令组拆文件**（`parse_*` 1272 行单文件）：2.0.0 前评估。
+- **1.3.1~1.3.5 延后功能项**（`--run` 参数透传 / `workspace watch` / `tgz` 别名 / sha256 边车自动校验）：归 1.4.0。
+- **旧二进制（<1.3.6）**：本版零新功能，无兼容差异。
+
+---
+
 ## 1.3.5 (2026-08-25) — pack 多格式输出（`--format zip|tar.gz`）+ SHA-256 边车
 
 1.3.5 是 1.3.0 发布后的**补丁版本**（1.3.x 系列最后一个规划补丁；与 1.3.1 ~ 1.3.4 相互独立、可并行）：`ezmk project pack --format zip|tar.gz` 产**多格式归档**（缺省 `tar.gz` 现状不变；zip 走 vendored miniz）——内容与 tar.gz **逐文件等价**（同一 stage 流程，仅归档器不同），`pkg install` 消费路径（`extract_archive`）早已支持 zip，端到端闭环。附带 **`.sha256` 边车**（两种格式统一）。**公共 API 无破坏性变更**（纯新增 flag + util + i18n key）。

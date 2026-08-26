@@ -1,6 +1,6 @@
 # EazyMake 1.3.6 执行计划
 
-> **状态：执行中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
 > 详细设计：[**1.3.6.md**](plans/1.3.x/1.3.6.md)。本计划为 1.3.0 发布后的**补丁版本**，主题为**代码质量收口**（承接 1.3.5 后质量分析结论）——`-Wall -Wextra` 清零、`parse_language` 错误文案与 `ver_map` 一致、`consumer_std_min` 校验去噪、归档遍历与运行逻辑去重、`run_tests` 机械拆分（~550 行单函数）、测试文件按主题拆分。**纯重构零新功能**：不引入任何新 flag/配置/命令/i18n key（仅文案微调）；每个重构都有既有测试锁定行为。
 >
@@ -32,36 +32,36 @@
 
 ### 阶段一：小修
 
-- [ ] **1.1 警告清零**：`detect_catch2` 删未用参数 `depends`（`build.cpp:1750` + `build.hpp` 声明 + 调用点）；`export.cpp:130` 补括号
-- [ ] **1.2 文案一致**：`parse_language` 错误文案从 `ver_map` 键生成（或补全 98/03/26）
-- [ ] **1.3 校验去噪**：`consumer_std_min` 消费者 language 非法 → 每进程只 warn 一次（static flag）
-- [ ] **1.4 单测**：文案含 98/03/26；去噪只 warn 一次
+- [x] **1.1 警告清零**：`detect_catch2` 删未用参数 `depends`（`build.cpp:1750` + `build.hpp` 声明 + 调用点）；`export.cpp:130` 补括号
+- [x] **1.2 文案一致**：`parse_language` 错误文案从 `ver_map` 键生成（或补全 98/03/26）
+- [x] **1.3 校验去噪**：`consumer_std_min` 消费者 language 非法 → 每进程只 warn 一次（static flag）
+- [x] **1.4 单测**：文案含 98/03/26；去噪只 warn 一次
 
 ### 阶段二：归档遍历共享
 
-- [ ] **2.1 `collect_stage_entries()`**（`util.cpp` + `util.hpp`）：递归遍历 → 相对路径 → `/` 分隔 → 目录尾 `/` → 排序（从 `create_targz`/`create_zip` Step 1 提取）
-- [ ] **2.2 两归档器复用**：`create_targz`/`create_zip` 消费共享结果（zip 写侧 `safe_zip_name` 校验保留）；1.3.5 等价性集成测试全绿 + `collect_stage_entries` 单测（子目录/空文件/排序）
+- [x] **2.1 `collect_stage_entries()`**（`util.cpp` + `util.hpp`）：递归遍历 → 相对路径 → `/` 分隔 → 目录尾 `/` → 排序（从 `create_targz`/`create_zip` Step 1 提取）
+- [x] **2.2 两归档器复用**：`create_targz`/`create_zip` 消费共享结果（zip 写侧 `safe_zip_name` 校验保留）；1.3.5 等价性集成测试全绿 + `collect_stage_entries` 单测（子目录/空文件/排序）
 
 ### 阶段三：运行逻辑共享
 
-- [ ] **3.1 `run_executable(exe, args, warn_on_nonzero)`**（`main.cpp` static helper）：`running` key + 命令组装 + `run_command` + 回显；`warn_on_nonzero=false` → 返回退出码（run 现状），`true` → 警告不退出（watch 现状）
-- [ ] **3.2 `ProjectRun` 与 watch `run_watched_exe` 改调 helper**；`project run` 与 watch 集成测试全绿
+- [x] **3.1 `run_executable(exe, args, warn_on_nonzero)`**（`main.cpp` static helper）：`running` key + 命令组装 + `run_command` + 回显；`warn_on_nonzero=false` → 返回退出码（run 现状），`true` → 警告不退出（watch 现状）
+- [x] **3.2 `ProjectRun` 与 watch `run_watched_exe` 改调 helper**；`project run` 与 watch 集成测试全绿
 
 ### 阶段四：`run_tests` 机械拆分
 
-- [ ] **4.1 拆分**：`prepare_test_compile_input` / `run_catch2_tests` / `run_ezmk_tests` 提取（**纯搬运**，不改行为/变量名语义）；`run_tests` 变薄调度
-- [ ] **4.2 复核**：`git diff -w` 确认纯搬运；全量回归（含报告/过滤/缓存/失败门禁用例）
+- [x] **4.1 拆分**：`prepare_test_compile_input` / `run_catch2_tests` / `run_ezmk_tests` 提取（**纯搬运**，不改行为/变量名语义）；`run_tests` 变薄调度
+- [x] **4.2 复核**：`git diff -w` 确认纯搬运；全量回归（含报告/过滤/缓存/失败门禁用例）
 
 ### 阶段五：测试文件拆分
 
-- [ ] **5.1 `test_integration_helpers.hpp`**：提取共享 helpers（`run_ezmk`/`find_*`/`poll_log`/1.3.5 pack helpers 等）
-- [ ] **5.2 按主题拆 `test_integration_*.cpp`**（core/pkg/workspace/report…）；用例/断言数不变
+- [x] **5.1 `test_integration_helpers.hpp`**：提取共享 helpers（`run_ezmk`/`find_*`/`poll_log`/1.3.5 pack helpers 等）
+- [x] **5.2 按主题拆 `test_integration_*.cpp`**（core/pkg/workspace/report…）；用例/断言数不变
 
 ### 阶段六：文档 + 收口
 
-- [ ] **6.1 CHANGES.md**：1.3.6 条目
-- [ ] **6.2 全量零回归**（基线 908/5283）
-- [ ] **6.3 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 纯重构零回归）
+- [x] **6.1 CHANGES.md**：1.3.6 条目
+- [x] **6.2 全量零回归**（基线 908/5283）
+- [x] **6.3 文档收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 纯重构零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 
