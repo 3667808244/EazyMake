@@ -6,6 +6,7 @@
 #include "ezmk/config.hpp"
 #include "ezmk/toolchain.hpp"
 #include "ezmk/util.hpp"
+#include "nlohmann_json.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -353,4 +354,206 @@ TEST_CASE("export cmake: --overwrite replaces existing file", "[export]") {
     REQUIRE_NOTHROW(export_cmake(cfg, tmp.path, opts));
     auto content = ezmk::util::file_read(tmp.path / "CMakeLists.txt");
     REQUIRE(content.find("cmake_minimum_required") != std::string::npos);
+}
+
+// ===================================================================
+// 1.4.0-dev.1 — project export vscode (debug config trio)
+// ===================================================================
+
+using ezmk::toolchain::CompilerFamily;
+
+// ---- per-platform debugger table (design §3.2) ----
+
+TEST_CASE("export vscode: debugger table — Windows+MSVC → cppvsdbg .exe", "[export][1.4.0-dev.1]") {
+    auto d = select_vscode_debugger(HostPlatform::Windows, CompilerFamily::Msvc, "demo");
+    REQUIRE(d.type == "cppvsdbg");
+    REQUIRE(d.mi_debugger_path.empty());
+    REQUIRE(d.program == "build/demo.exe");
+}
+
+TEST_CASE("export vscode: debugger table — Linux+GCC → cppdbg+gdb", "[export][1.4.0-dev.1]") {
+    auto d = select_vscode_debugger(HostPlatform::Linux, CompilerFamily::Gcc, "demo");
+    REQUIRE(d.type == "cppdbg");
+    REQUIRE(d.mi_debugger_path == "gdb");
+    REQUIRE(d.program == "build/demo");
+}
+
+TEST_CASE("export vscode: debugger table — Linux+Clang → cppdbg+lldb", "[export][1.4.0-dev.1]") {
+    auto d = select_vscode_debugger(HostPlatform::Linux, CompilerFamily::Clang, "demo");
+    REQUIRE(d.type == "cppdbg");
+    REQUIRE(d.mi_debugger_path == "lldb");
+    REQUIRE(d.program == "build/demo");
+}
+
+TEST_CASE("export vscode: debugger table — macOS+Clang → lldb", "[export][1.4.0-dev.1]") {
+    auto d = select_vscode_debugger(HostPlatform::MacOs, CompilerFamily::Clang, "demo");
+    REQUIRE(d.type == "lldb");
+    REQUIRE(d.mi_debugger_path.empty());
+    REQUIRE(d.program == "build/demo");
+}
+
+TEST_CASE("export vscode: debugger table — Windows+GCC → cppdbg+gdb .exe", "[export][1.4.0-dev.1]") {
+    auto d = select_vscode_debugger(HostPlatform::Windows, CompilerFamily::Gcc, "demo");
+    REQUIRE(d.type == "cppdbg");
+    REQUIRE(d.mi_debugger_path == "gdb");
+    REQUIRE(d.program == "build/demo.exe");
+}
+
+// ---- launch.json ----
+
+TEST_CASE("export vscode: launch.json key fields", "[export][1.4.0-dev.1]") {
+    auto cfg = make_exe_config();
+    auto files = build_vscode_files(cfg, fs::current_path(), ExportOptions{});
+    auto launch = nlohmann::json::parse(files.launch);   // must be valid JSON
+    REQUIRE(launch["version"] == "0.2.0");
+    REQUIRE(launch["configurations"].is_array());
+    REQUIRE(launch["configurations"].size() == 1);
+    auto& c = launch["configurations"][0];
+    REQUIRE(c["request"] == "launch");
+    REQUIRE(c["preLaunchTask"] == "ezmk-build");
+    REQUIRE(c["cwd"] == "${workspaceFolder}");
+    REQUIRE(c["externalConsole"] == false);
+    // program → ${workspaceFolder}/build/<name>[.exe]
+    std::string prog = c["program"];
+    REQUIRE(prog.rfind("${workspaceFolder}/build/demo", 0) == 0);
+    // type matches the current platform + detected toolchain
+    auto tc = ezmk::toolchain::detect_toolchain();
+    auto dbg = select_vscode_debugger(current_host_platform(), tc.family, "demo");
+    REQUIRE(c["type"] == dbg.type);
+    if (dbg.type == "cppdbg") {
+        REQUIRE(c["miDebuggerPath"] == dbg.mi_debugger_path);
+        REQUIRE(c["setupCommands"].is_array());
+        REQUIRE(c["setupCommands"][0]["text"] == "-enable-pretty-printing");
+    }
+}
+
+// ---- tasks.json ----
+
+TEST_CASE("export vscode: tasks.json key fields + no args without profile", "[export][1.4.0-dev.1]") {
+    auto cfg = make_exe_config();
+    auto files = build_vscode_files(cfg, fs::current_path(), ExportOptions{});
+    auto tasks = nlohmann::json::parse(files.tasks);    // must be valid JSON
+    REQUIRE(tasks["version"] == "2.0.0");
+    REQUIRE(tasks["tasks"].size() == 1);
+    auto& t = tasks["tasks"][0];
+    REQUIRE(t["label"] == "ezmk-build");                // cross-ref with launch
+    REQUIRE(t["type"] == "shell");
+    REQUIRE(t["command"] == "ezmk build");
+    REQUIRE(t.contains("args") == false);               // no --profile → no args
+    REQUIRE(t["group"]["kind"] == "build");
+    REQUIRE(t["group"]["isDefault"] == true);
+}
+
+TEST_CASE("export vscode: tasks.json --profile injects args", "[export][1.4.0-dev.1]") {
+    auto cfg = make_exe_config();
+    cfg.compile_profiles["debug"] = ProfileConfig{{"-g"}, {}, {{"DEBUG", "1"}}};
+    ExportOptions opts;
+    opts.profile = "debug";
+    auto files = build_vscode_files(cfg, fs::current_path(), opts);
+    auto tasks = nlohmann::json::parse(files.tasks);
+    REQUIRE(tasks["tasks"][0]["args"] ==
+            nlohmann::json::array({"--profile", "debug"}));
+}
+
+TEST_CASE("export vscode: unknown profile is fatal", "[export][1.4.0-dev.1]") {
+    auto cfg = make_exe_config();
+    ExportOptions opts;
+    opts.profile = "nope";
+    REQUIRE_THROWS_AS(build_vscode_files(cfg, fs::current_path(), opts),
+                      ezmk::fatal_error);
+}
+
+// ---- settings.json ----
+
+TEST_CASE("export vscode: settings prefers compile_commands", "[export][1.4.0-dev.1]") {
+    TempDir tmp;
+    auto cfg = make_exe_config();
+    cfg.compile.compile_commands = true;
+    auto files = build_vscode_files(cfg, tmp.path, ExportOptions{});
+    auto settings = nlohmann::json::parse(files.settings);  // must be valid JSON
+    REQUIRE(settings["clangd.arguments"] ==
+            nlohmann::json::array({"--compile-commands-dir=${workspaceFolder}"}));
+    REQUIRE(settings.contains("C_Cpp.default.includePath") == false);
+    REQUIRE(settings.contains("C_Cpp.default.defines") == false);
+}
+
+TEST_CASE("export vscode: settings falls back to C_Cpp without a db", "[export][1.4.0-dev.1]") {
+    TempDir tmp;
+    auto cfg = make_exe_config();
+    cfg.compile.flags = {"-Wall", "-Iextra", "-DEXTRA=1"};
+    cfg.compile.macros = {{"DEBUG", "1"}};
+    auto files = build_vscode_files(cfg, tmp.path, ExportOptions{});
+    auto settings = nlohmann::json::parse(files.settings);
+    REQUIRE(settings.contains("clangd.arguments") == false);
+    // includePath: resolved absolute — <tmp>/include (default) + <tmp>/extra
+    bool found_include = false, found_extra = false;
+    for (auto& p : settings["C_Cpp.default.includePath"]) {
+        std::string s = p;
+        if (s == (tmp.path / "include").lexically_normal().generic_string())
+            found_include = true;
+        if (s == (tmp.path / "extra").lexically_normal().generic_string())
+            found_extra = true;
+        REQUIRE(fs::path(s).is_absolute());
+    }
+    REQUIRE(found_include);
+    REQUIRE(found_extra);
+    // defines: -D flags + [compile].macros + ezmk standard macros
+    bool has_extra = false, has_debug = false, has_ezmk = false;
+    for (auto& d : settings["C_Cpp.default.defines"]) {
+        std::string s = d;
+        if (s == "EXTRA=1") has_extra = true;
+        if (s == "DEBUG=1") has_debug = true;
+        if (s == "EZMK=1") has_ezmk = true;
+    }
+    REQUIRE(has_extra);
+    REQUIRE(has_debug);
+    REQUIRE(has_ezmk);
+}
+
+TEST_CASE("export vscode: settings fallback includes installed dep dirs", "[export][1.4.0-dev.1]") {
+    CwdGuard guard;
+    fs::path proj = fs::current_path();
+    fs::create_directories(proj / ".ezmk" / "pkg" / "fmt" / "include");
+    { std::ofstream(proj / ".ezmk" / "pkg" / "fmt" / "include" / "fmt.hpp") << "x\n"; }
+
+    auto cfg = make_exe_config();
+    cfg.depends.libs.push_back({"fmt", {}});
+    auto files = build_vscode_files(cfg, proj, ExportOptions{});
+    auto settings = nlohmann::json::parse(files.settings);
+    bool found = false;
+    for (auto& p : settings["C_Cpp.default.includePath"]) {
+        std::string s = p;
+        if (s.find(".ezmk/pkg/fmt/include") != std::string::npos) found = true;
+    }
+    REQUIRE(found);
+}
+
+// ---- overwrite protection (export_vscode writes to disk) ----
+
+TEST_CASE("export vscode: refuses overwrite without --overwrite", "[export][1.4.0-dev.1]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".vscode");
+    { std::ofstream(tmp.path / ".vscode" / "launch.json") << "old\n"; }
+    auto cfg = make_exe_config();
+    REQUIRE_THROWS_AS(export_vscode(cfg, tmp.path, ExportOptions{}),
+                      ezmk::fatal_error);
+}
+
+TEST_CASE("export vscode: --overwrite writes the full trio", "[export][1.4.0-dev.1]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".vscode");
+    { std::ofstream(tmp.path / ".vscode" / "launch.json") << "old\n"; }
+    auto cfg = make_exe_config();
+    ExportOptions opts;
+    opts.overwrite = true;
+    REQUIRE_NOTHROW(export_vscode(cfg, tmp.path, opts));
+    for (const char* name : {"launch.json", "tasks.json", "settings.json"}) {
+        REQUIRE(ezmk::util::file_exists(tmp.path / ".vscode" / name));
+    }
+    auto launch = ezmk::util::file_read(tmp.path / ".vscode" / "launch.json");
+    REQUIRE(launch.find("\"version\"") != std::string::npos);
+    auto tasks = ezmk::util::file_read(tmp.path / ".vscode" / "tasks.json");
+    REQUIRE(tasks.find("ezmk-build") != std::string::npos);
+    auto settings = ezmk::util::file_read(tmp.path / ".vscode" / "settings.json");
+    REQUIRE(settings.find("C_Cpp.default.includePath") != std::string::npos);
 }

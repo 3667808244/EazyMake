@@ -1132,6 +1132,57 @@ TEST_CASE("integration: project export cmake generates CMakeLists.txt", "[integr
     }
 }
 
+// 1.4.0-dev.1: ezmk project export vscode — .vscode/ debug config trio.
+TEST_CASE("integration: project export vscode writes a valid .vscode trio", "[integration][1.4.0-dev.1]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "exp_vscode";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    ProcResult r = run_ezmk("project export vscode", proj_dir);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+
+    // All three files exist and are valid JSON with the key fields.
+    REQUIRE(fs::exists(proj_dir / ".vscode" / "launch.json"));
+    REQUIRE(fs::exists(proj_dir / ".vscode" / "tasks.json"));
+    REQUIRE(fs::exists(proj_dir / ".vscode" / "settings.json"));
+
+    auto launch = nlohmann::json::parse(
+        file_read(proj_dir / ".vscode" / "launch.json"));
+    REQUIRE(launch["version"] == "0.2.0");
+    REQUIRE(launch["configurations"][0]["preLaunchTask"] == "ezmk-build");
+    REQUIRE(launch["configurations"][0]["request"] == "launch");
+
+    auto tasks = nlohmann::json::parse(
+        file_read(proj_dir / ".vscode" / "tasks.json"));
+    REQUIRE(tasks["version"] == "2.0.0");
+    REQUIRE(tasks["tasks"][0]["label"] == "ezmk-build");
+    REQUIRE(tasks["tasks"][0]["command"] == "ezmk build");
+    REQUIRE(tasks["tasks"][0]["group"]["isDefault"] == true);
+
+    auto settings = nlohmann::json::parse(
+        file_read(proj_dir / ".vscode" / "settings.json"));
+    // A fresh project has no compile_commands.json → C_Cpp fallback.
+    REQUIRE(settings.contains("C_Cpp.default.includePath"));
+    REQUIRE(settings.contains("C_Cpp.default.defines"));
+
+    // Re-export refuses without --overwrite, succeeds with it.
+    ProcResult second = run_ezmk("project export vscode", proj_dir);
+    REQUIRE(second.exit_code != 0);
+    ProcResult third = run_ezmk("project export vscode --overwrite", proj_dir);
+    REQUIRE(third.exit_code == 0);
+}
+
 // 1.2.0: ezmk project import — convert a CMake project into ezmk.toml.
 TEST_CASE("integration: project import converts CMake to ezmk.toml", "[integration][1.2.0]") {
     if (!ezmk_available()) {
