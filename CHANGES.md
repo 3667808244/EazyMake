@@ -18,6 +18,36 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.3.5 (2026-08-25) — pack 多格式输出（`--format zip|tar.gz`）+ SHA-256 边车
+
+1.3.5 是 1.3.0 发布后的**补丁版本**（1.3.x 系列最后一个规划补丁；与 1.3.1 ~ 1.3.4 相互独立、可并行）：`ezmk project pack --format zip|tar.gz` 产**多格式归档**（缺省 `tar.gz` 现状不变；zip 走 vendored miniz）——内容与 tar.gz **逐文件等价**（同一 stage 流程，仅归档器不同），`pkg install` 消费路径（`extract_archive`）早已支持 zip，端到端闭环。附带 **`.sha256` 边车**（两种格式统一）。**公共 API 无破坏性变更**（纯新增 flag + util + i18n key）。
+
+### 新增 / 行为变更
+
+- **`ezmk project pack --format <tar.gz|zip>`**：`zip` 产 `name-version.zip`（缺省 `tar.gz` 行为完全不变）；大小写不敏感；非法格式（如 `deb`）→ fatal（`cli_err_invalid_format`）
+- **`util::create_zip`**：miniz `mz_zip_writer_*`；条目名与 `create_targz` 完全一致（相对 stage、`/` 分隔符统一——Windows 不产生反斜杠条目，坑 1；组件级路径安全校验防 `..` 逃逸，坑 2；遍历排序一致）
+- **`.sha256` 边车**：pack 成功后写 `<archive>.sha256`（`<hash>  <filename>`，tar.gz 与 zip 统一；纯新增文件不影响既有消费）；与 `--precompiled` 可组合（预编译包也可选 zip）
+
+### 文档
+
+- `docs/cli.md`（zh/en）：pack 节补 `--format` 标志表 + `.sha256` 边车说明；命令表更新
+- `README`（en/zh）：命令速览 pack 行补 `--format zip|tar.gz`
+- `CHANGES.md` 本条目
+
+### 测试
+
+- CLI 解析：`--format zip`/`ZIP`/`tar.gz`/缺省 + 非法（`deb`/`tgz`）拒绝
+- 集成：① zip 端到端（`pack --format zip` → `pkg install <zip>` 消费者侧编译成功）② 等价性（同项目 tar.gz/zip 解包后文件清单 + 内容 sha256 一致）③ 默认回归（无 `--format` → `.tar.gz`，不产 `.zip`）④ 非法格式 fatal ⑤ 边车（两种格式 `.sha256` 与 `crypto::sha256_file` 一致、含文件名）
+- i18n：新增 `cli_err_invalid_format` 三向一致；`check_i18n.py` 通过（374 keys）
+
+### 已知限制 / 跟进项
+
+- **`.deb` / `.rpm` 等包管理器格式**：明确不做（`fpm` + `ezmk project install --prefix <staging>` 配方覆盖，non-goals 方向）；发布自动化不进 CLI。
+- **`--format` 扩展其他归档（`tgz` 别名等）**与 **sha256 边车纳入 `pkg install --sha256` 自动校验**（与 index.toml 联动）：归 1.4.0 或后续评估。
+- **旧二进制（<1.3.5）**：不认识 `--format` → 报 unknown option；新 flag 需 ≥1.3.5。
+
+---
+
 ## 1.3.4 (2026-08-25) — watch 重建后自动运行（`ezmk watch --run`）
 
 1.3.4 是 1.3.0 发布后的**补丁版本**（与 1.3.1 语言区间、1.3.2 测试报告、1.3.3 简写相互独立、可并行）：`ezmk watch --run` / `-r` —— 每次**成功**重建后**阻塞运行**产物，程序退出后 watch 继续监听（"改代码自动重跑"）。watcher 线程阻塞 = 程序运行期间天然暂停变更检测，退出后自动恢复——零进程管理。**公共 API 无破坏性变更**（纯新增 flag + i18n key）。

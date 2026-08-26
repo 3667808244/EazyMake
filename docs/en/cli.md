@@ -74,7 +74,7 @@ scripting and muscle memory.
 | `ezmk run [build-opts] [-- <program args>]` | Build and execute (full: `ezmk project run`) |
 | `ezmk clean` | Remove cache and temp files (full: `ezmk project clean`) |
 | `ezmk install [install-opts]` | Install build artifacts to prefix, 1.1.0+ (full: `ezmk project install`) |
-| `ezmk pack [--output <dir>] [--precompiled]` | Package as `.tar.gz` (default: **source package**, platform-independent; `--precompiled` produces a prebuilt archive, `static` only), 1.1.0+ (full: `ezmk project pack`) |
+| `ezmk pack [--output <dir>] [--precompiled] [--format <tar.gz\|zip>]` | Package as `.tar.gz` (default: **source package**, platform-independent; `--precompiled` produces a prebuilt archive, `static` only; `--format zip` picks the zip archiver, 1.3.5+), 1.1.0+ (full: `ezmk project pack`) |
 | `ezmk watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild (full: `ezmk project watch`) |
 | `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
 | `ezmk project cc [-o <path>] [--profile <p>]` | Generate `compile_commands.json` for clangd/LSP, 1.2.0+ |
@@ -191,7 +191,14 @@ deliberately not shown).
 | `--no-headers` | Skip header installation |
 | `--no-data` | Skip data file installation |
 
-**`pack`-only flag:** `--output <dir>` — output directory (default `.`). Only valid for `type = "static"` projects.
+**`pack`-only flags:**
+
+| Flag | Purpose |
+|---|---|
+| `--output <dir>` | Output directory (default `.`). Only valid for `type = "static"` projects |
+| `--format <tar.gz\|zip>` | **1.3.5+** Archive format (default `tar.gz`, unchanged; `zip` uses the vendored miniz writer). Both formats contain the same files (identical stage contents) and ship a `<archive>.sha256` sidecar |
+
+> **`pack` writes a `.sha256` sidecar (1.3.5+):** every successful pack writes `<archive>.sha256` (`<hash>  <filename>`) — same format for `tar.gz` and `zip`; a pure add-on that does not affect existing consumers. `.deb` / `.rpm` are deliberately out of scope (use `fpm` + `ezmk project install --prefix <staging>`).
 
 **`test`-only flags:**
 

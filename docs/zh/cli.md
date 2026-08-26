@@ -66,7 +66,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk run [build-opts] [-- <program args>]` | 构建并运行（完整形式：`ezmk project run`） |
 | `ezmk clean` | 清除缓存和临时文件（完整形式：`ezmk project clean`） |
 | `ezmk install [install-opts]` | 安装构建产物到指定前缀，1.1.0+（完整形式：`ezmk project install`） |
-| `ezmk pack [--output <dir>] [--precompiled]` | 打包为 `.tar.gz`（默认**源码包**，平台无关；`--precompiled` 生成预编译包，仅 `static`），1.1.0+（完整形式：`ezmk project pack`） |
+| `ezmk pack [--output <dir>] [--precompiled] [--format <tar.gz\|zip>]` | 打包为 `.tar.gz`（默认**源码包**，平台无关；`--precompiled` 生成预编译包，仅 `static`；`--format zip` 选 zip 归档器，1.3.5+），1.1.0+（完整形式：`ezmk project pack`） |
 | `ezmk watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建（完整形式：`ezmk project watch`） |
 | `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
 | `ezmk project cc [-o <path>] [--profile <p>]` | 生成 `compile_commands.json`（clangd/LSP），1.2.0+ |
@@ -149,7 +149,14 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `--no-headers` | 跳过头文件安装 |
 | `--no-data` | 跳过数据文件安装 |
 
-**`pack` 专属标志：** `--output <dir>` — 输出目录（默认 `.`）。仅适用于 `type = "static"` 的项目。
+**`pack` 专属标志：**
+
+| 标志 | 用途 |
+|---|---|
+| `--output <dir>` | 输出目录（默认 `.`）。仅适用于 `type = "static"` 的项目 |
+| `--format <tar.gz\|zip>` | **1.3.5+** 归档格式（默认 `tar.gz`，行为不变；`zip` 走 vendored miniz）。两种格式内容逐文件等价（同一 stage 流程），均产出 `<archive>.sha256` 边车 |
+
+> **`pack` 产出 `.sha256` 边车（1.3.5+）：** 每次成功打包写 `<archive>.sha256`（`<hash>  <filename>`，tar.gz 与 zip 统一）——纯新增文件，不影响既有消费。`.deb` / `.rpm` 明确不做（用 `fpm` + `ezmk project install --prefix <staging>` 配方）。
 
 **`test` 专属标志：**
 

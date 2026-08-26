@@ -1,6 +1,6 @@
 # EazyMake 1.3.5 执行计划
 
-> **状态：执行中**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
+> **状态：已完成**。1.3.x 系列路线图见 [`plans/1.3.x/README.md`](plans/1.3.x/README.md)。
 >
 > 详细设计：[**1.3.5.md**](plans/1.3.x/1.3.5.md)。本计划为 1.3.0 发布后的**补丁版本**（1.3.x 系列最后一个规划补丁）：`ezmk project pack --format zip|tar.gz` 产**多格式归档**（缺省 `tar.gz` 现状不变；zip 走 vendored miniz）——内容与 tar.gz **逐文件等价**（同一 stage 流程，仅归档器不同），`pkg install` 消费路径（`extract_archive`）早已支持 zip，端到端闭环。附带 **`.sha256` 边车**（两种格式统一，`<archive>.sha256`）。
 >
@@ -30,28 +30,28 @@
 
 ### 阶段一：CLI
 
-- [ ] **1.1 `--format` 解析**：`project pack` spec（`src/cli.cpp`，现有 `--precompiled`/`--output`）加 `{'\0', "format", true}`；`PackOptions.format`（`include/ezmk/cli.hpp`，缺省 `"tar.gz"`）；合法值 `tar.gz`/`zip`（大小写不敏感）；非法 → fatal（新 i18n key `cli_err_invalid_format`）
-- [ ] **1.2 i18n**：`cli_err_invalid_format` 三向一致 + `check_i18n.py` 通过
-- [ ] **1.3 单测**：合法（`zip`/`ZIP`/`tar.gz`）/ 非法（`deb`）/ 缺省（`tar.gz`）
+- [x] **1.1 `--format` 解析**：`project pack` spec（`src/cli.cpp`，现有 `--precompiled`/`--output`）加 `{'\0', "format", true}`；`PackOptions.format`（`include/ezmk/cli.hpp`，缺省 `"tar.gz"`）；合法值 `tar.gz`/`zip`（大小写不敏感）；非法 → fatal（新 i18n key `cli_err_invalid_format`）
+- [x] **1.2 i18n**：`cli_err_invalid_format` 三向一致 + `check_i18n.py` 通过
+- [x] **1.3 单测**：合法（`zip`/`ZIP`/`tar.gz`）/ 非法（`deb`）/ 缺省（`tar.gz`）
 
 ### 阶段二：`create_zip` + 归档分发
 
-- [ ] **2.1 `util::create_zip(source_dir, output_file)`**（`src/util.cpp` + `include/ezmk/util.hpp`）：miniz `mz_zip_writer_*`；**`/` 分隔符统一**（坑 1）+ 路径规范化（相对、无 `..`，坑 2）+ 复用 `create_targz` 的目录遍历/排序
-- [ ] **2.2 `pack_project` 按格式分发**：`tar.gz` → `create_targz`（现状）；`zip` → `create_zip`；归档名 `name-version.zip`；**zip 内部结构与 tar.gz 等价**（顶层 `name-version/` 目录 + 相对路径，保证 `pkg install` 顶层目录探测一致）
+- [x] **2.1 `util::create_zip(source_dir, output_file)`**（`src/util.cpp` + `include/ezmk/util.hpp`）：miniz `mz_zip_writer_*`；**`/` 分隔符统一**（坑 1）+ 路径规范化（相对、无 `..`，坑 2）+ 复用 `create_targz` 的目录遍历/排序
+- [x] **2.2 `pack_project` 按格式分发**：`tar.gz` → `create_targz`（现状）；`zip` → `create_zip`；归档名 `name-version.zip`；**zip 内部结构与 tar.gz 等价**（顶层 `name-version/` 目录 + 相对路径，保证 `pkg install` 顶层目录探测一致）
 
 ### 阶段三：SHA-256 边车
 
-- [ ] **3.1 pack 成功后写 `<archive>.sha256`**（`crypto::sha256_file` 已有）：`{hash}  {filename}` 格式，两种格式统一；纯新增文件不影响既有消费路径
+- [x] **3.1 pack 成功后写 `<archive>.sha256`**（`crypto::sha256_file` 已有）：`{hash}  {filename}` 格式，两种格式统一；纯新增文件不影响既有消费路径
 
 ### 阶段四：测试
 
-- [ ] **4.1 用例**：① zip 端到端（`pack --format zip` → `pkg install <zip>` 成功，闭环消费）② 等价性（同项目 tar.gz/zip 解包后文件清单 + 关键内容哈希一致）③ 默认回归（无 `--format` → `.tar.gz`）④ 非法格式 fatal ⑤ 边车（两种格式 `.sha256` 与 `crypto::sha256_file` 一致）
-- [ ] **4.2 全量回归**（基线 904/5241）
+- [x] **4.1 用例**：① zip 端到端（`pack --format zip` → `pkg install <zip>` 成功，闭环消费）② 等价性（同项目 tar.gz/zip 解包后文件清单 + 关键内容哈希一致）③ 默认回归（无 `--format` → `.tar.gz`）④ 非法格式 fatal ⑤ 边车（两种格式 `.sha256` 与 `crypto::sha256_file` 一致）
+- [x] **4.2 全量回归**（基线 904/5241）
 
 ### 阶段五：文档 + 收口
 
-- [ ] **5.1 文档**：cli.md（en/zh）pack 节补 `--format` + `.sha256` 边车；README 命令表；CHANGES.md 1.3.5 条目
-- [ ] **5.2 收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新（1.3.5 完成 → 1.3.x 系列全部收口）；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **5.1 文档**：cli.md（en/zh）pack 节补 `--format` + `.sha256` 边车；README 命令表；CHANGES.md 1.3.5 条目
+- [x] **5.2 收口**：plan.md 勾选；`plans/1.3.x/README.md` 状态更新（1.3.5 完成 → 1.3.x 系列全部收口）；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
 > 门槛未满足即停止，禁止带着未收口项进入发布。
 

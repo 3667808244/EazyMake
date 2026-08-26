@@ -140,7 +140,7 @@ ezmk clean                      # clear cache
 ezmk watch [flags]              # auto-rebuild on change
 ezmk install [flags]            # install artifacts to prefix
 ezmk test [flags]               # run project tests
-ezmk pack [flags]               # create distributable .tar.gz (full: ezmk project pack)
+ezmk pack [flags]               # create distributable archive (full: ezmk project pack; --format zip|tar.gz, 1.3.5+)
 
 # Project
 ezmk project new <name>         # scaffold new project
