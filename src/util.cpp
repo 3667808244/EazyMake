@@ -582,6 +582,81 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
     if (ec) throw std::runtime_error("rename failed: " + output_file.string());
 }
 
+// 1.3.5: Create a .zip from a source directory (miniz zip writer).
+// Entry names match create_targz EXACTLY (relative to source_dir, forward
+// slashes, sorted) so `pkg install` and other consumers see identical package
+// contents regardless of format.
+void create_zip(const fs::path& source_dir, const fs::path& output_file) {
+    // --- Step 1: walk source_dir and collect sorted entries (same as targz) ---
+    struct ZipEntry {
+        std::string name;
+        std::vector<uint8_t> content;
+        bool is_dir = false;
+    };
+    std::vector<ZipEntry> entries;
+    for (auto& e : fs::recursive_directory_iterator(source_dir)) {
+        ZipEntry ze;
+        auto rel = fs::relative(e.path(), source_dir);
+        ze.name = rel.generic_string();
+        // zip convention: forward slashes — a backslash entry (坑 1) makes the
+        // archive look corrupt to zip readers on other platforms.
+        std::replace(ze.name.begin(), ze.name.end(), '\\', '/');
+        if (e.is_directory()) {
+            ze.is_dir = true;
+            if (!ze.name.empty() && ze.name.back() != '/') ze.name += '/';
+        } else {
+            std::string raw = file_read(e.path());
+            ze.content.assign(raw.begin(), raw.end());
+        }
+        entries.push_back(std::move(ze));
+    }
+    std::sort(entries.begin(), entries.end(),
+              [](const ZipEntry& a, const ZipEntry& b) { return a.name < b.name; });
+
+    // 坑 2: names are built from fs::relative of descendants, so they cannot
+    // contain ".." components — verify component-wise anyway (defense in depth,
+    // aligned with the extract-side safe_extract_path checks).
+    auto safe_zip_name = [](const std::string& n) -> bool {
+        if (n.empty() || n[0] == '/') return false;
+        size_t start = 0;
+        for (;;) {
+            auto slash = n.find('/', start);
+            std::string comp = n.substr(start,
+                slash == std::string::npos ? std::string::npos : slash - start);
+            if (comp == ".." || comp == ".") return false;
+            if (slash == std::string::npos) break;
+            start = slash + 1;
+        }
+        return true;
+    };
+
+    // --- Step 2: write the zip via miniz ---
+    mz_zip_archive zip{};
+    if (!mz_zip_writer_init_file(&zip, output_file.string().c_str(), 0)) {
+        throw std::runtime_error("failed to create ZIP: " + output_file.string());
+    }
+    bool ok = true;
+    for (auto& e : entries) {
+        if (!safe_zip_name(e.name)) { ok = false; break; }
+        if (e.is_dir) {
+            ok = mz_zip_writer_add_mem(&zip, e.name.c_str(), nullptr, 0,
+                                       MZ_NO_COMPRESSION);
+        } else {
+            ok = mz_zip_writer_add_mem(&zip, e.name.c_str(),
+                                       e.content.empty() ? nullptr : e.content.data(),
+                                       e.content.size(), MZ_DEFAULT_COMPRESSION);
+        }
+        if (!ok) break;
+    }
+    if (ok) ok = mz_zip_writer_finalize_archive(&zip);
+    mz_zip_writer_end(&zip);  // always: closes the file and frees allocations
+    if (!ok) {
+        std::error_code rm_ec;
+        fs::remove(output_file, rm_ec);  // best-effort cleanup of a partial archive
+        throw std::runtime_error("failed to write ZIP: " + output_file.string());
+    }
+}
+
 // ===================================================================
 // Archive extraction
 // ===================================================================

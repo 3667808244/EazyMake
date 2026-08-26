@@ -1595,7 +1595,10 @@ void pack_project(const config::EzConfig& cfg,
 
     // Step 1: Create staging directory
     fs::path output_dir = fs::absolute(opts.output_dir);
-    std::string archive_name = name + "-" + version + ".tar.gz";
+    // 1.3.5: --format <tar.gz|zip> — archive name follows the format.
+    std::string fmt = opts.format.empty() ? "tar.gz" : opts.format;
+    std::string archive_name = name + "-" + version +
+                               (fmt == "zip" ? ".zip" : ".tar.gz");
     std::string stage_name = name + "-" + version;
     fs::path stage_dir = output_dir / stage_name;
 
@@ -1693,7 +1696,12 @@ void pack_project(const config::EzConfig& cfg,
     fs::path output_archive = output_dir / archive_name;
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_creating,
                                 {{"file", archive_name}}));
-    util::create_targz(stage_dir, output_archive);
+    // 1.3.5: dispatch by format — same stage contents, different archiver.
+    if (fmt == "zip") {
+        util::create_zip(stage_dir, output_archive);
+    } else {
+        util::create_targz(stage_dir, output_archive);
+    }
 
     // Step: SHA-256
     std::string sha = crypto::sha256_file(output_archive);

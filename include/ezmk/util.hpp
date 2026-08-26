@@ -156,6 +156,11 @@ void extract_archive(const fs::path& archive, const fs::path& dest);
 // 1.1.0-dev.2: Create a .tar.gz from a source directory (ustar tar + raw deflate gzip)
 void create_targz(const fs::path& source_dir, const fs::path& output_file);
 
+// 1.3.5: Create a .zip from a source directory (miniz zip writer). Entry names
+// match create_targz exactly (relative to source_dir, forward slashes, sorted)
+// so consumers behave identically for both formats.
+void create_zip(const fs::path& source_dir, const fs::path& output_file);
+
 // ---- HTTP download ----
 // Downloads a URL to a local file. On Windows uses WinHTTP; Linux falls back to curl.
 void download(std::string_view url, const fs::path& dest);
