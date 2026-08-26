@@ -458,3 +458,62 @@ TEST_CASE("compiler_tag: overflowing digit run returns empty without throwing", 
         "Microsoft (R) C/C++ Optimizing Compiler Version 99999999999999999999999.43 for x64";
     REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, huge_msvc)).empty());
 }
+
+// ===================================================================
+// 1.4.0-dev.2: max_supported_std() — toolchain capability table
+// ===================================================================
+
+TEST_CASE("max_supported_std: GCC segmentation by major version", "[toolchain][1.4.0-dev.2]") {
+    using tc::CompilerFamily;
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 4.8.5") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 4.9.4") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 5.4.0") == "CPP14");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 6.5.0") == "CPP14");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 7.5.0") == "CPP14");  // partial C++17 → conservative
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 8.3.0") == "CPP17");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 10.4.0") == "CPP17");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 11.4.0") == "CPP20");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 12.3.0") == "CPP20");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 13.2.0") == "CPP23");
+    // MSYS2-style version line (Rev2 prefix must not confuse the parser)
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (Rev2, Built by MSYS2 project) 16.1.0") == "CPP23");
+}
+
+TEST_CASE("max_supported_std: Clang segmentation by major version", "[toolchain][1.4.0-dev.2]") {
+    using tc::CompilerFamily;
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 3.4.2") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 3.8.1") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 4.0.1") == "CPP14");  // partial C++17 → conservative
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 5.0.2") == "CPP17");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 10.0.1") == "CPP17");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 11.1.0") == "CPP20");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang version 16.0.6") == "CPP20");  // C++23 partial → conservative
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "Apple clang version 15.0.0 (clang-1500.3.9.4)") == "CPP20");
+}
+
+TEST_CASE("max_supported_std: MSVC segmentation by _MSC_VER", "[toolchain][1.4.0-dev.2]") {
+    using tc::CompilerFamily;
+    auto cl = [](const char* minor) {
+        return std::string("Microsoft (R) C/C++ Optimizing Compiler Version 19.") + minor + " for x64";
+    };
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("00")) == "CPP11");  // VS 2015
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("10")) == "CPP17");  // VS 2017
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("16")) == "CPP17");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("20")) == "CPP20");  // VS 2019
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("29")) == "CPP20");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("30")) == "CPP20");  // VS 2022 (C++23 partial → conservative)
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("43")) == "CPP20");
+}
+
+TEST_CASE("max_supported_std: unknown versions fall back to the conservative floor", "[toolchain][1.4.0-dev.2]") {
+    using tc::CompilerFamily;
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++: fatal error: no input files") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 3.4.6") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang (unknown)") == "CPP11");
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, "cl.exe 19.43") == "CPP11");  // no "Version" token
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, "Version 20.1.2") == "CPP11");  // non-19.x series
+    // Overflowing digit runs must not throw (same guard as compiler_tag).
+    REQUIRE(tc::max_supported_std(CompilerFamily::Gcc,
+        "g++ (GCC) 9999999999999999999999999999.0") == "CPP11");
+}

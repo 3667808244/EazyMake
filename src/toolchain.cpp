@@ -479,25 +479,32 @@ bool parse_digits(const std::string& s, size_t& pos, unsigned long& out) {
     return true;
 }
 
+// 1.4.0-dev.2: parse "<major>.<minor>" from a cl.exe version line
+// ("...Version 19.43.34808 for x64" → major=19, minor=43). Shared by
+// msvc_toolset_tag (toolset table) and msvc_msc_ver (_MSC_VER segments).
+bool parse_msvc_cl_version(const std::string& version,
+                           unsigned long& major, unsigned long& minor) {
+    auto pos = version.find("Version");
+    if (pos == std::string::npos) pos = version.find("version");
+    if (pos == std::string::npos) return false;
+
+    std::string rest = version.substr(pos + 7);  // skip "Version"
+    size_t i = 0;
+    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
+    if (!parse_digits(rest, i, major)) return false;
+    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
+    if (!parse_digits(rest, i, minor)) minor = 0;
+    return true;
+}
+
 // Map a cl.exe version line to the MSVC toolset tag.
 // cl reports "Version <major>.<minor>.<build>" where the 19.x series maps to
 // _MSC_VER = 1900 + <minor> (19.43 → 1943). The toolset lookup uses a table,
 // NOT arithmetic (1943 would wrongly compute 140+(1943-1900)/10 = 144).
 // VS2022 keeps v143 binary compatibility across 17.x, so >= 1930 collapses to 143.
 std::string msvc_toolset_tag(const std::string& version) {
-    auto pos = version.find("Version");
-    if (pos == std::string::npos) pos = version.find("version");
-    if (pos == std::string::npos) return "";
-
-    std::string rest = version.substr(pos + 7);  // skip "Version"
-    // Parse "<major>.<minor>" from rest (e.g. " 19.43.34808 for x64").
-    size_t i = 0;
-    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
     unsigned long major = 0, minor = 0;
-    if (!parse_digits(rest, i, major)) return "";
-    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-    if (!parse_digits(rest, i, minor)) minor = 0;
-
+    if (!parse_msvc_cl_version(version, major, minor)) return "";
     if (major != 19) return "";  // only the 19.x (VS2015+) series is mapped
     long msc_ver = 1900L + static_cast<long>(minor);
     if (msc_ver == 1900)                return "msvc140";  // VS 2015
@@ -505,6 +512,16 @@ std::string msvc_toolset_tag(const std::string& version) {
     if (msc_ver >= 1920 && msc_ver <= 1929) return "msvc142";  // VS 2019
     if (msc_ver >= 1930)                return "msvc143";  // VS 2022+
     return "";
+}
+
+// _MSC_VER from a cl.exe version line (19.43 → 1943). 0 = unparseable or
+// outside the 19.x series (max_supported_std treats it as the conservative
+// floor, same as msvc_toolset_tag returning "").
+long msvc_msc_ver(const std::string& version) {
+    unsigned long major = 0, minor = 0;
+    if (!parse_msvc_cl_version(version, major, minor)) return 0;
+    if (major != 19) return 0;
+    return 1900L + static_cast<long>(minor);
 }
 
 } // namespace
@@ -522,6 +539,61 @@ std::string compiler_tag(const Toolchain& tc) {
         return msvc_toolset_tag(tc.version);
     }
     return "";
+}
+
+// 1.4.0-dev.2: toolchain capability table — highest -std= the compiler
+// actually supports, as a canonical C++ form ("CPP<n>"). Conservative on every
+// boundary: underestimating is safe (a negotiated standard the compiler can't
+// handle would fail to compile), overestimating is not. C-side caps of the
+// same generation: C17 for gcc >= 8 / clang >= 5, C11 otherwise (incl. MSVC —
+// cl supports C11 only via /std:c11 with the C compiler).
+std::string max_supported_std(CompilerFamily family, const std::string& version) {
+    // GCC — major-version segmentation. Sources: gcc.gnu.org/projects/cxx-status
+    // (first release with full support per standard), verified 2026-08 on
+    // gcc 13/14 (g++ -std=c++23) and gcc 16 (MSYS2, -std=c++26 works).
+    //   < 4.8     → CPP11  (floor, conservative; 4.8.1 has full C++11)
+    //   4.8..4.x  → CPP11
+    //   5.x..6.x  → CPP14  (5.1 full C++14)
+    //   7.x       → CPP14  (7 has partial C++17 — conservative)
+    //   8.x..10.x → CPP17  (8 full C++17)
+    //   11.x..12.x→ CPP20  (11 full C++20)
+    //   >= 13.x   → CPP23  (13 ships -std=c++23; 14/15/16 extend it)
+    if (family == CompilerFamily::Gcc) {
+        unsigned long major = 0;
+        if (!first_version_major(version, major)) return "CPP11";
+        if (major >= 13) return "CPP23";
+        if (major >= 11) return "CPP20";
+        if (major >= 8)  return "CPP17";
+        if (major >= 5)  return "CPP14";
+        return "CPP11";
+    }
+    // Clang — same scheme. Sources: clang.llvm.org/cxx_status, verified 2026-08
+    // on clang 16/18 (C++23 partial → conservative CPP20).
+    //   < 4     → CPP11
+    //   4.x     → CPP14  (4 has partial C++17 — conservative)
+    //   5.x..10 → CPP17  (5 full C++17)
+    //   >= 11.x → CPP20  (11 mostly C++20; 16+ C++23 partial → conservative 20)
+    if (family == CompilerFamily::Clang) {
+        unsigned long major = 0;
+        if (!first_version_major(version, major)) return "CPP11";
+        if (major >= 11) return "CPP20";
+        if (major >= 5)  return "CPP17";
+        if (major >= 4)  return "CPP14";
+        return "CPP11";
+    }
+    // MSVC — _MSC_VER segmentation (same source as msvc_toolset_tag, MSDN
+    // "Visual Studio version" table, verified 2026-08):
+    //   1900 (VS2015)       → CPP11  (floor)
+    //   1910..1919 (VS2017) → CPP17
+    //   >= 1920 (VS2019+)   → CPP20  (1920..1929 VS2019 C++20; 1930+ VS2022
+    //                           has C++23 partial — conservative CPP20)
+    if (family == CompilerFamily::Msvc) {
+        long msc = msvc_msc_ver(version);
+        if (msc >= 1920) return "CPP20";
+        if (msc >= 1910) return "CPP17";
+        return "CPP11";  // < 1910 or unparseable
+    }
+    return "CPP11";
 }
 
 Toolchain detect_toolchain() {

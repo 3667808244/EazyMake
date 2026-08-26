@@ -39,6 +39,14 @@ Toolchain detect_toolchain();
 // "no compiler tag" — the full tag degrades to os-arch).
 std::string compiler_tag(const Toolchain& tc);
 
+// 1.4.0-dev.2: Highest -std= standard this toolchain actually supports, as a
+// canonical C++ form ("CPP20" / "CPP17" / ... — parse_language's normalized
+// C++ spelling). The C side of the same compiler generation caps at C17
+// (gcc >= 8 / clang >= 5) or C11 (older / unknown). Unknown versions →
+// conservative floor "CPP11". Segmentation sources are documented at the
+// implementation; see plans/1.4.x/1.4.0-dev.2.md §3.1. Pure — no subprocess.
+std::string max_supported_std(CompilerFamily family, const std::string& version);
+
 // Run vcvars64.bat and capture the resulting environment variables.
 // Returns a map of env vars. Windows/MSVC only.
 std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path);
