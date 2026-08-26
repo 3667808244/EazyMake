@@ -58,6 +58,7 @@
     "pkg_sha256_skipped_dir": "SHA-256 校验已跳过 — 从目录安装的包无归档可校验",
     "pkg_warn_std_mismatch": "包 '{pkg}' 要求至少 {pkg_std}，但本项目以 {consumer_std} 编译 — 包可能无法编译或链接；建议提高 [project].language",
     "pkg_warn_std_mismatch_precompiled": "预编译包 '{pkg}' 要求至少 {pkg_std}，但本项目以 {consumer_std} 编译 — 存在 ABI 不兼容风险（如 std::__cxx11 未定义引用）；建议提高 [project].language",
+    "pkg_fatal_std_mismatch": "严格标准校验失败: 包 '{pkg}' 要求至少 {pkg_std}，但本项目以 {consumer_std} 编译 — 请提高 [project].language，或设置 [pkg] strict_std_check = false 降级为警告",
     "installed": "包 {pkg} 安装成功。",
     "install_hook_lua_error": "安装钩子 Lua 错误 {script}: {msg}",
     "install_hook_no_run": "安装钩子 {script} 未定义 run() 函数，跳过",

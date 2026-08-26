@@ -849,6 +849,15 @@ static void parse_utils(const toml::table& root, EzConfig& cfg) {
     }
 }
 
+// 1.4.0-dev.2: [pkg] — package-management configuration.
+static void parse_pkg(const toml::table& root, EzConfig& cfg) {
+    if (auto pkg = root["pkg"].as_table()) {
+        if (auto ssc = (*pkg)["strict_std_check"].as_boolean()) {
+            cfg.pkg.strict_std_check = ssc->get();
+        }
+    }
+}
+
 EzConfig parse_config(const fs::path& toml_path) {
     EzConfig cfg;
 
@@ -892,6 +901,9 @@ EzConfig parse_config(const fs::path& toml_path) {
 
     // [utils]
     parse_utils(root, cfg);
+
+    // [pkg] (1.4.0-dev.2)
+    parse_pkg(root, cfg);
 
     // 1.1.0-dev.5: Resolve @link: references in path arrays
     {

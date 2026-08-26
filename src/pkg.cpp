@@ -154,11 +154,18 @@ static int std_min_of(const std::string& language) {
     }
 }
 
-// The consumer project's minimum standard, resolved from the located project
-// root (upward search from CWD). nullopt → no consumer ezmk.toml (global/user
-// scope installs) or an unparseable consumer config → skip the check (with a
+// Consumer context for the std-compat check: the project's minimum standard,
+// its raw declared language (for messages) and the [pkg] strict_std_check
+// switch (1.4.0-dev.2). nullopt min → no consumer ezmk.toml (global/user scope
+// installs) or an unparseable consumer config → skip the check (with a
 // warning for a malformed consumer language).
-static std::optional<int> consumer_std_min() {
+struct ConsumerStdContext {
+    std::optional<int> min;   // consumer minimum standard (nullopt = no check)
+    bool strict = false;      // [pkg] strict_std_check — warn → fatal
+    std::string language;     // consumer's declared [project].language (messages)
+};
+
+static ConsumerStdContext consumer_std_ctx() {
     // 1.3.6: dedupe the malformed-consumer warning per process — a broken
     // consumer config used to warn once per compiled package (multi-package
     // installs flooded the console). First occurrence still warns.
@@ -171,19 +178,23 @@ static std::optional<int> consumer_std_min() {
     };
     try {
         auto root = util::locate_project_root(fs::current_path());
-        if (!root) return std::nullopt;
+        if (!root) return {};
         auto cfg = config::parse_config(*root / "ezmk.toml");
-        if (cfg.project.language.empty()) return std::nullopt;
+        ConsumerStdContext ctx;
+        ctx.strict = cfg.pkg.strict_std_check;
+        ctx.language = cfg.project.language;
+        if (cfg.project.language.empty()) return ctx;  // min stays nullopt
         int min = std_min_of(cfg.project.language);
         if (min == 0) {
             warn_once("cannot check package language compatibility — consumer "
                       "[project].language is invalid: " + cfg.project.language);
-            return std::nullopt;
+            return {};
         }
-        return min;
+        ctx.min = min;
+        return ctx;
     } catch (const std::exception& e) {
         warn_once("cannot check package language compatibility: " + std::string(e.what()));
-        return std::nullopt;
+        return {};
     }
 }
 
@@ -200,33 +211,34 @@ static std::string std_label(const std::string& language) {
     }
 }
 
-// Warn when the package's minimum standard exceeds the consumer's.
-// precompiled=true uses the ABI-flavored wording (预编译 ABI 风险更高).
+// Warn (default) or fatal ([pkg] strict_std_check, 1.4.0-dev.2) when the
+// package's minimum standard exceeds the consumer's. precompiled=true uses the
+// ABI-flavored warning wording (预编译 ABI 风险更高); the strict fatal uses a
+// single escalated wording for both paths.
 static void check_std_compat(const std::string& pkg_name,
                              const std::string& pkg_language,
                              bool precompiled) {
     int pkg_min = std_min_of(pkg_language);
     if (pkg_min == 0) return;                 // package declares no usable bound
-    auto consumer_min = consumer_std_min();
-    if (!consumer_min || pkg_min <= *consumer_min) return;  // compatible
+    auto ctx = consumer_std_ctx();
+    if (!ctx.min || pkg_min <= *ctx.min) return;  // compatible
 
-    // Resolve the consumer's declared language for the warning text (rare path).
-    std::string consumer_lang;
-    try {
-        auto root = util::locate_project_root(fs::current_path());
-        if (root) {
-            auto cfg = config::parse_config(*root / "ezmk.toml");
-            consumer_lang = cfg.project.language;
-        }
-    } catch (...) {}
+    const std::string consumer_std =
+        ctx.language.empty() ? std::to_string(*ctx.min) : std_label(ctx.language);
+    const auto args = std::map<std::string, std::string>{
+        {"pkg", pkg_name},
+        {"pkg_std", std_label(pkg_language)},
+        {"consumer_std", consumer_std},
+    };
 
+    if (ctx.strict) {
+        util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pkg_fatal_std_mismatch,
+                                    args));
+    }
     util::warn(ezmk::i18n::fmt(
         precompiled ? ezmk::i18n::I18nKey::pkg_warn_std_mismatch_precompiled
                     : ezmk::i18n::I18nKey::pkg_warn_std_mismatch,
-        {{"pkg", pkg_name},
-         {"pkg_std", std_label(pkg_language)},
-         {"consumer_std", consumer_lang.empty() ? std::to_string(*consumer_min)
-                                                : std_label(consumer_lang)}}));
+        args));
 }
 
 static bool confirm(std::string_view msg, bool assume_yes = false) {

@@ -110,6 +110,7 @@ EZMK_I18N_KEY(pkg_install_from_dir)       // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_sha256_skipped_dir)     // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_warn_std_mismatch)              // 1.3.1: source-package std check (pkg min > consumer min)
 EZMK_I18N_KEY(pkg_warn_std_mismatch_precompiled)  // 1.3.1: precompiled std check — ABI-flavored wording
+EZMK_I18N_KEY(pkg_fatal_std_mismatch)             // 1.4.0-dev.2: [pkg] strict_std_check=true — warn escalated to fatal
 EZMK_I18N_KEY(missing_dep)
 EZMK_I18N_KEY(missing_dep_at_build)       // 1.1.0-dev.7
 EZMK_I18N_KEY(missing_dep_install_hint)   // 1.1.0-dev.7

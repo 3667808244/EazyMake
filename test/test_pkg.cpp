@@ -798,18 +798,24 @@ std::string capture_cerr(F&& fn) {
 
 // A consumer project root (ezmk.toml with the given language) + CWD guard.
 // CWD must be inside the project for locate_project_root() to find it.
+// 1.4.0-dev.2: strict=true writes `[pkg] strict_std_check = true`.
 struct ConsumerProject {
     fs::path root;
     std::unique_ptr<CwdGuard> guard;
 
     explicit ConsumerProject(const std::string& language,
-                             const std::string& name = "consumer") {
+                             const std::string& name = "consumer",
+                             bool strict = false) {
         guard = std::make_unique<CwdGuard>();
         root = guard->temp_dir;
         std::ofstream(root / "ezmk.toml")
             << "[project]\nname = \"" << name << "\"\ntype = \"executable\"\n"
             << "version = \"0.1.0\"\nlanguage = \"" << language << "\"\n\n"
             << "[compile]\ninclude_dirs = [\"include\"]\nsrc_dirs = [\"src\"]\n";
+        if (strict) {
+            std::ofstream(root / "ezmk.toml", std::ios::app)
+                << "\n[pkg]\nstrict_std_check = true\n";
+        }
         fs::create_directories(root / "src");
     }
 };
@@ -983,4 +989,77 @@ TEST_CASE("std compat: malformed consumer config warns once per process (1.3.6)"
         pos += needle.size();
     }
     REQUIRE(count == 1);
+}
+
+// 1.4.0-dev.2: [pkg] strict_std_check = true escalates the mismatch to a fatal
+// (same semantics as the 1.3.1 warning, escalated wording).
+TEST_CASE("std compat: strict_std_check makes mismatch fatal (source pkg)", "[pkg][1.4.0-dev.2]") {
+    ConsumerProject consumer("C++11", "consumer", /*strict=*/true);
+    auto pkg = stdtest_source_pkg("strictsrc", "C++17");
+    bool threw = false;
+    try {
+        compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    } catch (const ezmk::fatal_error&) {
+        threw = true;
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(threw);
+}
+
+TEST_CASE("std compat: strict_std_check makes mismatch fatal (precompiled pkg)", "[pkg][1.4.0-dev.2]") {
+    ConsumerProject consumer("C++11", "consumer", /*strict=*/true);
+    auto pkg = stdtest_precompiled_pkg("strictpc", "C++17");
+    bool threw = false;
+    try {
+        compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    } catch (const ezmk::fatal_error&) {
+        threw = true;
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(threw);
+}
+
+// strict_std_check on, but the package is within the consumer's standard → no
+// fatal, install proceeds silently (the check only fires on a real mismatch).
+TEST_CASE("std compat: strict_std_check with compatible package is silent", "[pkg][1.4.0-dev.2]") {
+    ConsumerProject consumer("C++17", "consumer", /*strict=*/true);
+    auto pkg = stdtest_source_pkg("strictok", "C++11");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("requires at least") == std::string::npos);
+}
+
+// strict_std_check = false (default) keeps the 1.3.1 warn behavior — the
+// warning text must NOT mention the strict fatal.
+TEST_CASE("std compat: strict_std_check default keeps warn behavior", "[pkg][1.4.0-dev.2]") {
+    ConsumerProject consumer("C++11");
+    auto pkg = stdtest_source_pkg("strictdef", "C++17");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg);
+        throw;
+    }
+    fs::remove_all(pkg);
+    REQUIRE(out.find("strict std check failed") == std::string::npos);
+    REQUIRE(out.find("requires at least C++17") != std::string::npos);
 }

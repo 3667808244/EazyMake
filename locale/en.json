@@ -58,6 +58,7 @@
     "pkg_sha256_skipped_dir": "SHA-256 verification skipped — installing from a directory (no archive)",
     "pkg_warn_std_mismatch": "package '{pkg}' requires at least {pkg_std}, but this project compiles at {consumer_std} — the package may fail to compile or link; consider raising [project].language",
     "pkg_warn_std_mismatch_precompiled": "precompiled package '{pkg}' requires at least {pkg_std}, but this project compiles at {consumer_std} — ABI mismatch risk (e.g. std::__cxx11 undefined references); consider raising [project].language",
+    "pkg_fatal_std_mismatch": "strict std check failed: package '{pkg}' requires at least {pkg_std}, but this project compiles at {consumer_std} — raise [project].language or set [pkg] strict_std_check = false to downgrade this to a warning",
     "installed": "Package {pkg} installed successfully.",
     "install_hook_lua_error": "install hook Lua error in {script}: {msg}",
     "install_hook_no_run": "install hook {script} does not define a run() function, skipping",

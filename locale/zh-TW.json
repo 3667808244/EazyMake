@@ -57,6 +57,7 @@
     "pkg_info_precompiled_variants": "  預編譯產物",
     "pkg_install_from_dir": "從目錄安裝套件 {dir}",
     "pkg_sha256_skipped_dir": "SHA-256 校驗已跳過 — 從目錄安裝的套件無封存可校驗",
+    "pkg_fatal_std_mismatch": "嚴格標準校驗失敗: 套件 '{pkg}' 要求至少 {pkg_std}，但本專案以 {consumer_std} 編譯 — 請提高 [project].language，或設定 [pkg] strict_std_check = false 降級為警告",
     "installed": "套件 {pkg} 安裝成功。",
     "install_hook_lua_error": "安裝鉤子 Lua 錯誤 {script}: {msg}",
     "install_hook_no_run": "安裝鉤子 {script} 未定義 run() 函式，跳過",

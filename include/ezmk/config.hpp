@@ -119,6 +119,15 @@ struct TestConfig {
     std::vector<std::string> link_targets = {};      // 1.2.0-dev.12: test-only -l system targets
 };
 
+// 1.4.0-dev.2: Package-management configuration section ([pkg] in ezmk.toml).
+struct PkgSection {
+    // Standard-compatibility check (1.3.1): warn → fatal when true. Default
+    // false keeps the informative-warning behavior — a strict error would
+    // break the existing package ecosystem, so it is opt-in (CI / strict
+    // requirements only).
+    bool strict_std_check = false;
+};
+
 struct EzConfig {
     ProjectSection project;
     CompileSection compile;
@@ -128,6 +137,7 @@ struct EzConfig {
     HooksSection hooks;                                          // 0.2.3+
     InstallSection install;                                      // 1.1.0 [install]
     TestConfig test;                                             // 1.1.0-dev.6 [test]
+    PkgSection pkg;                                              // 1.4.0-dev.2 [pkg]
     std::map<std::string, ProfileConfig> compile_profiles;       // 0.2.3+ [compile.profile.*]
     std::map<std::string, ProfileLinkConfig> link_profiles;      // 0.2.3+ [link.profile.*]
 };
