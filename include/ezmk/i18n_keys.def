@@ -61,6 +61,7 @@ EZMK_I18N_KEY(import_reject_unsupported) // 1.2.0
 EZMK_I18N_KEY(export_exists_refuse)     // 1.2.0
 EZMK_I18N_KEY(export_written)           // 1.2.0
 EZMK_I18N_KEY(export_hook_note)         // 1.2.0-dev.8
+EZMK_I18N_KEY(export_flag_target_mismatch) // 1.4.0-dev.1
 EZMK_I18N_KEY(ezmk_lua_usage)           // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_missing_script)  // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_need_value)      // 1.2.0-dev.8

@@ -943,6 +943,54 @@ TEST_CASE("cli parse: project export with no target throws", "[cli][1.2.0]") {
     );
 }
 
+// 1.4.0-dev.1 — project export vscode (debug config trio)
+TEST_CASE("cli parse: project export vscode basic", "[cli][1.4.0-dev.1]") {
+    auto args = TestArgs({"project", "export", "vscode"}).parse();
+    REQUIRE(args.cmd == Command::ProjectExport);
+    REQUIRE(args.project_export_opts.has_value());
+    REQUIRE(args.project_export_opts->target == "vscode");
+    REQUIRE(args.project_export_opts->overwrite == false);
+    REQUIRE(args.project_export_opts->profile.empty());
+}
+
+TEST_CASE("cli parse: project export vscode --overwrite --profile", "[cli][1.4.0-dev.1]") {
+    auto args = TestArgs({"project", "export", "vscode",
+                          "--overwrite", "--profile", "debug"}).parse();
+    REQUIRE(args.cmd == Command::ProjectExport);
+    auto& o = *args.project_export_opts;
+    REQUIRE(o.target == "vscode");
+    REQUIRE(o.overwrite == true);
+    REQUIRE(o.profile == "debug");
+}
+
+TEST_CASE("cli parse: project export vscode --profile=release", "[cli][1.4.0-dev.1]") {
+    auto args = TestArgs({"project", "export", "vscode", "--profile=release"}).parse();
+    REQUIRE(args.project_export_opts->target == "vscode");
+    REQUIRE(args.project_export_opts->profile == "release");
+}
+
+TEST_CASE("cli parse: project export vscode rejects cmake-only flags", "[cli][1.4.0-dev.1]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "export", "vscode", "--resolve"}).parse(),
+        ezmk::fatal_error
+    );
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "export", "vscode", "-o", "out.json"}).parse(),
+        ezmk::fatal_error
+    );
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "export", "vscode", "--no-glob"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
+TEST_CASE("cli parse: project export unknown target still throws", "[cli][1.4.0-dev.1]") {
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "export", "make"}).parse(),
+        ezmk::fatal_error
+    );
+}
+
 // ===================================================================
 // 1.2.0-dev.12 — project test options
 // ===================================================================

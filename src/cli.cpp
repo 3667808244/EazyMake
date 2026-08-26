@@ -440,6 +440,7 @@ namespace ezmk::cli
         }
 
         // 1.2.0: project export <target> — generate CMakeLists.txt (cmake first)
+        // 1.4.0-dev.1: + vscode — generate .vscode/ launch/tasks/settings
         if (action == "export")
         {
             args.cmd = Command::ProjectExport;
@@ -456,7 +457,7 @@ namespace ezmk::cli
             opts.target = require_positional(
                 p, "ezmk project export",
                 ezmk::i18n::get(ezmk::i18n::I18nKey::arg_export_target));
-            if (opts.target != "cmake")
+            if (opts.target != "cmake" && opts.target != "vscode")
                 util::fatal(ezmk::i18n::I18nKey::export_unknown_target,
                             {{"target", opts.target}});
             if (auto v = p.value("output"))
@@ -469,6 +470,19 @@ namespace ezmk::cli
                 opts.resolve = true;
             if (p.has("no-glob"))
                 opts.use_glob = false;
+            // 1.4.0-dev.1: cmake-only flags on the vscode target — explicit
+            // refusal beats silently ignoring them (design doc §3.1).
+            if (opts.target == "vscode")
+            {
+                auto refuse = [&](const char* flag) {
+                    util::fatal(ezmk::i18n::I18nKey::export_flag_target_mismatch,
+                                {{"flag", flag}, {"target", opts.target}});
+                };
+                if (!opts.output.empty()) refuse("--output");
+                if (opts.resolve)             refuse("--resolve");
+                if (p.has("glob"))            refuse("--glob");
+                if (p.has("no-glob"))         refuse("--no-glob");
+            }
             args.project_export_opts = opts;
             return args;
         }
@@ -1209,7 +1223,7 @@ namespace ezmk::cli
         row("ezmk project new  <name> [--type <t>]", I18nKey::help_project_new);
         row("ezmk project pack [--output <dir>] [--precompiled]", I18nKey::help_project_pack);
         row("ezmk project cc   [-o <path>] [--profile <p>]", I18nKey::help_project_cc);
-        row("ezmk project export cmake [flags]", I18nKey::help_project_export);
+        row("ezmk project export <cmake|vscode> [flags]", I18nKey::help_project_export);
         row("ezmk project import [--from <fmt>] [--overwrite]", I18nKey::help_project_import);
         std::cout << "\n";
 
