@@ -1708,6 +1708,11 @@ void pack_project(const config::EzConfig& cfg,
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_sha256,
                                 {{"sha256", sha}}));
 
+    // 1.3.5: .sha256 sidecar file ("<hash>  <filename>") — same format for
+    // tar.gz and zip; pure add-on, does not affect existing consumers.
+    util::file_write(output_archive.string() + ".sha256",
+                     sha + "  " + archive_name + "\n");
+
     // Step: Cleanup staging (best-effort — failure to remove a temp dir should
     // not fail the pack command)
     { std::error_code ec; fs::remove_all(stage_dir, ec); }
