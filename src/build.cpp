@@ -1913,6 +1913,413 @@ void emit_ezmk_junit(const fs::path& out_path,
     util::info("  report written: " + out_path.string());
 }
 
+// ===================================================================
+// 1.3.6: test-runner mechanical split — the former ~550-line run_tests
+// monolith is decomposed into a thin dispatcher (prologue + framework
+// dispatch) plus one runner per framework. PURE MOVES: no behavior,
+// variable-name or message changes (verified via `git diff -w` + the full
+// regression, incl. the report/filter/cache/failure-gate cases).
+// ===================================================================
+
+namespace {
+
+// Shared state assembled by run_tests' prologue and consumed by both runners.
+struct TestRunContext {
+    fs::path proj_root;
+    fs::path build_dir;
+    fs::path cache_dir;
+    cache::CompileInput cin;
+    config::LinkSection test_link;
+    std::vector<fs::path> project_objs;
+    std::vector<fs::path> test_sources;
+    std::string test_filter;
+    bool verbose = false;
+    std::string report_fmt;
+    fs::path report_path;
+    bool is_msvc = false;
+    config::LanguageInfo lang_info;
+};
+
+// ---- Catch2 framework runner (moved verbatim from run_tests) ----
+static void run_catch2_tests(TestRunContext& ctx) {
+    // ---- Catch2 Mode ----
+    util::info("Running tests (Catch2)...");
+
+    // Detect Catch2
+    std::string catch2_inc = detect_catch2(ctx.proj_root);
+    if (catch2_inc.empty()) {
+        util::fatal("Catch2 not found. Install it with:\n"
+                    "  ezmk pkg install catch2\n"
+                    "or place catch2.hpp in include/vendor/catch2.hpp");
+    }
+    util::info(std::string("  Catch2 include: ") + catch2_inc);
+
+    // Check if any test file has user-defined main
+    bool user_has_main = false;
+    for (auto& ts : ctx.test_sources) {
+        if (has_user_main(ts)) {
+            user_has_main = true;
+            break;
+        }
+    }
+
+    // Generate test_main.cpp if needed
+    fs::path test_main_cpp;
+    if (!user_has_main) {
+        test_main_cpp = ctx.cache_dir / "test_main.cpp";
+        std::string main_content;
+        // Use appropriate include depending on Catch2 version
+        fs::path vendor_hpp = ctx.proj_root / "include/vendor/catch2.hpp";
+        if (util::file_exists(vendor_hpp)) {
+            // Single-header Catch2 (v2 style): CATCH_CONFIG_MAIN still generates main
+            main_content += "#define CATCH_CONFIG_MAIN\n";
+            main_content += "#include \"catch2.hpp\"\n";
+        } else {
+            // Multi-header Catch2 v3: CATCH_CONFIG_MAIN removed → explicit main + Session().run()
+            main_content += "#include <catch2/catch_session.hpp>\n";
+            main_content += "int main(int argc, char* argv[]) {\n";
+            main_content += "    return Catch::Session().run(argc, argv);\n";
+            main_content += "}\n";
+        }
+        // Only write if content changed (avoid unnecessary recompilation)
+        bool write_needed = true;
+        if (util::file_exists(test_main_cpp)) {
+            auto existing = util::file_read(test_main_cpp);
+            if (existing == main_content) write_needed = false;
+        }
+        if (write_needed) {
+            util::file_write(test_main_cpp, main_content);
+        }
+    }
+
+    // 1.2.0-dev.11: compile test sources + test_main.cpp through the shared
+    // compile_sources — build_compile_args + join_shell_args (S4 escaping),
+    // translate_compile_flags (MSVC), dependency-package includes, caching.
+    ctx.cin.sources = ctx.test_sources;
+    if (!user_has_main && !test_main_cpp.empty()) ctx.cin.sources.push_back(test_main_cpp);
+    fs::path test_record_path = ctx.cache_dir / "obj_test" / ".test_cache.json";
+    auto test_record = cache::load_record(test_record_path);
+    validate_test_cache_signature(test_record, ctx.cin);
+    auto comp_result = cache::compile_sources(ctx.cin, test_record);
+    cache::save_record(test_record, test_record_path);
+    if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
+        util::info("    " + std::to_string(comp_result.cache_hits) + " cached, " +
+                   std::to_string(comp_result.cache_misses) + " compiled");
+    }
+    std::vector<fs::path> test_objs = comp_result.objects;
+
+    // Link test_runner via the shared link helpers (escaping + MSVC
+    // translation), with project objects + test objects + the Catch2 lib.
+    fs::path runner = ctx.build_dir / "test_runner";
+#ifdef EZMK_WIN
+    runner += ".exe";
+#endif
+    std::vector<fs::path> objs = ctx.project_objs;
+    objs.insert(objs.end(), test_objs.begin(), test_objs.end());
+
+    // Link against Catch2 library (from project/user/global scope)
+    std::vector<fs::path> archives;
+    {
+        fs::path catch2_lib;
+        // Try to find libcatch2.a in known locations
+        std::vector<fs::path> search_paths = {
+            ctx.proj_root / ".ezmk/pkg/catch2/build",
+        };
+        auto home = util::get_home_dir();
+#ifdef EZMK_WIN
+        const char* appdata = std::getenv("LOCALAPPDATA");
+        fs::path local_ezmk = appdata ? fs::path(appdata) / "ezmk" : home / "AppData/Local/ezmk";
+        search_paths.push_back(local_ezmk / "pkg/catch2/build");
+#endif
+        search_paths.push_back(home / ".ezmk/pkg/catch2/build");
+        search_paths.push_back(home / ".local/share/ezmk/pkg/catch2/build");
+
+        for (auto& dir : search_paths) {
+            auto lib = dir / "libcatch2.a";
+            if (util::file_exists(lib)) {
+                catch2_lib = lib;
+                break;
+            }
+        }
+        if (!catch2_lib.empty()) {
+            archives.push_back(catch2_lib);
+        }
+    }
+
+    // 1.3.0-dev.2: response-file fallback for the test-runner link too.
+    auto jc = ctx.is_msvc
+        ? cache::JoinedCommand{make_msvc_exe_cmd(objs, archives, runner, ctx.test_link), {}}
+        : make_gcc_link_cmd(objs, archives, runner, ctx.test_link, ctx.lang_info, ctx.cache_dir);
+    RspGuard rsp_guard{jc.rsp_file};
+    std::string link_cmd = jc.cmd;
+    if (ctx.verbose) util::info("  " + link_cmd);
+    auto link_res = util::run_command(link_cmd);
+    if (link_res.exit_code != 0) {
+        util::error("test link failed");
+        if (!link_res.err.empty()) util::error(link_res.err);
+        util::fatal("build failed");
+    }
+
+    // Run test_runner. No `-s`: with it, every passing CHECK prints its own
+    // "PASSED" line, which text parsing trivially confuses with a test case.
+    // We rely on Catch2's exit code (non-zero on any failure) plus the
+    // case-level summary line instead.
+    std::string test_cmd = "\"" + runner.string() + "\"";
+    if (!ctx.test_filter.empty()) {
+        // 1.2.0-dev.11: escape the filter — it is user input interpolated
+        // into a shell command on POSIX (1.1.3 S4 class of injection).
+        test_cmd += " \"" + util::escape_shell_arg(ctx.test_filter) + "\"";
+    }
+    // 1.3.2: --report — transparently forward to Catch2's own reporter
+    // machinery (`-r <fmt>::out=<file>`). The console reporter stays
+    // default, so the summary-text parsing below is untouched (坑 1).
+    if (!ctx.report_fmt.empty()) {
+        test_cmd += " -r " + ctx.report_fmt + "::out=\"" +
+                    util::escape_shell_arg(ctx.report_path.string()) + "\"";
+    }
+    auto test_res = util::run_command(test_cmd);
+
+    // Parse the case-level summary from Catch2 console output. Two shapes:
+    //   - failures present: "test cases: M | X passed | Y failed"
+    //       (zero-count segments are omitted, e.g. "1 | 1 failed")
+    //   - all passed:       "All tests passed (A assertions in M test cases)"
+    // If neither parses (reporter format changed), fall back to the exit
+    // code for the gate — the counts just become less precise.
+    int total_cases = 0;
+    int passed_cases = 0;
+    int failed_cases = 0;
+    bool summary_found = false;
+
+    auto to_int = [](const std::string& s) -> int {
+        auto start = s.find_first_of("0123456789");
+        if (start == std::string::npos) return -1;
+        auto end = s.find_first_not_of("0123456789", start);
+        try { return std::stoi(s.substr(start, end - start)); }
+        catch (...) { return -1; }
+    };
+
+    std::string combined_out = test_res.out + "\n" + test_res.err;
+    std::istringstream output_stream(combined_out);
+    std::string line;
+    while (std::getline(output_stream, line)) {
+        // "test cases: M | X passed | Y failed" — authoritative case counts.
+        auto tc_pos = line.find("test cases:");
+        if (tc_pos != std::string::npos) {
+            std::string rest = line.substr(tc_pos + 11);
+            std::vector<std::string> segs;
+            std::string seg;
+            std::istringstream seg_stream(rest);
+            while (std::getline(seg_stream, seg, '|')) segs.push_back(seg);
+            int m = segs.empty() ? -1 : to_int(segs[0]);
+            if (m >= 0) {
+                total_cases = m;
+                passed_cases = 0;
+                failed_cases = 0;
+                for (size_t i = 1; i < segs.size(); ++i) {
+                    if (segs[i].find("passed") != std::string::npos) {
+                        int x = to_int(segs[i]);
+                        if (x >= 0) passed_cases = x;
+                    } else if (segs[i].find("failed") != std::string::npos) {
+                        int y = to_int(segs[i]);
+                        if (y >= 0) failed_cases = y;
+                    }
+                }
+                summary_found = true;
+            }
+            break;
+        }
+    }
+
+    if (!summary_found) {
+        // "All tests passed (A assertions in M test cases)"
+        auto at_pos = combined_out.find("All tests passed");
+        if (at_pos != std::string::npos) {
+            auto in_pos = combined_out.find(" in ", at_pos);
+            if (in_pos != std::string::npos) {
+                int m = to_int(combined_out.substr(in_pos + 4));
+                if (m >= 0) {
+                    total_cases = m;
+                    passed_cases = m;
+                    failed_cases = 0;
+                    summary_found = true;
+                }
+            }
+        }
+    }
+
+    if (!summary_found) {
+        // Format changed — only the exit code is reliable.
+        failed_cases = test_res.exit_code != 0 ? 1 : 0;
+        passed_cases = 0;
+        total_cases = passed_cases + failed_cases;
+    }
+
+    // Print results
+    util::info(std::string("  cases: ") + std::to_string(total_cases) +
+               " | passed: " + std::to_string(passed_cases) +
+               " | failed: " + std::to_string(failed_cases));
+
+    // Print failure details from output
+    if ((failed_cases > 0 || test_res.exit_code != 0) && !test_res.out.empty()) {
+        std::istringstream full(test_res.out);
+        while (std::getline(full, line)) {
+            if (line.find("FAILED") != std::string::npos ||
+                line.find("REQUIRE") != std::string::npos ||
+                line.find("CHECK") != std::string::npos ||
+                line.find("with expansion") != std::string::npos) {
+                util::error("    " + line);
+            }
+        }
+    }
+
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
+                {{"total", std::to_string(total_cases)},
+                 {"passed", std::to_string(passed_cases)},
+                 {"failed", std::to_string(failed_cases)}}));
+
+    if (failed_cases > 0 || test_res.exit_code != 0) {
+        util::fatal(ezmk::i18n::I18nKey::test_failed);
+    }
+}
+
+// ---- EZMK built-in framework runner (moved verbatim from run_tests) ----
+static void run_ezmk_tests(TestRunContext& ctx) {
+    // ---- ezmk Built-in Framework Mode ----
+    util::info("Running tests (ezmk)...");
+
+    int passed = 0, failed = 0, timed_out = 0;
+    double total_time = 0.0;
+    // 1.2.0-dev.11: shared test compile cache (per-test entries accumulate)
+    fs::path test_record_path = ctx.cache_dir / "obj_test" / ".test_cache.json";
+    auto test_record = cache::load_record(test_record_path);
+    validate_test_cache_signature(test_record, ctx.cin);
+    // 1.3.2: per-file records for the JUnit report (emitted after the loop).
+    std::vector<EzmkTestRecord> records;
+
+    for (auto& ts : ctx.test_sources) {
+        auto test_start = std::chrono::steady_clock::now();
+
+        // Filter by filename if --filter specified
+        if (!ctx.test_filter.empty()) {
+            auto fname = ts.filename().string();
+            // Simple glob: * matches any, ? matches single
+            // For MVP, do substring match
+            if (fname.find(ctx.test_filter) == std::string::npos) {
+                if (ctx.verbose) {
+                    util::info(std::string("  [SKIP] ") + fname + " (filtered)");
+                }
+                continue;
+            }
+        }
+
+        // 1.2.0-dev.11: compile to an object via the shared compile input
+        // (build_compile_args + join_shell_args + MSVC translation + package
+        // includes + caching). compile_sources throws on failure after
+        // printing the error — keep the per-test isolation.
+        fs::path test_obj;
+        try {
+            ctx.cin.sources = {ts};
+            auto comp_result = cache::compile_sources(ctx.cin, test_record);
+            test_obj = comp_result.objects.front();
+        } catch (const ezmk::fatal_error&) {
+            util::error(std::string("  compilation failed: ") + ts.filename().string());
+            failed++;
+            records.push_back({ts.filename().string(), 0.0,
+                               EzmkTestRecord::Status::CompileFail, {}, {}});
+            continue;
+        }
+
+        // Link the test executable via the shared link helpers (escaping +
+        // MSVC translation), then run it.
+        auto test_exe = ctx.build_dir / ("test_" + ts.stem().string());
+#ifdef EZMK_WIN
+        test_exe += ".exe";
+#endif
+        std::vector<fs::path> objs = ctx.project_objs;
+        objs.push_back(test_obj);
+        // 1.3.0-dev.2: response-file fallback for the per-test link.
+        auto jc = ctx.is_msvc
+            ? cache::JoinedCommand{make_msvc_exe_cmd(objs, {}, test_exe, ctx.test_link), {}}
+            : make_gcc_link_cmd(objs, {}, test_exe, ctx.test_link, ctx.lang_info, ctx.cache_dir);
+        RspGuard rsp_guard{jc.rsp_file};
+        std::string comp_cmd = jc.cmd;
+
+        if (ctx.verbose) util::info("  " + comp_cmd);
+        auto comp_res = util::run_command(comp_cmd);
+        if (comp_res.exit_code != 0) {
+            util::error(std::string("  link failed: ") + ts.filename().string());
+            if (!comp_res.err.empty()) util::error(comp_res.err);
+            failed++;
+            records.push_back({ts.filename().string(), 0.0,
+                               EzmkTestRecord::Status::LinkFail, {}, comp_res.err});
+            continue;
+        }
+
+        // Run test with a 30s timeout — a hung test must not block the
+        // whole suite indefinitely.
+        auto run_res = util::run_command("\"" + test_exe.string() + "\"", 30);
+        auto elapsed = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - test_start).count();
+        total_time += elapsed;
+
+        auto fname = ts.filename().string();
+        if (run_res.timed_out) {
+            util::error("  [TIMEOUT] " + fname + "  (exceeded 30s)");
+            timed_out++;
+            records.push_back({fname, elapsed, EzmkTestRecord::Status::Timeout,
+                               run_res.out, run_res.err});
+        } else if (run_res.exit_code == 0) {
+            util::info("  [PASS] " + fname + "  (" +
+                       std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
+            if (ctx.verbose && !run_res.out.empty()) {
+                util::info("    stdout: " + run_res.out);
+            }
+            passed++;
+            records.push_back({fname, elapsed, EzmkTestRecord::Status::Pass,
+                               ctx.verbose ? run_res.out : "", ""});
+        } else {
+            util::error("  [FAIL] " + fname + "  (" +
+                      std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
+            if (!run_res.out.empty()) {
+                util::info("    stdout: " + run_res.out);
+            }
+            if (!run_res.err.empty()) {
+                util::error("    stderr: " + run_res.err);
+            }
+            failed++;
+            records.push_back({fname, elapsed, EzmkTestRecord::Status::Fail,
+                               run_res.out, run_res.err});
+        }
+    }
+    cache::save_record(test_record, test_record_path);
+
+    // 1.3.2: machine-readable report — EZMK framework only emits junit
+    // (其他格式显式提示用 Catch2 框架，坑 3)。Report is written BEFORE the
+    // failure gate so CI sees the failures in the file.
+    if (!ctx.report_fmt.empty()) {
+        if (ctx.report_fmt != "junit") {
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::test_report_not_supported,
+                {{"fmt", ctx.report_fmt}}));
+        }
+        emit_ezmk_junit(ctx.report_path, records, total_time);
+    }
+
+    int total = passed + failed + timed_out;
+    // Fold timeouts into the failed bucket for the summary so the numbers
+    // add up (each [TIMEOUT] line already flags the individual case).
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
+                {{"total", std::to_string(total)},
+                 {"passed", std::to_string(passed)},
+                 {"failed", std::to_string(failed + timed_out)}}));
+
+    if (failed > 0 || timed_out > 0) {
+        util::fatal(ezmk::i18n::I18nKey::test_failed);
+    }
+}
+
+} // anonymous namespace
+
 void run_tests(const config::EzConfig& cfg,
                const std::string& test_framework_override,
                const std::string& test_filter,
@@ -2088,384 +2495,30 @@ void run_tests(const config::EzConfig& cfg,
     fs::create_directories(cache_dir / "obj_test");
     fs::create_directories(build_dir);
 
+    // 1.3.6: assemble the runner context and dispatch (mechanical split).
+    TestRunContext ctx{
+        .proj_root = proj_root,
+        .build_dir = build_dir,
+        .cache_dir = cache_dir,
+        .cin = std::move(cin),
+        .test_link = std::move(test_link),
+        .project_objs = std::move(project_objs),
+        .test_sources = std::move(test_sources),
+        .test_filter = test_filter,
+        .verbose = verbose,
+        .report_fmt = std::move(report_fmt),
+        .report_path = std::move(report_path),
+        .is_msvc = is_msvc,
+        .lang_info = std::move(lang_info),
+    };
+
     if (framework == "CATCH2") {
-        // ---- Catch2 Mode ----
-        util::info("Running tests (Catch2)...");
-
-        // Detect Catch2
-        std::string catch2_inc = detect_catch2(proj_root);
-        if (catch2_inc.empty()) {
-            util::fatal("Catch2 not found. Install it with:\n"
-                        "  ezmk pkg install catch2\n"
-                        "or place catch2.hpp in include/vendor/catch2.hpp");
-        }
-        util::info(std::string("  Catch2 include: ") + catch2_inc);
-
-        // Check if any test file has user-defined main
-        bool user_has_main = false;
-        for (auto& ts : test_sources) {
-            if (has_user_main(ts)) {
-                user_has_main = true;
-                break;
-            }
-        }
-
-        // Generate test_main.cpp if needed
-        fs::path test_main_cpp;
-        if (!user_has_main) {
-            test_main_cpp = cache_dir / "test_main.cpp";
-            std::string main_content;
-            // Use appropriate include depending on Catch2 version
-            fs::path vendor_hpp = proj_root / "include/vendor/catch2.hpp";
-            if (util::file_exists(vendor_hpp)) {
-                // Single-header Catch2 (v2 style): CATCH_CONFIG_MAIN still generates main
-                main_content += "#define CATCH_CONFIG_MAIN\n";
-                main_content += "#include \"catch2.hpp\"\n";
-            } else {
-                // Multi-header Catch2 v3: CATCH_CONFIG_MAIN removed → explicit main + Session().run()
-                main_content += "#include <catch2/catch_session.hpp>\n";
-                main_content += "int main(int argc, char* argv[]) {\n";
-                main_content += "    return Catch::Session().run(argc, argv);\n";
-                main_content += "}\n";
-            }
-            // Only write if content changed (avoid unnecessary recompilation)
-            bool write_needed = true;
-            if (util::file_exists(test_main_cpp)) {
-                auto existing = util::file_read(test_main_cpp);
-                if (existing == main_content) write_needed = false;
-            }
-            if (write_needed) {
-                util::file_write(test_main_cpp, main_content);
-            }
-        }
-
-        // 1.2.0-dev.11: compile test sources + test_main.cpp through the shared
-        // compile_sources — build_compile_args + join_shell_args (S4 escaping),
-        // translate_compile_flags (MSVC), dependency-package includes, caching.
-        cin.sources = test_sources;
-        if (!user_has_main && !test_main_cpp.empty()) cin.sources.push_back(test_main_cpp);
-        fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
-        auto test_record = cache::load_record(test_record_path);
-        validate_test_cache_signature(test_record, cin);
-        auto comp_result = cache::compile_sources(cin, test_record);
-        cache::save_record(test_record, test_record_path);
-        if (comp_result.cache_hits > 0 || comp_result.cache_misses > 0) {
-            util::info("    " + std::to_string(comp_result.cache_hits) + " cached, " +
-                       std::to_string(comp_result.cache_misses) + " compiled");
-        }
-        std::vector<fs::path> test_objs = comp_result.objects;
-
-        // Link test_runner via the shared link helpers (escaping + MSVC
-        // translation), with project objects + test objects + the Catch2 lib.
-        fs::path runner = build_dir / "test_runner";
-#ifdef EZMK_WIN
-        runner += ".exe";
-#endif
-        std::vector<fs::path> objs = project_objs;
-        objs.insert(objs.end(), test_objs.begin(), test_objs.end());
-
-        // Link against Catch2 library (from project/user/global scope)
-        std::vector<fs::path> archives;
-        {
-            fs::path catch2_lib;
-            // Try to find libcatch2.a in known locations
-            std::vector<fs::path> search_paths = {
-                proj_root / ".ezmk/pkg/catch2/build",
-            };
-            auto home = util::get_home_dir();
-#ifdef EZMK_WIN
-            const char* appdata = std::getenv("LOCALAPPDATA");
-            fs::path local_ezmk = appdata ? fs::path(appdata) / "ezmk" : home / "AppData/Local/ezmk";
-            search_paths.push_back(local_ezmk / "pkg/catch2/build");
-#endif
-            search_paths.push_back(home / ".ezmk/pkg/catch2/build");
-            search_paths.push_back(home / ".local/share/ezmk/pkg/catch2/build");
-
-            for (auto& dir : search_paths) {
-                auto lib = dir / "libcatch2.a";
-                if (util::file_exists(lib)) {
-                    catch2_lib = lib;
-                    break;
-                }
-            }
-            if (!catch2_lib.empty()) {
-                archives.push_back(catch2_lib);
-            }
-        }
-
-        // 1.3.0-dev.2: response-file fallback for the test-runner link too.
-        auto jc = is_msvc
-            ? cache::JoinedCommand{make_msvc_exe_cmd(objs, archives, runner, test_link), {}}
-            : make_gcc_link_cmd(objs, archives, runner, test_link, lang_info, cache_dir);
-        RspGuard rsp_guard{jc.rsp_file};
-        std::string link_cmd = jc.cmd;
-        if (verbose) util::info("  " + link_cmd);
-        auto link_res = util::run_command(link_cmd);
-        if (link_res.exit_code != 0) {
-            util::error("test link failed");
-            if (!link_res.err.empty()) util::error(link_res.err);
-            util::fatal("build failed");
-        }
-
-        // Run test_runner. No `-s`: with it, every passing CHECK prints its own
-        // "PASSED" line, which text parsing trivially confuses with a test case.
-        // We rely on Catch2's exit code (non-zero on any failure) plus the
-        // case-level summary line instead.
-        std::string test_cmd = "\"" + runner.string() + "\"";
-        if (!test_filter.empty()) {
-            // 1.2.0-dev.11: escape the filter — it is user input interpolated
-            // into a shell command on POSIX (1.1.3 S4 class of injection).
-            test_cmd += " \"" + util::escape_shell_arg(test_filter) + "\"";
-        }
-        // 1.3.2: --report — transparently forward to Catch2's own reporter
-        // machinery (`-r <fmt>::out=<file>`). The console reporter stays
-        // default, so the summary-text parsing below is untouched (坑 1).
-        if (!report_fmt.empty()) {
-            test_cmd += " -r " + report_fmt + "::out=\"" +
-                        util::escape_shell_arg(report_path.string()) + "\"";
-        }
-        auto test_res = util::run_command(test_cmd);
-
-        // Parse the case-level summary from Catch2 console output. Two shapes:
-        //   - failures present: "test cases: M | X passed | Y failed"
-        //       (zero-count segments are omitted, e.g. "1 | 1 failed")
-        //   - all passed:       "All tests passed (A assertions in M test cases)"
-        // If neither parses (reporter format changed), fall back to the exit
-        // code for the gate — the counts just become less precise.
-        int total_cases = 0;
-        int passed_cases = 0;
-        int failed_cases = 0;
-        bool summary_found = false;
-
-        auto to_int = [](const std::string& s) -> int {
-            auto start = s.find_first_of("0123456789");
-            if (start == std::string::npos) return -1;
-            auto end = s.find_first_not_of("0123456789", start);
-            try { return std::stoi(s.substr(start, end - start)); }
-            catch (...) { return -1; }
-        };
-
-        std::string combined_out = test_res.out + "\n" + test_res.err;
-        std::istringstream output_stream(combined_out);
-        std::string line;
-        while (std::getline(output_stream, line)) {
-            // "test cases: M | X passed | Y failed" — authoritative case counts.
-            auto tc_pos = line.find("test cases:");
-            if (tc_pos != std::string::npos) {
-                std::string rest = line.substr(tc_pos + 11);
-                std::vector<std::string> segs;
-                std::string seg;
-                std::istringstream seg_stream(rest);
-                while (std::getline(seg_stream, seg, '|')) segs.push_back(seg);
-                int m = segs.empty() ? -1 : to_int(segs[0]);
-                if (m >= 0) {
-                    total_cases = m;
-                    passed_cases = 0;
-                    failed_cases = 0;
-                    for (size_t i = 1; i < segs.size(); ++i) {
-                        if (segs[i].find("passed") != std::string::npos) {
-                            int x = to_int(segs[i]);
-                            if (x >= 0) passed_cases = x;
-                        } else if (segs[i].find("failed") != std::string::npos) {
-                            int y = to_int(segs[i]);
-                            if (y >= 0) failed_cases = y;
-                        }
-                    }
-                    summary_found = true;
-                }
-                break;
-            }
-        }
-
-        if (!summary_found) {
-            // "All tests passed (A assertions in M test cases)"
-            auto at_pos = combined_out.find("All tests passed");
-            if (at_pos != std::string::npos) {
-                auto in_pos = combined_out.find(" in ", at_pos);
-                if (in_pos != std::string::npos) {
-                    int m = to_int(combined_out.substr(in_pos + 4));
-                    if (m >= 0) {
-                        total_cases = m;
-                        passed_cases = m;
-                        failed_cases = 0;
-                        summary_found = true;
-                    }
-                }
-            }
-        }
-
-        if (!summary_found) {
-            // Format changed — only the exit code is reliable.
-            failed_cases = test_res.exit_code != 0 ? 1 : 0;
-            passed_cases = 0;
-            total_cases = passed_cases + failed_cases;
-        }
-
-        // Print results
-        util::info(std::string("  cases: ") + std::to_string(total_cases) +
-                   " | passed: " + std::to_string(passed_cases) +
-                   " | failed: " + std::to_string(failed_cases));
-
-        // Print failure details from output
-        if ((failed_cases > 0 || test_res.exit_code != 0) && !test_res.out.empty()) {
-            std::istringstream full(test_res.out);
-            while (std::getline(full, line)) {
-                if (line.find("FAILED") != std::string::npos ||
-                    line.find("REQUIRE") != std::string::npos ||
-                    line.find("CHECK") != std::string::npos ||
-                    line.find("with expansion") != std::string::npos) {
-                    util::error("    " + line);
-                }
-            }
-        }
-
-        util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
-                    {{"total", std::to_string(total_cases)},
-                     {"passed", std::to_string(passed_cases)},
-                     {"failed", std::to_string(failed_cases)}}));
-
-        if (failed_cases > 0 || test_res.exit_code != 0) {
-            util::fatal(ezmk::i18n::I18nKey::test_failed);
-        }
-
+        run_catch2_tests(ctx);
     } else if (framework == "EZMK") {
-        // ---- ezmk Built-in Framework Mode ----
-        util::info("Running tests (ezmk)...");
-
-        int passed = 0, failed = 0, timed_out = 0;
-        double total_time = 0.0;
-        // 1.2.0-dev.11: shared test compile cache (per-test entries accumulate)
-        fs::path test_record_path = cache_dir / "obj_test" / ".test_cache.json";
-        auto test_record = cache::load_record(test_record_path);
-        validate_test_cache_signature(test_record, cin);
-        // 1.3.2: per-file records for the JUnit report (emitted after the loop).
-        std::vector<EzmkTestRecord> records;
-
-        for (auto& ts : test_sources) {
-            auto test_start = std::chrono::steady_clock::now();
-
-            // Filter by filename if --filter specified
-            if (!test_filter.empty()) {
-                auto fname = ts.filename().string();
-                // Simple glob: * matches any, ? matches single
-                // For MVP, do substring match
-                if (fname.find(test_filter) == std::string::npos) {
-                    if (verbose) {
-                        util::info(std::string("  [SKIP] ") + fname + " (filtered)");
-                    }
-                    continue;
-                }
-            }
-
-            // 1.2.0-dev.11: compile to an object via the shared compile input
-            // (build_compile_args + join_shell_args + MSVC translation + package
-            // includes + caching). compile_sources throws on failure after
-            // printing the error — keep the per-test isolation.
-            fs::path test_obj;
-            try {
-                cin.sources = {ts};
-                auto comp_result = cache::compile_sources(cin, test_record);
-                test_obj = comp_result.objects.front();
-            } catch (const ezmk::fatal_error&) {
-                util::error(std::string("  compilation failed: ") + ts.filename().string());
-                failed++;
-                records.push_back({ts.filename().string(), 0.0,
-                                   EzmkTestRecord::Status::CompileFail, {}, {}});
-                continue;
-            }
-
-            // Link the test executable via the shared link helpers (escaping +
-            // MSVC translation), then run it.
-            auto test_exe = build_dir / ("test_" + ts.stem().string());
-#ifdef EZMK_WIN
-            test_exe += ".exe";
-#endif
-            std::vector<fs::path> objs = project_objs;
-            objs.push_back(test_obj);
-            // 1.3.0-dev.2: response-file fallback for the per-test link.
-            auto jc = is_msvc
-                ? cache::JoinedCommand{make_msvc_exe_cmd(objs, {}, test_exe, test_link), {}}
-                : make_gcc_link_cmd(objs, {}, test_exe, test_link, lang_info, cache_dir);
-            RspGuard rsp_guard{jc.rsp_file};
-            std::string comp_cmd = jc.cmd;
-
-            if (verbose) util::info("  " + comp_cmd);
-            auto comp_res = util::run_command(comp_cmd);
-            if (comp_res.exit_code != 0) {
-                util::error(std::string("  link failed: ") + ts.filename().string());
-                if (!comp_res.err.empty()) util::error(comp_res.err);
-                failed++;
-                records.push_back({ts.filename().string(), 0.0,
-                                   EzmkTestRecord::Status::LinkFail, {}, comp_res.err});
-                continue;
-            }
-
-            // Run test with a 30s timeout — a hung test must not block the
-            // whole suite indefinitely.
-            auto run_res = util::run_command("\"" + test_exe.string() + "\"", 30);
-            auto elapsed = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - test_start).count();
-            total_time += elapsed;
-
-            auto fname = ts.filename().string();
-            if (run_res.timed_out) {
-                util::error("  [TIMEOUT] " + fname + "  (exceeded 30s)");
-                timed_out++;
-                records.push_back({fname, elapsed, EzmkTestRecord::Status::Timeout,
-                                   run_res.out, run_res.err});
-            } else if (run_res.exit_code == 0) {
-                util::info("  [PASS] " + fname + "  (" +
-                           std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
-                if (verbose && !run_res.out.empty()) {
-                    util::info("    stdout: " + run_res.out);
-                }
-                passed++;
-                records.push_back({fname, elapsed, EzmkTestRecord::Status::Pass,
-                                   verbose ? run_res.out : "", ""});
-            } else {
-                util::error("  [FAIL] " + fname + "  (" +
-                          std::to_string(static_cast<int>(elapsed * 1000)) + "ms)");
-                if (!run_res.out.empty()) {
-                    util::info("    stdout: " + run_res.out);
-                }
-                if (!run_res.err.empty()) {
-                    util::error("    stderr: " + run_res.err);
-                }
-                failed++;
-                records.push_back({fname, elapsed, EzmkTestRecord::Status::Fail,
-                                   run_res.out, run_res.err});
-            }
-        }
-        cache::save_record(test_record, test_record_path);
-
-        // 1.3.2: machine-readable report — EZMK framework only emits junit
-        // (其他格式显式提示用 Catch2 框架，坑 3)。Report is written BEFORE the
-        // failure gate so CI sees the failures in the file.
-        if (!report_fmt.empty()) {
-            if (report_fmt != "junit") {
-                util::fatal(ezmk::i18n::fmt(
-                    ezmk::i18n::I18nKey::test_report_not_supported,
-                    {{"fmt", report_fmt}}));
-            }
-            emit_ezmk_junit(report_path, records, total_time);
-        }
-
-        int total = passed + failed + timed_out;
-        // Fold timeouts into the failed bucket for the summary so the numbers
-        // add up (each [TIMEOUT] line already flags the individual case).
-        util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::test_summary,
-                    {{"total", std::to_string(total)},
-                     {"passed", std::to_string(passed)},
-                     {"failed", std::to_string(failed + timed_out)}}));
-
-        if (failed > 0 || timed_out > 0) {
-            util::fatal(ezmk::i18n::I18nKey::test_failed);
-        }
-
+        run_ezmk_tests(ctx);
     } else {
         util::fatal(std::string("unknown test framework: '") + framework +
                     "'. Supported: catch2, ezmk");
     }
 }
-
 } // namespace ezmk::build
