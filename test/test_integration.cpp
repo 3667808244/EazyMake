@@ -28,6 +28,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -3616,4 +3617,141 @@ TEST_CASE("integration: watch without --run never runs (1.3.4)", "[integration][
     REQUIRE(rebuilt);
     REQUIRE(count_in_log(log_file, "WATCH-RUN-MARKER") == 0);
     REQUIRE(count_in_log(log_file, "Running wr_plain") == 0);
+}
+
+// ==============================================================
+// 1.3.5: `ezmk project pack --format <tar.gz|zip>` + .sha256 sidecar
+// ==============================================================
+namespace {
+
+// A static-lib package (include/ + src/ + ezmk.toml) for pack tests.
+void write_pack135_pkg(const fs::path& pkg_dir, const std::string& name) {
+    fs::create_directories(pkg_dir / "include");
+    fs::create_directories(pkg_dir / "src");
+    file_write(pkg_dir / "include" / (name + ".hpp"),
+        "#pragma once\nint " + name + "_answer();\n");
+    file_write(pkg_dir / "src" / (name + ".cpp"),
+        "#include \"" + name + ".hpp\"\nint " + name + "_answer() { return 135; }\n");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"" + name + "\"\ntype = \"static\"\nversion = \"1.0.0\"\n");
+}
+
+// Recursive (relative path → sha256) map of an extracted directory.
+std::map<std::string, std::string> tree_hashes(const fs::path& dir) {
+    std::map<std::string, std::string> out;
+    for (auto& e : fs::recursive_directory_iterator(dir)) {
+        if (!e.is_regular_file()) continue;
+        auto rel = fs::relative(e.path(), dir).generic_string();
+        out[rel] = ezmk::crypto::sha256_file(e.path());
+    }
+    return out;
+}
+
+} // anonymous namespace
+
+// zip E2E: pack --format zip → pkg install <zip> compiles on the consumer side.
+TEST_CASE("integration: pack --format zip installs end-to-end (1.3.5)", "[integration][1.3.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "pkg135";
+    write_pack135_pkg(pkg_dir, "pkg135");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+
+    ProcResult r = run_ezmk("project pack --format zip --output \"" + out.string() + "\"", pkg_dir);
+    INFO("pack stderr: " << r.err);
+    REQUIRE(r.exit_code == 0);
+    fs::path zip = out / "pkg135-1.0.0.zip";
+    REQUIRE(fs::exists(zip));
+
+    // Consumer installs the zip → compiled on the consumer side (source pkg).
+    fs::path proj = tmp.path / "app135";
+    ProcResult new_r = run_ezmk("project new app135 --disable-git-init --disable-gitignore", tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    ProcResult inst = run_ezmk("pkg install \"" + zip.string() + "\" -p -y", proj);
+    INFO("zip install stderr: " << inst.err);
+    REQUIRE(inst.exit_code == 0);
+    REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "pkg135" / "build" / "libpkg135.a"));
+    REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "pkg135" / "include" / "pkg135.hpp"));
+}
+
+// Equivalence: tar.gz and zip extract to the same file set + content hashes.
+TEST_CASE("integration: pack zip/tar.gz contents are equivalent (1.3.5)", "[integration][1.3.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "eq135";
+    write_pack135_pkg(pkg_dir, "eq135");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+
+    ProcResult rt = run_ezmk("project pack --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(rt.exit_code == 0);
+    ProcResult rz = run_ezmk("project pack --format zip --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(rz.exit_code == 0);
+    fs::path tgz = out / "eq135-1.0.0.tar.gz";
+    fs::path zip = out / "eq135-1.0.0.zip";
+    REQUIRE(fs::exists(tgz));
+    REQUIRE(fs::exists(zip));
+
+    // Extract both and compare the recursive file set + content hashes.
+    fs::path d_tgz = tmp.path / "x_tgz", d_zip = tmp.path / "x_zip";
+    fs::create_directories(d_tgz);
+    fs::create_directories(d_zip);
+    REQUIRE_NOTHROW(extract_archive(tgz, d_tgz));
+    REQUIRE_NOTHROW(extract_archive(zip, d_zip));
+    auto h1 = tree_hashes(d_tgz);
+    auto h2 = tree_hashes(d_zip);
+    REQUIRE(h1 == h2);
+    // Spot-check the expected entries (same layout as the tarball).
+    REQUIRE(h1.count("include/eq135.hpp") == 1);
+    REQUIRE(h1.count("src/eq135.cpp") == 1);
+    REQUIRE(h1.count("ezmk.toml") == 1);
+}
+
+// Default format regression + .sha256 sidecar + invalid format rejection.
+TEST_CASE("integration: pack default format and .sha256 sidecar (1.3.5)", "[integration][1.3.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "def135";
+    write_pack135_pkg(pkg_dir, "def135");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+
+    // Default (no --format) → .tar.gz, no .zip (behavior unchanged).
+    ProcResult r = run_ezmk("project pack --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(r.exit_code == 0);
+    fs::path tgz = out / "def135-1.0.0.tar.gz";
+    REQUIRE(fs::exists(tgz));
+    REQUIRE_FALSE(fs::exists(out / "def135-1.0.0.zip"));
+
+    // --format zip → .zip + sidecar.
+    ProcResult rz = run_ezmk("project pack --format zip --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(rz.exit_code == 0);
+    fs::path zip = out / "def135-1.0.0.zip";
+    REQUIRE(fs::exists(zip));
+
+    // Sidecar: both formats write <archive>.sha256 matching sha256_file,
+    // in "<hash>  <filename>" form.
+    std::string s_tgz = file_read(tgz.string() + ".sha256");
+    std::string s_zip = file_read(zip.string() + ".sha256");
+    REQUIRE(s_tgz.find(ezmk::crypto::sha256_file(tgz)) != std::string::npos);
+    REQUIRE(s_zip.find(ezmk::crypto::sha256_file(zip)) != std::string::npos);
+    REQUIRE(s_tgz.find("def135-1.0.0.tar.gz") != std::string::npos);
+    REQUIRE(s_zip.find("def135-1.0.0.zip") != std::string::npos);
+
+    // Invalid format → fatal with a hint.
+    ProcResult bad = run_ezmk("project pack --format deb --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(bad.exit_code != 0);
+    std::string combined = bad.out + "\n" + bad.err;
+    REQUIRE(combined.find("invalid --format") != std::string::npos);
+    REQUIRE(combined.find("tar.gz") != std::string::npos);
 }
