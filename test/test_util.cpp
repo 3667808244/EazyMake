@@ -931,6 +931,40 @@ TEST_CASE("create_targz → extract_targz round trip", "[util][1.2.0-dev.11]") {
     ezmk::util::remove_all(tmp);
 }
 
+// 1.3.6: collect_stage_entries — the shared staging traversal behind both
+// archive writers (relative names, forward slashes, dirs trailing '/', sorted).
+TEST_CASE("collect_stage_entries: relative, slash-normalized, sorted", "[util][1.3.6]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_stage_entries";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp / "src" / "nested");
+    ezmk::util::file_write(tmp / "src" / "b.cpp", "int b() { return 2; }\n");
+    ezmk::util::file_write(tmp / "src" / "a.cpp", "int a() { return 1; }\n");
+    ezmk::util::file_write(tmp / "src" / "nested" / "c.cpp", "int c() { return 3; }\n");
+    ezmk::util::file_write(tmp / "src" / "empty.txt", "");  // empty file must be kept
+
+    auto entries = ezmk::util::collect_stage_entries(tmp / "src");
+    ezmk::util::remove_all(tmp);
+
+    // Sorted by name; forward slashes; directories carry a trailing '/'.
+    std::vector<std::string> names;
+    for (auto& e : entries) names.push_back(e.name);
+    REQUIRE(names == std::vector<std::string>({
+        "a.cpp", "b.cpp", "empty.txt", "nested/", "nested/c.cpp"}));
+    // Directory vs file flags.
+    for (auto& e : entries) {
+        if (e.name == "nested/") {
+            REQUIRE(e.is_dir);
+            REQUIRE(e.content.empty());
+        } else if (e.name == "empty.txt") {
+            REQUIRE_FALSE(e.is_dir);
+            REQUIRE(e.content.empty());
+        } else {
+            REQUIRE_FALSE(e.is_dir);
+            REQUIRE_FALSE(e.content.empty());
+        }
+    }
+}
+
 // 1.2.0-dev.11: >100-char ustar names — create_targz writes the prefix field,
 // extract must read it back (previously truncated silently).
 TEST_CASE("create_targz → extract_targz round trip: long path via ustar prefix", "[util][1.2.0-dev.11]") {

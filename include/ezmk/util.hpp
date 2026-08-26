@@ -156,6 +156,20 @@ void extract_archive(const fs::path& archive, const fs::path& dest);
 // 1.1.0-dev.2: Create a .tar.gz from a source directory (ustar tar + raw deflate gzip)
 void create_targz(const fs::path& source_dir, const fs::path& output_file);
 
+// 1.3.6: a staged entry for archive creation (shared by the tar.gz and zip
+// writers): name is relative to source_dir with forward slashes (dirs end in
+// '/'), content holds the file bytes, is_dir marks directory entries.
+struct StageEntry {
+    std::string name;
+    std::vector<uint8_t> content;
+    bool is_dir = false;
+};
+
+// 1.3.6: walk a staging directory into sorted StageEntries (relative names,
+// forward slashes, directories trailing '/') — the single traversal shared by
+// create_targz and create_zip so both formats stay byte-identical in layout.
+std::vector<StageEntry> collect_stage_entries(const fs::path& source_dir);
+
 // 1.3.5: Create a .zip from a source directory (miniz zip writer). Entry names
 // match create_targz exactly (relative to source_dir, forward slashes, sorted)
 // so consumers behave identically for both formats.

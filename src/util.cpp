@@ -411,21 +411,17 @@ fs::path get_exe_dir() {
 // Archive creation (1.1.0-dev.2)
 // ===================================================================
 
-// 1.1.0-dev.2: Create a .tar.gz archive from a source directory.
-// Uses miniz for gzip compression (raw deflate) + hand-rolled ustar tar.
-void create_targz(const fs::path& source_dir, const fs::path& output_file) {
-    // --- Step 1: walk source_dir and collect sorted entries ---
-    struct TarEntry {
-        std::string name;
-        std::vector<uint8_t> content;
-        bool is_dir = false;
-    };
-    std::vector<TarEntry> entries;
+// 1.3.6: the single staging traversal shared by create_targz and create_zip —
+// recursive walk → relative names → forward slashes → dirs trailing '/' →
+// sorted. Both archive formats consume this, so their internal layout stays
+// identical (the 1.3.5 tar.gz/zip equivalence test locks this).
+std::vector<StageEntry> collect_stage_entries(const fs::path& source_dir) {
+    std::vector<StageEntry> entries;
     for (auto& e : fs::recursive_directory_iterator(source_dir)) {
-        TarEntry te;
+        StageEntry te;
         auto rel = fs::relative(e.path(), source_dir);
         te.name = rel.generic_string();
-        // tar convention: forward slashes
+        // archive convention: forward slashes
         std::replace(te.name.begin(), te.name.end(), '\\', '/');
         if (e.is_directory()) {
             te.is_dir = true;
@@ -437,7 +433,15 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
         entries.push_back(std::move(te));
     }
     std::sort(entries.begin(), entries.end(),
-              [](const TarEntry& a, const TarEntry& b) { return a.name < b.name; });
+              [](const StageEntry& a, const StageEntry& b) { return a.name < b.name; });
+    return entries;
+}
+
+// 1.1.0-dev.2: Create a .tar.gz archive from a source directory.
+// Uses miniz for gzip compression (raw deflate) + hand-rolled ustar tar.
+void create_targz(const fs::path& source_dir, const fs::path& output_file) {
+    // --- Step 1: walk source_dir and collect sorted entries ---
+    auto entries = collect_stage_entries(source_dir);
 
     // --- Step 2: build tar byte stream (ustar format) ---
     std::vector<uint8_t> tar;
@@ -588,30 +592,7 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
 // contents regardless of format.
 void create_zip(const fs::path& source_dir, const fs::path& output_file) {
     // --- Step 1: walk source_dir and collect sorted entries (same as targz) ---
-    struct ZipEntry {
-        std::string name;
-        std::vector<uint8_t> content;
-        bool is_dir = false;
-    };
-    std::vector<ZipEntry> entries;
-    for (auto& e : fs::recursive_directory_iterator(source_dir)) {
-        ZipEntry ze;
-        auto rel = fs::relative(e.path(), source_dir);
-        ze.name = rel.generic_string();
-        // zip convention: forward slashes — a backslash entry (坑 1) makes the
-        // archive look corrupt to zip readers on other platforms.
-        std::replace(ze.name.begin(), ze.name.end(), '\\', '/');
-        if (e.is_directory()) {
-            ze.is_dir = true;
-            if (!ze.name.empty() && ze.name.back() != '/') ze.name += '/';
-        } else {
-            std::string raw = file_read(e.path());
-            ze.content.assign(raw.begin(), raw.end());
-        }
-        entries.push_back(std::move(ze));
-    }
-    std::sort(entries.begin(), entries.end(),
-              [](const ZipEntry& a, const ZipEntry& b) { return a.name < b.name; });
+    auto entries = collect_stage_entries(source_dir);
 
     // 坑 2: names are built from fs::relative of descendants, so they cannot
     // contain ".." components — verify component-wise anyway (defense in depth,
