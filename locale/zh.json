@@ -262,6 +262,7 @@
     "cli_jobs_negative": "'-j' 值必须 >= 0",
     "cli_err_invalid_report": "无效的 --report 值: '{val}' — 期望 <格式>[:<路径>] 且格式非空（如 'junit' 或 'junit:out.xml'）",
     "cli_report_test_only": "--report 仅对测试命令有效（ezmk test / ezmk workspace test），{cmd} 不支持",
+    "cli_err_invalid_format": "无效的 --format 值: '{val}' — 期望 'tar.gz' 或 'zip'",
     "cli_invalid_color": "无效的 --color 值: '{val}' (期望 always、auto 或 never)",
     "cli_did_you_mean": "  你是不是想用: {suggestion}?",
     "cli_unknown_command": "未知命令: {cmd}",

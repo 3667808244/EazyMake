@@ -397,6 +397,7 @@ namespace ezmk::cli
                 {'v', "verbose", false},
                 {'\0', "output", true},
                 {'\0', "precompiled", false},  // 1.2.5
+                {'\0', "format", true},        // 1.3.5: <tar.gz|zip>
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project pack");
             if (p.has("verbose"))     opts.verbose = true;
@@ -405,6 +406,16 @@ namespace ezmk::cli
                 opts.output_dir = *v;
             else
                 opts.output_dir = ".";
+            if (auto v = p.value("format")) {
+                // 1.3.5: tar.gz / zip (case-insensitive); anything else → fatal.
+                std::string fmt = *v;
+                for (auto& c : fmt) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (fmt != "tar.gz" && fmt != "zip") {
+                    util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_err_invalid_format,
+                                                {{"val", *v}}));
+                }
+                opts.format = std::move(fmt);
+            }
             args.project_pack_opts = opts;
             return args;
         }

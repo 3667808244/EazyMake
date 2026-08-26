@@ -68,6 +68,7 @@ struct ProjectPackOptions {
     std::string output_dir;    // --output <dir> (default: ".")
     bool precompiled = false;  // 1.2.5: --precompiled (default: source package)
     bool verbose = false;      // -v: show index.toml snippet
+    std::string format = "tar.gz";  // 1.3.5: --format <tar.gz|zip> (default: tar.gz)
 };
 
 // 1.2.0: project cc options — generate compile_commands.json

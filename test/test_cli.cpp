@@ -1059,3 +1059,32 @@ TEST_CASE("cli parse: project watch --run / -r", "[cli][1.3.4]") {
     REQUIRE(d.watch_no_build_on_start == true);
     REQUIRE(d.watch_run == true);
 }
+
+// ===================================================================
+// 1.3.5 — project pack --format <tar.gz|zip>
+// ===================================================================
+
+TEST_CASE("cli parse: project pack --format", "[cli][1.3.5]") {
+    // Default: tar.gz (unchanged behavior).
+    auto d = TestArgs({"project", "pack"}).parse();
+    REQUIRE(d.cmd == Command::ProjectPack);
+    REQUIRE(d.project_pack_opts.has_value());
+    REQUIRE(d.project_pack_opts->format == "tar.gz");
+
+    auto z = TestArgs({"project", "pack", "--format", "zip"}).parse();
+    REQUIRE(z.project_pack_opts->format == "zip");
+
+    auto up = TestArgs({"project", "pack", "--format", "ZIP"}).parse();
+    REQUIRE(up.project_pack_opts->format == "zip");  // case-insensitive
+
+    auto t = TestArgs({"project", "pack", "--format", "tar.gz"}).parse();
+    REQUIRE(t.project_pack_opts->format == "tar.gz");
+
+    // Invalid formats are rejected at parse time.
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "pack", "--format", "deb"}).parse(),
+        ezmk::fatal_error);
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "pack", "--format", "tgz"}).parse(),
+        ezmk::fatal_error);
+}
