@@ -46,6 +46,33 @@ static std::filesystem::path require_project_root() {
     return *root;
 }
 
+// 1.3.6: shared executable launcher — the "running" message, argument assembly,
+// blocking run and stdout/stderr echo used by BOTH `project run` and
+// `watch --run` (previously duplicated in two places).
+// warn_on_nonzero=false → returns the child's exit code (run semantics);
+// warn_on_nonzero=true  → warns on non-zero and returns 0 (watch keeps looping).
+static int run_executable(const std::filesystem::path& exe,
+                          const std::vector<std::string>& args,
+                          bool warn_on_nonzero) {
+    ezmk::util::info(ezmk::i18n::I18nKey::running,
+                     {{"exe", exe.filename().string()}});
+    std::string cmd = "\"" + exe.string() + "\"";
+    for (const auto& a : args) {
+        cmd += " \"" + ezmk::util::escape_shell_arg(a) + "\"";
+    }
+    auto res = ezmk::util::run_command(cmd);
+    if (!res.out.empty()) std::cout << res.out;
+    if (!res.err.empty()) std::cerr << res.err;
+    if (res.exit_code != 0 && warn_on_nonzero) {
+        ezmk::util::warn(ezmk::i18n::fmt(
+            ezmk::i18n::I18nKey::watch_run_exit_nonzero,
+            {{"exe", exe.filename().string()},
+             {"code", std::to_string(res.exit_code)}}));
+        return 0;
+    }
+    return res.exit_code;
+}
+
 // 1.3.0-dev.2: load the workspace from the current directory or fail with a
 // clear "no workspace found" error (shared by all `ezmk workspace` commands).
 static ezmk::workspace::Workspace require_workspace() {
@@ -196,18 +223,11 @@ int main(int argc, char** argv) {
             auto proj_root = require_project_root();
             auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
             auto exe = ezmk::build::build_project(cfg, args.build_opts);
-            ezmk::util::info(ezmk::i18n::I18nKey::running,
-                             {{"exe", exe.filename().string()}});
-            // 0.2.5+: forward positional args (after "--") to the program.
-            std::string cmd = "\"" + exe.string() + "\"";
-            for (const auto& a : args.program_args) {
-                cmd += " \"" + ezmk::util::escape_shell_arg(a) + "\"";
-            }
-            auto res = ezmk::util::run_command(cmd);
-            if (!res.out.empty()) std::cout << res.out;
-            if (!res.err.empty()) std::cerr << res.err;
-            if (res.exit_code != 0) {
-                return res.exit_code;
+            // 1.3.6: shared launcher — forwards positional args (after "--")
+            // to the program and returns the child's exit code.
+            int rc = run_executable(exe, args.program_args, /*warn_on_nonzero=*/false);
+            if (rc != 0) {
+                return rc;
             }
             break;
         }
@@ -324,17 +344,9 @@ int main(int argc, char** argv) {
             // warn, keep watching (watch is a loop, not a one-shot run).
             auto run_watched_exe = [&](const std::filesystem::path& exe) {
                 if (!args.watch_run || exe.empty()) return;
-                ezmk::util::info(ezmk::i18n::I18nKey::running,
-                                 {{"exe", exe.filename().string()}});
-                auto res = ezmk::util::run_command("\"" + exe.string() + "\"");
-                if (!res.out.empty()) std::cout << res.out;
-                if (!res.err.empty()) std::cerr << res.err;
-                if (res.exit_code != 0) {
-                    ezmk::util::warn(ezmk::i18n::fmt(
-                        ezmk::i18n::I18nKey::watch_run_exit_nonzero,
-                        {{"exe", exe.filename().string()},
-                         {"code", std::to_string(res.exit_code)}}));
-                }
+                // 1.3.6: shared launcher — warn_on_nonzero=true keeps watch
+                // looping after a non-zero child exit (watch is a loop).
+                run_executable(exe, {}, /*warn_on_nonzero=*/true);
             };
 
             // Initial build (unless --no-build-on-start)
