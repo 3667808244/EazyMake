@@ -145,7 +145,7 @@ ezmk pack [flags]               # create distributable archive (full: ezmk proje
 # Project
 ezmk project new <name>         # scaffold new project
 ezmk project cc [flags]         # generate compile_commands.json for clangd
-ezmk project export cmake [flags]  # generate CMakeLists.txt from ezmk.toml
+ezmk project export <cmake|vscode> [flags]  # generate CMakeLists.txt / .vscode/ debug trio from ezmk.toml
 ezmk project import [flags]     # import a CMake project into ezmk.toml (experimental)
 
 # Packages

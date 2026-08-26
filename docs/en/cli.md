@@ -78,7 +78,7 @@ scripting and muscle memory.
 | `ezmk watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild (full: `ezmk project watch`) |
 | `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
 | `ezmk project cc [-o <path>] [--profile <p>]` | Generate `compile_commands.json` for clangd/LSP, 1.2.0+ |
-| `ezmk project export cmake [flags]` | Generate `CMakeLists.txt` from `ezmk.toml` (single-direction snapshot), 1.2.0+ |
+| `ezmk project export <cmake\|vscode> [flags]` | Generate build config from `ezmk.toml` (single-direction snapshot) — `cmake`: `CMakeLists.txt`, 1.2.0+; `vscode`: `.vscode/` debug trio, 1.4.0-dev.1+ |
 | `ezmk project import [--from <fmt>] [--overwrite]` | Import a CMake project into `ezmk.toml` (experimental, single-direction snapshot), 1.2.0+ |
 
 **`--type <t>`** (for `new`): `executable` (default) · `static` · `shared` · `utils`.
@@ -102,6 +102,30 @@ aborts (without writing anything) on unsupported non-standard CMake constructs
 `pkg_check_modules`). **Experimental** — verify library links and platform
 macros after import. See [migrate-from-cmake.md](migrate-from-cmake.md) for
 supported/unsupported constructs and manual migration steps.
+
+**`project export vscode` (1.4.0-dev.1+)** generates the VS Code debug config
+trio under `.vscode/` from `ezmk.toml` — `launch.json`, `tasks.json` and
+`settings.json` (single-direction snapshot; regenerate, don't hand-edit):
+
+- **launch.json** picks the debugger per platform/toolchain: Windows+MSVC →
+  `cppvsdbg` (requires the VS Code C++ extension / Visual Studio); Linux
+  (GCC/Clang) and Windows (GCC/Clang) → `cppdbg` with `miDebuggerPath` set to
+  `gdb`/`lldb` by the detected compiler; macOS (Clang) → `lldb`. `program` points
+  at `${workspaceFolder}/build/<name>` (`.exe` on Windows), and `preLaunchTask:
+  "ezmk-build"` triggers an incremental build before debugging.
+- **tasks.json** defines the `ezmk-build` shell task (`ezmk build`, plus
+  `--profile <name>` when `--profile` was given — including the
+  `[compile].default_profile` fallback). Dependency include paths/macros are not
+  hardcoded: `ezmk build` injects them at build time (single source of truth).
+- **settings.json** prefers `compile_commands.json` (when
+  `[compile].compile_commands = true` or the file exists) via `clangd.arguments`;
+  otherwise it falls back to `C_Cpp.default.includePath` (project includes +
+  `-I` dirs + installed package includes) and `C_Cpp.default.defines` (EZMK_*
+  standard macros + `[compile].macros`).
+
+Existing files are refused unless `--overwrite` is given. The cmake-only flags
+(`-o` / `--resolve` / `--glob` / `--no-glob`) are rejected for this target.
+See [config_file.md](config_file.md) for the config fields these files mirror.
 
 **Companion runtime: `ezmk-lua` (1.2.0-dev.8+).** `ezmk project export cmake`
 maps `[hooks]` `pre_build` / `post_build` to `add_custom_command` calls that

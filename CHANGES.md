@@ -18,6 +18,42 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.0-dev.1 (2026-08-27) — 调试配置生成（VS Code 三件套）
+
+1.4.0 第一个开发子版本，主题为**调试配置生成**：`ezmk project export vscode` 从 `ezmk.toml` 一键生成 `.vscode/` 三件套（`launch.json` + `tasks.json` + `settings.json`），**per-platform 调试器**（Windows/MSVC → `cppvsdbg`；Linux/Windows GCC/Clang → `cppdbg` + `miDebuggerPath` 按检测工具链取 `gdb`/`lldb`；macOS/Clang → `lldb`），`preLaunchTask` 触发 `ezmk build` 增量构建，与 `[compile.profile.*]` / `[compile].default_profile` 联动。**公共 API 无破坏性变更**（`export` 命令组纯新增 `vscode` 子形态，`cmake` 目标全部现有 flag/行为不变）。
+
+### 新增 / 行为变更
+
+- **`ezmk project export vscode [--overwrite] [--profile <name>]`**（`cli.cpp` + `export.cpp` + `main.cpp`）：`export` 命令组新子形态；`--overwrite`/`--profile` 语义与 `export cmake` 完全复用；cmake 专属 flag（`-o`/`--output`、`--resolve`、`--glob`/`--no-glob`）在 vscode 目标下**显式报错**（新 i18n key `export_flag_target_mismatch`，三向同步）
+- **`export_vscode()` 生成器**（`include/ezmk/export.hpp` + `src/export.cpp`）：三文件统一 nlohmann `dump(2)` 序列化（杜绝手拼 JSON 转义坑）；`select_vscode_debugger(platform, family, name)` 纯函数 + per-platform 调试器表（`cppvsdbg`/`cppdbg`+`miDebuggerPath`/`lldb`，`program` = `build/<name>`，Windows 带 `.exe`）
+- **launch.json**：`version 0.2.0`，`program` = `${workspaceFolder}/build/<name>`，`cwd` = `${workspaceFolder}`，`externalConsole` false，`preLaunchTask` = `ezmk-build`；`cppdbg` 时注入 `miDebuggerPath` + `setupCommands`（pretty-printing）
+- **tasks.json**：`version 2.0.0`，`ezmk-build` shell 任务（`ezmk build`，`--profile <name>` 仅 `--profile`/`default_profile` 时追加）+ `group.build.isDefault`；依赖包 include/宏**不硬编码**（构建侧由 `ezmk build` 注入，单一数据源）
+- **settings.json**：优先 `compile_commands.json`（`[compile].compile_commands = true` 或文件已存在）→ `clangd.arguments: ["--compile-commands-dir=${workspaceFolder}"]`；否则回退 `C_Cpp.default.includePath`（`[compile].include_dirs` + `-I` flag + 已安装依赖包 include，均解析为绝对路径）+ `C_Cpp.default.defines`（EZMK_* 标准宏 + `[compile].macros` + `-D` flag，复用 `generate_ezmk_macros`）
+- **profile 联动**：`--profile` 为空时回退 `[compile].default_profile`（与 `export cmake` 语义对齐）；未知 profile → fatal（与 `effective_compile` 一致）
+- **覆盖保护**：三文件逐个 `export_exists_refuse`（无 `--overwrite` 时 fatal）+ 原子写（temp → rename）
+- **CLI help**：`ezmk project export <cmake|vscode> [flags]` 行更新 + `help_project_export` 文案（en/zh/zh-TW）
+
+### 文档
+
+- `docs/en|zh/cli.md`：`project export vscode` 节（命令/flag/三件套说明/per-platform 调试器表/坑位——`cppvsdbg` 依赖 VS Code C++ 扩展或 VS）
+- `CHANGES.md` 本条目；`plan.md` 1.4.0-dev.1 执行计划（详见 `plans/1.4.x/1.4.0-dev.1.md`）
+
+### 测试
+
+- 新增 5 个 CLI 单测（`test_cli.cpp`）：vscode 目标解析、`--overwrite`/`--profile`（含 `--profile=` 形态）、cmake 专属 flag 拒绝、未知 target 仍 fatal
+- 新增 12 个生成器单测（`test_export.cpp`）：per-platform 调试器表 5 行（cppvsdbg/cppdbg+gdb/cppdbg+lldb/lldb/Windows+GCC）、launch/tasks/settings 关键字段（nlohmann 反序列化断言）、tasks `--profile` args、未知 profile fatal、compile_commands 优先、C_Cpp 回退（include 绝对路径/-D/macros/EZMK 宏）、依赖包 include、覆盖保护（拒绝 + `--overwrite` 全量写出）
+- 新增 1 个集成测试（`test_integration.cpp`）：真实临时项目 `project export vscode` → 三件套存在 + JSON 合法 + 关键字段 + 重复导出拒绝/`--overwrite` 通过
+- 快速测试：**855 用例 / 4857 断言零失败**（1.3.6 基线非集成子集 841/4800，+14 用例；2 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **launch 参数透传（`--`）**、**多配置（test 目标调试）**：1.4.0 后续或 1.5.x 评估。
+- **`project cc`/`export cmake` 改造**：settings 仅复用 compile_commands 产物，不改 `cc` 本身。
+- **`--resolve`/`--glob`/`-o` 对 vscode 目标**：不引入（vscode 输出固定 `.vscode/`）。
+- **dev.2 依赖**：工具链能力表 / 校验严格化与调试配置主线独立，可并行。
+
+---
+
 ## 1.3.6 (2026-08-26) — 代码质量收口（技术债清理）
 
 1.3.6 是 1.3.0 发布后的**补丁版本**，主题为**代码质量收口**（承接 1.3.5 后的质量分析结论）：`-Wall -Wextra` 清零、错误文案与实现一致、校验去噪、归档/运行逻辑去重、`run_tests` 机械拆分、测试文件按主题拆分。**纯重构零新功能**——不引入新 flag/配置/命令/i18n key；每个重构都有既有测试锁定（等价性/集成/全量回归）。**公共 API 无破坏性变更**。

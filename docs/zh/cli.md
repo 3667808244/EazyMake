@@ -70,7 +70,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建（完整形式：`ezmk project watch`） |
 | `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
 | `ezmk project cc [-o <path>] [--profile <p>]` | 生成 `compile_commands.json`（clangd/LSP），1.2.0+ |
-| `ezmk project export cmake [flags]` | 从 `ezmk.toml` 生成 `CMakeLists.txt`（单向快照），1.2.0+ |
+| `ezmk project export <cmake\|vscode> [flags]` | 从 `ezmk.toml` 生成构建配置（单向快照）——`cmake`: `CMakeLists.txt`，1.2.0+；`vscode`: `.vscode/` 调试三件套，1.4.0-dev.1+ |
 | `ezmk project import [--from <fmt>] [--overwrite]` | 把 CMake 项目导入为 `ezmk.toml`（实验性，单向快照），1.2.0+ |
 
 **`--type <t>`**（用于 `new`）：`executable`（默认）· `static` · `shared` · `utils`。
@@ -83,6 +83,27 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 （自定义命令、生成器表达式、`function()`/`macro()`、`pkg_check_modules`）会**事务性中止**，
 不产出半成品。**实验性**——导入后请手动校对库链接与平台宏。支持/不支持清单与手动迁移步骤
 见 [migrate-from-cmake.md](migrate-from-cmake.md)。
+
+**`project export vscode`（1.4.0-dev.1+）** 从 `ezmk.toml` 生成 `.vscode/` 下的
+VS Code 调试三件套——`launch.json` + `tasks.json` + `settings.json`（单向快照；
+重新生成，勿手改）：
+
+- **launch.json** 按平台/工具链选调试器：Windows+MSVC → `cppvsdbg`（依赖 VS Code
+  C++ 扩展 / Visual Studio）；Linux（GCC/Clang）与 Windows（GCC/Clang）→ `cppdbg`，
+  `miDebuggerPath` 按检测到的编译器取 `gdb`/`lldb`；macOS（Clang）→ `lldb`。
+  `program` 指向 `${workspaceFolder}/build/<name>`（Windows 带 `.exe`），
+  `preLaunchTask: "ezmk-build"` 保证调试前先增量构建。
+- **tasks.json** 定义 `ezmk-build` shell 任务（`ezmk build`，给定 `--profile` 时追加
+  `--profile <name>`——含 `[compile].default_profile` 回退）。依赖包的 include/宏
+  **不硬编码**：构建侧由 `ezmk build` 注入（单一数据源）。
+- **settings.json** 优先 `compile_commands.json`（`[compile].compile_commands = true`
+  或文件已存在）→ `clangd.arguments`；否则回退 `C_Cpp.default.includePath`
+  （项目 include + `-I` 目录 + 已安装依赖包 include）与 `C_Cpp.default.defines`
+  （EZMK_* 标准宏 + `[compile].macros`）。
+
+已存在文件默认拒绝覆盖，需显式 `--overwrite`。cmake 专属 flag（`-o` / `--resolve` /
+`--glob` / `--no-glob`）在本目标下直接报错。这些文件镜像的配置字段见
+[config_file.md](config_file.md)。
 
 **伴侣运行时：`ezmk-lua`（1.2.0-dev.8+）。** `ezmk project export cmake`
 把 `[hooks]` 的 `pre_build` / `post_build` 映射为 `add_custom_command` 调用，
