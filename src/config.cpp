@@ -365,18 +365,28 @@ LanguageInfo parse_language(std::string_view language) {
         {"03", "03"}, {"11", "11"}, {"14", "14"},
         {"17", "17"}, {"20", "20"}, {"23", "23"}, {"26", "26"},
     };
+    // 1.3.6: derive the supported list from ver_map itself — the old hardcoded
+    // string drifted from the map (missing 98/03/26) and misled users.
+    static const std::string kSupportedVers = [] {
+        std::string s;
+        for (auto& [k, v] : ver_map) {
+            if (!s.empty()) s += ", ";
+            s += k;
+        }
+        return s;
+    }();
 
     auto it = ver_map.find(lo.ver);
     if (it == ver_map.end()) {
         throw std::runtime_error(
             std::string("unknown language version: '") + lo.ver +
-            "'. Supported: 89, 99, 11, 14, 17, 20, 23");
+            "'. Supported: " + kSupportedVers);
     }
     if (!max_part.empty()) {
         if (ver_map.find(hi.ver) == ver_map.end()) {
             throw std::runtime_error(
                 std::string("unknown language version: '") + hi.ver +
-                "'. Supported: 89, 99, 11, 14, 17, 20, 23");
+                "'. Supported: " + kSupportedVers);
         }
     }
 

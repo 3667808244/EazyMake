@@ -263,6 +263,23 @@ TEST_CASE("parse_language: invalid range forms rejected", "[config][1.3.1]") {
     }
 }
 
+// 1.3.6: the unknown-version message is derived from ver_map — it must list
+// EVERY supported version (the old hardcoded string missed 98/03/26).
+TEST_CASE("parse_language: unknown version message lists all supported versions", "[config][1.3.6]") {
+    using namespace ezmk::config;
+    try {
+        parse_language("C++42");
+        FAIL("expected a throw");
+    } catch (const std::runtime_error& e) {
+        std::string m = e.what();
+        REQUIRE(m.find("unknown language version: '42'") != std::string::npos);
+        REQUIRE(m.find("98") != std::string::npos);
+        REQUIRE(m.find("03") != std::string::npos);
+        REQUIRE(m.find("26") != std::string::npos);
+        REQUIRE(m.find("11") != std::string::npos);
+    }
+}
+
 // ===================================================================
 // 1.1.0-dev.4: normalize_lang() tests
 // ===================================================================

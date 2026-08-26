@@ -127,7 +127,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
     if (!cfg.project.version.empty()) {
         version_numeric = std::all_of(cfg.project.version.begin(),
                                       cfg.project.version.end(),
-                                      [](char c) { return c >= '0' && c <= '9' || c == '.'; });
+                                      [](char c) { return (c >= '0' && c <= '9') || c == '.'; });
     }
     os << "project(" << target;
     if (version_numeric) os << " VERSION " << cfg.project.version;

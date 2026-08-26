@@ -952,3 +952,35 @@ TEST_CASE("std compat: precompiled pkg within consumer standard is silent", "[pk
     fs::remove_all(pkg);
     REQUIRE(out.find("requires at least") == std::string::npos);
 }
+
+// 1.3.6: a malformed consumer [project].language warns ONCE per process — the
+// old code warned for every compiled package (multi-package install flood).
+// Only this test uses an invalid consumer language, so the process-level
+// dedupe flag starts false and the single expected warning is deterministic.
+TEST_CASE("std compat: malformed consumer config warns once per process (1.3.6)", "[pkg][1.3.6]") {
+    ConsumerProject consumer("Rust2024");  // invalid language → std_min_of = 0
+    auto pkg1 = stdtest_source_pkg("dedup1", "C++11");
+    auto pkg2 = stdtest_source_pkg("dedup2", "C++11");
+    std::string out;
+    try {
+        out = capture_cerr([&] {
+            auto r1 = compile_package(pkg1, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r1.empty());
+            auto r2 = compile_package(pkg2, {}, ezmk::toolchain::Toolchain{});
+            REQUIRE_FALSE(r2.empty());
+        });
+    } catch (...) {
+        fs::remove_all(pkg1);
+        fs::remove_all(pkg2);
+        throw;
+    }
+    fs::remove_all(pkg1);
+    fs::remove_all(pkg2);
+    const std::string needle = "cannot check package language compatibility";
+    size_t count = 0, pos = 0;
+    while ((pos = out.find(needle, pos)) != std::string::npos) {
+        count++;
+        pos += needle.size();
+    }
+    REQUIRE(count == 1);
+}

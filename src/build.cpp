@@ -1746,8 +1746,7 @@ namespace {
 //           2) include/vendor/catch2.hpp (single-header)
 //           3) user/global-scope installed catch2
 //           4) error (not found)
-std::string detect_catch2(const fs::path& proj_root,
-                           const config::DependsSection& depends) {
+std::string detect_catch2(const fs::path& proj_root) {
     // 1. Check project-scope installed catch2 (from [depends] or manual install)
     fs::path proj_pkg = proj_root / ".ezmk/pkg/catch2";
     if (util::file_exists(proj_pkg)) {
@@ -2094,7 +2093,7 @@ void run_tests(const config::EzConfig& cfg,
         util::info("Running tests (Catch2)...");
 
         // Detect Catch2
-        std::string catch2_inc = detect_catch2(proj_root, cfg.depends);
+        std::string catch2_inc = detect_catch2(proj_root);
         if (catch2_inc.empty()) {
             util::fatal("Catch2 not found. Install it with:\n"
                         "  ezmk pkg install catch2\n"

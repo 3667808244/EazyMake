@@ -159,6 +159,16 @@ static int std_min_of(const std::string& language) {
 // scope installs) or an unparseable consumer config → skip the check (with a
 // warning for a malformed consumer language).
 static std::optional<int> consumer_std_min() {
+    // 1.3.6: dedupe the malformed-consumer warning per process — a broken
+    // consumer config used to warn once per compiled package (multi-package
+    // installs flooded the console). First occurrence still warns.
+    static bool g_warned_consumer_config = false;
+    auto warn_once = [](const std::string& msg) {
+        if (!g_warned_consumer_config) {
+            g_warned_consumer_config = true;
+            util::warn(msg);
+        }
+    };
     try {
         auto root = util::locate_project_root(fs::current_path());
         if (!root) return std::nullopt;
@@ -166,13 +176,13 @@ static std::optional<int> consumer_std_min() {
         if (cfg.project.language.empty()) return std::nullopt;
         int min = std_min_of(cfg.project.language);
         if (min == 0) {
-            util::warn("cannot check package language compatibility — consumer "
-                       "[project].language is invalid: " + cfg.project.language);
+            warn_once("cannot check package language compatibility — consumer "
+                      "[project].language is invalid: " + cfg.project.language);
             return std::nullopt;
         }
         return min;
     } catch (const std::exception& e) {
-        util::warn("cannot check package language compatibility: " + std::string(e.what()));
+        warn_once("cannot check package language compatibility: " + std::string(e.what()));
         return std::nullopt;
     }
 }
