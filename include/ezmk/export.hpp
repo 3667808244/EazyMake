@@ -2,6 +2,7 @@
 
 #include "ezmk/config.hpp"
 #include "ezmk/cli.hpp"
+#include "ezmk/toolchain.hpp"
 
 #include <filesystem>
 #include <string>
@@ -34,5 +35,44 @@ std::string build_cmake_text(const config::EzConfig& cfg,
 int export_cmake(const config::EzConfig& cfg,
                  const fs::path& project_root,
                  const ExportOptions& opts);
+
+// ===================================================================
+// 1.4.0-dev.1: `ezmk project export vscode` — generate .vscode/ debug config
+// trio (launch.json + tasks.json + settings.json) from ezmk.toml. Same
+// single-direction snapshot contract as `export cmake`: regenerate, don't
+// hand-edit. Overwrite safety mirrors export_cmake (refuse unless --overwrite).
+// ===================================================================
+
+// Host platform for the per-platform debugger table (compile-time detected;
+// parameterized so tests can exercise every row of the table).
+enum class HostPlatform { Windows, MacOs, Linux };
+
+HostPlatform current_host_platform();
+
+// Per-platform debugger selection (design doc §3.2). Pure — no I/O.
+struct VscodeDebugger {
+    std::string type;             // "cppvsdbg" | "cppdbg" | "lldb"
+    std::string mi_debugger_path; // "gdb"/"lldb" (cppdbg only; empty otherwise)
+    std::string program;          // "build/<name>" or "build/<name>.exe"
+};
+VscodeDebugger select_vscode_debugger(HostPlatform plat,
+                                      toolchain::CompilerFamily family,
+                                      const std::string& project_name);
+
+// The three generated files as JSON text (pure, no I/O) — unit-testable.
+struct VscodeFiles {
+    std::string launch;
+    std::string tasks;
+    std::string settings;
+};
+VscodeFiles build_vscode_files(const config::EzConfig& cfg,
+                               const fs::path& project_root,
+                               const ExportOptions& opts);
+
+// Write the trio under <project_root>/.vscode/ with overwrite protection and
+// atomic writes. Returns 0 on success; a refusal is a fatal (exit 1).
+int export_vscode(const config::EzConfig& cfg,
+                  const fs::path& project_root,
+                  const ExportOptions& opts);
 
 } // namespace ezmk::export_gen

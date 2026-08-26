@@ -3,6 +3,8 @@
 #include "ezmk/util.hpp"
 #include "ezmk/pkg.hpp"
 #include "ezmk/i18n.hpp"
+#include "ezmk/toolchain.hpp"
+#include "nlohmann_json.hpp"
 #include "pkg_alias.hpp"      // 共享包别名表（dev.2 export / dev.4 import）
 
 #include <algorithm>
@@ -488,6 +490,202 @@ int export_cmake(const config::EzConfig& cfg,
     // dev.8: hooks 现经 ezmk-lua 导出（best-effort），提示用户该运行时依赖。
     if (!cfg.hooks.pre_build.empty() || !cfg.hooks.post_build.empty()) {
         util::info(ezmk::i18n::I18nKey::export_hook_note);
+    }
+    return 0;
+}
+
+// ===================================================================
+// 1.4.0-dev.1: `ezmk project export vscode` — .vscode/ debug config trio
+// ===================================================================
+
+HostPlatform current_host_platform() {
+#if defined(_WIN32)
+    return HostPlatform::Windows;
+#elif defined(__APPLE__)
+    return HostPlatform::MacOs;
+#else
+    return HostPlatform::Linux;
+#endif
+}
+
+VscodeDebugger select_vscode_debugger(HostPlatform plat,
+                                      toolchain::CompilerFamily family,
+                                      const std::string& project_name) {
+    VscodeDebugger d;
+    d.program = "build/" + project_name;
+    if (plat == HostPlatform::Windows) d.program += ".exe";
+
+    // macOS + Clang (Apple toolchain) → native lldb (design §3.2).
+    if (plat == HostPlatform::MacOs && family == toolchain::CompilerFamily::Clang) {
+        d.type = "lldb";
+        return d;
+    }
+    // Windows + MSVC → cppvsdbg (needs VS Code C++ extension / VS — doc note).
+    if (plat == HostPlatform::Windows && family == toolchain::CompilerFamily::Msvc) {
+        d.type = "cppvsdbg";
+        return d;
+    }
+    // Everything else → cppdbg over the MI protocol; debugger by detected family.
+    d.type = "cppdbg";
+    d.mi_debugger_path =
+        (family == toolchain::CompilerFamily::Clang) ? "lldb" : "gdb";
+    return d;
+}
+
+VscodeFiles build_vscode_files(const config::EzConfig& cfg,
+                               const fs::path& project_root,
+                               const ExportOptions& opts) {
+    // Profile resolution mirrors export cmake: explicit --profile, else
+    // [compile].default_profile. Unknown profile → fatal (same as
+    // effective_compile, so tasks never reference a nonexistent profile).
+    const std::string profile =
+        opts.profile.empty() ? cfg.compile.default_profile : opts.profile;
+    if (!profile.empty() &&
+        cfg.compile_profiles.find(profile) == cfg.compile_profiles.end()) {
+        util::fatal(std::string("unknown profile: '") + profile +
+                    "'. No such compile profile in ezmk.toml.");
+    }
+
+    auto tc = toolchain::detect_toolchain();
+    VscodeDebugger dbg =
+        select_vscode_debugger(current_host_platform(), tc.family, cfg.project.name);
+
+    // ---- launch.json (design §3.2) ----
+    nlohmann::json launch = nlohmann::json::object();
+    launch["version"] = "0.2.0";
+    nlohmann::json cfg_json = nlohmann::json::object();
+    cfg_json["name"] = "Debug " + cfg.project.name;
+    cfg_json["type"] = dbg.type;
+    cfg_json["request"] = "launch";
+    cfg_json["program"] = "${workspaceFolder}/" + dbg.program;
+    cfg_json["cwd"] = "${workspaceFolder}";
+    cfg_json["externalConsole"] = false;
+    cfg_json["preLaunchTask"] = "ezmk-build";   // key aligned with tasks.json
+    if (dbg.type == "cppdbg") {
+        cfg_json["miDebuggerPath"] = dbg.mi_debugger_path;
+        cfg_json["setupCommands"] = nlohmann::json::array({
+            nlohmann::json{{"description", "Enable pretty-printing for gdb"},
+                           {"text", "-enable-pretty-printing"},
+                           {"ignoreFailures", true}},
+        });
+    }
+    launch["configurations"] = nlohmann::json::array({cfg_json});
+
+    // ---- tasks.json (design §3.3) ----
+    // Dependency include paths/macros are NOT hardcoded — `ezmk build` injects
+    // them; the debug/index side gets them from settings/compile_commands.
+    nlohmann::json tasks = nlohmann::json::object();
+    tasks["version"] = "2.0.0";
+    nlohmann::json task = nlohmann::json::object();
+    task["label"] = "ezmk-build";
+    task["type"] = "shell";
+    task["command"] = "ezmk build";
+    if (!profile.empty()) {
+        task["args"] = nlohmann::json::array({"--profile", profile});
+    }
+    task["group"] = nlohmann::json{{"kind", "build"}, {"isDefault", true}};
+    tasks["tasks"] = nlohmann::json::array({task});
+
+    // ---- settings.json (design §3.4) ----
+    // Prefer compile_commands.json (single source of truth); fall back to
+    // C_Cpp.default.* only when no database exists / is configured.
+    nlohmann::json settings = nlohmann::json::object();
+    const bool has_db = cfg.compile.compile_commands ||
+                        fs::exists(project_root / "compile_commands.json");
+    if (has_db) {
+        settings["clangd.arguments"] =
+            nlohmann::json::array({"--compile-commands-dir=${workspaceFolder}"});
+    } else {
+        auto compile = effective_compile(cfg, profile);
+        std::vector<std::string> include_dirs = compile.include_dirs;
+        std::vector<std::string> defines;
+        for (const auto& f : compile.flags) {
+            if (f.rfind("-I", 0) == 0 && f.size() > 2) {
+                include_dirs.push_back(f.substr(2));
+            } else if (f.rfind("-D", 0) == 0 && f.size() > 2) {
+                defines.push_back(f.substr(2));
+            }
+        }
+        // ezmk standard macros + [compile].macros (same sources as export cmake).
+        if (compile.ezmk_macros) {
+            for (const auto& m : build::generate_ezmk_macros(cfg)) {
+                if (m.rfind("-D", 0) == 0 && m.size() > 2) {
+                    defines.push_back(m.substr(2));
+                }
+            }
+        }
+        for (const auto& [k, v] : compile.macros) {
+            defines.push_back(v.empty() ? k : k + "=" + escape_macro_value(v));
+        }
+
+        nlohmann::json inc = nlohmann::json::array();
+        for (const auto& d : include_dirs) {
+            fs::path p = fs::path(d).is_absolute() ? fs::path(d) : (project_root / d);
+            inc.push_back(fs::absolute(p).lexically_normal().generic_string());
+        }
+        // Installed dependency package include dirs (project → user → global).
+        auto add_pkg_includes = [&](const std::vector<config::DependsEntry>& deps) {
+            for (const auto& dep : deps) {
+                fs::path pkg = find_installed_pkg(dep.name);
+                if (!pkg.empty() && fs::exists(pkg / "include")) {
+                    inc.push_back((pkg / "include").lexically_normal().generic_string());
+                }
+            }
+        };
+        add_pkg_includes(cfg.depends.libs);
+        add_pkg_includes(cfg.depends.want);
+
+        settings["C_Cpp.default.includePath"] = inc;
+        settings["C_Cpp.default.defines"] = defines;
+    }
+
+    VscodeFiles out;
+    out.launch = launch.dump(2) + "\n";
+    out.tasks = tasks.dump(2) + "\n";
+    out.settings = settings.dump(2) + "\n";
+    return out;
+}
+
+int export_vscode(const config::EzConfig& cfg,
+                  const fs::path& project_root,
+                  const ExportOptions& opts) {
+    fs::path dir = project_root / ".vscode";
+    VscodeFiles files = build_vscode_files(cfg, project_root, opts);
+
+    struct NamedFile { const char* name; const std::string& text; };
+    const NamedFile trio[] = {
+        {"launch.json", files.launch},
+        {"tasks.json", files.tasks},
+        {"settings.json", files.settings},
+    };
+
+    // Overwrite safety: refuse unless --overwrite (design §3.1) — checked per
+    // file so a partial existing trio is never half-replaced silently.
+    if (!opts.overwrite) {
+        for (const auto& f : trio) {
+            if (fs::exists(dir / f.name)) {
+                util::fatal(ezmk::i18n::I18nKey::export_exists_refuse,
+                            {{"path", (dir / f.name).string()}});
+            }
+        }
+    }
+
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (ec) {
+        util::fatal(std::string("failed to create .vscode/ directory: ") +
+                    ec.message());
+    }
+
+    // Atomic write per file (temp → rename), mirroring export_cmake.
+    for (const auto& f : trio) {
+        fs::path out = dir / f.name;
+        auto tmp = out;
+        tmp += ".tmp";
+        util::file_write(tmp, f.text);
+        fs::rename(tmp, out, ec);
+        if (ec) util::file_write(out, f.text);
+        util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
     }
     return 0;
 }

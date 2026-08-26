@@ -280,6 +280,7 @@ int main(int argc, char** argv) {
         }
 
         // 1.2.0: project export cmake — one-shot CMakeLists.txt generation
+        // 1.4.0-dev.1: + vscode — .vscode/ debug config trio
         case ezmk::cli::Command::ProjectExport: {
             auto proj_root = require_project_root();
             auto cfg = ezmk::config::parse_config((proj_root / "ezmk.toml").string());
@@ -290,7 +291,11 @@ int main(int argc, char** argv) {
             eo2.profile = eo.profile;
             eo2.resolve = eo.resolve;
             eo2.use_glob = eo.use_glob;
-            ezmk::export_gen::export_cmake(cfg, proj_root, eo2);
+            if (eo.target == "vscode") {
+                ezmk::export_gen::export_vscode(cfg, proj_root, eo2);
+            } else {
+                ezmk::export_gen::export_cmake(cfg, proj_root, eo2);
+            }
             break;
         }
 
