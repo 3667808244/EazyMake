@@ -29,25 +29,25 @@
 
 ### 阶段一：导入映射（4.1）
 
-- [ ] **1.1 `set_target_properties` 扫描**（`import.cpp` 解析链新增分支）：`PROPERTIES` 后的键值对——`CXX_STANDARD`/`C_STANDARD` → N；`CXX_EXTENSIONS` ON/OFF → GNU 前缀；`CXX_STANDARD_REQUIRED`（信息性，`>=` 语义天然兼容）
-- [ ] **1.2 `target_compile_features` 扫描**：`cxx_std_<N>` / `c_std_<N>`（双路径，坑 1）
-- [ ] **1.3 映射应用**：解析循环后——有标准 → `language = ">=CPP<N>"` / `">=C<N>"`（`CXX_EXTENSIONS ON` → `>=GNUCPP<N>` / `>=GNUC<N>`）；无 → 现状回退 `C++17`/`C17`（LANGUAGES 决定）
-- [ ] **1.4 单测**（`test_import.cpp`）：含 `CXX_STANDARD`（区间断言）、不含（`C++17` 回退）、`target_compile_features` 路径、`C_STANDARD`（C 项目）、`CXX_EXTENSIONS ON`（GNU 前缀）
+- [x] **1.1 `set_target_properties` 扫描**（`import.cpp` 解析链新增分支）：`PROPERTIES` 后的键值对——`CXX_STANDARD`/`C_STANDARD` → N；`CXX_EXTENSIONS` ON/OFF → GNU 前缀；`CXX_STANDARD_REQUIRED`（信息性，`>=` 语义天然兼容）
+- [x] **1.2 `target_compile_features` 扫描**：`cxx_std_<N>` / `c_std_<N>`（双路径，坑 1）
+- [x] **1.3 映射应用**：解析循环后——有标准 → `language = ">=CPP<N>"` / `">=C<N>"`（`CXX_EXTENSIONS ON` → `>=GNUCPP<N>` / `>=GNUC<N>`）；无 → 现状回退 `C++17`/`C17`（LANGUAGES 决定）
+- [x] **1.4 单测**（`test_import.cpp`）：含 `CXX_STANDARD`（区间断言）、不含（`C++17` 回退）、`target_compile_features` 路径、`C_STANDARD`（C 项目）、`CXX_EXTENSIONS ON`（GNU 前缀）
 
 ### 阶段二：导出能力确认（4.2）
 
-- [ ] **2.1 `std_capability_note()`**（`export.cpp` + `export.hpp`，纯函数）：`(std_kind, std_ver, tc)` → 超能力注释文本（`# CXX_STANDARD <n> exceeds the target toolchain capability (<max>)`）；未超/工具链版本未知 → 空（保守不警告）
-- [ ] **2.2 `build_cmake_text` 接入**：`CXX_STANDARD`/`C_STANDARD` 发射前调用（`toolchain::detect_toolchain()`，静态缓存）；正常导出输出不变
-- [ ] **2.3 单测**（`test_export.cpp`）：正常（gcc 13 + C++17 → 无注释）、超能力（gcc 4.8 + C++17 → 注释含 max）、未知版本（空 version → 无注释）
+- [x] **2.1 `std_capability_note()`**（`export.cpp` + `export.hpp`，纯函数）：`(std_kind, std_ver, tc)` → 超能力注释文本（`# CXX_STANDARD <n> exceeds the target toolchain capability (<max>)`）；未超/工具链版本未知 → 空（保守不警告）
+- [x] **2.2 `build_cmake_text` 接入**：`CXX_STANDARD`/`C_STANDARD` 发射前调用（`toolchain::detect_toolchain()`，静态缓存）；正常导出输出不变
+- [x] **2.3 单测**（`test_export.cpp`）：正常（gcc 13 + C++17 → 无注释）、超能力（gcc 4.8 + C++17 → 注释含 max）、未知版本（空 version → 无注释）
 
 ### 阶段三：文档 + 收口（4.3）
 
-- [ ] **3.1 cli.md（en/zh）**：import/export 节补标准读取/能力确认说明；config_file.md 区间引用（`">=CPP<N>"` 来自 CMake 导入）
-- [ ] **3.2 CHANGES.md**：1.4.0-dev.4 条目（新增 / 行为变更 / 文档 / 已知限制）
-- [ ] **3.3 全量零回归**：`bash build.sh test-all`（基线 948/5472）
-- [ ] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **3.1 cli.md（en/zh）**：import/export 节补标准读取/能力确认说明；config_file.md 区间引用（`">=CPP<N>"` 来自 CMake 导入）
+- [x] **3.2 CHANGES.md**：1.4.0-dev.4 条目（新增 / 行为变更 / 文档 / 已知限制）
+- [x] **3.3 全量零回归**：`bash build.sh test-all`（基线 948/5472 → **959/5492**，+11 用例/+20 断言，3 跳过为既有环境限制）
+- [x] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
-> 门槛未满足即停止，禁止带着未收口项进入下一子版本。
+> 门槛未满足即停止，禁止带着未收口项进入下一子版本。**本版门槛全部满足，dev.4 收口。**
 
 ---
 

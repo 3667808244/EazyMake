@@ -84,6 +84,18 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 不产出半成品。**实验性**——导入后请手动校对库链接与平台宏。支持/不支持清单与手动迁移步骤
 见 [migrate-from-cmake.md](migrate-from-cmake.md)。
 
+**语言标准会随导入保留（1.4.0-dev.4+）：** `set_target_properties` 的
+`CXX_STANDARD N` / `C_STANDARD N` 与 `target_compile_features` 的
+`cxx_std_N` / `c_std_N` 映射为区间 `[project].language = ">=CPP<N>"`
+（或 `">=C<N>"`；`CXX_EXTENSIONS ON` → GNU 前缀 `">=GNUCPP<N>"`）——与 CMake
+"至少 N" 语义一致，兼容 1.3.1 区间语法。未声明标准时保持 `LANGUAGES` 回退
+（`CXX` → `C++17`、`C` → `C17`）。
+
+**`project export cmake` 能力确认（1.4.0-dev.4+）：** 当导出的 `CXX_STANDARD` /
+`C_STANDARD` 超过目标工具链能力（`max_supported_std`）时，生成的 CMakeLists.txt
+带注释（`# CXX_STANDARD 17 exceeds the target toolchain capability (CPP11)`）
+而非静默改值——由 CMake 项目自行决定。
+
 **`project export vscode`（1.4.0-dev.1+）** 从 `ezmk.toml` 生成 `.vscode/` 下的
 VS Code 调试三件套——`launch.json` + `tasks.json` + `settings.json`（单向快照；
 重新生成，勿手改）：

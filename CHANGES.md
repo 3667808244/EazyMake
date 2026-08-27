@@ -119,6 +119,38 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.0-dev.4 (2026-08-27) — CMake 互操作补全
+
+1.4.0 第四个开发子版本，收口 CMake 互操作两处 1.3.x 预留缺口：① **导入读标准**——轻量解析器不再对 `LANGUAGES CXX` 硬编码 `C++17`，改为扫描 `set_target_properties` 的 `CXX_STANDARD`/`C_STANDARD` 与 `target_compile_features` 的 `cxx_std_N`/`c_std_N`，映射为 ezmk **区间** language（`">=CPP<N>"`，语义 A 兼容，dev.3 协商自动惠及导入项目）；② **导出能力确认**——`CXX_STANDARD`/`C_STANDARD` 与 dev.2 能力表联动，导出标准超目标工具链能力时生成注释警告（不静默改值，CMake 项目可自行决定）。**公共 API 无破坏性变更**（解析增强 + 新纯函数 `std_capability_note`）。
+
+### 新增 / 行为变更
+
+- **导入读 `CXX_STANDARD` / `C_STANDARD`**（`src/import.cpp`）：`set_target_properties` 的 `PROPERTIES` 键值对扫描——`CXX_STANDARD N` → `language = ">=CPP<N>"`、`C_STANDARD N` → `">=C<N>"`；`CXX_EXTENSIONS`/`C_EXTENSIONS` 显式 ON → GNU 前缀（`>=GNUCPP<N>` / `>=GNUC<N>`）；`CXX_STANDARD_REQUIRED`（信息性，ezmk 区间语义天然"达不到就警告"，无需映射）；标准以最后出现为准
+- **导入双路径扫描**（坑 1）：`target_compile_features` 的 `cxx_std_N` / `c_std_N` 同样提取；非数字/变量未解析 → 忽略（回退现状不报错）
+- **缺省回退不变**：无任何标准声明 → `LANGUAGES` 决定（`CXX` → `C++17`、`C` → `C17`，现状）
+- **`std_capability_note(std_kind, std_ver, tc)`**（`export.hpp` + `export.cpp`，纯函数）：导出的 `CXX_STANDARD`/`C_STANDARD` 超 `max_supported_std`（dev.2）→ 返回 `# CXX_STANDARD <n> exceeds the target toolchain capability (<max>)` 注释；未超或工具链版本未知（`compiler_tag` 为空，坑 3 保守）→ 空
+- **`build_cmake_text` 接入**：`CXX_STANDARD`/`C_STANDARD` 发射前调用（`toolchain::detect_toolchain()` 静态缓存）；正常导出输出逐字节不变
+
+### 文档
+
+- `docs/en|zh/cli.md`：import 节补「语言标准随导入保留」（映射规则 + 缺省回退）、export 节补「能力确认」说明
+- `docs/en|zh/config_file.md`：区间语法节补「CMake 导入」引用（`CXX_STANDARD N` → `">=CPP<N>"`）
+- `CHANGES.md` 本条目；`plan.md` 1.4.0-dev.4 执行计划（详见 `plans/1.4.x/1.4.0-dev.4.md`）
+
+### 测试
+
+- 新增 6 个导入单测（`test_import.cpp`）：`CXX_STANDARD` → `>=CPP17`（非硬编码）、`CXX_EXTENSIONS OFF` + `REQUIRED ON` → 非 GNU、`CXX_EXTENSIONS ON` → `>=GNUCPP17`、`target_compile_features` → `>=CPP20`、`C_STANDARD` → `>=C11`、无标准 → `C++17` 回退
+- 新增 5 个导出能力单测（`test_export.cpp`）：能力内空（gcc 13 + 17/20/23）、超能力注释（gcc 4.8 + CXX/C 17 → 含 `CPP11`）、MSVC 分段（19.43 → 23 超/20 内）、未知版本保守空、正常导出无注释（输出不变）
+- 快速测试：**882 用例 / 4946 断言零失败**（dev.3 非集成子集 871/4926，+11 用例；2 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **`target_compile_features` 全量语义映射**（`cxx_std_*` 的 PUBLIC/INTERFACE 传播）：1.4.0 后续或 1.5.x。
+- **`CXX_STANDARD_REQUIRED` 严格化映射**（ON → ezmk 侧 fail-fast）：1.4.0 后续或 1.5.x。
+- **导出能力注释基于导出时检测的工具链**：生成的 CMake 可能在另一工具链上运行——注释仅提示，不阻断。
+
+---
+
 ## 1.3.6 (2026-08-26) — 代码质量收口（技术债清理）
 
 1.3.6 是 1.3.0 发布后的**补丁版本**，主题为**代码质量收口**（承接 1.3.5 后的质量分析结论）：`-Wall -Wextra` 清零、错误文案与实现一致、校验去噪、归档/运行逻辑去重、`run_tests` 机械拆分、测试文件按主题拆分。**纯重构零新功能**——不引入新 flag/配置/命令/i18n key；每个重构都有既有测试锁定（等价性/集成/全量回归）。**公共 API 无破坏性变更**。

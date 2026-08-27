@@ -98,6 +98,11 @@ code supports a baseline standard (optionally up to a documented upper bound):
 > package declares it (its range **max** is a commitment boundary: consumers
 > above it never push the package past it). See
 > [Package Authoring Guide](package_authoring.md) for the full semantics.
+>
+> **Imported from CMake (1.4.0-dev.4+):** `ezmk project import` maps
+> `CXX_STANDARD N` / `cxx_std_N` to `">=CPP<N>"` (a single-sided range) — CMake's
+> "at least N" semantics, so the range form is the natural target. See
+> [cli.md](cli.md).
 
 ---
 

@@ -103,6 +103,20 @@ aborts (without writing anything) on unsupported non-standard CMake constructs
 macros after import. See [migrate-from-cmake.md](migrate-from-cmake.md) for
 supported/unsupported constructs and manual migration steps.
 
+**Language standard is imported (1.4.0-dev.4+):** `CXX_STANDARD N` /
+`C_STANDARD N` (from `set_target_properties`) and `cxx_std_N` / `c_std_N`
+(from `target_compile_features`) map to a range `[project].language =
+">=CPP<N>"` (or `">=C<N>"`; `CXX_EXTENSIONS ON` → the `GNU` prefix
+`">=GNUCPP<N>"`) — CMake's "at least N" semantics, compatible with 1.3.1
+ranges. Without a declared standard, the `LANGUAGES` fallback stays
+(`CXX` → `C++17`, `C` → `C17`).
+
+**`project export cmake` confirms the toolchain capability (1.4.0-dev.4+):**
+when the exported `CXX_STANDARD` / `C_STANDARD` exceeds the target toolchain's
+capability (`max_supported_std`), the generated CMakeLists.txt carries a
+comment (`# CXX_STANDARD 17 exceeds the target toolchain capability (CPP11)`)
+instead of silently changing the value — the CMake project decides.
+
 **`project export vscode` (1.4.0-dev.1+)** generates the VS Code debug config
 trio under `.vscode/` from `ezmk.toml` — `launch.json`, `tasks.json` and
 `settings.json` (single-direction snapshot; regenerate, don't hand-edit):
