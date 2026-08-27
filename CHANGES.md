@@ -54,6 +54,38 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.0-dev.2 (2026-08-27) — 工具链能力表 + 标准校验严格化
+
+1.4.0 第二个开发子版本，收口 1.3.1 的两个遗留点：① **工具链能力表** `toolchain::max_supported_std(family, version)`——给定编译器（gcc/clang/msvc + 版本）返回实际支持的最高 `-std=`（规范形 `CPP<n>`，未知版本保守回退 `CPP11`），语义 C（"支持多高用多高"）与 dev.3 编译协商的前置；② **校验严格化开关** `[pkg] strict_std_check`——1.3.1 标准兼容校验从 warn 升级为 fatal（默认仍 warn，严格失败会破坏现有包生态，仅显式开启）。**1.3.1 语义 A（编译取 min）不变**；**公共 API 无破坏性变更**（内部工具函数 + 纯新增配置节）。
+
+### 新增 / 行为变更
+
+- **`toolchain::max_supported_std(family, version)`**（`toolchain.cpp` + `toolchain.hpp`）：版本号取 major 比较（复用 `first_version_major` 溢出防护）；**GCC** 分段（<5→CPP11、5–6→CPP14、7→CPP14 保守、8–10→CPP17、11–12→CPP20、≥13→CPP23）、**Clang** 分段（<4→CPP11、4→CPP14 保守、5–10→CPP17、≥11→CPP20，16+ 的 C++23 部分支持保守取 20）、**MSVC** 走 `_MSC_VER` 分段（1910–1919→CPP17、≥1920→CPP20，1930+ 的 C++23 视配置保守取 20）；每张表注释标注来源（gcc/clang cxx-status、MSDN 版本表）与实测日期；返回 C++ 主轴规范形，C 侧同代上限（C17/C11）在头注释注明
+- **共享 cl 版本解析**：`msvc_toolset_tag` 的「Version <major>.<minor>」解析抽取为 `parse_msvc_cl_version`，新增 `msvc_msc_ver()`（cl 版本行 → `_MSC_VER`），两表共用不复制逻辑
+- **`[pkg]` 配置节**（`config.hpp` `PkgSection` + `config.cpp`）：`strict_std_check` 布尔默认 `false`（纯新增可选节/字段，既有配置零影响）
+- **`check_std_compat` 两态**（`pkg.cpp`）：`consumer_std_min()` 重构为 `consumer_std_ctx()`（min + strict + 消费者声明语言一次解析，不再二次 parse）；不匹配时 strict → `util::fatal`（新 i18n key `pkg_fatal_std_mismatch`），非 strict → 现状 warn（`pkg_warn_std_mismatch*` 保留）
+- **i18n**：新增 `pkg_fatal_std_mismatch`（en/zh/zh-TW 三向一致，`check_i18n.py` 通过）
+
+### 文档
+
+- `docs/en|zh/config_file.md`：`[pkg]` 节（`strict_std_check` 字段 + 「仅 CI/严格要求时开启」说明 + 与 1.3.1 校验的关联 + 示例）
+- `CHANGES.md` 本条目；`plan.md` 1.4.0-dev.2 执行计划（详见 `plans/1.4.x/1.4.0-dev.2.md`）
+
+### 测试
+
+- 新增 4 个能力表单测（`test_toolchain.cpp`）：GCC 分段（4.8/5/6/7/8/10/11/12/13/16 MSYS2 版式）、Clang 分段（3.4/3.8/4/5/10/11/16/Apple 15）、MSVC `_MSC_VER` 分段（19.00/19.10/19.16/19.20/19.29/19.30/19.43）、未知/异常版本保守回退（空串/无 Version/非 19.x/溢出不抛）
+- 新增 4 个严格化单测（`test_pkg.cpp`）：strict on + 源码包超消费者 → fatal、strict on + 预编译包 → fatal、strict on + 兼容包 → 静默、strict off（默认）→ warn 文案不变（不含 fatal 措辞）
+- 快速测试：**863 用例 / 4903 断言零失败**（dev.1 非集成子集 855/4857，+8 用例；2 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **dev.3 前置**：编译协商（语义 B）按 `max(包min, 消费者标准)` 重编——能力表用于确认「协商后的标准是否被编译器支持」。
+- **语义 C（"支持多高用多高"）**：本版只建表，启用归 dev.3/后续评估。
+- **`[compile].language` 超能力校验**（配置期拒绝超能力标准）：dev.4 或后续。
+- **CLI `--strict`**：不引入（配置字段即可，1.4.0 最小面）。
+
+---
+
 ## 1.3.6 (2026-08-26) — 代码质量收口（技术债清理）
 
 1.3.6 是 1.3.0 发布后的**补丁版本**，主题为**代码质量收口**（承接 1.3.5 后的质量分析结论）：`-Wall -Wextra` 清零、错误文案与实现一致、校验去噪、归档/运行逻辑去重、`run_tests` 机械拆分、测试文件按主题拆分。**纯重构零新功能**——不引入新 flag/配置/命令/i18n key；每个重构都有既有测试锁定（等价性/集成/全量回归）。**公共 API 无破坏性变更**。

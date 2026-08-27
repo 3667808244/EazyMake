@@ -30,27 +30,27 @@
 
 ### 阶段一：能力表（4.1）
 
-- [ ] **1.1 `max_supported_std()`**（`toolchain.cpp` + `toolchain.hpp` 声明）：`(family, version) → "CPP<n>"` 规范形；版本号取 major 比较（复用 `first_version_major`）；未知版本 → 保守下限 `CPP11`
-- [ ] **1.2 GCC 分段表**：<5 → CPP11；5–6 → CPP14；7 → CPP14（保守，7 的 C++17 不全）；8–10 → CPP17；11–12 → CPP20；≥13 → CPP23——注释标注来源（gcc cxx-status）与实测日期
-- [ ] **1.3 Clang 分段表**：<4 → CPP11；4 → CPP14；5–10 → CPP17；≥11 → CPP20（16+ 的 C++23 部分支持 → 保守 CPP20）
-- [ ] **1.4 MSVC 分段表**：`msvc_msc_ver()` 从 cl 版本行解析 `_MSC_VER`（复用 `parse_digits`，与 `msvc_toolset_tag` 共享解析 helper）；1910–1919 → CPP17；≥1920 → CPP20（1930+ 的 C++23 视配置 → 保守 CPP20）；<1910/未知 → CPP11
-- [ ] **1.5 单测**（`test_toolchain.cpp`）：各 family 关键版本（gcc 4.8/5/8/11/13、clang 3.4/4/5/11/16、msvc 19.0/19.10/19.20/19.30）+ 未知版本 → CPP11
+- [x] **1.1 `max_supported_std()`**（`toolchain.cpp` + `toolchain.hpp` 声明）：`(family, version) → "CPP<n>"` 规范形；版本号取 major 比较（复用 `first_version_major`）；未知版本 → 保守下限 `CPP11`
+- [x] **1.2 GCC 分段表**：<5 → CPP11；5–6 → CPP14；7 → CPP14（保守，7 的 C++17 不全）；8–10 → CPP17；11–12 → CPP20；≥13 → CPP23——注释标注来源（gcc cxx-status）与实测日期
+- [x] **1.3 Clang 分段表**：<4 → CPP11；4 → CPP14；5–10 → CPP17；≥11 → CPP20（16+ 的 C++23 部分支持 → 保守 CPP20）
+- [x] **1.4 MSVC 分段表**：`msvc_msc_ver()` 从 cl 版本行解析 `_MSC_VER`（复用 `parse_digits`，与 `msvc_toolset_tag` 共享解析 helper）；1910–1919 → CPP17；≥1920 → CPP20（1930+ 的 C++23 视配置 → 保守 CPP20）；<1910/未知 → CPP11
+- [x] **1.5 单测**（`test_toolchain.cpp`）：各 family 关键版本（gcc 4.8/5/8/11/13、clang 3.4/4/5/11/16、msvc 19.0/19.10/19.20/19.30）+ 未知版本 → CPP11
 
 ### 阶段二：严格化开关（4.2）
 
-- [ ] **2.1 `[pkg]` 配置节**（`config.hpp` `PkgSection` + `config.cpp` 解析）：`strict_std_check` 布尔默认 `false`（纯新增字段）
-- [ ] **2.2 `check_std_compat` 两态**（`pkg.cpp`）：`consumer_std_min()` 重构为 `consumer_std_ctx()`（min + strict + consumer 声明语言一次解析）；不匹配时 strict → `util::fatal`（新 key），非 strict → 现状 warn
-- [ ] **2.3 i18n**：新增 `pkg_fatal_std_mismatch`（en/zh/zh-TW 三向一致，`check_i18n.py` 通过）；`pkg_warn_std_mismatch*` 保留
-- [ ] **2.4 单测**（`test_pkg.cpp`）：`ConsumerProject` 支持 strict 参数——strict on + 包超消费者 → fatal（源码/预编译两路径）；strict off（默认）→ warn 不变；包在消费者标准内 → 静默
+- [x] **2.1 `[pkg]` 配置节**（`config.hpp` `PkgSection` + `config.cpp` 解析）：`strict_std_check` 布尔默认 `false`（纯新增字段）
+- [x] **2.2 `check_std_compat` 两态**（`pkg.cpp`）：`consumer_std_min()` 重构为 `consumer_std_ctx()`（min + strict + consumer 声明语言一次解析）；不匹配时 strict → `util::fatal`（新 key），非 strict → 现状 warn
+- [x] **2.3 i18n**：新增 `pkg_fatal_std_mismatch`（en/zh/zh-TW 三向一致，`check_i18n.py` 通过）；`pkg_warn_std_mismatch*` 保留
+- [x] **2.4 单测**（`test_pkg.cpp`）：`ConsumerProject` 支持 strict 参数——strict on + 包超消费者 → fatal（源码/预编译两路径）；strict off（默认）→ warn 不变；包在消费者标准内 → 静默
 
 ### 阶段三：文档 + 收口（4.3）
 
-- [ ] **3.1 config_file.md（en/zh）**：`[pkg]` 节（`strict_std_check` 字段 + 「仅 CI/严格要求时开启」说明 + 与 1.3.1 校验的关联）
-- [ ] **3.2 CHANGES.md**：1.4.0-dev.2 条目（新增 / 行为变更 / 文档 / 已知限制）
-- [ ] **3.3 全量零回归**：`bash build.sh test-all`（基线 931/5396）
-- [ ] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **3.1 config_file.md（en/zh）**：`[pkg]` 节（`strict_std_check` 字段 + 「仅 CI/严格要求时开启」说明 + 与 1.3.1 校验的关联）
+- [x] **3.2 CHANGES.md**：1.4.0-dev.2 条目（新增 / 行为变更 / 文档 / 已知限制）
+- [x] **3.3 全量零回归**：`bash build.sh test-all`（基线 931/5396 → **939/5442**，+8 用例/+46 断言，3 跳过为既有环境限制）
+- [x] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
-> 门槛未满足即停止，禁止带着未收口项进入下一子版本。
+> 门槛未满足即停止，禁止带着未收口项进入下一子版本。**本版门槛全部满足，dev.2 收口。**
 
 ---
 

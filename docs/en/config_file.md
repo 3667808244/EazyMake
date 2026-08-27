@@ -468,6 +468,30 @@ See `utils.md`.
 
 ---
 
+## `pkg` Section (1.4.0-dev.2+)
+
+Package-management configuration. Optional — all fields default to the
+informative (non-failing) behavior.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `strict_std_check` | bool | No | `false` | **1.4.0-dev.2+** Escalate the install-time standard compatibility check (1.3.1) from a warning to a **fatal error** when a package's minimum standard exceeds the project's |
+
+> **When to enable?** With `strict_std_check = true`, installing a package whose
+> minimum standard is higher than your `[project].language` compiles at **fails**
+> (instead of warning and continuing). Use it in CI or requirement-tight projects
+> where an ABI/source mismatch must block the install. To resolve a failure: raise
+> `[project].language` — or set `strict_std_check = false` to downgrade back to the
+> 1.3.1 warning. The default stays a warning because a strict error would break the
+> existing package ecosystem (opt-in only).
+
+```toml
+[pkg]
+strict_std_check = true   # warn → fatal (default: false)
+```
+
+---
+
 ## Full Examples
 
 ### Normal Project (0.2.3)
