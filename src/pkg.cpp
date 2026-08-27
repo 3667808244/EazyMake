@@ -215,12 +215,14 @@ static std::string std_label(const std::string& language) {
 // package's minimum standard exceeds the consumer's. precompiled=true uses the
 // ABI-flavored warning wording (预编译 ABI 风险更高); the strict fatal uses a
 // single escalated wording for both paths.
+// 1.4.0-dev.3: the consumer context is resolved ONCE by the caller (shared with
+// compile negotiation) and passed in — no second parse of the consumer config.
 static void check_std_compat(const std::string& pkg_name,
                              const std::string& pkg_language,
-                             bool precompiled) {
+                             bool precompiled,
+                             const ConsumerStdContext& ctx) {
     int pkg_min = std_min_of(pkg_language);
     if (pkg_min == 0) return;                 // package declares no usable bound
-    auto ctx = consumer_std_ctx();
     if (!ctx.min || pkg_min <= *ctx.min) return;  // compatible
 
     const std::string consumer_std =
@@ -239,6 +241,48 @@ static void check_std_compat(const std::string& pkg_name,
         precompiled ? ezmk::i18n::I18nKey::pkg_warn_std_mismatch_precompiled
                     : ezmk::i18n::I18nKey::pkg_warn_std_mismatch,
         args));
+}
+
+// 1.4.0-dev.3: 编译协商（语义 B）——见 pkg.hpp 注释。公式：
+//   effective = min( max(包min, 消费者min), 能力表, 包max )
+// 无消费者 / 消费者能力不足 / 任一 cap 把结果拉回包 min 以下 → 不协商。
+config::LanguageInfo negotiate_package_std(const config::LanguageInfo& pkg_lang,
+                                           std::optional<int> consumer_min,
+                                           const toolchain::Toolchain& tc) {
+    if (pkg_lang.min_ver == 0) return pkg_lang;          // 包声明不可用
+    if (!consumer_min || *consumer_min <= pkg_lang.min_ver) {
+        return pkg_lang;                                 // 无消费者 / 消费者更弱
+    }
+
+    int eff = *consumer_min;
+    // cap 1: 工具链能力表（dev.2）——"CPP<n>" 取 <n>；解析失败不 cap（保守下限
+    // 本应可解析，防御性兜底）。
+    const std::string cap_str =
+        toolchain::max_supported_std(tc.family, tc.version);
+    if (cap_str.size() > 3) {
+        try {
+            int cap = std::stoi(cap_str.substr(3));
+            if (cap > 0 && eff > cap) eff = cap;
+        } catch (...) {}
+    }
+    // cap 2: 包声明区间上界（元数据承诺——超上界行为未验证，0 = 无上界）。
+    if (pkg_lang.max_ver > 0 && eff > pkg_lang.max_ver) eff = pkg_lang.max_ver;
+    if (eff <= pkg_lang.min_ver) return pkg_lang;        // cap 拉回包 min 以下
+
+    // 套用协商值：std_flag / min_ver / normalized_lang 同步替换（与
+    // parse_language 的构造逐字节一致，含 GNU 前缀）。
+    config::LanguageInfo out = pkg_lang;
+    out.min_ver = eff;
+    const std::string v = std::to_string(eff);
+    const bool is_cxx = (out.compiler == "g++");
+    if (is_cxx) {
+        out.std_flag = out.gnu_extensions ? ("-std=gnu++" + v) : ("-std=c++" + v);
+        out.normalized_lang = (out.gnu_extensions ? "GNUCPP" : "CPP") + v;
+    } else {
+        out.std_flag = out.gnu_extensions ? ("-std=gnu" + v) : ("-std=c" + v);
+        out.normalized_lang = (out.gnu_extensions ? "GNUC" : "C") + v;
+    }
+    return out;
 }
 
 static bool confirm(std::string_view msg, bool assume_yes = false) {
@@ -732,7 +776,8 @@ fs::path select_precompiled_archive(const fs::path& lib_dir,
         // paths surface the config error where the package is processed.
     }
     if (!pkg_language.empty()) {
-        check_std_compat(pkg_name, pkg_language, /*precompiled=*/true);
+        check_std_compat(pkg_name, pkg_language, /*precompiled=*/true,
+                         consumer_std_ctx());
     }
     return select_precompiled_variant(lib_dir, pkg_name, platform, compiler, abi, strict);
 }
@@ -773,7 +818,17 @@ fs::path compile_package(const fs::path& pkg_dir,
 
     // 1.3.1: source-package standard compatibility check (precompiled is
     // checked inside select_precompiled_archive with stronger wording).
-    check_std_compat(name, cfg.project.language, /*precompiled=*/false);
+    // 1.4.0-dev.3: 消费者上下文一次解析——warn/fatal 校验（声明标准，协商前）
+    // 与编译协商（语义 B）共享，不二次 parse 消费者配置。
+    auto consumer_ctx = consumer_std_ctx();
+    check_std_compat(name, cfg.project.language, /*precompiled=*/false,
+                     consumer_ctx);
+
+    // 1.4.0-dev.3: 编译协商——包按 max(包min, 消费者min) 重编（cap 到能力表
+    // 与包声明上界）。协商值 ≥ 包 min → 上述校验自然不再 warn；预编译包不
+    // 参与（走 select_precompiled_archive，无编译）。
+    auto lang = config::parse_language(cfg.project.language);
+    lang = negotiate_package_std(lang, consumer_ctx.min, tc);
 
     fs::path build_dir = pkg_dir / "build";
     fs::create_directories(build_dir);
@@ -823,8 +878,12 @@ fs::path compile_package(const fs::path& pkg_dir,
     record.deterministic = cfg.compile.deterministic;
 
     // Check global compile options signature (1.1.2 C2: include stdlib; use_pic
-    // is always false for packages — static libs)
-    auto cur_sig = cache::compile_options_signature(cfg.compile, {}, "",
+    // is always false for packages — static libs).
+    // 1.4.0-dev.3: pass the (negotiated) std_flag — the old "" never matched
+    // the per-source signature (which always includes std_flag), so package
+    // caches never hit; and a negotiation change (consumer standard) now
+    // invalidates the package cache automatically.
+    auto cur_sig = cache::compile_options_signature(cfg.compile, {}, lang.std_flag,
                                                     cfg.project.stdlib, false);
     // 1.1.0: deterministic build — include lockfile hash
     // 1.2.0-dev.7: lockfile resolved against the located project root
@@ -844,8 +903,6 @@ fs::path compile_package(const fs::path& pkg_dir,
     }
 
     // ---- Unified compile phase ----
-    auto lang = config::parse_language(cfg.project.language);
-
     cache::CompileInput cin;
     cin.sources = std::move(sources);
     cin.obj_dir = build_dir;

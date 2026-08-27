@@ -114,4 +114,16 @@ fs::path select_precompiled_variant(const fs::path& lib_dir,
                                     const std::string& abi_tag,
                                     bool strict);
 
+// 1.4.0-dev.3: Compile negotiation (semantics B) — a source package is compiled
+// at max(pkg_min, consumer_min) instead of its own declared minimum, capped by
+// the toolchain capability table (max_supported_std, dev.2) and the package's
+// declared range upper bound (metadata promise). Returns the negotiated
+// LanguageInfo (std_flag / min_ver / normalized_lang replaced); returns the
+// original when there is no negotiation (no consumer / consumer weaker than the
+// package / the caps pull the result back to the package minimum or below).
+// Pure — no I/O. Precompiled packages never negotiate (no compilation).
+config::LanguageInfo negotiate_package_std(const config::LanguageInfo& pkg_lang,
+                                           std::optional<int> consumer_min,
+                                           const toolchain::Toolchain& tc);
+
 } // namespace ezmk::pkg

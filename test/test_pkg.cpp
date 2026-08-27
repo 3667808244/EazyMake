@@ -1063,3 +1063,100 @@ TEST_CASE("std compat: strict_std_check default keeps warn behavior", "[pkg][1.4
     REQUIRE(out.find("strict std check failed") == std::string::npos);
     REQUIRE(out.find("requires at least C++17") != std::string::npos);
 }
+
+// ===================================================================
+// 1.4.0-dev.3: compile negotiation (semantics B) — negotiate_package_std()
+// ===================================================================
+
+namespace {
+
+// Parse a language declaration and build a fake toolchain with a version line.
+ezmk::config::LanguageInfo parse_lang(const std::string& lang) {
+    return ezmk::config::parse_language(lang);
+}
+ezmk::toolchain::Toolchain fake_tc(ezmk::toolchain::CompilerFamily family,
+                                   const std::string& version) {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = family;
+    tc.version = version;
+    return tc;
+}
+
+} // namespace
+
+// Consumer higher than the package min → negotiate up (cap: gcc 13 → CPP23).
+TEST_CASE("negotiate: consumer higher negotiates up", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 13.2.0");
+    auto out = negotiate_package_std(parse_lang("C++11"), 17, tc);
+    REQUIRE(out.min_ver == 17);
+    REQUIRE(out.std_flag == "-std=c++17");
+    REQUIRE(out.normalized_lang == "CPP17");
+    REQUIRE(out.max_ver == 0);   // base metadata preserved
+}
+
+// No consumer project → no negotiation, original declaration returned.
+TEST_CASE("negotiate: no consumer keeps the package declaration", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 13.2.0");
+    auto base = parse_lang("C++11");
+    auto out = negotiate_package_std(base, std::nullopt, tc);
+    REQUIRE(out.min_ver == base.min_ver);
+    REQUIRE(out.std_flag == base.std_flag);
+    REQUIRE(out.normalized_lang == base.normalized_lang);
+}
+
+// Consumer weaker than the package min → no negotiation (1.3.1 warn continues).
+TEST_CASE("negotiate: weaker consumer keeps the package declaration", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 13.2.0");
+    auto base = parse_lang("C++17");
+    auto out = negotiate_package_std(base, 11, tc);
+    REQUIRE(out.min_ver == base.min_ver);
+    REQUIRE(out.std_flag == base.std_flag);
+}
+
+// Cap 1: toolchain capability — an old compiler (gcc 4.8 → CPP11) cannot be
+// negotiated above C++11, so a C++20 consumer yields no negotiation.
+TEST_CASE("negotiate: capability cap blocks negotiation", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 4.8.5");
+    auto base = parse_lang("C++11");
+    auto out = negotiate_package_std(base, 20, tc);
+    REQUIRE(out.min_ver == base.min_ver);   // 11 <= pkg min → original
+    REQUIRE(out.std_flag == base.std_flag);
+}
+
+// Cap 1 mid-tier: gcc 8 → CPP17 caps a C++20 consumer down to C++17 (still a
+// negotiation — the package gains a standard it could not otherwise use).
+TEST_CASE("negotiate: capability cap pulls the value down", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 8.3.0");
+    auto out = negotiate_package_std(parse_lang("C++11"), 20, tc);
+    REQUIRE(out.min_ver == 17);
+    REQUIRE(out.std_flag == "-std=c++17");
+    REQUIRE(out.normalized_lang == "CPP17");
+}
+
+// Cap 2: the package's declared range upper bound (metadata promise) — a
+// C++11..C++17 package never compiles above C++17, even with a C++20 consumer.
+TEST_CASE("negotiate: package range upper bound caps the value", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 13.2.0");
+    auto out = negotiate_package_std(parse_lang("C++11..C++17"), 20, tc);
+    REQUIRE(out.min_ver == 17);
+    REQUIRE(out.std_flag == "-std=c++17");
+    REQUIRE(out.normalized_lang == "CPP17");
+}
+
+// C language: same formula, C spelling ("-std=c17" / "C17").
+TEST_CASE("negotiate: C language negotiates with C spelling", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 13.2.0");
+    auto out = negotiate_package_std(parse_lang("C11"), 17, tc);
+    REQUIRE(out.min_ver == 17);
+    REQUIRE(out.std_flag == "-std=c17");
+    REQUIRE(out.normalized_lang == "C17");
+}
+
+// GNU extensions survive negotiation ("-std=gnu++17", "GNUCPP17").
+TEST_CASE("negotiate: GNU extensions preserved in the negotiated flag", "[pkg][1.4.0-dev.3]") {
+    auto tc = fake_tc(ezmk::toolchain::CompilerFamily::Gcc, "g++ (GCC) 13.2.0");
+    auto out = negotiate_package_std(parse_lang("GNUCPP11"), 17, tc);
+    REQUIRE(out.min_ver == 17);
+    REQUIRE(out.std_flag == "-std=gnu++17");
+    REQUIRE(out.normalized_lang == "GNUCPP17");
+}
