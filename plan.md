@@ -1,53 +1,53 @@
-# EazyMake 1.4.0-dev.3 执行计划
+# EazyMake 1.4.0-dev.4 执行计划
 
 > **状态：执行中**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
-> 详细设计：[**1.4.0-dev.3.md**](plans/1.4.x/1.4.0-dev.3.md)。本计划为 1.4.0 第三个开发子版本，主题为**编译协商（语义 B）**——源码包不再按自身 `language` 独立编译，而是按 `max(包min, 消费者min)` 重编（cap 到 dev.2 能力表与包声明区间上界）。**1.3.1 语义 A 为基线**（编译取 min），本版扩展而非替换。
+> 详细设计：[**1.4.0-dev.4.md**](plans/1.4.x/1.4.0-dev.4.md)。本计划为 1.4.0 第四个开发子版本，主题为**CMake 互操作补全**——收口 1.3.x 预留的两处缺口：① **导入**读 `CXX_STANDARD`/`C_STANDARD`/`target_compile_features` → 映射为 ezmk **区间** language（`">=CPP<N>"`，语义 A 兼容）；② **导出**在 dev.2 能力表就绪后确认 `CXX_STANDARD` 不超目标工具链能力（超 → 注释警告而非静默改值）。
 >
-> **范围边界**：**明确不做**——预编译包协商（无编译，ABI 由发布方决定，precompiled warn 逻辑不变）；语义 C（"支持多高用多高"自动协商到能力上限）与 `[test]` 场景协商（1.4.0 后续或 1.5.x）；无消费者（全局/用户级安装）时的协商（按包自身 min，现状）。**公共 API 无破坏性变更**。
+> **范围边界**：**明确不做**——`target_compile_features` 全量语义映射、`CXX_STANDARD_REQUIRED` 严格化映射（1.4.0 后续或 1.5.x）；`CXX_EXTENSIONS ON` 的完整扩展语义（用 GNU 前缀表达或注释注明）；导入的 LANGUAGES 缺省回退（无 `CXX_STANDARD` → 现状 `C++17` 保留）。**公共 API 无破坏性变更**。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 939 用例 / 5442 断言，1.4.0-dev.2 后实测）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 948 用例 / 5472 断言，1.4.0-dev.3 后实测）。
 
 ---
 
 ## 1 背景
 
-- 1.3.1 定死语义 A：包按自身 `language`（min）独立编译，消费者按其 `language` 编译，两者从不协商。源码包与消费者标准不一致时（包 C++11、消费者 C++17），包仍按 C++11 编译——浪费且不能利用更高标准。
-- dev.2 能力表 `max_supported_std()` 就绪 → 本版实现**语义 B**：包按 `max(包min, 消费者min)` 重编，前提是能力表确认该标准被编译器支持。
+- CMake 互操作两处预留缺口：`import.cpp` 对 `LANGUAGES CXX` 硬编码 `C++17`（不读 `CXX_STANDARD`，导入项目语言标准丢失）；`export cmake` 的 `CXX_STANDARD` 映射（1.3.1 修复取 min）未与 dev.2 能力表联动（导出标准可能超目标工具链能力）。
+- 本版补全：导入读标准并映射为区间（`">=N"`，语义 A 兼容，dev.3 协商自动惠及导入项目）；导出在能力表就绪后确认/校正映射。
 
 ## 2 目标
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | `compile_package()` 接受"协商标准"：包按 `max(包min, 消费者min)` 编译（cap 到 `max_supported_std`） | P0 |
-| 2 | 消费者标准传入路径：`compile_package` 调用点从 `consumer_std_ctx()` 取协商标准（与 1.3.1 warn 校验共享一次解析） | P0 |
-| 3 | 协商标准 < 包 max（双边区间上界）时不触发；协商值 cap 到包 max（上界是元数据承诺，超上界行为未验证） | P0 |
-| 4 | 缓存语义：协商标准变化 → `compile_options_signature` 变（std_flag 参与签名，天然失效）——**顺带修复包级签名传 `""` 导致包缓存从不命中的隐患** | P0 |
-| 5 | 1.3.1 的 warn 校验与协商**共存**：校验在协商前（协商值 ≥ 包 min 时自然不再 warn；包 min > 消费者能力时才 warn/fatal） | P1 |
-| 6 | 测试：协商公式各分支单测 + 协商编译端到端断言（`-std=` 行为）+ 缓存失效 + warn 共存 | P0 |
+| 1 | `import` 解析 `CXX_STANDARD N`（及 `C_STANDARD`）→ `[project].language = ">=CPP<N>"`（区间形式，语义 A） | P0 |
+| 2 | `CXX_STANDARD_REQUIRED OFF` / `CXX_EXTENSIONS ON` → 保持精确值而非区间（扩展语义不同）或注释注明 | P1 |
+| 3 | 缺省回退不变：无 `CXX_STANDARD` → 现状 `C++17`（文档注明"CMake 缺省下 ezmk 取 C++17"） | P0 |
+| 4 | 导出：能力表（dev.2）就绪后，`CXX_STANDARD` 映射确认不超能力（超 → 注释警告而非静默） | P1 |
+| 5 | 测试：导入含/不含 `CXX_STANDARD` 两态 + 区间断言；导出能力警告 | P0 |
 
 ## 3 执行阶段（每阶段一个 commit）
 
-### 阶段一：协商 helper（4.1）
+### 阶段一：导入映射（4.1）
 
-- [x] **1.1 `negotiate_package_std()`**（`pkg.cpp` + `pkg.hpp` 声明，纯函数）：`effective = min( max(包min, 消费者min), 能力表, 包max )`；无消费者 / 消费者能力不足 / cap 拉回包 min 以下 → 返回原声明（不协商）；返回替换 `std_flag`/`min_ver`/`normalized_lang` 的 `LanguageInfo`
-- [x] **1.2 调用点接入**（`compile_package`）：`check_std_compat` 改接 `ConsumerStdContext` 参数（与协商共享一次 `consumer_std_ctx()` 解析，不再二次 parse）；协商后的 `lang` 构造 `cin`；预编译路径不变
-- [x] **1.3 单测**（`test_pkg.cpp`）：公式各分支——消费者更高→协商、无消费者→原声明、消费者更弱→原声明+warn 保留、cap 能力表（低能力编译器→不协商）、cap 包上界（区间 max）、C 语言协商
+- [ ] **1.1 `set_target_properties` 扫描**（`import.cpp` 解析链新增分支）：`PROPERTIES` 后的键值对——`CXX_STANDARD`/`C_STANDARD` → N；`CXX_EXTENSIONS` ON/OFF → GNU 前缀；`CXX_STANDARD_REQUIRED`（信息性，`>=` 语义天然兼容）
+- [ ] **1.2 `target_compile_features` 扫描**：`cxx_std_<N>` / `c_std_<N>`（双路径，坑 1）
+- [ ] **1.3 映射应用**：解析循环后——有标准 → `language = ">=CPP<N>"` / `">=C<N>"`（`CXX_EXTENSIONS ON` → `>=GNUCPP<N>` / `>=GNUC<N>`）；无 → 现状回退 `C++17`/`C17`（LANGUAGES 决定）
+- [ ] **1.4 单测**（`test_import.cpp`）：含 `CXX_STANDARD`（区间断言）、不含（`C++17` 回退）、`target_compile_features` 路径、`C_STANDARD`（C 项目）、`CXX_EXTENSIONS ON`（GNU 前缀）
 
-### 阶段二：缓存/共存（4.2）
+### 阶段二：导出能力确认（4.2）
 
-- [x] **2.1 包级签名修复**：`compile_options_signature` 的 std_flag 从 `""` 改为协商后的 `lang.std_flag`——包缓存命中恢复（现状从不命中）+ 协商值变化自动失效（锁定测试）
-- [x] **2.2 集成测试**：真实项目——消费者 C++17 + 包声明 C++11（源码含 C++17 特性）→ 安装成功（协商到 C++17）；消费者 C++11 同包 → 编译失败（保持 C++11）；同消费者重复安装 → 第二次缓存命中；消费者标准变更 → 重编（签名失效）
-- [x] **2.3 warn 共存确认**：协商成功路径不再 warn（协商值 ≥ 包 min）；包 min > 消费者能力 → 1.3.1 warn 保留（既有测试回归即覆盖）
+- [ ] **2.1 `std_capability_note()`**（`export.cpp` + `export.hpp`，纯函数）：`(std_kind, std_ver, tc)` → 超能力注释文本（`# CXX_STANDARD <n> exceeds the target toolchain capability (<max>)`）；未超/工具链版本未知 → 空（保守不警告）
+- [ ] **2.2 `build_cmake_text` 接入**：`CXX_STANDARD`/`C_STANDARD` 发射前调用（`toolchain::detect_toolchain()`，静态缓存）；正常导出输出不变
+- [ ] **2.3 单测**（`test_export.cpp`）：正常（gcc 13 + C++17 → 无注释）、超能力（gcc 4.8 + C++17 → 注释含 max）、未知版本（空 version → 无注释）
 
 ### 阶段三：文档 + 收口（4.3）
 
-- [x] **3.1 config_file.md / package_authoring.md（en/zh）**：编译协商（语义 B）说明——公式、触发条件、cap 到能力表/包上界、缓存/共享语义（同一 scope 内协商值一致才复用缓存）、预编译包不参与
-- [x] **3.2 CHANGES.md**：1.4.0-dev.3 条目（新增 / 行为变更 / 文档 / 已知限制 + 包缓存命中修复说明）
-- [x] **3.3 全量零回归**：`bash build.sh test-all`（基线 939/5442 → **948/5472**，+9 用例/+30 断言，3 跳过为既有环境限制）
-- [x] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [ ] **3.1 cli.md（en/zh）**：import/export 节补标准读取/能力确认说明；config_file.md 区间引用（`">=CPP<N>"` 来自 CMake 导入）
+- [ ] **3.2 CHANGES.md**：1.4.0-dev.4 条目（新增 / 行为变更 / 文档 / 已知限制）
+- [ ] **3.3 全量零回归**：`bash build.sh test-all`（基线 948/5472）
+- [ ] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
-> 门槛未满足即停止，禁止带着未收口项进入下一子版本。**本版门槛全部满足，dev.3 收口。**
+> 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 
 ---
 
@@ -55,26 +55,23 @@
 
 | 决策 | 说明 |
 |------|------|
-| 协商公式单点实现 | `negotiate_package_std()` 纯函数：`min( max(包min, 消费者min), 能力表, 包max )`，全部边界在函数内收敛（cap 拉回包 min 以下 → 不协商） |
-| 共享消费者解析 | `check_std_compat` 改接 `ConsumerStdContext` 参数，协商与其共享一次 `consumer_std_ctx()`——安装路径只解析一次消费者配置 |
-| 包级签名含协商 std_flag | 修复 `pkg.cpp` 签名传 `""` 的隐患（包缓存从不命中）+ 协商值变化自动失效——与项目构建路径（`build.cpp` 含 `std_flag`）对齐 |
-| 校验前置 | `check_std_compat` 保留在协商前（1.3.1 语义，基于**声明**标准）；协商成功（协商值 ≥ 包 min）自然不再 warn |
-| 预编译不参与 | 无编译路径，`select_precompiled_archive` 的 warn/fatal 逻辑不变 |
-| 端到端断言 | 用"C++17 特性源码 + C++11 声明包"可编译/不可编译的行为差异锁定协商真正生效（而非只看命令文本） |
+| 导入产出区间 `">=CPP<N>"` | 与 1.3.1 区间语法对齐（语义 A：编译取 min=N）；`CXX_STANDARD` 的 CMake 语义本就是"至少 N"，`>=` 是精确映射；dev.3 协商自动惠及（min=N 参与） |
+| 双路径扫描 | `set_target_properties` + `target_compile_features` 都提取标准（坑 1）；漏 → 回退现状不报错 |
+| `CXX_EXTENSIONS` | 显式 ON → GNU 前缀（`>=GNUCPP<N>`）；显式 OFF/缺省 → 非 GNU（CMake 缺省 ON，但 ezmk 导入取保守非 GNU，文档注明可手改） |
+| 导出能力确认纯函数 | `std_capability_note()` 可单测（注入 fake tc）；`build_cmake_text` 用 `detect_toolchain()`（静态缓存）接入 |
+| 未知版本不警告 | 工具链版本解析失败（`compiler_tag` 为空）→ 跳过能力确认（坑 3：能力确认误报，保守） |
+| 超能力只注释不改值 | CMake 项目可自行决定（设计 §3.2：不静默改值） |
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 处理 |
 |------|------|------|
-| 包编译标准从 min → max(包min, 消费者min) | 行为增强 | 仅消费者标准更高时改变；无消费者/消费者更弱不变 |
-| 包级缓存签名含 std_flag | 修复 + 失效 | 升级后首次安装全量重编一次（签名变化）；此后命中恢复 |
-| 协商值参与缓存签名 | 自动失效 | 既有签名机制，std_flag 已参与 |
-| 预编译包 | 不参与 | 逻辑不变 |
-| 公共 API | **无破坏性变更** | 纯增量（内部协商 + 新纯函数） |
+| 导入产出 `>=CPP<N>` | 行为增强 | 原硬编码 `C++17` → 读标准；无 `CXX_STANDARD` 项目不变（回退现状） |
+| 导出超能力注释 | 纯新增注释 | 正常导出输出不变（逐字节相同） |
+| 公共 API | **无破坏性变更** | 纯增量（解析增强 + 新纯函数） |
 
 ## 6 延后项（明确收口）
 
-- **语义 C**（"支持多高用多高"自动协商到能力上限）：1.4.0 后续或 1.5.x。
-- **`[test]` 场景协商**（测试编译用消费者标准）：1.4.0 后续或 1.5.x。
-- **共享缓存文档化**：同一 scope 内协商值一致才复用缓存（`--locked`/确定性构建下协商值固定）——本版文档注明。
+- **`target_compile_features` 全量语义映射**（`cxx_std_*` 的 PUBLIC/INTERFACE 传播）：1.4.0 后续或 1.5.x。
+- **`CXX_STANDARD_REQUIRED` 严格化映射**（ON → ezmk 侧 fail-fast）：1.4.0 后续或 1.5.x。
 - **2.0.0**：保持破坏性变更窗口，与本版解耦。
