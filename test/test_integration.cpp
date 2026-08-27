@@ -1501,6 +1501,7 @@ TEST_CASE("integration: source package compiles at the negotiated standard (dev.
     // A source package declaring C++11 whose source needs C++17 (structured
     // bindings) — compiles ONLY when negotiated up to the consumer's C++17.
     fs::path pkg_dir = tmp.path / "nego_pkg";
+    fs::create_directories(pkg_dir / "include");
     fs::create_directories(pkg_dir / "src");
     file_write(pkg_dir / "ezmk.toml",
         "[project]\nname = \"negopkg\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
