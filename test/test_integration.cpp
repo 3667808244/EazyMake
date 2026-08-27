@@ -1477,6 +1477,68 @@ TEST_CASE("integration: pkg install from an invalid directory is rejected", "[in
     REQUIRE(combined.find("src/") != std::string::npos);
 }
 
+// 1.4.0-dev.3: compile negotiation (semantics B) — a source package compiles
+// at max(pkg_min, consumer_min) capped by the toolchain capability; the
+// negotiated standard participates in the package cache signature.
+TEST_CASE("integration: source package compiles at the negotiated standard (dev.3)", "[integration][1.4.0-dev.3]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    fs::path proj_dir = tmp.path / "nego_consumer";
+    fs::create_directories(proj_dir / "src");
+    auto write_consumer = [&](const std::string& language) {
+        file_write(proj_dir / "ezmk.toml",
+            "[project]\nname = \"nego_consumer\"\ntype = \"executable\"\n"
+            "version = \"0.1.0\"\nlanguage = \"" + language + "\"\n\n"
+            "[compile]\ninclude_dirs = [\"include\"]\nsrc_dirs = [\"src\"]\n");
+    };
+    write_consumer("C++17");
+    file_write(proj_dir / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    // A source package declaring C++11 whose source needs C++17 (structured
+    // bindings) — compiles ONLY when negotiated up to the consumer's C++17.
+    fs::path pkg_dir = tmp.path / "nego_pkg";
+    fs::create_directories(pkg_dir / "src");
+    file_write(pkg_dir / "ezmk.toml",
+        "[project]\nname = \"negopkg\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
+        "language = \"C++11\"\n");
+    file_write(pkg_dir / "src" / "s.cpp",
+        "#include <utility>\n"
+        "int nego_value() { auto [a, b] = std::pair<int,int>{1, 2}; return a + b; }\n");
+
+    // Consumer C++17 → negotiated to C++17 → the C++17-only source compiles;
+    // and since the negotiated value >= pkg min, no 1.3.1 warning fires.
+    ProcResult r = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p -y", proj_dir);
+    INFO("install stderr: " << r.err);
+    INFO("install stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE((r.out + r.err).find("requires at least") == std::string::npos);
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "negopkg"));
+
+    // Same consumer + same package → the package cache now hits (the
+    // signature includes the negotiated std_flag; the pre-dev.3 "" never
+    // matched the per-source signature, so packages always recompiled).
+    ProcResult r2 = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p -y", proj_dir);
+    INFO("reinstall stderr: " << r2.err);
+    REQUIRE(r2.exit_code == 0);
+    REQUIRE((r2.out + r2.err).find("1 cached, 0 compiled") != std::string::npos);
+
+    // Consumer standard drops to C++11 → no negotiation (consumer not higher)
+    // → the package compiles at C++11 → the C++17-only source FAILS, proving
+    // the earlier success really was the negotiated standard.
+    write_consumer("C++11");
+    ProcResult r3 = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p -y", proj_dir);
+    INFO("downgraded consumer stderr: " << r3.err);
+    REQUIRE(r3.exit_code != 0);
+    const std::string r3_out = r3.out + r3.err;
+    const bool compile_failed = (r3_out.find("failed") != std::string::npos) ||
+                                (r3_out.find("error") != std::string::npos);
+    REQUIRE(compile_failed);
+}
+
 // 1.2.0-dev.7: upward project-root search — ezmk build works from a nested
 // subdirectory, and artifacts land in the located project root's build/.
 TEST_CASE("integration: build works from a subdirectory (upward search)", "[integration][1.2.0-dev.7]") {
