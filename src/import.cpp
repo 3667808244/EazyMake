@@ -377,6 +377,13 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
     std::vector<std::optional<bool>> cond_stack;
     std::set<std::string> todo_seen;
 
+    // 1.4.0-dev.4: CMake 标准跟踪——set_target_properties / target_compile_features
+    // 提取 CXX_STANDARD/C_STANDARD → 区间 language（">=CPP<N>"，语义 A）。
+    bool std_seen = false;
+    bool std_is_cxx = true;      // family 由设置标准的属性决定
+    int std_ver = 0;
+    bool std_extensions = false; // CXX_EXTENSIONS 显式 ON → GNU 前缀
+
     auto add_todo = [&](const std::string& note) {
         if (todo_seen.insert(note).second) p.todos.push_back(note);
     };
@@ -533,7 +540,61 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                     p.find_pkg_versions[pkg] = call.args[1];
                 }
             }
+        } else if (call.name == "set_target_properties") {
+            // 1.4.0-dev.4: PROPERTIES 键值对扫描——CXX_STANDARD/C_STANDARD → N、
+            // CXX_EXTENSIONS/C_EXTENSIONS ON → GNU 前缀、CXX_STANDARD_REQUIRED
+            // （信息性：ezmk 区间语义天然"达不到就警告"，无需映射）。
+            // 标准以"最后出现"为准；非数字/变量未解析 → 忽略（回退现状）。
+            bool in_props = false;
+            for (size_t k = 0; k + 1 < call.args.size(); ++k) {
+                std::string key = call.args[k];
+                ascii_upper(key);
+                if (key == "PROPERTIES") { in_props = true; continue; }
+                if (!in_props) continue;
+                std::string val = expand_var(call.args[k + 1], table);
+                if (key == "CXX_STANDARD" || key == "C_STANDARD") {
+                    try {
+                        int v = std::stoi(val);
+                        if (v > 0) {
+                            std_ver = v;
+                            std_is_cxx = (key == "CXX_STANDARD");
+                            std_seen = true;
+                        }
+                    } catch (...) {}
+                } else if (key == "CXX_EXTENSIONS" || key == "C_EXTENSIONS") {
+                    std::string u = val;
+                    ascii_upper(u);
+                    std_extensions = (u == "ON" || u == "TRUE" || u == "1");
+                }
+                ++k;  // consume the value token
+            }
+        } else if (call.name == "target_compile_features" && !call.args.empty()) {
+            // 1.4.0-dev.4: cxx_std_<N> / c_std_<N>（双路径，坑 1）。
+            for (size_t k = 1; k < call.args.size(); ++k) {
+                std::string a = call.args[k];
+                if (unparsed(a)) continue;
+                try {
+                    if (a.rfind("cxx_std_", 0) == 0 && a.size() > 8) {
+                        int v = std::stoi(a.substr(8));
+                        if (v > 0) { std_ver = v; std_is_cxx = true; std_seen = true; }
+                    } else if (a.rfind("c_std_", 0) == 0 && a.size() > 6) {
+                        int v = std::stoi(a.substr(6));
+                        if (v > 0) { std_ver = v; std_is_cxx = false; std_seen = true; }
+                    }
+                } catch (...) {}
+            }
         }
+    }
+
+    // 1.4.0-dev.4: 标准映射——CXX_STANDARD/C_STANDARD → 区间 language
+    // （">=CPP<N>"，语义 A：编译取 min=N，dev.3 协商自动惠及）；CXX_EXTENSIONS
+    // 显式 ON → GNU 前缀（">=GNUCPP<N>"）；无标准 → 现状回退（LANGUAGES 决定）。
+    if (std_seen && std_ver > 0) {
+        std::string v = std::to_string(std_ver);
+        if (std_is_cxx)
+            p.language = std_extensions ? (">=GNUCPP" + v) : (">=CPP" + v);
+        else
+            p.language = std_extensions ? (">=GNUC" + v) : (">=C" + v);
     }
 
     // 源文件所在目录 → src_dirs（相对项目根，去重保序）。

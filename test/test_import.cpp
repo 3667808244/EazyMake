@@ -176,3 +176,64 @@ TEST_CASE("import: reject function/macro definitions transactionally", "[import]
                         test_root()),
                     fatal_error);
 }
+
+// ===================================================================
+// 1.4.0-dev.4: import reads CXX_STANDARD / C_STANDARD / target_compile_features
+// → range language (">=CPP<N>", semantics A)
+// ===================================================================
+
+TEST_CASE("import: CXX_STANDARD maps to a >=CPP<N> range (dev.4)", "[import][1.4.0-dev.4]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "set_target_properties(app PROPERTIES CXX_STANDARD 17)\n",
+        test_root());
+    CHECK(t.find("language = \">=CPP17\"") != std::string::npos);
+    CHECK(t.find("language = \"C++17\"") == std::string::npos);  // not the hardcode
+}
+
+TEST_CASE("import: CXX_STANDARD with CXX_EXTENSIONS OFF stays non-GNU (dev.4)", "[import][1.4.0-dev.4]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "set_target_properties(app PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)\n",
+        test_root());
+    CHECK(t.find("language = \">=CPP20\"") != std::string::npos);
+    CHECK(t.find("GNUCPP") == std::string::npos);
+}
+
+TEST_CASE("import: CXX_EXTENSIONS ON maps to a GNU prefix (dev.4)", "[import][1.4.0-dev.4]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "set_target_properties(app PROPERTIES CXX_STANDARD 17 CXX_EXTENSIONS ON)\n",
+        test_root());
+    CHECK(t.find("language = \">=GNUCPP17\"") != std::string::npos);
+}
+
+TEST_CASE("import: target_compile_features cxx_std_N is scanned (dev.4)", "[import][1.4.0-dev.4]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "target_compile_features(app PRIVATE cxx_std_20)\n",
+        test_root());
+    CHECK(t.find("language = \">=CPP20\"") != std::string::npos);
+}
+
+TEST_CASE("import: C_STANDARD maps a C project (dev.4)", "[import][1.4.0-dev.4]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES C)\n"
+        "add_executable(app src/main.c)\n"
+        "set_target_properties(app PROPERTIES C_STANDARD 11)\n",
+        test_root());
+    CHECK(t.find("language = \">=C11\"") != std::string::npos);
+}
+
+TEST_CASE("import: no standard keeps the C++17 fallback (dev.4)", "[import][1.4.0-dev.4]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n",
+        test_root());
+    CHECK(t.find("language = \"C++17\"") != std::string::npos);
+    CHECK(t.find(">=") == std::string::npos);
+}
