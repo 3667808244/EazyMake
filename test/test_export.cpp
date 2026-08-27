@@ -557,3 +557,58 @@ TEST_CASE("export vscode: --overwrite writes the full trio", "[export][1.4.0-dev
     auto settings = ezmk::util::file_read(tmp.path / ".vscode" / "settings.json");
     REQUIRE(settings.find("C_Cpp.default.includePath") != std::string::npos);
 }
+
+// ===================================================================
+// 1.4.0-dev.4: std_capability_note() — export standard capability check
+// ===================================================================
+
+TEST_CASE("export cmake: std capability note — within capability is empty", "[export][1.4.0-dev.4]") {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "g++ (GCC) 13.2.0";   // cap CPP23
+    REQUIRE(std_capability_note("CXX", 17, tc).empty());
+    REQUIRE(std_capability_note("CXX", 20, tc).empty());
+    REQUIRE(std_capability_note("CXX", 23, tc).empty());
+}
+
+TEST_CASE("export cmake: std capability note — exceeding emits a comment", "[export][1.4.0-dev.4]") {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "g++ (GCC) 4.8.5";    // cap CPP11
+    auto note = std_capability_note("CXX", 17, tc);
+    REQUIRE(note.find("CXX_STANDARD 17 exceeds the target toolchain capability (CPP11)")
+            != std::string::npos);
+    // C spelling
+    auto note_c = std_capability_note("C", 17, tc);
+    REQUIRE(note_c.find("C_STANDARD 17 exceeds the target toolchain capability (CPP11)")
+            != std::string::npos);
+}
+
+TEST_CASE("export cmake: std capability note — MSVC segmentation", "[export][1.4.0-dev.4]") {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Msvc;
+    tc.version = "Microsoft (R) C/C++ Optimizing Compiler Version 19.43.34808 for x64";
+    // _MSC_VER 1943 → cap CPP20: 23 exceeds, 20 within.
+    REQUIRE(std_capability_note("CXX", 23, tc).find("exceeds the target toolchain capability (CPP20)")
+            != std::string::npos);
+    REQUIRE(std_capability_note("CXX", 20, tc).empty());
+}
+
+TEST_CASE("export cmake: std capability note — unknown version is conservative", "[export][1.4.0-dev.4]") {
+    // Unparseable version → no warning (design §3.3 坑 3).
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "";   // no version line
+    REQUIRE(std_capability_note("CXX", 26, tc).empty());
+    REQUIRE(std_capability_note("CXX", 0, tc).empty());   // no standard
+}
+
+// The capability note must not disturb a normal export (same machine → within
+// capability → no comment, output unchanged).
+TEST_CASE("export cmake: normal export has no capability comment (dev.4)", "[export][1.4.0-dev.4]") {
+    auto cfg = make_exe_config();
+    cfg.project.language = "C++17";
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("exceeds the target toolchain capability") == std::string::npos);
+    REQUIRE(t.find("CXX_STANDARD 17") != std::string::npos);
+}

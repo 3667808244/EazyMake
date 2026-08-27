@@ -295,6 +295,11 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         os << ")\n";
     }
     if (std_num > 0) {
+        // 1.4.0-dev.4: 能力确认——导出的标准超目标工具链能力 → 注释警告
+        // （不静默改值，CMake 项目可自行决定；检测为静态缓存，未知版本不警告）。
+        auto cap_note = std_capability_note(is_cpp ? "CXX" : "C", std_num,
+                                            toolchain::detect_toolchain());
+        if (!cap_note.empty()) os << cap_note << "\n";
         os << "set_target_properties(" << target << " PROPERTIES "
            << (is_cpp ? "CXX_STANDARD " : "C_STANDARD ") << std_num
            << " " << (is_cpp ? "CXX_STANDARD_REQUIRED" : "C_STANDARD_REQUIRED")
@@ -648,8 +653,7 @@ VscodeFiles build_vscode_files(const config::EzConfig& cfg,
 
 int export_vscode(const config::EzConfig& cfg,
                   const fs::path& project_root,
-                  const ExportOptions& opts) {
-    fs::path dir = project_root / ".vscode";
+                  const ExportOptions& opts) {    fs::path dir = project_root / ".vscode";
     VscodeFiles files = build_vscode_files(cfg, project_root, opts);
 
     struct NamedFile { const char* name; const std::string& text; };
@@ -688,6 +692,26 @@ int export_vscode(const config::EzConfig& cfg,
         util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
     }
     return 0;
+}
+
+// 1.4.0-dev.4: CMake standard capability confirmation — see export.hpp.
+// Conservative: an unparseable toolchain version (compiler_tag empty) skips
+// the check entirely (the generated CMake may run on a different toolchain
+// than the one detected at export time).
+std::string std_capability_note(const std::string& std_kind, int std_ver,
+                                const toolchain::Toolchain& tc) {
+    if (std_ver <= 0) return "";
+    if (toolchain::compiler_tag(tc).empty()) return "";  // 版本未知 → 不警告
+    const std::string cap = toolchain::max_supported_std(tc.family, tc.version);
+    int cap_ver = 0;
+    try {
+        if (cap.size() > 3) cap_ver = std::stoi(cap.substr(3));
+    } catch (...) {}
+    if (cap_ver > 0 && std_ver > cap_ver) {
+        return "# " + std_kind + "_STANDARD " + std::to_string(std_ver) +
+               " exceeds the target toolchain capability (" + cap + ")";
+    }
+    return "";
 }
 
 } // namespace ezmk::export_gen

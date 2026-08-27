@@ -75,4 +75,14 @@ int export_vscode(const config::EzConfig& cfg,
                   const fs::path& project_root,
                   const ExportOptions& opts);
 
+// 1.4.0-dev.4: CMake standard capability confirmation — returns a warning
+// comment when the exported standard (CXX_STANDARD / C_STANDARD <std_ver>)
+// exceeds the target toolchain's capability (max_supported_std, dev.2), e.g.
+// "# CXX_STANDARD 17 exceeds the target toolchain capability (CPP11)". Empty
+// when within capability or the toolchain version is unparseable (conservative
+// — no false warnings; the generated CMake may run on a different toolchain
+// than the one detected at export time). Pure — no I/O.
+std::string std_capability_note(const std::string& std_kind, int std_ver,
+                                const toolchain::Toolchain& tc);
+
 } // namespace ezmk::export_gen
