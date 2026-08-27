@@ -91,6 +91,13 @@ code supports a baseline standard (optionally up to a documented upper bound):
 > check warns when a package requires a higher minimum than the consuming project
 > compiles at — see [Package Authoring Guide](package_authoring.md) and
 > [Packages](pkg.md).
+>
+> **Compile negotiation (1.4.0-dev.3+):** a *source* package's effective compile
+> standard is `min( max(pkg_min, consumer_min), max_supported_std, pkg_max )` —
+> the consumer's higher standard is used when the compiler supports it and the
+> package declares it (its range **max** is a commitment boundary: consumers
+> above it never push the package past it). See
+> [Package Authoring Guide](package_authoring.md) for the full semantics.
 
 ---
 

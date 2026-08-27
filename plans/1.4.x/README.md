@@ -21,8 +21,8 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 |--------|------|----------|------|
 | [1.4.0-dev.1](1.4.0-dev.1.md) | 调试配置生成 | `project export vscode` 三件套（launch/tasks/settings）+ per-platform 调试器 + profile 联动 + JSON 序列化/覆盖保护 | ✅ 已完成（2026-08-27，dev.1：全量 931/5396 零回归，+20 用例/+94 断言） |
 | [1.4.0-dev.2](1.4.0-dev.2.md) | 工具链能力表 + 校验严格化 | `max_supported_std(family, version)`（gcc/clang/msvc 分段）+ `[pkg] strict_std_check` 开关（warn→error） | ✅ 已完成（2026-08-27，dev.2：全量 939/5442 零回归，+8 用例/+46 断言） |
-| [1.4.0-dev.3](1.4.0-dev.3.md) | 编译协商（语义 B） | 包按 `max(包min, 消费者min)` 重编（cap 到能力表与包 max）+ 缓存签名自动失效 + 与 1.3.1 warn 共存 | 规划中（依赖 dev.2 ✅） |
-| [1.4.0-dev.4](1.4.0-dev.4.md) | CMake 互操作补全 | `import` 读 `CXX_STANDARD` → 区间 language（`">=CPP<N>"`）；`export` 超能力注释 | 规划中（依赖 dev.2，仅导出确认） |
+| [1.4.0-dev.3](1.4.0-dev.3.md) | 编译协商（语义 B） | 包按 `max(包min, 消费者min)` 重编（cap 到能力表与包 max）+ 缓存签名自动失效 + 与 1.3.1 warn 共存 | ✅ 已完成（2026-08-27，dev.3：全量 948/5472 零回归，+9 用例/+30 断言） |
+| [1.4.0-dev.4](1.4.0-dev.4.md) | CMake 互操作补全 | `import` 读 `CXX_STANDARD` → 区间 language（`">=CPP<N>"`）；`export` 超能力注释 | 规划中（依赖 dev.2 ✅，仅导出确认） |
 | [1.4.0-dev.5](1.4.0-dev.5.md) | 功能收口 | watch `--` 透传 + `workspace watch` + `tgz` 别名 + sha256 边车自动校验（1.3.x 延后项） | 规划中 |
 
 ### 依赖关系
@@ -44,6 +44,6 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 - **1.3.6 重构收益**：`run_executable`（watch 透传通道）、`run_member`（workspace watch 模型）、`TestRunContext`（测试基础设施）为本系列复用。
 - **1.3.6 延后重构项随主线穿插**：build.cpp/pkg.cpp 全面重构、Catch2 结构化解析（报告语义化）——不单列 dev，随相关 dev 一并评估。
 - **cli.cpp 命令组拆文件**（`parse_*` 1272 行单文件）：2.0.0 前评估。
-- **回归基线**：全量 939 用例 / 5442 断言（1.4.0-dev.2 后实测，基线 931/5396），新增功能不得引入回归。
+- **回归基线**：全量 948 用例 / 5472 断言（1.4.0-dev.3 后实测，基线 939/5442），新增功能不得引入回归。
 - **i18n**：各 dev 新增 key 三向一致 + `check_i18n.py` 通过。
 - **与 2.0.0 解耦**：本系列纯增量，不依赖任何 deprecation 到期；2.0.0 保持破坏性变更窗口。

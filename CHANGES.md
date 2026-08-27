@@ -86,6 +86,39 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.0-dev.3 (2026-08-27) — 编译协商（语义 B）
+
+1.4.0 第三个开发子版本，落地**编译协商（语义 B）**：源码包不再按自身声明的 min 独立编译，而是按 `effective = min( max(包min, 消费者min), 能力表, 包max )` 重编——消费者标准更高时直接利用（包 C++11、消费者 C++17 → 按 C++17 编译），cap 到 dev.2 能力表与包声明区间上界（元数据承诺，超上界行为未验证）。**1.3.1 语义 A（编译取 min）为基线，本版扩展而非替换**；预编译包不参与（无编译，ABI 由发布方决定）。**公共 API 无破坏性变更**（纯增量：内部协商 + 新纯函数 `pkg::negotiate_package_std`）。
+
+### 新增 / 行为变更
+
+- **`pkg::negotiate_package_std(pkg_lang, consumer_min, tc)`**（`pkg.hpp` + `pkg.cpp`，纯函数）：协商公式单点实现——无消费者 / 消费者能力不足 / 任一 cap 把结果拉回包 min 以下 → 返回原声明（不协商）；否则返回替换 `std_flag`/`min_ver`/`normalized_lang`（含 GNU 前缀）的 `LanguageInfo`，与 `parse_language` 构造逐字节一致
+- **`compile_package()` 接入**：`check_std_compat` 改接 `ConsumerStdContext` 参数（与协商共享一次 `consumer_std_ctx()`，不再二次 parse 消费者配置）；协商后的 `lang` 构造 `CompileInput`；预编译路径不变（`select_precompiled_archive` 的 warn/fatal 逻辑原样）
+- **1.3.1 校验与协商共存**：校验在协商前（基于**声明**标准）；协商值 ≥ 包 min → 自然不再 warn；包 min > 消费者能力 → 1.3.1 warn/fatal 保留
+- **包级缓存签名修复**：`compile_options_signature` 的 std_flag 从 `""` 改为协商后的 `lang.std_flag`——此前包级签名从不含 std_flag，与含 std_flag 的逐源签名永不匹配，**包缓存从不命中（每次安装全量重编）**；现在命中恢复，且协商值变化（消费者标准变更）自动失效——与项目构建路径（`build.cpp`）对齐
+- **缓存语义**：协商标准参与签名，消费者标准变化 → 自动重编；同一 scope 内协商值一致才复用包缓存（文档注明）
+
+### 文档
+
+- `docs/en|zh/config_file.md`：区间语法节补「编译协商（1.4.0-dev.3+）」——公式、区间 max 为承诺边界、完整语义指向包编写指南
+- `docs/en|zh/package_authoring.md`：新增「编译协商」小节——公式、触发条件、cap 到能力表/包上界、预编译不参与、缓存/共享语义
+- `CHANGES.md` 本条目；`plan.md` 1.4.0-dev.3 执行计划（详见 `plans/1.4.x/1.4.0-dev.3.md`）
+
+### 测试
+
+- 新增 8 个协商公式单测（`test_pkg.cpp`）：消费者更高→协商（std_flag/normalized/min_ver 断言）、无消费者→原声明、消费者更弱→原声明、能力表 cap（gcc 4.8→不协商 / gcc 8→cap 到 17）、包上界 cap（`C++11..C++17` 消费者 20→17）、C 语言协商（`-std=c17`/`C17`）、GNU 扩展保留（`-std=gnu++17`/`GNUCPP17`）
+- 新增 1 个集成测试（`test_integration.cpp`）：C++17 消费者 + C++11 声明包（源码含 C++17 结构化绑定）→ 协商编译成功且无 1.3.1 warn；同消费者重装 → `1 cached, 0 compiled`（签名修复锁定）；消费者降级 C++11 → 编译失败（证明此前成功确为协商生效）
+- 快速测试：**871 用例 / 4926 断言零失败**（dev.2 非集成子集 863/4903，+8 用例；2 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **语义 C**（"支持多高用多高"自动协商到能力上限）：1.4.0 后续或 1.5.x 评估。
+- **`[test]` 场景协商**（测试编译用消费者标准）：1.4.0 后续或 1.5.x。
+- **共享缓存注意**：同一 scope 内协商值一致才复用包缓存（`--locked`/确定性构建下协商值固定）。
+- **包缓存行为变化**：升级到本版后首次安装会全量重编一次（签名从 `""` 变为含 std_flag）——一次性开销，此后命中恢复。
+
+---
+
 ## 1.3.6 (2026-08-26) — 代码质量收口（技术债清理）
 
 1.3.6 是 1.3.0 发布后的**补丁版本**，主题为**代码质量收口**（承接 1.3.5 后的质量分析结论）：`-Wall -Wextra` 清零、错误文案与实现一致、校验去噪、归档/运行逻辑去重、`run_tests` 机械拆分、测试文件按主题拆分。**纯重构零新功能**——不引入新 flag/配置/命令/i18n key；每个重构都有既有测试锁定（等价性/集成/全量回归）。**公共 API 无破坏性变更**。

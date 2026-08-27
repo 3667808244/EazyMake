@@ -30,24 +30,24 @@
 
 ### 阶段一：协商 helper（4.1）
 
-- [ ] **1.1 `negotiate_package_std()`**（`pkg.cpp` + `pkg.hpp` 声明，纯函数）：`effective = min( max(包min, 消费者min), 能力表, 包max )`；无消费者 / 消费者能力不足 / cap 拉回包 min 以下 → 返回原声明（不协商）；返回替换 `std_flag`/`min_ver`/`normalized_lang` 的 `LanguageInfo`
-- [ ] **1.2 调用点接入**（`compile_package`）：`check_std_compat` 改接 `ConsumerStdContext` 参数（与协商共享一次 `consumer_std_ctx()` 解析，不再二次 parse）；协商后的 `lang` 构造 `cin`；预编译路径不变
-- [ ] **1.3 单测**（`test_pkg.cpp`）：公式各分支——消费者更高→协商、无消费者→原声明、消费者更弱→原声明+warn 保留、cap 能力表（低能力编译器→不协商）、cap 包上界（区间 max）、C 语言协商
+- [x] **1.1 `negotiate_package_std()`**（`pkg.cpp` + `pkg.hpp` 声明，纯函数）：`effective = min( max(包min, 消费者min), 能力表, 包max )`；无消费者 / 消费者能力不足 / cap 拉回包 min 以下 → 返回原声明（不协商）；返回替换 `std_flag`/`min_ver`/`normalized_lang` 的 `LanguageInfo`
+- [x] **1.2 调用点接入**（`compile_package`）：`check_std_compat` 改接 `ConsumerStdContext` 参数（与协商共享一次 `consumer_std_ctx()` 解析，不再二次 parse）；协商后的 `lang` 构造 `cin`；预编译路径不变
+- [x] **1.3 单测**（`test_pkg.cpp`）：公式各分支——消费者更高→协商、无消费者→原声明、消费者更弱→原声明+warn 保留、cap 能力表（低能力编译器→不协商）、cap 包上界（区间 max）、C 语言协商
 
 ### 阶段二：缓存/共存（4.2）
 
-- [ ] **2.1 包级签名修复**：`compile_options_signature` 的 std_flag 从 `""` 改为协商后的 `lang.std_flag`——包缓存命中恢复（现状从不命中）+ 协商值变化自动失效（锁定测试）
-- [ ] **2.2 集成测试**：真实项目——消费者 C++17 + 包声明 C++11（源码含 C++17 特性）→ 安装成功（协商到 C++17）；消费者 C++11 同包 → 编译失败（保持 C++11）；同消费者重复安装 → 第二次缓存命中；消费者标准变更 → 重编（签名失效）
-- [ ] **2.3 warn 共存确认**：协商成功路径不再 warn（协商值 ≥ 包 min）；包 min > 消费者能力 → 1.3.1 warn 保留（既有测试回归即覆盖）
+- [x] **2.1 包级签名修复**：`compile_options_signature` 的 std_flag 从 `""` 改为协商后的 `lang.std_flag`——包缓存命中恢复（现状从不命中）+ 协商值变化自动失效（锁定测试）
+- [x] **2.2 集成测试**：真实项目——消费者 C++17 + 包声明 C++11（源码含 C++17 特性）→ 安装成功（协商到 C++17）；消费者 C++11 同包 → 编译失败（保持 C++11）；同消费者重复安装 → 第二次缓存命中；消费者标准变更 → 重编（签名失效）
+- [x] **2.3 warn 共存确认**：协商成功路径不再 warn（协商值 ≥ 包 min）；包 min > 消费者能力 → 1.3.1 warn 保留（既有测试回归即覆盖）
 
 ### 阶段三：文档 + 收口（4.3）
 
-- [ ] **3.1 config_file.md / package_authoring.md（en/zh）**：编译协商（语义 B）说明——公式、触发条件、cap 到能力表/包上界、缓存/共享语义（同一 scope 内协商值一致才复用缓存）、预编译包不参与
-- [ ] **3.2 CHANGES.md**：1.4.0-dev.3 条目（新增 / 行为变更 / 文档 / 已知限制 + 包缓存命中修复说明）
-- [ ] **3.3 全量零回归**：`bash build.sh test-all`（基线 939/5442）
-- [ ] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **3.1 config_file.md / package_authoring.md（en/zh）**：编译协商（语义 B）说明——公式、触发条件、cap 到能力表/包上界、缓存/共享语义（同一 scope 内协商值一致才复用缓存）、预编译包不参与
+- [x] **3.2 CHANGES.md**：1.4.0-dev.3 条目（新增 / 行为变更 / 文档 / 已知限制 + 包缓存命中修复说明）
+- [x] **3.3 全量零回归**：`bash build.sh test-all`（基线 939/5442 → **948/5472**，+9 用例/+30 断言，3 跳过为既有环境限制）
+- [x] **3.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
-> 门槛未满足即停止，禁止带着未收口项进入下一子版本。
+> 门槛未满足即停止，禁止带着未收口项进入下一子版本。**本版门槛全部满足，dev.3 收口。**
 
 ---
 

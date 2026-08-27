@@ -58,6 +58,33 @@ A **utils** package (`type = "utils"`) provides Lua-based tools:
 > link names (`-l<name>`), so the lowercase-hyphen convention keeps them portable
 > across case-sensitive filesystems and free of ambiguous characters.
 
+#### Compile Negotiation (1.4.0-dev.3+)
+
+Since 1.4.0-dev.3, a **source** package is not compiled at its declared minimum
+in isolation — the consumer project's standard is negotiated:
+
+```
+effective = min( max(pkg_min, consumer_min), compiler_capability, pkg_max )
+```
+
+- A package declaring `"C++11"` installed into a `"C++17"` consumer is compiled
+  at **C++17** — the consumer already has the toolchain and headers for it
+  (wasted effort, and unusable features, avoided).
+- The result is **capped** by the compiler's actual capability
+  (`max_supported_std`, e.g. an old GCC cannot be pushed above C++11) and by the
+  package's own declared range upper bound. Declare `"C++11..C++17"` to pin a
+  documented **maximum**: behavior above it is untested, so it is never used.
+- No consumer project (global/user-scope installs), or a consumer weaker than
+  the package → the package compiles at its declared minimum (unchanged), and
+  the 1.3.1 compatibility warning still applies.
+- **Precompiled packages never negotiate** (no compilation — the ABI is decided
+  by the publisher; the 1.3.1 precompiled ABI warning still applies).
+- **Caching:** the negotiated standard is part of the compile signature, so a
+  consumer-standard change recompiles the package automatically. The same
+  package built under different consumers yields different artifacts — the
+  install cache is shared per scope, so reuse it only when the negotiated
+  standard is identical (deterministic builds pin it via `ezmk.lock`).
+
 ### 2.2 `[depends]`
 
 ```toml
