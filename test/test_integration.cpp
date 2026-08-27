@@ -1499,13 +1499,15 @@ TEST_CASE("integration: source package compiles at the negotiated standard (dev.
     file_write(proj_dir / "src" / "main.cpp", "int main() { return 0; }\n");
 
     // A source package declaring C++11 whose source needs C++17 (structured
-    // bindings) — compiles ONLY when negotiated up to the consumer's C++17.
+    // bindings) with -Werror — compiles ONLY when negotiated up to the
+    // consumer's C++17 (gcc 16 treats newer features as a warning in older
+    // modes; -Werror turns that into a hard error, proving the standard).
     fs::path pkg_dir = tmp.path / "nego_pkg";
     fs::create_directories(pkg_dir / "include");
     fs::create_directories(pkg_dir / "src");
     file_write(pkg_dir / "ezmk.toml",
         "[project]\nname = \"negopkg\"\ntype = \"static\"\nversion = \"1.0.0\"\n"
-        "language = \"C++11\"\n");
+        "language = \"C++11\"\n\n[compile]\nflags = [\"-Werror\"]\n");
     file_write(pkg_dir / "src" / "s.cpp",
         "#include <utility>\n"
         "int nego_value() { auto [a, b] = std::pair<int,int>{1, 2}; return a + b; }\n");
