@@ -259,27 +259,28 @@ end
 TEST_CASE("hooks: ctx.output is correct", "[hooks][0.2.3][lua]") {
     TempProject proj;
     auto output_path = proj.dir / "build" / "myapp.exe";
-    auto expected_output = output_path.string();
 
+    // 1.4.0-dev.5: the old test asserted `rc == 0 || rc == 1` and compared
+    // ctx.output against an UNDEFINED Lua global (always nil → always failed
+    // to a non-zero rc, but the test passed either way). Now the expected
+    // path is rebuilt in Lua from ctx.project_root — tolerant of both '/' and
+    // '\' separators (Windows native output vs Lua-side concatenation) — and
+    // asserted; a wrong ctx.output makes the hook fatal.
     auto script = write_hook_script(proj.dir, "check_output", R"lua(
 function run(ctx)
-    -- Store output for assertion (we can only return integers)
-    -- We check by comparing strings directly
-    if ctx.output == EXPECTED then
-        return 0
-    else
-        return 1
-    end
+    -- Build the expected path accepting both separator styles.
+    local sep = string.find(ctx.output, "\\", 1, true) and "\\" or "/"
+    local expected = ctx.project_root .. sep .. "build" .. sep .. "myapp.exe"
+    assert(ctx.output == expected,
+        "ctx.output mismatch: got '" .. tostring(ctx.output) ..
+        "', expected '" .. expected .. "'")
+    return 0
 end
 )lua");
 
-    // We can't easily inject the expected string into Lua, so just verify the script runs
     init();
-    // Just check it doesn't crash
     int rc = run_hook_script(state(), script, output_path, proj.dir, "");
-    // Non-zero exit (1) is from the string mismatch, not a Lua error
-    // Either 0 or 1 means the hook executed correctly
-    REQUIRE((rc == 0 || rc == 1));
+    REQUIRE(rc == 0);
 }
 
 TEST_CASE("hooks: ctx fields accessible via key name", "[hooks][0.2.3][lua]") {

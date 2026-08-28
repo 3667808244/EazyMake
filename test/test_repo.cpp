@@ -1,6 +1,7 @@
 // Unit tests for repo.cpp
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
+#include "test_helpers.hpp"
 #include "ezmk/repo.hpp"
 #include "ezmk/cli.hpp"
 #include "ezmk/util.hpp"
@@ -97,11 +98,17 @@ TEST_CASE("load_repo_list: empty when file doesn't exist", "[repo]") {
 }
 
 TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
-    TempRepoScope temp;
+    // 1.4.0-dev.5: the old test never called either function (it hand-wrote
+    // TOML and asserted on a locally-built vector) — zero coverage of the
+    // serialize/deserialize pair. Now: chdir into a temp project (project
+    // scope list.toml resolves to CWD when no ezmk.toml is found, or to the
+    // located root), save via the real API, load back, and compare.
+    TempDir tmp;
+    CwdGuard cwd;  // chdirs to a temp dir; Project scope resolves to it
+    fs::path list_path = list_toml_path(Scope::Project);
+    REQUIRE_FALSE(list_path.empty());
 
-    // Build test entries
     std::vector<RepoEntry> entries;
-
     RepoEntry e1;
     e1.name = "test-repo";
     e1.url = "https://github.com/user/test-repo.git";
@@ -109,7 +116,6 @@ TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
     e1.branch = "main";
     e1.last_update = "2026-06-22T12:00:00Z";
     entries.push_back(e1);
-
     RepoEntry e2;
     e2.name = "local-dev";
     e2.url = "E:/packages/my-dev-repo";
@@ -117,36 +123,20 @@ TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
     e2.last_update = "2026-06-22T10:00:00Z";
     entries.push_back(e2);
 
-    // Save to a temp location (we need to override the path resolution somehow)
-    // Since save_repo_list uses list_toml_path(), we test by saving directly
-    fs::create_directories(temp.list_path.parent_path());
-    {
-        // Manually write TOML to the temp path
-        std::ostringstream out;
-        out << "[[repos]]\n";
-        out << "name = \"test-repo\"\n";
-        out << "url = \"https://github.com/user/test-repo.git\"\n";
-        out << "type = \"git\"\n";
-        out << "branch = \"main\"\n";
-        out << "last_update = \"2026-06-22T12:00:00Z\"\n\n";
+    save_repo_list(Scope::Project, entries);
+    REQUIRE(fs::exists(list_path));
 
-        out << "[[repos]]\n";
-        out << "name = \"local-dev\"\n";
-        out << "url = \"E:/packages/my-dev-repo\"\n";
-        out << "type = \"local\"\n";
-        out << "last_update = \"2026-06-22T10:00:00Z\"\n";
-
-        file_write(temp.list_path, out.str());
-    }
-
-    REQUIRE(ezmk::util::file_exists(temp.list_path));
-
-    // Now test: the RepoEntry struct is correct
-    REQUIRE(entries.size() == 2);
-    REQUIRE(entries[0].name == "test-repo");
-    REQUIRE(entries[0].type == "git");
-    REQUIRE(entries[1].name == "local-dev");
-    REQUIRE(entries[1].type == "local");
+    auto loaded = load_repo_list(Scope::Project);
+    REQUIRE(loaded.size() == 2);
+    REQUIRE(loaded[0].name == "test-repo");
+    REQUIRE(loaded[0].url == "https://github.com/user/test-repo.git");
+    REQUIRE(loaded[0].type == "git");
+    REQUIRE(loaded[0].branch == "main");
+    REQUIRE(loaded[0].last_update == "2026-06-22T12:00:00Z");
+    REQUIRE(loaded[1].name == "local-dev");
+    REQUIRE(loaded[1].url == "E:/packages/my-dev-repo");
+    REQUIRE(loaded[1].type == "local");
+    REQUIRE(loaded[1].last_update == "2026-06-22T10:00:00Z");
 }
 
 // ===================================================================

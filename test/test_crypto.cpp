@@ -132,8 +132,17 @@ TEST_CASE("Sha256Stream: finalize_raw", "[crypto]") {
         stream.update("test", 4);
         uint8_t raw[32];
         stream.finalize_raw(raw);
-        // The raw output is 32 bytes (256 bits)
-        REQUIRE(true);
+        // 1.4.0-dev.5: the old `REQUIRE(true)` verified nothing — assert the
+        // raw 32-byte digest matches the hex digest of the same input (a
+        // truncated finalize_raw that wrote < 32 bytes would fail the hex
+        // comparison below, since the tail bytes would be uninitialized).
+        std::string hex;
+        for (int i = 0; i < 32; ++i) {
+            char buf[3];
+            std::snprintf(buf, sizeof(buf), "%02x", raw[i]);
+            hex += buf;
+        }
+        REQUIRE(hex == sha256("test"));
     }
 
     SECTION("raw output matches hex output") {

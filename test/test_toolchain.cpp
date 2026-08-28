@@ -284,10 +284,10 @@ TEST_CASE("Toolchain default state", "[toolchain][struct]") {
 
 TEST_CASE("load_msvc_env with non-existent path returns empty map", "[toolchain][msvc_env]") {
     // On Windows without VS, or on non-Windows, this should return empty.
-    // The function should not crash — reaching here without exception is success.
+    // 1.4.0-dev.5: the old `env.empty() || !env.empty()` was a tautology —
+    // now the empty-map contract is asserted directly (no crash AND empty).
     auto env = tc::load_msvc_env("C:/nonexistent/vcvars64.bat");
-    bool result = env.empty() || !env.empty(); // just verify no crash
-    CHECK(result);
+    CHECK(env.empty());
 }
 
 // ===================================================================
