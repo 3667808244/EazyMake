@@ -74,7 +74,7 @@ scripting and muscle memory.
 | `ezmk run [build-opts] [-- <program args>]` | Build and execute (full: `ezmk project run`) |
 | `ezmk clean` | Remove cache and temp files (full: `ezmk project clean`) |
 | `ezmk install [install-opts]` | Install build artifacts to prefix, 1.1.0+ (full: `ezmk project install`) |
-| `ezmk pack [--output <dir>] [--precompiled] [--format <tar.gz\|zip>]` | Package as `.tar.gz` (default: **source package**, platform-independent; `--precompiled` produces a prebuilt archive, `static` only; `--format zip` picks the zip archiver, 1.3.5+), 1.1.0+ (full: `ezmk project pack`) |
+| `ezmk pack [--output <dir>] [--precompiled] [--format <tar.gz\|tgz\|zip>]` | Package as `.tar.gz` (default: **source package**, platform-independent; `--precompiled` produces a prebuilt archive, `static` only; `--format zip` picks the zip archiver, 1.3.5+; `tgz` = `tar.gz` alias, 1.4.0-dev.5+), 1.1.0+ (full: `ezmk project pack`) |
 | `ezmk watch [build-opts] [--no-build-on-start]` | Watch sources and auto-rebuild (full: `ezmk project watch`) |
 | `ezmk test [test-opts]` | Build and run project tests, 1.1.0+ (full: `ezmk project test`) |
 | `ezmk project cc [-o <path>] [--profile <p>]` | Generate `compile_commands.json` for clangd/LSP, 1.2.0+ |
@@ -220,6 +220,8 @@ deliberately not shown).
 
 **`watch --run` (1.3.4+):** after every successful rebuild the freshly built executable runs **blockingly** on the watcher thread — change detection is naturally paused while the program runs and resumes when it exits (zero process management). Non-zero exits only **warn** (watch keeps looping). Only valid for `executable` projects (`static`/`shared`/`utils` + `--run` → startup error). The **initial** build does not run — the first run happens after the first change. Behavior without `--run` is unchanged. Ctrl+C terminates the child and watch together (same foreground process group). A long-running program (server/GUI) pauses watching until it exits — press Ctrl+C to stop.
 
+**`watch --run -- <args>` (1.4.0-dev.5+):** arguments after `--` are passed to the watched executable on **every** run — `ezmk watch --run -- --verbose input.txt` runs the rebuilt program as `./exe --verbose input.txt`. Without `--`, the program runs with no arguments (behavior unchanged). `--` terminates flag parsing first (GNU convention), so the args may themselves start with `-`.
+
 **`install`-only flags:**
 
 | Flag | Purpose |
@@ -234,7 +236,7 @@ deliberately not shown).
 | Flag | Purpose |
 |---|---|
 | `--output <dir>` | Output directory (default `.`). Only valid for `type = "static"` projects |
-| `--format <tar.gz\|zip>` | **1.3.5+** Archive format (default `tar.gz`, unchanged; `zip` uses the vendored miniz writer). Both formats contain the same files (identical stage contents) and ship a `<archive>.sha256` sidecar |
+| `--format <tar.gz\|tgz\|zip>` | **1.3.5+** Archive format (default `tar.gz`, unchanged; `zip` uses the vendored miniz writer). **1.4.0-dev.5+** `tgz` is a case-insensitive alias for `tar.gz` (normalized at parse time; the archive name stays `name-version.tar.gz`). All formats contain the same files (identical stage contents) and ship a `<archive>.sha256` sidecar |
 
 > **`pack` writes a `.sha256` sidecar (1.3.5+):** every successful pack writes `<archive>.sha256` (`<hash>  <filename>`) — same format for `tar.gz` and `zip`; a pure add-on that does not affect existing consumers. `.deb` / `.rpm` are deliberately out of scope (use `fpm` + `ezmk project install --prefix <staging>`).
 
@@ -265,6 +267,7 @@ A workspace is a **collection of independent projects (members) under one direct
 | `ezmk workspace list` | List members (name / type / workspace deps); invalid members show their reason |
 | `ezmk workspace build [-j N] [--stop-on-error] [--member <name>...]` | Build all members topologically (dependency layers first, parallel within a layer) |
 | `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...] [--report <fmt>[:<path>]]` | Run member tests; members without tests are skipped (not an error). **1.3.2+** `--report` is forwarded to every member — each writes its own report file |
+| `ezmk workspace watch [-j N] [--stop-on-error] [--member <name>...] [-r]` | **1.4.0-dev.5+** Watch **all** members and rebuild on change (member-level watch; Ctrl+C stops every member watcher together) |
 | `ezmk workspace clean [--member <name>...]` | Clean members in reverse dependency order (same semantics as single-project `ezmk clean`: caches/temp only, `build/` artifacts kept) |
 
 The config file is **`ezmk-workspace.toml`** (independent of `ezmk.toml`; a root may be both a project and a workspace):
@@ -288,11 +291,13 @@ workspace = ["strutil"]           # sibling member (basename or full relative pa
 
 Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at config time) + the depended-on member must be `type = "static"` (its `build/lib<name>.a` is reused); no versions (develop-and-use; version/snapshot semantics belong to packages). See the `[depends]` section of [`config_file.md`](config_file.md).
 
-**`-w` / `--workspace` redirect (on `build` / `test` / `clean`):** `ezmk build -w` ≡ `ezmk workspace build` (the workspace root is located upward from any subdirectory). It is **not** "build both the project and the workspace"; without `-w`, a member-internal `ezmk build` keeps single-project semantics (builds only the current member, injecting **already-existing** sibling artifacts).
+**`-w` / `--workspace` redirect (on `build` / `test` / `watch` / `clean`):** `ezmk build -w` ≡ `ezmk workspace build`, `ezmk watch -w` ≡ `ezmk workspace watch` (the workspace root is located upward from any subdirectory). It is **not** "build both the project and the workspace"; without `-w`, a member-internal `ezmk build` keeps single-project semantics (builds only the current member, injecting **already-existing** sibling artifacts).
 
 **`--member <name>` = target member + dependency closure:** builds only the named member and its **dependencies** (dependencies build first in topological order so artifacts are fresh); `--member apps/tool-a` and `--member tool-a` (basename) are equivalent. To build **a single member without the closure** → `cd <member> && ezmk build`. An unknown member is an error.
 
 **`--stop-on-error` (`build` / `test`):** after the first failure the scheduler **stops dispatching new tasks** — not-yet-started members of the current layer and all later layers are marked `skipped`; members already running **finish naturally, never killed**. The summary reports succeeded / failed / skipped; any failure gives a non-zero exit. Without the flag, all members run and failures are summarized. `clean` does **not** support the flag (no dependency semantics).
+
+**`workspace watch` (1.4.0-dev.5+):** runs `ezmk watch` in **every selected member** concurrently (member-level watch — each member keeps its own project semantics, incremental cache and output). Member output is aggregated with a `[member]` prefix. All selected members' watchers run simultaneously within the `-j` limit and stop together on Ctrl+C (each member watch handles its own SIGINT). `--member <name>` selects the member + its dependency closure; `--run`/`-r` is forwarded to **executable** members only (`static` members watch without `--run` — the flag has no meaning for a library). **Concurrency caveat:** a dependent member reads the depended-upon member's `build/` artifacts during its own rebuilds — while the depended-upon member is rebuilding, a dependent may briefly see a half-written sibling artifact (the next rebuild self-heals). Members are started in topological order (dependencies first) to minimize the window; if this causes link flakiness, watch only the needed subset with `--member`.
 
 **`-j N` / `--jobs N`:** intra-layer parallelism; precedence `-j` > `[workspace.options].default_jobs` > hardware concurrency.
 
@@ -324,6 +329,8 @@ Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at con
 | `-y` / `--yes` | Skip confirmation prompts (non-interactive) |
 | `--locked` | Install only against the existing `ezmk.lock` — error on mismatch (1.1.0+) |
 | `--no-lock` | Skip `ezmk.lock` generation (1.1.0+) |
+
+**Local-archive `.sha256` sidecar auto-verification (1.4.0-dev.5+):** when installing a **local** archive (`pkg install <file>.tar.gz`) **without** an explicit `--sha256` (or index-provided hash), and a sibling `<archive>.sha256` sidecar exists (the `ezmk project pack` output format `<hash>  <filename>`), the hash is read from the sidecar and verified automatically — `ezmk pkg install mylib-1.0.0.tar.gz` gains full integrity checking for free. Precedence and safety: an explicit `--sha256` / index.toml `sha256` always wins (a sidecar only fills an **empty** expected hash); URL installs never trust a companion sidecar (only explicit `--sha256`); a **missing or malformed** sidecar (not 64 hex chars) simply skips verification — it never blocks the install.
 
 See [`pkg.md`](pkg.md) for the package format and dependency resolution.
 
@@ -478,14 +485,14 @@ unknown subcommand. Shorthands are typing sugar and are **not** part of zsh comp
 | `pp` | `project pack` | | | | |
 | `pt` | `project test` | | | | |
 | `wl` | `workspace list` (1.3.3+) | `wc` | `workspace clean` (1.3.3+) | | |
-| `wb` | `workspace build` (1.3.3+) | | | | |
+| `wb` | `workspace build` (1.3.3+) | `ww` | `workspace watch` (1.4.0-dev.5+) | | |
 | `wt` | `workspace test` (1.3.3+) | | | | |
 | `u` | `utils` | | | `h` / `v` | `help` / `version` |
 
-> **Workspace shorthands (1.3.3+):** `wl`/`wb`/`wt`/`wc` expand at the command
+> **Workspace shorthands (1.3.3+):** `wl`/`wb`/`wt`/`wc` (and `ww`, 1.4.0-dev.5+) expand at the command
 > position exactly like the p/k/r shorthands (`ezmk wb` ≡ `ezmk workspace build`;
 > `ezmk workspace wb` is still an unknown subcommand). They are orthogonal to the
-> `-w` redirect flag (a build/test/clean *option*). `w` alone and the `example`
+> `-w` redirect flag (a build/test/watch/clean *option*). `w` alone and the `example`
 > group deliberately have **no** shorthand — see the 1.3.3 plan.
 
 ---

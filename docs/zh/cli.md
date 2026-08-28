@@ -66,7 +66,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `ezmk run [build-opts] [-- <program args>]` | 构建并运行（完整形式：`ezmk project run`） |
 | `ezmk clean` | 清除缓存和临时文件（完整形式：`ezmk project clean`） |
 | `ezmk install [install-opts]` | 安装构建产物到指定前缀，1.1.0+（完整形式：`ezmk project install`） |
-| `ezmk pack [--output <dir>] [--precompiled] [--format <tar.gz\|zip>]` | 打包为 `.tar.gz`（默认**源码包**，平台无关；`--precompiled` 生成预编译包，仅 `static`；`--format zip` 选 zip 归档器，1.3.5+），1.1.0+（完整形式：`ezmk project pack`） |
+| `ezmk pack [--output <dir>] [--precompiled] [--format <tar.gz\|tgz\|zip>]` | 打包为 `.tar.gz`（默认**源码包**，平台无关；`--precompiled` 生成预编译包，仅 `static`；`--format zip` 选 zip 归档器，1.3.5+；`tgz` = `tar.gz` 别名，1.4.0-dev.5+），1.1.0+（完整形式：`ezmk project pack`） |
 | `ezmk watch [build-opts] [--no-build-on-start]` | 监视源码并自动重新构建（完整形式：`ezmk project watch`） |
 | `ezmk test [test-opts]` | 构建并运行项目测试，1.1.0+（完整形式：`ezmk project test`） |
 | `ezmk project cc [-o <path>] [--profile <p>]` | 生成 `compile_commands.json`（clangd/LSP），1.2.0+ |
@@ -173,6 +173,8 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 
 **`watch --run`（1.3.4+）：** 每次成功重建后在 watcher 线程上**阻塞运行**新产物——程序运行期间天然暂停变更检测，退出后自动恢复（零进程管理）。非零退出只**警告**（watch 是持续循环）。仅适用于 `executable` 项目（`static`/`shared`/`utils` + `--run` → 启动报错）。**初始构建不运行**——首次运行发生在第一次变更之后。无 `--run` 时行为完全不变。Ctrl+C 与子进程同前台进程组一起终止（用户意图"全停"）。长驻程序（服务器/GUI）会暂停监听直到退出——按 Ctrl+C 停止。
 
+**`watch --run -- <args>`（1.4.0-dev.5+）：** `--` 之后的参数在**每次**运行时透传给被监视的产物——`ezmk watch --run -- --verbose input.txt` 等价于 `./exe --verbose input.txt`。不带 `--` 时产物无参数运行（行为不变）。`--` 先终止 flag 解析（GNU 约定），因此参数本身可以 `-` 开头。
+
 **`install` 专属标志：**
 
 | 标志 | 用途 |
@@ -187,7 +189,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | 标志 | 用途 |
 |---|---|
 | `--output <dir>` | 输出目录（默认 `.`）。仅适用于 `type = "static"` 的项目 |
-| `--format <tar.gz\|zip>` | **1.3.5+** 归档格式（默认 `tar.gz`，行为不变；`zip` 走 vendored miniz）。两种格式内容逐文件等价（同一 stage 流程），均产出 `<archive>.sha256` 边车 |
+| `--format <tar.gz\|tgz\|zip>` | **1.3.5+** 归档格式（默认 `tar.gz`，行为不变；`zip` 走 vendored miniz）。**1.4.0-dev.5+** `tgz` 是 `tar.gz` 的大小写不敏感别名（解析时归一化，归档名仍为 `name-version.tar.gz`）。各格式内容逐文件等价（同一 stage 流程），均产出 `<archive>.sha256` 边车 |
 
 > **`pack` 产出 `.sha256` 边车（1.3.5+）：** 每次成功打包写 `<archive>.sha256`（`<hash>  <filename>`，tar.gz 与 zip 统一）——纯新增文件，不影响既有消费。`.deb` / `.rpm` 明确不做（用 `fpm` + `ezmk project install --prefix <staging>` 配方）。
 
@@ -218,6 +220,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `ezmk workspace list` | 列出成员（名称 / 类型 / workspace 依赖），无效成员标注原因 |
 | `ezmk workspace build [-j N] [--stop-on-error] [--member <name>...]` | 拓扑构建全部成员（依赖层先构建、同层并行） |
 | `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...] [--report <格式>[:<路径>]]` | 运行成员测试；无测试的成员跳过（不报错）。**1.3.2+** `--report` 透传给每个成员，各写各的报告文件 |
+| `ezmk workspace watch [-j N] [--stop-on-error] [--member <name>...] [-r]` | **1.4.0-dev.5+** 监视**全部**成员，变更自动重建（成员级 watch；Ctrl+C 一起停止所有成员 watcher） |
 | `ezmk workspace clean [--member <name>...]` | 按依赖逆序清理成员（与单项目 `ezmk clean` 语义一致：清缓存/临时目录，`build/` 产物保留） |
 
 配置文件为 **`ezmk-workspace.toml`**（独立于 `ezmk.toml`；根可同时是项目与工作区）：
@@ -241,11 +244,13 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 
 依赖约束：**单向非循环**（环 / 自环在配置期拒绝）+ 被依赖成员必须是 `type = "static"`（产物 `build/lib<name>.a` 复用）；无版本（开发中即改即用，版本/快照语义走包）。详见 [`config_file.md`](config_file.md) 的 `[depends]` 节。
 
-**`-w` / `--workspace` 重定向（附在 `build` / `test` / `clean` 上）：** `ezmk build -w` ≡ `ezmk workspace build`（从工作区内任意子目录自动向上定位工作区根）。**不是**「项目 + workspace 都构建」；不加 `-w` 的成员内 `ezmk build` 仍是单项目语义（只构建当前成员，注入**已存在**的兄弟产物）。
+**`-w` / `--workspace` 重定向（附在 `build` / `test` / `watch` / `clean` 上）：** `ezmk build -w` ≡ `ezmk workspace build`，`ezmk watch -w` ≡ `ezmk workspace watch`（从工作区内任意子目录自动向上定位工作区根）。**不是**「项目 + workspace 都构建」；不加 `-w` 的成员内 `ezmk build` 仍是单项目语义（只构建当前成员，注入**已存在**的兄弟产物）。
 
 **`--member <name>` = 目标成员 + 依赖闭包：** 只构建指定成员及其**依赖**（依赖按拓扑先构建，保证产物新鲜）；`--member apps/tool-a` 与 `--member tool-a`（末段）等价。只想构建**单个成员、不构建闭包** → `cd <member> && ezmk build`。未知成员 → 报错。
 
 **`--stop-on-error`（`build` / `test`）：** 首个失败发生后**停止派发新任务**——本层未启动的成员与所有后续层标记 `skipped`；已在运行的成员**自然结束、不 kill**。摘要含 succeeded / failed / skipped；任一失败退出码非零。不设该标志 → 全部成员跑完再汇总。`clean` **不支持**该标志（无依赖语义）。
+
+**`workspace watch`（1.4.0-dev.5+）：** 在每个**选定成员**里并行跑 `ezmk watch`（成员级 watch——各成员保持自己的项目语义、增量缓存与输出），成员输出带 `[member]` 前缀聚合。选定成员的 watcher 在 `-j` 限制内同时运行，Ctrl+C 一起停止（每个成员 watch 自行处理 SIGINT）。`--member <name>` 选择目标成员 + 依赖闭包；`--run`/`-r` 只透传给 **executable** 成员（`static` 成员不带 `--run` watch——库无此语义）。**并发注意：** 依赖者重建时会读取被依赖成员的 `build/` 产物——被依赖成员重建期间，依赖者可能短暂读到半成品兄弟产物（下次重建自愈）。成员按拓扑序启动（依赖先）以缩小窗口；若因此偶发链接抖动，用 `--member` 只监视所需子集。
 
 **`-j N` / `--jobs N`：** 层内并行任务数；优先级 `-j` > `[workspace.options].default_jobs` > 硬件并发。
 
@@ -277,6 +282,8 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 | `-y` / `--yes` | 跳过确认提示（非交互模式） |
 | `--locked` | 仅按现有 `ezmk.lock` 安装，不一致则报错（1.1.0+） |
 | `--no-lock` | 跳过 `ezmk.lock` 生成（1.1.0+） |
+
+**本地归档 `.sha256` 边车自动校验（1.4.0-dev.5+）：** 安装**本地**归档（`pkg install <file>.tar.gz`）且**未**显式给 `--sha256`（或 index 未提供哈希）时，若同目录存在 `<archive>.sha256` 边车（`ezmk project pack` 的产出格式 `<hash>  <filename>`），自动读取边车哈希并校验——`ezmk pkg install mylib-1.0.0.tar.gz` 免费获得完整完整性校验。优先级与安全：显式 `--sha256` / index.toml `sha256` 始终优先（边车只填空的期望哈希）；URL 安装**从不**信任伴生边车（只认显式 `--sha256`）；**缺失或格式非法**的边车（非 64 位十六进制）直接跳过校验，绝不阻断安装。
 
 包格式和依赖解析参见 [`pkg.md`](pkg.md)。
 
@@ -408,11 +415,11 @@ include_dirs = ["include", "@link:shared/include"]
 | `pp` | `project pack` | | | | |
 | `pt` | `project test` | | | | |
 | `wl` | `workspace list`（1.3.3+） | `wc` | `workspace clean`（1.3.3+） | | |
-| `wb` | `workspace build`（1.3.3+） | | | | |
+| `wb` | `workspace build`（1.3.3+） | `ww` | `workspace watch`（1.4.0-dev.5+） | | |
 | `wt` | `workspace test`（1.3.3+） | | | | |
 | `u` | `utils` | | | `h` / `v` | `help` / `version` |
 
-> **workspace 简写（1.3.3+）：** `wl`/`wb`/`wt`/`wc` 在命令位置展开，与 p/k/r 简写完全一致（`ezmk wb` ≡ `ezmk workspace build`；`ezmk workspace wb` 仍为未知子命令）。与 `-w` 重定向 flag（build/test/clean 的**参数位**选项）正交。`w` 单字母与 `example` 组**刻意不做**简写——见 1.3.3 计划。
+> **workspace 简写（1.3.3+）：** `wl`/`wb`/`wt`/`wc`（以及 1.4.0-dev.5+ 的 `ww`）在命令位置展开，与 p/k/r 简写完全一致（`ezmk wb` ≡ `ezmk workspace build`；`ezmk workspace wb` 仍为未知子命令）。与 `-w` 重定向 flag（build/test/watch/clean 的**参数位**选项）正交。`w` 单字母与 `example` 组**刻意不做**简写——见 1.3.3 计划。
 
 ---
 

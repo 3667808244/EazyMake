@@ -140,7 +140,7 @@ ezmk clean                      # clear cache
 ezmk watch [flags]              # auto-rebuild on change
 ezmk install [flags]            # install artifacts to prefix
 ezmk test [flags]               # run project tests
-ezmk pack [flags]               # create distributable archive (full: ezmk project pack; --format zip|tar.gz, 1.3.5+)
+ezmk pack [flags]               # create distributable archive (full: ezmk project pack; --format zip|tar.gz|tgz, 1.3.5+)
 
 # Project
 ezmk project new <name>         # scaffold new project
@@ -169,8 +169,9 @@ ezmk example hello              # scaffold an example into ./hello/
 ezmk workspace list             # list workspace members
 ezmk workspace build [flags]    # build all members (topological, parallel)
 ezmk workspace test [flags]     # run member tests
+ezmk workspace watch [flags]    # watch all members and rebuild on change (1.4.0-dev.5+)
 ezmk workspace clean [flags]    # clean member caches
-# build/test/clean accept -w to redirect: ezmk build -w ≡ ezmk workspace build
+# build/test/watch/clean accept -w to redirect: ezmk build -w ≡ ezmk workspace build
 ```
 
 Full reference: [`docs/en/cli.md`](docs/en/cli.md)
@@ -185,7 +186,7 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 | Third-party / private repos | `ezmk repo add <url>` wires in git-repo third-party sources | [`docs/en/repo.md`](docs/en/repo.md) · Tutorial [Pkg 03](tutorial/en/packages/03-third-party-repos.md) |
 | CMake interop | `project export cmake` to export / `project import --from cmake` to import (experimental) | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Interop 01](tutorial/en/interop/01-import-cmake.md) |
 | compile_commands | `project cc` generates compile_commands.json for clangd/IDEs | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Dev 02](tutorial/en/dev/02-utils.md) |
-| Workspace batch management (1.3.0+) | `ezmk-workspace.toml` declares a member set; `workspace build/test/clean` with topological ordering + parallelism; one-way acyclic member deps with automatic static-library artifact injection | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Dev 05](tutorial/en/dev/05-workspace.md) |
+| Workspace batch management (1.3.0+) | `ezmk-workspace.toml` declares a member set; `workspace build/test/watch/clean` (watch: 1.4.0-dev.5+) with topological ordering + parallelism; one-way acyclic member deps with automatic static-library artifact injection | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Dev 05](tutorial/en/dev/05-workspace.md) |
 
 ## Documentation
 

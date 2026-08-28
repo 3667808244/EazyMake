@@ -14,6 +14,10 @@ As of v1.1.0, the following public APIs are **permanently stable**:
 - **Configuration:** `ezmk-workspace.toml` (`[workspace]` `name`/`members`, `[workspace.options]` `default_jobs`/`stop_on_error`); the `workspace` field of `[depends]` in member `ezmk.toml` files.
 - **Environment:** `EZMK_LANG` variant tags — BCP 47 normalization (`zh_CN`/`zh-CN`/`zh_CN.UTF-8` → canonical) and the variant → base → English fallback chain.
 
+**Extended in v1.4.0 (1.4.0-dev.5):**
+
+- **Commands:** `workspace watch` (with `-w` redirect on `watch` — `ezmk watch -w` ≡ `ezmk workspace watch`; `--member`, `--stop-on-error`, `-j`, `--run` forwarded to executable members; `ww` shorthand).
+
 Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
 
 ---
@@ -148,6 +152,41 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **`target_compile_features` 全量语义映射**（`cxx_std_*` 的 PUBLIC/INTERFACE 传播）：1.4.0 后续或 1.5.x。
 - **`CXX_STANDARD_REQUIRED` 严格化映射**（ON → ezmk 侧 fail-fast）：1.4.0 后续或 1.5.x。
 - **导出能力注释基于导出时检测的工具链**：生成的 CMake 可能在另一工具链上运行——注释仅提示，不阻断。
+
+---
+
+## 1.4.0-dev.5 (2026-08-27) — 功能收口（1.3.x 延后项）
+
+1.4.0 第五个开发子版本，集中收口 1.3.x 各补丁明确延后的四项"小而独立"功能：① **`watch --run -- <args>` 参数透传**（1.3.4 延后）；② **`workspace watch` 命令组**（1.3.0 延后，`-w` 重定向扩展到 watch）；③ **`--format tgz` 别名**（1.3.5 延后）；④ **sha256 边车自动校验**（1.3.5 延后，`pkg install` 本地归档自动读取同目录 `.sha256`）。每项独立、低风险、互不依赖；**公共 API 无破坏性变更**（纯增量：新命令 + flag 别名 + 行为增强）。
+
+### 新增 / 行为变更
+
+- **`watch --run -- <args>` 透传**（`src/main.cpp` + `src/cli.cpp`）：watch 不再拒绝 positionals——`--` 后的参数在**每次**运行透传给被监视产物（复用 1.3.6 `run_executable` 的 `program_args` 通道，`warn_on_nonzero=true` 保持 watch 循环语义）；无 `--` 时行为不变
+- **`workspace watch` 命令组**（`src/workspace_build.cpp` + `src/cli.cpp` + `src/main.cpp` + `include/ezmk/cli.hpp`）：`Command::WorkspaceWatch` + `WorkspaceOptions.watch_run`；成员级 watch——每个成员跑 `ezmk watch` 子进程（复用 `run_member` cwd 模型 + `print_prefixed` 前缀聚合），拓扑层顺序启动（依赖先，初始构建产物先就绪），`-j` 限流并行、`--stop-on-error` 沿用（成员 watch 非零退出 → 停止派发新成员）、Ctrl+C 各成员自行处理 SIGINT 后一起退出
+- **`watch -w` 重定向**：`ezmk watch -w` ≡ `ezmk workspace watch`（watch 加入 build/test/clean 的 `-w` 家族；`--stop-on-error`/`--member` 无 `-w` 时按既有规则报错）
+- **`ww` 别名**：`ww` → `workspace watch`（workspace 简写族，与 1.3.3 一致，仅命令位置生效）
+- **`workspace watch --run`**：转发 `--run` 给 **executable** 成员（`static` 成员 watch 不带 `--run`——1.3.4 config-time gate 对库无意义）；`--` 透传归成员级（workspace 层拒绝 positionals）
+- **`--format tgz` 别名**（`src/cli.cpp`）：`tgz`（大小写不敏感）归一化为 `tar.gz`，归档名仍 `name-version.tar.gz`；`tar.gz`/`zip` 行为不变
+- **sha256 边车自动校验**（`src/pkg.cpp`）：`pkg install` 本地归档且无显式 `--sha256`/index 哈希时，自动读取同目录 `<archive>.sha256`（`<hash>  <filename>`，1.3.5 产出）并校验；**显式 `--sha256`/index 哈希始终优先**；URL 安装不信任伴生边车；边车缺失/格式非法（非 64 位十六进制）→ 跳过校验不阻断（新 i18n key `pkg_sha256_sidecar`，三向同步）
+- **CLI help**：`workspace watch` 行 + `help_workspace_watch` 文案；`-w` 帮助文案扩展为 build/test/watch/clean（en/zh）
+
+### 文档
+
+- `docs/en|zh/cli.md`：watch 节补 `--` 透传、workspace 节补 `watch` 命令 + `-w` 扩展 + 并发注意（坑 1：依赖成员重建期间依赖者可能短暂读到半成品兄弟产物，拓扑先启动 + `--member` 缓解）、pack 节补 `tgz` 别名、pkg 节补边车自动校验（优先级/安全边界）
+- `CHANGES.md` 本条目；`plan.md` 1.4.0-dev.5 执行计划（详见 `plans/1.4.x/1.4.0-dev.5.md`）
+
+### 测试
+
+- 新增 4 组 CLI 单测（`test_cli.cpp`）：watch `--` 透传（含 positionals 捕获、空缺省）、`workspace watch` 解析（`-j`/`--member`/`--run`/`-r`/`--stop-on-error`/positionals 拒绝）、`watch -w` 重定向（含 workspace-foreign flag 拒绝）、`ww` 别名；pack `--format` 补 `tgz`/`TGZ`/`Tgz` 归一化断言
+- 新增 1 个 workspace watch 集成测试（`test_integration_workspace.cpp`）：后台启动 → orchestrator 起始行 → 三成员初始构建产物齐备 → touch 源文件 → 产物 mtime 更新（变更重建生效）→ kill 进程树
+- 新增 3 个边车集成测试（`test_integration_report.cpp`）：边车存在自动校验（日志含 sidecar + 安装产物）、篡改边车 → `SHA-256 mismatch` 阻断、缺失/格式非法跳过 + 显式 `--sha256` 优先
+- 快速测试：**887 用例 / 4995 断言零失败**（dev.4 非集成子集 885/4986，+2 用例）；全量 `test-all`：**968 用例 / 5588 断言零失败**（dev.4 基线 959/5492，+9 用例/+96 断言，3 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **`workspace watch --run` 的 `--` 成员级透传**：1.4.0 后续或 1.5.x。
+- **watch 的 profile 热切换**：1.4.0 后续或 1.5.x。
+- **workspace watch 并发**：依赖成员重建期间依赖者可能短暂读到半成品兄弟产物（下次重建自愈）；拓扑先启动缩小窗口，必要时 `--member` 只监视子集。
 
 ---
 

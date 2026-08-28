@@ -1,6 +1,6 @@
 # EazyMake 1.4.0-dev.5 执行计划
 
-> **状态：执行中**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
+> **状态：已完成（收口）**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
 > 详细设计：[**1.4.0-dev.5.md**](plans/1.4.x/1.4.0-dev.5.md)。本计划为 1.4.0 第五个开发子版本，主题为**功能收口（1.3.x 延后项）**——集中收口四项小而独立的功能：① `watch --run -- <args>` 参数透传；② `workspace watch` 命令组 + `-w` 重定向扩展；③ `--format tgz` 别名；④ `pkg install` 本地归档 sha256 边车自动校验。
 >
@@ -29,35 +29,35 @@
 
 ### 阶段一：watch `--` 透传（3.1）
 
-- [ ] **1.1 watch spec 改造**（`src/main.cpp`）：watch 不再 `reject_positionals`；允许 `--` 后透传参数（对齐 `project run` 的 `program_args` 通道）
-- [ ] **1.2 接线**：`run_watched_exe` → `run_executable(exe, watch_program_args, true)`（1.3.6 已建通道，仅接线）
-- [ ] **1.3 集成测试**（`test_watch.cpp`）：`watch --run -- <args>` 透传断言（`--` 终止符语义既有，单测锁定）
+- [x] **1.1 watch spec 改造**（`src/main.cpp`）：watch 不再 `reject_positionals`；允许 `--` 后透传参数（对齐 `project run` 的 `program_args` 通道）
+- [x] **1.2 接线**：`run_watched_exe` → `run_executable(exe, watch_program_args, true)`（1.3.6 已建通道，仅接线）
+- [x] **1.3 集成测试**（`test_watch.cpp`）：`watch --run -- <args>` 透传断言（`--` 终止符语义既有，单测锁定）
 
 ### 阶段二：workspace watch（3.2）
 
-- [ ] **2.1 命令组**（`src/cli.cpp`）：`workspace_cmd_spec` 补 watch（复用 `-j`/`--member` flag）；`kAliases` 加 `ww`；`-w` 重定向扩展到 watch（`ezmk watch -w` ≡ `ezmk workspace watch`）
-- [ ] **2.2 执行**（`src/workspace_build.cpp`）：成员级 watch——每个成员跑 `ezmk watch`（子进程，复用 `run_member` 的 cwd 模型）；聚合输出带前缀（复用 `print_prefixed`）；拓扑层内互不依赖才并行、同层依赖 watch 串行（坑 1）；`--stop-on-error` 语义沿用
-- [ ] **2.3 集成测试**（`test_workspace.cpp`）：workspace watch 基本流转 + `-w` 重定向 + `--member` + 前缀输出
+- [x] **2.1 命令组**（`src/cli.cpp`）：`workspace_cmd_spec` 补 watch（复用 `-j`/`--member` flag）；`kAliases` 加 `ww`；`-w` 重定向扩展到 watch（`ezmk watch -w` ≡ `ezmk workspace watch`）
+- [x] **2.2 执行**（`src/workspace_build.cpp`）：成员级 watch——每个成员跑 `ezmk watch`（子进程，复用 `run_member` 的 cwd 模型）；聚合输出带前缀（复用 `print_prefixed`）；拓扑层内互不依赖才并行、同层依赖 watch 串行（坑 1）；`--stop-on-error` 语义沿用
+- [x] **2.3 集成测试**（`test_workspace.cpp`）：workspace watch 基本流转 + `-w` 重定向 + `--member` + 前缀输出
 
 ### 阶段三：tgz 别名（3.3）
 
-- [ ] **3.1 归一化**（`src/cli.cpp`）：`--format` 合法值集合 `tar.gz` / `tgz` / `zip`；`tgz`（大小写不敏感）归一化为 `tar.gz`（归档名仍 `name-version.tar.gz`）
-- [ ] **3.2 单测**（`test_cli.cpp`）：`tgz` / `TGZ` / `Tgz` → `tar.gz`；非法值仍报错
+- [x] **3.1 归一化**（`src/cli.cpp`）：`--format` 合法值集合 `tar.gz` / `tgz` / `zip`；`tgz`（大小写不敏感）归一化为 `tar.gz`（归档名仍 `name-version.tar.gz`）
+- [x] **3.2 单测**（`test_cli.cpp`）：`tgz` / `TGZ` / `Tgz` → `tar.gz`；非法值仍报错
 
 ### 阶段四：边车自动校验（3.4）
 
-- [ ] **4.1 读取校验**（`src/pkg.cpp`）：`install_package` 本地归档路径——`expected_sha256` 为空且 `<archive>.sha256` 存在 → 读取并校验（格式 `<hash>  <filename>`，1.3.5 产出）；边车缺失/格式非法 → 现状（跳过校验，不阻断）
-- [ ] **4.2 优先级**：显式 `--sha256` 优先；边车仅空 `--sha256` 时启用（坑 3）；URL 安装仍走显式 `--sha256`（不信任 URL 伴生边车）
-- [ ] **4.3 单测/集成测试**（`test_pkg.cpp`）：边车存在 → 校验通过/失败阻断；边车缺失/格式非法 → 跳过不阻断；显式 `--sha256` 优先于边车
+- [x] **4.1 读取校验**（`src/pkg.cpp`）：`install_package` 本地归档路径——`expected_sha256` 为空且 `<archive>.sha256` 存在 → 读取并校验（格式 `<hash>  <filename>`，1.3.5 产出）；边车缺失/格式非法 → 现状（跳过校验，不阻断）
+- [x] **4.2 优先级**：显式 `--sha256` 优先；边车仅空 `--sha256` 时启用（坑 3）；URL 安装仍走显式 `--sha256`（不信任 URL 伴生边车）
+- [x] **4.3 单测/集成测试**（`test_pkg.cpp`）：边车存在 → 校验通过/失败阻断；边车缺失/格式非法 → 跳过不阻断；显式 `--sha256` 优先于边车
 
 ### 阶段五：文档 + 收口（3.5）
 
-- [ ] **5.1 cli.md（en/zh）**：watch 节 `--` 透传、workspace 节 `watch` 命令 + `-w` 扩展、pack 节 `tgz` 别名、pkg 节边车自动校验
-- [ ] **5.2 CHANGES.md**：1.4.0-dev.5 条目（新增 / 行为变更 / 文档 / 已知限制）
-- [ ] **5.3 全量零回归**：`bash build.sh test-all`（基线 959/5492 → 实测更新）
-- [ ] **5.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
+- [x] **5.1 cli.md（en/zh）**：watch 节 `--` 透传、workspace 节 `watch` 命令 + `-w` 扩展、pack 节 `tgz` 别名、pkg 节边车自动校验
+- [x] **5.2 CHANGES.md**：1.4.0-dev.5 条目（新增 / 行为变更 / 文档 / 已知限制）
+- [x] **5.3 全量零回归**：`bash build.sh test-all`（基线 959/5492 → **968/5588**，+9 用例/+96 断言，3 跳过为既有环境限制）
+- [x] **5.4 文档收口**：plan.md 勾选；`plans/1.4.x/README.md` 状态更新；发布门槛复核（API 无破坏性变更 + 全量零回归）
 
-> 门槛未满足即停止，禁止带着未收口项进入下一子版本。
+> 门槛未满足即停止，禁止带着未收口项进入下一子版本。**本版门槛全部满足，dev.5 收口。**
 
 ---
 
