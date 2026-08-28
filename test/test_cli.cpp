@@ -1155,12 +1155,21 @@ TEST_CASE("cli parse: project pack --format", "[cli][1.3.5]") {
     auto t = TestArgs({"project", "pack", "--format", "tar.gz"}).parse();
     REQUIRE(t.project_pack_opts->format == "tar.gz");
 
-    // Invalid formats are rejected at parse time.
+    // 1.4.0-dev.5: `tgz` is a case-insensitive alias for `tar.gz` (normalized
+    // at parse time; the archive name stays name-version.tar.gz).
+    auto tg = TestArgs({"project", "pack", "--format", "tgz"}).parse();
+    REQUIRE(tg.project_pack_opts->format == "tar.gz");
+    auto tg_up = TestArgs({"project", "pack", "--format", "TGZ"}).parse();
+    REQUIRE(tg_up.project_pack_opts->format == "tar.gz");
+    auto tg_mix = TestArgs({"project", "pack", "--format", "Tgz"}).parse();
+    REQUIRE(tg_mix.project_pack_opts->format == "tar.gz");
+
+    // Invalid formats are still rejected at parse time.
     REQUIRE_THROWS_AS(
         TestArgs({"project", "pack", "--format", "deb"}).parse(),
         ezmk::fatal_error);
     REQUIRE_THROWS_AS(
-        TestArgs({"project", "pack", "--format", "tgz"}).parse(),
+        TestArgs({"project", "pack", "--format", "7z"}).parse(),
         ezmk::fatal_error);
 }
 

@@ -447,8 +447,11 @@ namespace ezmk::cli
                 opts.output_dir = ".";
             if (auto v = p.value("format")) {
                 // 1.3.5: tar.gz / zip (case-insensitive); anything else → fatal.
+                // 1.4.0-dev.5: `tgz` is an alias for `tar.gz` (normalized here;
+                // the archive name stays name-version.tar.gz).
                 std::string fmt = *v;
                 for (auto& c : fmt) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (fmt == "tgz") fmt = "tar.gz";
                 if (fmt != "tar.gz" && fmt != "zip") {
                     util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_err_invalid_format,
                                                 {{"val", *v}}));
