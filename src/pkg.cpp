@@ -1646,6 +1646,33 @@ void install(const std::string& pkg_file, cli::Scope scope,
     }
 
     // SHA-256 verification
+    // 1.4.0-dev.5: local-archive sidecar auto-verification — when no explicit
+    // --sha256 / index.toml sha256 was given AND the archive has a sibling
+    // "<archive>.sha256" sidecar (1.3.5 pack output: "<hash>  <filename>"),
+    // read it and verify. URL downloads never trust a companion sidecar
+    // (坑 3: explicit --sha256 wins; a sidecar only fills an EMPTY expected
+    // value, and a missing/malformed sidecar skips verification, not blocks).
+    std::string sidecar_sha;
+    if (expected_sha256.empty() && !is_url && !fs::is_directory(archive_path)) {
+        fs::path sidecar(archive_path.string() + ".sha256");
+        if (util::file_exists(sidecar)) {
+            std::string content = util::file_read(sidecar);
+            // Format "<hash>  <filename>\n" — take the first token (the hash).
+            std::istringstream ss(content);
+            std::string hash;
+            ss >> hash;
+            // 64 hex chars = a well-formed sha256; anything else → skip
+            // (malformed sidecar is not a reason to block the install).
+            if (hash.size() == 64 &&
+                hash.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos) {
+                sidecar_sha = std::move(hash);
+                expected_sha256 = sidecar_sha;
+                util::info(ezmk::i18n::fmt(
+                    ezmk::i18n::I18nKey::pkg_sha256_sidecar,
+                    {{"file", sidecar.filename().string()}}));
+            }
+        }
+    }
     if (!expected_sha256.empty()) {
         util::info(ezmk::i18n::I18nKey::verifying);
         std::string actual = crypto::sha256_file(archive_path);

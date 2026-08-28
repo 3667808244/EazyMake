@@ -478,3 +478,130 @@ TEST_CASE("integration: pack default format and .sha256 sidecar (1.3.5)", "[inte
     REQUIRE(combined.find("invalid --format") != std::string::npos);
     REQUIRE(combined.find("tar.gz") != std::string::npos);
 }
+
+// ==============================================================
+// 1.4.0-dev.5: pkg install — .sha256 sidecar auto-verification
+// ==============================================================
+namespace {
+
+// Pack `name` (static-lib source package) into `out` and return the archive +
+// its .sha256 sidecar path. Both formats carry a sidecar (1.3.5).
+std::pair<fs::path, fs::path> pack_with_sidecar(const fs::path& pkg_dir,
+                                                const std::string& name,
+                                                const fs::path& out) {
+    ProcResult r = run_ezmk("project pack --output \"" + out.string() + "\"", pkg_dir);
+    REQUIRE(r.exit_code == 0);
+    fs::path archive = out / (name + "-1.0.0.tar.gz");
+    REQUIRE(fs::exists(archive));
+    fs::path sidecar = fs::path(archive.string() + ".sha256");
+    REQUIRE(fs::exists(sidecar));
+    return {archive, sidecar};
+}
+
+} // anonymous namespace
+
+// Sidecar present + valid → auto-verified (no --sha256 needed).
+TEST_CASE("integration: pkg install auto-verifies via .sha256 sidecar (1.4.0-dev.5)", "[integration][1.4.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "sc135";
+    write_pack135_pkg(pkg_dir, "sc135");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+    auto [archive, sidecar] = pack_with_sidecar(pkg_dir, "sc135", out);
+
+    fs::path proj = tmp.path / "app_sc";
+    ProcResult new_r = run_ezmk("project new app_sc --disable-git-init --disable-gitignore", tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+
+    // No --sha256: the sibling sidecar is read and verified automatically.
+    ProcResult inst = run_ezmk("pkg install \"" + archive.string() + "\" -p -y", proj);
+    INFO("sidecar install stderr: " << inst.err);
+    REQUIRE(inst.exit_code == 0);
+    REQUIRE(inst.err.find("sidecar") != std::string::npos);  // "verifying via .sha256 sidecar"
+    REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "sc135" / "build" / "libsc135.a"));
+}
+
+// Sidecar tampered (wrong hash) → verification FAILS (blocks install).
+TEST_CASE("integration: pkg install rejects a tampered .sha256 sidecar (1.4.0-dev.5)", "[integration][1.4.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "sc_bad";
+    write_pack135_pkg(pkg_dir, "sc_bad");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+    auto [archive, sidecar] = pack_with_sidecar(pkg_dir, "sc_bad", out);
+
+    // Corrupt the sidecar hash (keep the "<hash>  <filename>" shape).
+    std::string bad_hash(64, '0');
+    file_write(sidecar, bad_hash + "  sc_bad-1.0.0.tar.gz\n");
+
+    fs::path proj = tmp.path / "app_sc_bad";
+    ProcResult new_r = run_ezmk("project new app_sc_bad --disable-git-init --disable-gitignore", tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+
+    ProcResult inst = run_ezmk("pkg install \"" + archive.string() + "\" -p -y", proj);
+    INFO("tampered install stderr: " << inst.err);
+    REQUIRE(inst.exit_code != 0);
+    std::string combined = inst.out + "\n" + inst.err;
+    REQUIRE(combined.find("SHA-256 mismatch") != std::string::npos);
+    REQUIRE_FALSE(fs::exists(proj / ".ezmk" / "pkg" / "sc_bad"));
+}
+
+// Sidecar missing → verification skipped (not blocked); explicit --sha256 wins
+// over a (contradictory) sidecar.
+TEST_CASE("integration: pkg install sidecar missing or explicit --sha256 precedence (1.4.0-dev.5)", "[integration][1.4.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path pkg_dir = tmp.path / "sc_miss";
+    write_pack135_pkg(pkg_dir, "sc_miss");
+    fs::path out = tmp.path / "out";
+    fs::create_directories(out);
+    auto [archive, sidecar] = pack_with_sidecar(pkg_dir, "sc_miss", out);
+
+    // NOTE: Catch2 re-runs the whole test body per SECTION — create a fresh
+    // consumer project inside each section (project new fails on existing dir).
+    auto make_consumer = [&](const std::string& name) {
+        fs::path proj = tmp.path / name;
+        ProcResult new_r = run_ezmk("project new " + name + " --disable-git-init --disable-gitignore", tmp.path);
+        REQUIRE(new_r.exit_code == 0);
+        return proj;
+    };
+
+    SECTION("no sidecar → install proceeds without verification") {
+        fs::remove(sidecar);
+        fs::path proj = make_consumer("app_sc_miss");
+        ProcResult inst = run_ezmk("pkg install \"" + archive.string() + "\" -p -y", proj);
+        INFO("no-sidecar install stderr: " << inst.err);
+        REQUIRE(inst.exit_code == 0);
+        REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "sc_miss" / "build" / "libsc_miss.a"));
+    }
+    SECTION("explicit --sha256 wins over a contradictory sidecar") {
+        // Correct hash from the pack (recomputed independently so the test is
+        // self-verifying — the sidecar itself is the reference here).
+        fs::path proj = make_consumer("app_sc_expl");
+        std::string correct = ezmk::crypto::sha256_file(archive);
+        ProcResult inst = run_ezmk("pkg install \"" + archive.string() +
+                                   "\" --sha256 " + correct + " -p -y", proj);
+        INFO("explicit-sha install stderr: " << inst.err);
+        REQUIRE(inst.exit_code == 0);
+        REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "sc_miss" / "build" / "libsc_miss.a"));
+    }
+    SECTION("malformed sidecar (garbage, not 64 hex) → skipped, not blocked") {
+        file_write(sidecar, "not-a-hash  sc_miss-1.0.0.tar.gz\n");
+        fs::path proj = make_consumer("app_sc_mal");
+        ProcResult inst = run_ezmk("pkg install \"" + archive.string() + "\" -p -y", proj);
+        INFO("malformed-sidecar install stderr: " << inst.err);
+        REQUIRE(inst.exit_code == 0);
+        REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "sc_miss" / "build" / "libsc_miss.a"));
+    }
+}
