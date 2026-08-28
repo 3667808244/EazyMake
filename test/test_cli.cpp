@@ -1109,6 +1109,33 @@ TEST_CASE("cli parse: project watch --run / -r", "[cli][1.3.4]") {
 }
 
 // ===================================================================
+// 1.4.0-dev.5 — project watch --run -- <args> (positional pass-through)
+// ===================================================================
+
+TEST_CASE("cli parse: project watch forwards args after --", "[cli][1.4.0-dev.5]") {
+    // `watch --run -- <args>` → program_args (like project run).
+    auto a = TestArgs({"watch", "--run", "--", "--verbose", "input.txt"}).parse();
+    REQUIRE(a.cmd == Command::ProjectWatch);
+    REQUIRE(a.watch_run == true);
+    REQUIRE(a.program_args.size() == 2);
+    REQUIRE(a.program_args[0] == "--verbose");
+    REQUIRE(a.program_args[1] == "input.txt");
+
+    // Positionals without explicit -- are also captured (unlike before,
+    // watch no longer rejects them — parse_options treats non-option tokens
+    // as positionals, so `watch --run foo` ≡ `watch --run -- foo`).
+    auto b = TestArgs({"project", "watch", "--run", "foo"}).parse();
+    REQUIRE(b.cmd == Command::ProjectWatch);
+    REQUIRE(b.watch_run == true);
+    REQUIRE(b.program_args.size() == 1);
+    REQUIRE(b.program_args[0] == "foo");
+
+    // No positionals → empty (behavior unchanged).
+    auto c = TestArgs({"watch", "--run"}).parse();
+    REQUIRE(c.program_args.empty());
+}
+
+// ===================================================================
 // 1.3.5 — project pack --format <tar.gz|zip>
 // ===================================================================
 

@@ -351,7 +351,9 @@ int main(int argc, char** argv) {
                 if (!args.watch_run || exe.empty()) return;
                 // 1.3.6: shared launcher — warn_on_nonzero=true keeps watch
                 // looping after a non-zero child exit (watch is a loop).
-                run_executable(exe, {}, /*warn_on_nonzero=*/true);
+                // 1.4.0-dev.5: pass through `watch --run -- <args>` (empty
+                // when no positionals given — behavior unchanged).
+                run_executable(exe, args.program_args, /*warn_on_nonzero=*/true);
             };
 
             // Initial build (unless --no-build-on-start)

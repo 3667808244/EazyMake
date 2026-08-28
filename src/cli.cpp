@@ -322,7 +322,9 @@ namespace ezmk::cli
                     args.watch_no_build_on_start = true;
                 if (p.has("run"))
                     args.watch_run = true;   // 1.3.4: --run / -r
-                reject_positionals(p, "ezmk project watch");
+                // 1.4.0-dev.5: positionals (typically after "--") are passed to
+                // the watched executable on each run (--run), like `project run`.
+                args.program_args = p.positionals;
             }
             else // build
             {
