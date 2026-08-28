@@ -293,6 +293,15 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
     // 2. Compile options signature (extra_includes + std_flag + stdlib + use_pic)
     auto cur_sig = compile_options_signature(compile, extra_includes, std_flag,
                                              stdlib, use_pic);
+    // 1.1.0: deterministic build — lockfile hash is part of the signature.
+    // Must mirror build.cpp's save side exactly, or every build is a cache
+    // miss (the saved signature carries the lock hash, the check doesn't).
+    if (record.deterministic) {
+        auto lock_path = proj_root / "ezmk.lock";
+        if (util::file_exists(lock_path)) {
+            cur_sig += ":" + crypto::sha256_file(lock_path);
+        }
+    }
     if (cur_sig != record.compile_options_signature) return std::nullopt;
 
     // 3. Headers: re-hash each stored header path with current content
@@ -337,11 +346,21 @@ void save_record(const CacheRecord& record, const fs::path& json_path) {
 
     auto tmp = json_path;
     tmp += ".tmp";
-    util::file_write(tmp, json);
+    if (!util::file_write(tmp, json)) {
+        // 1.4.0-dev.5: a failed cache write must be surfaced — silently
+        // dropping it made the next build recompile everything AND left
+        // record.json stale (build still reported success).
+        util::warn("failed to write cache record to " + tmp.string() +
+                   " — incremental cache will not persist");
+        return;
+    }
     std::error_code ec;
     fs::rename(tmp, json_path, ec);
     if (ec) {
-        util::file_write(json_path, json);
+        if (!util::file_write(json_path, json)) {
+            util::warn("failed to write cache record to " + json_path.string() +
+                       " — incremental cache will not persist");
+        }
     }
 }
 

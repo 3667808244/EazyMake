@@ -45,7 +45,32 @@ void skip_space(const std::string& s, size_t& i) {
     while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
 }
 
+// 解析 [[...]] / [=[...]=] 长字符串（i 指向第一个 '['）。
+std::string parse_bracket(const std::string& s, size_t& i) {
+    size_t eq = 0, j = i + 1;
+    while (j < s.size() && s[j] == '=') { ++eq; ++j; }
+    ++j;  // 跳过第二个 '['
+    std::string closer = "]" + std::string(eq, '=') + "]";
+    size_t pos = s.find(closer, j);
+    std::string out;
+    if (pos == std::string::npos) { out = s.substr(j); i = s.size(); }
+    else { out = s.substr(j, pos - j); i = pos + closer.size(); }
+    return out;
+}
+
+// 跳过注释（i 指向 '#'）。CMake 的括号注释 `#[[ ... ]]` / `#[=[ ... ]=]` 可跨行——
+// 只跳到行尾会把注释体当真实命令解析（含 add_custom_command 时误拒绝，含
+// add_executable 时静默污染结果）。先检测括号注释形态，否则按行注释处理。
 void skip_comment(const std::string& s, size_t& i) {
+    if (i + 1 < s.size() && s[i] == '#' &&
+        (s[i + 1] == '[' ||
+         (s[i + 1] == '=' && i + 2 < s.size() && s[i + 2] == '['))) {
+        // `#[[` 或 `#[=` 起头：跳过 '#' 后复用 parse_bracket 的 [=[...]=] 扫描。
+        size_t j = i + 1;
+        parse_bracket(s, j);
+        i = j;
+        return;
+    }
     while (i < s.size() && s[i] != '\n') ++i;
 }
 
@@ -64,19 +89,6 @@ std::string parse_quoted(const std::string& s, size_t& i) {
         }
     }
     if (i < s.size()) ++i;  // 跳过闭引号
-    return out;
-}
-
-// 解析 [[...]] / [=[...]=] 长字符串（i 指向第一个 '['）。
-std::string parse_bracket(const std::string& s, size_t& i) {
-    size_t eq = 0, j = i + 1;
-    while (j < s.size() && s[j] == '=') { ++eq; ++j; }
-    ++j;  // 跳过第二个 '['
-    std::string closer = "]" + std::string(eq, '=') + "]";
-    size_t pos = s.find(closer, j);
-    std::string out;
-    if (pos == std::string::npos) { out = s.substr(j); i = s.size(); }
-    else { out = s.substr(j, pos - j); i = pos + closer.size(); }
     return out;
 }
 

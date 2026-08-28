@@ -1126,6 +1126,10 @@ static void process_installed_pkg(const fs::path& pkg_root,
 
             auto cur_cfg = config::parse_config(cur_dir / "ezmk.toml");
             for (auto& dep : cur_cfg.depends.libs) {
+                // 1.1.3 S2 同口径: 依赖名来自包的 ezmk.toml（不可信输入），直接拼进
+                // dest_dir/<name> 会被用于解析/编译/写产物——`..`/分隔符/盘符/绝对
+                // 路径会在安装目录外落盘。与根包名（1068 行）一样校验，非法即中止。
+                util::validate_pkg_name(dep.name);
                 if (seen.insert(dep.name).second) {
                     to_check.push_back(dep.name);
                     fs::path dep_path = dest_dir / dep.name;
@@ -1200,6 +1204,8 @@ static void process_installed_pkg(const fs::path& pkg_root,
             // 0.2.2+: want dependencies are optional — include if installed.
             // 1.1.0-dev.7: interactive prompt for missing optional deps (Y/N/A/D).
             for (auto& dep : cur_cfg.depends.want) {
+                // 同 libs: 依赖名不可信输入 → 与根包名同口径校验（防止 `..` 越界）。
+                util::validate_pkg_name(dep.name);
                 if (seen.insert(dep.name).second) {
                     fs::path dep_path = dest_dir / dep.name;
                     if (util::file_exists(dep_path)) {
@@ -1540,6 +1546,13 @@ void install(const std::string& pkg_file, cli::Scope scope,
              bool no_lock) {
     // 1.1.0: --locked mode — install from lockfile only
     // 1.2.0-dev.7: lockfile + config resolved against the located project root
+    // 1.4.0-dev.5: --locked must actually PIN the version (previously it only
+    // checked direct-dep specs and then installed the newest — silently
+    // upgrading and REWRITING ezmk.lock, the exact drift --locked prevents).
+    // Now: the lockfile's recorded version for this package becomes an Exact
+    // constraint for the repo search, and the lockfile is never rewritten.
+    std::string locked_version;    // non-empty only in --locked mode
+    std::string locked_sha256;
     if (locked) {
         auto proj_root = util::locate_project_root(fs::current_path())
                             .value_or(fs::current_path());
@@ -1551,7 +1564,27 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 config::parse_config((proj_root / "ezmk.toml").string()), *lf)) {
             util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_locked_depends_mismatch));
         }
-        // Continue with install but verify against lockfile
+        // Find the package in the lockfile (by bare name; the CLI passes the
+        // package name, not a constraint, in --locked mode).
+        std::string pkg_name = pkg_file;
+        {
+            auto at = pkg_file.find('@');
+            if (at != std::string::npos) pkg_name = pkg_file.substr(0, at);
+        }
+        for (const auto& lp : lf->packages) {
+            if (lp.name == pkg_name) {
+                locked_version = lp.version;
+                locked_sha256 = lp.sha256;
+                break;
+            }
+        }
+        if (locked_version.empty()) {
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::lock_locked_pkg_not_in_lockfile,
+                {{"pkg", pkg_name}}));
+        }
+        // --locked never rewrites the lockfile (it is the source of truth).
+        no_lock = true;
     }
 
     // 1.1.0: detect toolchain once for the entire install (MSVC-aware archiving)
@@ -1613,10 +1646,26 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (!util::file_exists(archive_path)) {
             // Not a local file or URL — try searching registered repos
             util::info(ezmk::i18n::I18nKey::searching_repos, {{"pkg", pkg_file}});
-            auto search_result = repo::search_package(pkg_file, {
-                cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+            auto search_result = [&]() {
+                if (!locked_version.empty()) {
+                    // --locked: pin to the exact version recorded in ezmk.lock.
+                    config::VersionConstraint exact;
+                    exact.op = config::VersionConstraint::Exact;
+                    exact.version = locked_version;
+                    return repo::search_package(pkg_file, {
+                        cli::Scope::Project, cli::Scope::User, cli::Scope::Global},
+                        exact);
+                }
+                return repo::search_package(pkg_file, {
+                    cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
+            }();
             if (search_result.archive_path.empty() ||
                 !util::file_exists(search_result.archive_path)) {
+                if (!locked_version.empty()) {
+                    util::fatal(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::lock_locked_version_unavailable,
+                        {{"pkg", pkg_file}, {"version", locked_version}}));
+                }
                 util::fatal(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_file}});
             }
             archive_path = search_result.archive_path;
@@ -1627,6 +1676,12 @@ void install(const std::string& pkg_file, cli::Scope scope,
             // later SHA-256 check would read freed memory — CI-only corruption).
             if (expected_sha256.empty() && !search_result.sha256.empty()) {
                 repo_sha = search_result.sha256;
+                expected_sha256 = repo_sha;
+            }
+            // --locked: prefer the lockfile-recorded sha256 over the (possibly
+            // drifted) index value — the lockfile is the source of truth.
+            if (!locked_sha256.empty()) {
+                repo_sha = locked_sha256;
                 expected_sha256 = repo_sha;
             }
             util::info(ezmk::i18n::I18nKey::found_in_repo, {{"path", archive_path.string()}});

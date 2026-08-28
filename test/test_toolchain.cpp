@@ -443,8 +443,11 @@ TEST_CASE("compiler_tag: unparseable version returns empty", "[toolchain][1.2.0-
     REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "")).empty());
     REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Gcc, "g++: fatal error: no input files")).empty());
     REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Clang, "clang (unknown)")).empty());
-    // MSVC without the "Version" token
-    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, "cl.exe 19.43")).empty());
+    // MSVC version parsing is language-independent (1.4.0-dev.5): the banner
+    // "cl.exe 19.43" (no "Version" token) still parses to 19.43 → msvc143.
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, "cl.exe 19.43")) == "msvc143");
+    // No version digits at all → unparseable.
+    REQUIRE(tc::compiler_tag(make_tc(tc::CompilerFamily::Msvc, "cl.exe")).empty());
 }
 
 // 1.2.0-dev.11: an overflowing digit run (from a $CXX wrapper or odd cl
@@ -503,6 +506,12 @@ TEST_CASE("max_supported_std: MSVC segmentation by _MSC_VER", "[toolchain][1.4.0
     REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("29")) == "CPP20");
     REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("30")) == "CPP20");  // VS 2022 (C++23 partial → conservative)
     REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, cl("43")) == "CPP20");
+    // 1.4.0-dev.5: localized banners (no "Version" token) parse the same way —
+    // zh-CN cl.exe output "用于 x64 的 ... 优化编译器 19.44.35208 版" must NOT
+    // grab "64" from "x64" (the digit.digit scan skips platform tags).
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc,
+        "\xd3\xc3\xd3\xda x64 \xb5\xc4 Microsoft (R) C/C++ \xd3\xc5\xbb\xaf\xb1\xe0\xd2\xeb\xc6\xf7 19.44.35208 \xb0\xe6")
+        == "CPP20");
 }
 
 TEST_CASE("max_supported_std: unknown versions fall back to the conservative floor", "[toolchain][1.4.0-dev.2]") {
@@ -511,7 +520,7 @@ TEST_CASE("max_supported_std: unknown versions fall back to the conservative flo
     REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++: fatal error: no input files") == "CPP11");
     REQUIRE(tc::max_supported_std(CompilerFamily::Gcc, "g++ (GCC) 3.4.6") == "CPP11");
     REQUIRE(tc::max_supported_std(CompilerFamily::Clang, "clang (unknown)") == "CPP11");
-    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, "cl.exe 19.43") == "CPP11");  // no "Version" token
+    REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, "cl.exe 19.43") == "CPP20");  // language-independent parse (1.4.0-dev.5)
     REQUIRE(tc::max_supported_std(CompilerFamily::Msvc, "Version 20.1.2") == "CPP11");  // non-19.x series
     // Overflowing digit runs must not throw (same guard as compiler_tag).
     REQUIRE(tc::max_supported_std(CompilerFamily::Gcc,

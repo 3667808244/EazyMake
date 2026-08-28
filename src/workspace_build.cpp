@@ -419,8 +419,9 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
     // SIGINT: member watchers handle their own SIGINT (they exit cleanly); the
     // orchestrator just waits for all of them. A marker handler prevents the
     // parent from dying before the children finish (mirrors project watch).
-    static std::atomic<bool> sigint_received{false};
-    auto prev_sigint = std::signal(SIGINT, [](int) { sigint_received = true; });
+    // 1.4.0-dev.5: restore the previous handler after the wait loop (like
+    // main.cpp's ProjectWatch) so a reused process (tests) keeps Ctrl+C.
+    auto prev_sigint = std::signal(SIGINT, [](int) { /* marker only */ });
 
     // Members that failed validation are warned at the end (never dispatched).
     std::vector<const workspace::Member*> invalid;
@@ -471,13 +472,15 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
                    {{"name", m->name}, {"reason", m->error}});
     }
 
-    size_t succeeded = total - failed.load() - skipped.load();
+    size_t succeeded = total - static_cast<size_t>(failed.load()) -
+                       static_cast<size_t>(skipped.load());
     util::info(I18nKey::workspace_summary,
                {{"action", "watch"},
                 {"succeeded", std::to_string(succeeded)},
                 {"failed", std::to_string(failed.load())},
                 {"skipped", std::to_string(skipped.load())}});
-    (void)prev_sigint;
+    // Restore the previous SIGINT handler (see above).
+    std::signal(SIGINT, prev_sigint);
     return failed.load() == 0 ? 0 : 1;
 }
 

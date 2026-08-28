@@ -20,10 +20,18 @@ namespace {
 // 1.2.0-dev.11: array fields must contain only strings — a type mismatch (e.g.
 // `flags = ["-Wall", 42]`) used to be silently dropped, hiding config mistakes.
 // `field` names the config field for the error message.
+// 1.4.0-dev.5: the WHOLE node being the wrong type (`flags = "-Wall"`, a
+// string) was still silently accepted as "empty" — now also rejected (only an
+// ABSENT key stays empty, so optional fields keep their defaults).
 std::vector<std::string> extract_string_array(const toml::node* node,
                                               const char* field) {
     std::vector<std::string> result;
-    if (!node || !node->is_array()) return result;
+    if (!node) return result;
+    if (!node->is_array()) {
+        throw std::runtime_error(
+            i18n::fmt(i18n::I18nKey::config_err_array_field_type,
+                      {{"field", field ? field : ""}}));
+    }
     auto& arr = *node->as_array();
     for (size_t i = 0; i < arr.size(); ++i) {
         if (auto val = arr[i].value<std::string>()) {
@@ -174,13 +182,27 @@ static DependsEntry parse_depends_entry(std::string_view raw) {
 }
 
 // 0.9.6+ — Extract an array of DependsEntry from a TOML node.
+// 1.4.0-dev.5: same strictness as extract_string_array — a whole-node type
+// mismatch (`lib = "fmt"`) or a non-string entry (`lib = ["fmt", 42]`) used to
+// be silently dropped; now rejected so a mistyped dependency is never silently
+// half-parsed.
 static std::vector<DependsEntry> extract_depends_array(const toml::node* node) {
     std::vector<DependsEntry> result;
-    if (!node || !node->is_array()) return result;
+    if (!node) return result;
+    if (!node->is_array()) {
+        throw std::runtime_error(
+            i18n::fmt(i18n::I18nKey::config_err_array_field_type,
+                      {{"field", "depends"}}));
+    }
     auto& arr = *node->as_array();
     for (size_t i = 0; i < arr.size(); ++i) {
         if (auto val = arr[i].value<std::string>()) {
             result.push_back(parse_depends_entry(*val));
+        } else {
+            throw std::runtime_error(
+                i18n::fmt(i18n::I18nKey::config_err_array_type,
+                          {{"field", "depends"},
+                           {"index", std::to_string(i)}}));
         }
     }
     return result;
@@ -557,8 +579,16 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         cfg.compile.msvc_flags = extract_string_array(comp->get("msvc_flags"), "compile.msvc_flags");
 
         // Try new field name "include_dirs" first, fall back to old "include_dir"
+        // 1.4.0-dev.5: a non-array include_dirs (`include_dirs = "inc"`) must
+        // not silently fall through to the legacy field — reject it (the old
+        // `is_array()` gate treated the typo as "field absent").
         auto inc_dirs = comp->get("include_dirs");
-        if (inc_dirs && inc_dirs->is_array()) {
+        if (inc_dirs) {
+            if (!inc_dirs->is_array()) {
+                throw std::runtime_error(
+                    i18n::fmt(i18n::I18nKey::config_err_array_field_type,
+                              {{"field", "compile.include_dirs"}}));
+            }
             cfg.compile.include_dirs = extract_string_array(inc_dirs, "compile.include_dirs");
         } else {
             cfg.compile.include_dirs = extract_string_array(comp->get("include_dir"), "compile.include_dir");

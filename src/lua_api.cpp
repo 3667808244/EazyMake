@@ -1240,13 +1240,19 @@ static int run_lua_script_with_ctx(lua_State* L,
         }
     }
 
-    // Ensure ezmk API is registered
+    // Ensure ezmk API is registered with the CURRENT project root.
+    // 1.4.0-dev.5: the old existence-only guard was dead code — init() registers
+    // the API at process start with fs::current_path(), so `ezmk` was never nil
+    // and hooks running from a located root (build.cpp:495, pkg.cpp:374) kept
+    // g_project_root pinned to the CWD. Re-register whenever the root differs
+    // (register_api also invalidates the config cache, so a hook after a config
+    // change re-reads ezmk.toml correctly).
+    fs::path abs_root = fs::absolute(api_project_root);
     lua_getglobal(L, "ezmk");
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
+    bool needs_reg = lua_isnil(L, -1) || g_project_root != abs_root;
+    lua_pop(L, 1);
+    if (needs_reg) {
         register_api(L, api_project_root);
-    } else {
-        lua_pop(L, 1);
     }
 
     assert(lua_gettop(L) == top_before && "register_api must not change stack size");

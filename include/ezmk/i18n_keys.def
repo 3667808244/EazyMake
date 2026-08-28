@@ -26,6 +26,8 @@ EZMK_I18N_KEY(lock_integrity_fail)         // 1.1.0
 EZMK_I18N_KEY(lock_missing_deterministic)  // 1.1.0
 EZMK_I18N_KEY(lock_locked_missing)         // 1.1.0
 EZMK_I18N_KEY(lock_locked_depends_mismatch)// 1.1.0
+EZMK_I18N_KEY(lock_locked_pkg_not_in_lockfile)      // 1.4.0-dev.5: --locked, package not recorded in ezmk.lock
+EZMK_I18N_KEY(lock_locked_version_unavailable)      // 1.4.0-dev.5: --locked, locked version not found in repos
 EZMK_I18N_KEY(lock_sha256_mismatch)        // 1.1.0
 EZMK_I18N_KEY(install_summary)             // 1.1.0
 EZMK_I18N_KEY(install_dry_run)             // 1.1.0
@@ -180,6 +182,7 @@ EZMK_I18N_KEY(config_err_invalid_profile)
 EZMK_I18N_KEY(config_err_empty_depends_entry)
 EZMK_I18N_KEY(config_err_version_missing)
 EZMK_I18N_KEY(config_err_array_type)              // 1.2.0-dev.11
+EZMK_I18N_KEY(config_err_array_field_type)        // 1.4.0-dev.5: whole field not an array
 EZMK_I18N_KEY(config_err_invalid_version)         // 1.2.0-dev.11
 EZMK_I18N_KEY(config_err_invalid_source_date_epoch) // 1.2.0-dev.11
 EZMK_I18N_KEY(config_err_unknown_profile)         // 1.2.0-dev.11

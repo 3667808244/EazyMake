@@ -1213,6 +1213,11 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     } else {
         // CreateProcess failed — command not found or not executable
         result.exit_code = 1;
+        // 1.4.0-dev.5: the write ends of both pipes leak here (only the read
+        // handles were closed). Close them too — every failed spawn (missing
+        // git, toolchain probe of a nonexistent compiler) would leak 2 handles.
+        CloseHandle(hWriteOut);
+        CloseHandle(hWriteErr);
     }
     CloseHandle(hReadOut);
     CloseHandle(hReadErr);
@@ -1232,6 +1237,10 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     if (out_fd < 0 || err_fd < 0) {
         if (out_fd >= 0) { close(out_fd); unlink(out_tmpl.c_str()); }
         if (err_fd >= 0) { close(err_fd); unlink(err_tmpl.c_str()); }
+        // 1.4.0-dev.5: a failed mkstemp must not look like a successful run
+        // (exit_code 0 made callers like git_available() report success).
+        result.exit_code = 1;
+        result.err = "failed to create temporary files for command output";
         return result;
     }
 
@@ -1340,8 +1349,10 @@ bool git_available() {
 
 bool git_clone(const std::string& url, const fs::path& dest, std::string_view branch) {
     std::ostringstream cmd;
-    cmd << "git clone --branch " << escape_shell_arg(branch)
-        << " \"" << escape_shell_arg(url) << "\" \""
+    // branch is quoted like url/dest: escape_shell_arg only covers `" \ ` $`,
+    // and a bare branch name with spaces/; would split or inject under sh -c.
+    cmd << "git clone --branch \"" << escape_shell_arg(branch)
+        << "\" \"" << escape_shell_arg(url) << "\" \""
         << escape_shell_arg(dest.string()) << "\"";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) {
@@ -1354,7 +1365,7 @@ bool git_clone(const std::string& url, const fs::path& dest, std::string_view br
 bool git_pull(const fs::path& repo_dir, std::string_view branch) {
     std::ostringstream cmd;
     cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
-        << "\" pull origin " << escape_shell_arg(branch);
+        << "\" pull origin \"" << escape_shell_arg(branch) << "\"";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) {
         error(std::string("git pull failed: ") + res.err);

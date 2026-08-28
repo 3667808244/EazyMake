@@ -480,21 +480,33 @@ bool parse_digits(const std::string& s, size_t& pos, unsigned long& out) {
 }
 
 // 1.4.0-dev.2: parse "<major>.<minor>" from a cl.exe version line
-// ("...Version 19.43.34808 for x64" → major=19, minor=43). Shared by
+// ("...Version 19.43.34808 for x64" → major=19, minor=43; zh-CN:
+// "用于 x64 的 ... 优化编译器 19.44.35208 版" → same). Shared by
 // msvc_toolset_tag (toolset table) and msvc_msc_ver (_MSC_VER segments).
+// Language-independent: locate the first "<digits>.<digits>" sequence instead
+// of anchoring on the localized "Version"/"版" word — this also skips "x64" /
+// "x86" platform tags (a bare first-number scan would grab "64" from "x64").
 bool parse_msvc_cl_version(const std::string& version,
                            unsigned long& major, unsigned long& minor) {
-    auto pos = version.find("Version");
-    if (pos == std::string::npos) pos = version.find("version");
-    if (pos == std::string::npos) return false;
-
-    std::string rest = version.substr(pos + 7);  // skip "Version"
     size_t i = 0;
-    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-    if (!parse_digits(rest, i, major)) return false;
-    while (i < rest.size() && !std::isdigit(static_cast<unsigned char>(rest[i]))) ++i;
-    if (!parse_digits(rest, i, minor)) minor = 0;
-    return true;
+    while (i + 2 < version.size()) {
+        if (std::isdigit(static_cast<unsigned char>(version[i])) &&
+            version[i + 1] == '.' &&
+            std::isdigit(static_cast<unsigned char>(version[i + 2]))) {
+            // Backtrack to the start of the major digit run.
+            size_t start = i;
+            while (start > 0 &&
+                   std::isdigit(static_cast<unsigned char>(version[start - 1]))) --start;
+            if (!parse_digits(version, start, major)) return false;
+            // parse_digits stopped at '.', skip it, then parse the minor.
+            if (start >= version.size() || version[start] != '.') return false;
+            ++start;
+            if (!parse_digits(version, start, minor)) minor = 0;
+            return true;
+        }
+        ++i;
+    }
+    return false;
 }
 
 // Map a cl.exe version line to the MSVC toolset tag.

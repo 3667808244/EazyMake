@@ -393,6 +393,9 @@ void add(const cli::RepoOptions& opts) {
     if (repo_name.empty()) {
         throw std::runtime_error("could not determine repo name; use --name");
     }
+    // 1.1.3 S2 同口径安全校验: repo_name 会拼进 cache_dir 并被 remove() 递归删除——
+    // `.`/`..`/路径分隔符/盘符/绝对路径 一律拒绝（恶意/巧合的 URL 末段可能得到 ".."）。
+    util::validate_pkg_name(repo_name);
 
     // Load existing list
     auto entries = load_repo_list(scope);

@@ -619,9 +619,17 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     // 1.1.0: deterministic build — resolve SOURCE_DATE_EPOCH
     if (st.compile_cfg.deterministic && st.compile_cfg.source_date_epoch == 0) {
         // Priority: env → git HEAD commit time → ezmk.toml mtime (fallback)
+        // 1.4.0-dev.5: guard the env parse — a malformed SOURCE_DATE_EPOCH used
+        // to throw out of run_command into the top-level catch (mirrors the
+        // 1.1.3 C1 fix in cache.cpp's resolve_source_date_epoch).
         const char* env_sde = std::getenv("SOURCE_DATE_EPOCH");
         if (env_sde && env_sde[0]) {
-            st.compile_cfg.source_date_epoch = static_cast<uint64_t>(std::stoull(env_sde));
+            try {
+                st.compile_cfg.source_date_epoch = static_cast<uint64_t>(std::stoull(env_sde));
+            } catch (...) {
+                util::warn("invalid SOURCE_DATE_EPOCH: " + std::string(env_sde) +
+                           " — using 0");
+            }
         } else {
             // Try git HEAD commit timestamp
             std::error_code ec;
