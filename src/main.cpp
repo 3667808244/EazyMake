@@ -566,6 +566,14 @@ int main(int argc, char** argv) {
             break;
         }
 
+        // 1.4.0-dev.5: workspace watch — member-level watch (long-running).
+        case ezmk::cli::Command::WorkspaceWatch: {
+            auto ws = require_workspace();
+            int rc = ezmk::workspace_build::run_watch(ws, *args.workspace_opts);
+            if (rc != 0) return rc;
+            break;
+        }
+
         case ezmk::cli::Command::Utils: {
             // 1.1.1: intercept `cc` — served by the built-in C++ generator
             // (drift-free compile_commands.json). Other tools keep the Lua path.

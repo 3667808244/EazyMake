@@ -556,3 +556,103 @@ TEST_CASE("integration: workspace test --report writes per-member reports (1.3.2
     // The workspace root itself has no report (members are the units).
     REQUIRE_FALSE(fs::exists(root / ".ezmk" / "test-results" / "junit.xml"));
 }
+
+// ==============================================================
+// 1.4.0-dev.5: workspace watch — member-level watch
+// ==============================================================
+namespace {
+
+// Start `ezmk workspace watch [flags]` in root (background), redirecting output
+// to log_file. Caller must kill_ws_watch_processes() at the end.
+void start_ws_watch(const fs::path& root, const fs::path& log_file,
+                    const std::string& flags) {
+    std::string ezmk_bin = find_ezmk_binary().string();
+    std::string watch_cmd;
+#ifdef EZMK_WIN
+    watch_cmd = "cmd /c start \"\" /D \"" + root.string() + "\" /B " +
+                escape_shell_arg(ezmk_bin) +
+                " workspace watch " + flags + " > \"" +
+                escape_shell_arg(log_file.string()) + "\" 2>&1";
+#else
+    watch_cmd = "cd " + escape_shell_arg(root.string()) + " && " +
+                escape_shell_arg(ezmk_bin) +
+                " workspace watch " + flags + " > " +
+                escape_shell_arg(log_file.string()) + " 2>&1 &";
+#endif
+    run_command(watch_cmd);
+}
+
+// Kill the workspace-watch process tree (parent orchestrator + member watchers).
+void kill_ws_watch_processes() {
+#ifdef EZMK_WIN
+    run_command("cmd /c taskkill /F /IM ezmk.exe 2>nul");
+#else
+    run_command("pkill -f \"ezmk workspace watch\" 2>/dev/null || true");
+    run_command("pkill -f \"ezmk watch\" 2>/dev/null || true");
+#endif
+}
+
+} // anonymous namespace
+
+// workspace watch starts a watcher in every member (initial build artifacts
+// appear) and rebuilds a member when its sources change.
+TEST_CASE("integration: workspace watch starts member watchers and rebuilds (1.4.0-dev.5)", "[integration][workspace][1.4.0-dev.5]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws_ww";
+    write_ws_fixture(root);
+
+    // Pre-build so the initial watcher build is fast / sibling artifacts exist.
+    ProcResult b = run_ezmk("workspace build -j 2", root);
+    REQUIRE(b.exit_code == 0);
+
+    fs::path log_file = tmp.path / "ws_watch.log";
+    start_ws_watch(root, log_file, "");
+
+    // The orchestrator prints its start line immediately (stderr, unbuffered).
+    bool started = poll_log(log_file, "workspace watch:", std::chrono::seconds(15));
+    INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
+    REQUIRE(started);
+
+    // Every member watcher does an initial build on startup — wait until each
+    // member's artifact exists (they were pre-built, so this is a cache-hit
+    // fast path; the point is all THREE member watchers came up).
+    fs::path exe_a = ws_app_exe(root, "tool-a");
+    fs::path exe_b = ws_app_exe(root, "tool-b");
+    fs::path lib   = root / "libs/strutil/build/libstrutil.a";
+    auto wait_exists = [&](const fs::path& p, std::chrono::seconds t) {
+        auto deadline = std::chrono::steady_clock::now() + t;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (fs::exists(p)) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        }
+        return false;
+    };
+    REQUIRE(wait_exists(exe_a, std::chrono::seconds(60)));
+    REQUIRE(wait_exists(exe_b, std::chrono::seconds(60)));
+    REQUIRE(wait_exists(lib, std::chrono::seconds(60)));
+
+    // Record tool-a's exe mtime, touch its source → member watcher rebuilds.
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));  // let watchers settle
+    auto t0 = fs::last_write_time(exe_a);
+    {
+        std::ofstream f(root / "apps/tool-a/src/main.cpp", std::ios::app);
+        f << "// workspace-watch-touch\n";
+    }
+
+    bool rebuilt = false;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::error_code ec;
+        auto t = fs::last_write_time(exe_a, ec);
+        if (!ec && t > t0) { rebuilt = true; break; }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+    INFO("watch log after touch:\n"
+         << (fs::exists(log_file) ? file_read(log_file) : ""));
+    kill_ws_watch_processes();
+    REQUIRE(rebuilt);
+}

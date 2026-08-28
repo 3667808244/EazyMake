@@ -41,6 +41,14 @@ int run_build(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
 // `ezmk test`. Members without any test sources are skipped (not an error).
 int run_test(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts);
 
+// 1.4.0-dev.5: `ezmk workspace watch` — start `ezmk watch` in every selected
+// member (long-running subprocesses; the orchestrator waits until all member
+// watchers exit, normally via SIGINT which each member handles itself).
+// Topological layers still gate startup order (dependencies start first, so
+// their initial builds finish before dependents watch). Returns the process
+// exit code (0 = all members exited cleanly).
+int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts);
+
 // `ezmk workspace clean` — reverse-topological, sequential `ezmk clean` per
 // member. `--stop-on-error` is rejected at parse time (clean has no
 // dependency semantics). Returns the process exit code.

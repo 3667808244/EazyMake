@@ -1163,3 +1163,74 @@ TEST_CASE("cli parse: project pack --format", "[cli][1.3.5]") {
         TestArgs({"project", "pack", "--format", "tgz"}).parse(),
         ezmk::fatal_error);
 }
+
+// ===================================================================
+// 1.4.0-dev.5 — workspace watch
+// ===================================================================
+
+TEST_CASE("cli parse: workspace watch", "[cli][1.4.0-dev.5]") {
+    auto args = TestArgs({"workspace", "watch"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceWatch);
+    REQUIRE(args.workspace_opts.has_value());
+    REQUIRE(args.workspace_opts->watch_run == false);
+    REQUIRE(args.workspace_opts->members.empty());
+}
+
+TEST_CASE("cli parse: workspace watch flags", "[cli][1.4.0-dev.5]") {
+    // -j / --member / --run / --stop-on-error are accepted.
+    auto args = TestArgs({"workspace", "watch", "-j", "2", "--member", "tool-a",
+                          "--run"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceWatch);
+    REQUIRE(args.workspace_opts.has_value());
+    REQUIRE(args.workspace_opts->jobs == 2);
+    REQUIRE(args.workspace_opts->members.size() == 1);
+    REQUIRE(args.workspace_opts->members[0] == "tool-a");
+    REQUIRE(args.workspace_opts->watch_run == true);
+    REQUIRE(args.workspace_opts->stop_on_error == false);  // not passed
+
+    // --stop-on-error is accepted (and forwarded to the scheduler).
+    auto s = TestArgs({"workspace", "watch", "--stop-on-error"}).parse();
+    REQUIRE(s.cmd == Command::WorkspaceWatch);
+    REQUIRE(s.workspace_opts->stop_on_error == true);
+
+    // -r shorthand ≡ --run.
+    auto b = TestArgs({"workspace", "watch", "-r"}).parse();
+    REQUIRE(b.cmd == Command::WorkspaceWatch);
+    REQUIRE(b.workspace_opts->watch_run == true);
+
+    // Positionals are rejected.
+    REQUIRE_THROWS_AS(
+        TestArgs({"workspace", "watch", "extra"}).parse(), ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: watch -w redirects to workspace watch (1.4.0-dev.5)", "[cli][1.4.0-dev.5]") {
+    // `ezmk watch -w` ≡ `ezmk workspace watch`.
+    auto args = TestArgs({"watch", "-w"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceWatch);
+    REQUIRE(args.workspace_opts.has_value());
+
+    auto b = TestArgs({"watch", "-w", "--run", "--member", "libs/x"}).parse();
+    REQUIRE(b.cmd == Command::WorkspaceWatch);
+    REQUIRE(b.workspace_opts->watch_run == true);
+    REQUIRE(b.workspace_opts->members.size() == 1);
+
+    // project-watch-only flags stay project-scoped (no -w → ProjectWatch).
+    auto c = TestArgs({"watch", "--no-build-on-start"}).parse();
+    REQUIRE(c.cmd == Command::ProjectWatch);
+
+    // --no-build-on-start is workspace-foreign → rejected under -w.
+    REQUIRE_THROWS_AS(
+        TestArgs({"watch", "-w", "--no-build-on-start"}).parse(),
+        ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: workspace watch alias ww (1.4.0-dev.5)", "[cli][1.4.0-dev.5][alias]") {
+    auto args = TestArgs({"ww", "--run"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceWatch);
+    REQUIRE(args.workspace_opts.has_value());
+    REQUIRE(args.workspace_opts->watch_run == true);
+
+    // Positionals after -- are rejected (member-level pass-through only).
+    REQUIRE_THROWS_AS(
+        TestArgs({"workspace", "watch", "--", "arg"}).parse(), ezmk::fatal_error);
+}

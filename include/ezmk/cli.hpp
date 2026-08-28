@@ -35,6 +35,7 @@ enum class Command {
     WorkspaceBuild,  // 1.3.0-dev.2
     WorkspaceTest,   // 1.3.0-dev.2
     WorkspaceClean,  // 1.3.0-dev.2
+    WorkspaceWatch,  // 1.4.0-dev.5
     Version,
     Help,
 };
@@ -107,6 +108,7 @@ struct WorkspaceOptions {
     bool stop_on_error = false;              // --stop-on-error (build/test only)
     std::vector<std::string> members;        // --member <name> (repeatable)
     std::string test_report;                 // 1.3.2: --report (test only) — forwarded to members
+    bool watch_run = false;                  // 1.4.0-dev.5: --run (watch only) — forwarded to members
 };
 
 struct InstallOptions {

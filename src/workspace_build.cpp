@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -145,8 +146,11 @@ bool member_has_tests(const fs::path& member_dir, const config::EzConfig& cfg) {
 // and stream its output prefixed with the member name. Returns true on success.
 // The stop-check lives in the caller (task body) so a not-yet-started task
 // counts as `skipped`, not `failed`.
+// 1.4.0-dev.5: `extra_flags` appends raw flags to the member command (e.g.
+// workspace watch's `--run` forwarding to executable members).
 bool run_member(const workspace::Member& m, const std::string& action,
-                std::mutex& print_mutex, const std::string& test_report = {}) {
+                std::mutex& print_mutex, const std::string& test_report = {},
+                const std::string& extra_flags = {}) {
     {
         std::lock_guard<std::mutex> lk(print_mutex);
         util::info(I18nKey::workspace_member_start,
@@ -158,6 +162,9 @@ bool run_member(const workspace::Member& m, const std::string& action,
         // 1.3.2: forward --report to the member subprocess — each member
         // writes its own report file (default: <member>/.ezmk/test-results/...).
         cmd += " --report \"" + util::escape_shell_arg(test_report) + "\"";
+    }
+    if (!extra_flags.empty()) {
+        cmd += " " + extra_flags;
     }
     util::RunOptions ro;
     ro.cwd = m.path;
@@ -377,6 +384,101 @@ int run_clean(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
     util::info(I18nKey::workspace_clean_done,
                {{"count", std::to_string(cleaned)}});
     return failed == 0 ? 0 : 1;
+}
+
+// 1.4.0-dev.5: `ezmk workspace watch` — start `ezmk watch` in every selected
+// member and wait until all member watchers exit (normally via SIGINT, which
+// each member watch handles itself — the orchestrator only installs a marker
+// handler so it survives to summarize). Members are dispatched in topological
+// layer order (dependencies first, so their initial builds finish before
+// dependents start watching); within the jobs limit, all selected members'
+// watchers run concurrently — watch is a long-lived loop, so unlike build/test
+// there is no per-layer barrier (a layer would never "finish").
+//
+// 坑 1 (dev.5 §3.5): dependent members share the depended-upon member's build
+// artifacts — while the depended-upon member rebuilds, a dependent may briefly
+// see a half-written sibling artifact. This is inherent to concurrent watch
+// (the next rebuild self-heals); documented in cli.md. Members are dispatched
+// in topological order to minimize the window (dependencies build first).
+int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts) {
+    int jobs = resolve_jobs(opts.jobs, ws);
+    auto layers = workspace::topo_layers(ws);
+    auto sel = select_layers(ws, layers, opts.members);
+
+    // Flatten the selected layers into start order (dependencies first) —
+    // watch has no per-layer completion barrier, so dispatch is one pool.
+    std::vector<size_t> order;
+    for (const auto& layer : sel) {
+        for (size_t idx : layer) order.push_back(idx);
+    }
+
+    size_t total = order.size();
+    util::info(I18nKey::workspace_watch_start,
+               {{"count", std::to_string(total)}, {"jobs", std::to_string(jobs)}});
+
+    // SIGINT: member watchers handle their own SIGINT (they exit cleanly); the
+    // orchestrator just waits for all of them. A marker handler prevents the
+    // parent from dying before the children finish (mirrors project watch).
+    static std::atomic<bool> sigint_received{false};
+    auto prev_sigint = std::signal(SIGINT, [](int) { sigint_received = true; });
+
+    // Members that failed validation are warned at the end (never dispatched).
+    std::vector<const workspace::Member*> invalid;
+    for (const auto& m : ws.members) {
+        if (!m.valid) invalid.push_back(&m);
+    }
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> failed{0}, skipped{0};
+    std::mutex print_mutex;
+
+    util::ThreadPool pool(static_cast<size_t>(jobs));
+    std::vector<std::future<void>> futures;
+    futures.reserve(order.size());
+    for (size_t idx : order) {
+        futures.push_back(pool.submit([&ws, idx, &stop, &print_mutex,
+                                       &failed, &skipped, &opts]() {
+            // --stop-on-error fired while this task was queued → skipped.
+            if (stop.load()) {
+                skipped.fetch_add(1);
+                return;
+            }
+            const auto& m = ws.members[idx];
+            // 1.4.0-dev.5: `workspace watch --run` forwards --run to member
+            // watchers — but only for executable members (1.3.4 config-time
+            // gate: --run on a non-executable member would fatal its watch).
+            std::string extra;
+            if (opts.watch_run && m.type == "executable") extra = "--run";
+            bool ok = run_member(m, "watch", print_mutex, /*test_report=*/{},
+                                 extra);
+            if (ok) {
+                // watcher exited cleanly (e.g. SIGINT) — nothing to record.
+            } else {
+                failed.fetch_add(1);
+                if (opts.stop_on_error) stop.store(true);
+            }
+        }));
+    }
+    // Await every member watcher (SIGINT makes each child exit → run_command
+    // returns → future completes). Never kill a running subprocess.
+    for (auto& f : futures) {
+        f.get();
+    }
+
+    // Warn about invalid members (they are not in any layer).
+    for (const auto* m : invalid) {
+        util::warn(I18nKey::workspace_list_invalid,
+                   {{"name", m->name}, {"reason", m->error}});
+    }
+
+    size_t succeeded = total - failed.load() - skipped.load();
+    util::info(I18nKey::workspace_summary,
+               {{"action", "watch"},
+                {"succeeded", std::to_string(succeeded)},
+                {"failed", std::to_string(failed.load())},
+                {"skipped", std::to_string(skipped.load())}});
+    (void)prev_sigint;
+    return failed.load() == 0 ? 0 : 1;
 }
 
 } // namespace ezmk::workspace_build

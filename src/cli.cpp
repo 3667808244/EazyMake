@@ -281,6 +281,14 @@ namespace ezmk::cli
                 cmd_name = "ezmk project watch";
                 spec.push_back({'\0', "no-build-on-start", false});
                 spec.push_back({'r', "run", false});   // 1.3.4: run after each successful rebuild
+                // 1.4.0-dev.5: -w/--workspace redirect → `ezmk workspace watch`
+                // (watch joined build/test/clean in the redirect family).
+                // --stop-on-error / --member are workspace-only (accepted here
+                // so `watch -w --member x` parses; rejected without -w below,
+                // mirroring the build branch).
+                spec.push_back({'w', "workspace", false});
+                spec.push_back({'\0', "stop-on-error", false});
+                spec.push_back({'\0', "member", true});
             }
 
             auto p = parse_options(argc, argv, 3, spec, cmd_name);
@@ -301,10 +309,39 @@ namespace ezmk::cli
                 args.workspace_opts = std::move(w);
                 return args;
             }
+            if (action == "watch" && p.has("workspace"))
+            {
+                // 1.4.0-dev.5: `ezmk watch -w` ≡ `ezmk workspace watch`. The
+                // workspace watch spec = workspace_cmd_spec + --run (forwarded
+                // to member watchers); --no-build-on-start is project-watch-only
+                // and rejected here (workspace-foreign).
+                args.cmd = Command::WorkspaceWatch;
+                auto spec = workspace_cmd_spec();
+                spec.push_back({'r', "run", false});   // forwarded to members
+                auto wp = parse_options(argc, argv, 3, spec,
+                                        "ezmk workspace watch");
+                WorkspaceOptions w = parse_workspace_opts(wp);
+                fill_members(wp, w);
+                if (wp.has("run")) w.watch_run = true;
+                reject_positionals(wp, "ezmk workspace watch");
+                reject_report_on_non_test(w, "ezmk workspace watch");
+                args.workspace_opts = std::move(w);
+                return args;
+            }
             if (action == "build" &&
                 (p.has("stop-on-error") || p.has("member")))
             {
                 // 1.3.0-dev.2: workspace-only flags without -w are a usage error.
+                std::string flag = p.has("stop-on-error") ? "--stop-on-error"
+                                                          : "--member";
+                util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
+                            {{"flag", flag}});
+            }
+            if (action == "watch" &&
+                (p.has("stop-on-error") || p.has("member")))
+            {
+                // 1.4.0-dev.5: same rule for watch — workspace-only flags
+                // without -w are a usage error.
                 std::string flag = p.has("stop-on-error") ? "--stop-on-error"
                                                           : "--member";
                 util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
@@ -869,17 +906,26 @@ namespace ezmk::cli
             return args;
         }
 
-        if (action == "build" || action == "test" || action == "clean")
+        if (action == "build" || action == "test" || action == "clean" ||
+            action == "watch")
         {
             std::string cmd_name = "ezmk workspace " + std::string(action);
             if (action == "build")
                 args.cmd = Command::WorkspaceBuild;
             else if (action == "test")
                 args.cmd = Command::WorkspaceTest;
+            else if (action == "watch")
+                args.cmd = Command::WorkspaceWatch;
             else
                 args.cmd = Command::WorkspaceClean;
 
-            auto p = parse_options(argc, argv, 3, workspace_cmd_spec(), cmd_name);
+            // 1.4.0-dev.5: watch reuses the shared spec (already has -j /
+            // --member) plus -r/--run (forwarded to member watchers).
+            auto spec = workspace_cmd_spec();
+            if (action == "watch")
+                spec.push_back({'r', "run", false});
+
+            auto p = parse_options(argc, argv, 3, spec, cmd_name);
             WorkspaceOptions w = parse_workspace_opts(p);
             fill_members(p, w);
             reject_positionals(p, cmd_name);
@@ -891,6 +937,9 @@ namespace ezmk::cli
             // 1.3.2: --report is test-only.
             if (action != "test")
                 reject_report_on_non_test(w, cmd_name);
+            // 1.4.0-dev.5: --run is watch-only.
+            if (p.has("run"))
+                w.watch_run = true;
 
             args.workspace_opts = std::move(w);
             return args;
@@ -1068,6 +1117,7 @@ namespace ezmk::cli
                 // 1.3.3: workspace two-letter shorthands (组首字母 + 子命令首字母)
                 {"wl", {"workspace", "list"}},  {"wb", {"workspace", "build"}},
                 {"wt", {"workspace", "test"}},  {"wc", {"workspace", "clean"}},
+                {"ww", {"workspace", "watch"}}, // 1.4.0-dev.5
                 {"u", {"utils", nullptr}},    {"h", {"help", nullptr}},
                 {"v", {"version", nullptr}},
             };
@@ -1258,8 +1308,9 @@ namespace ezmk::cli
         row("ezmk workspace list", I18nKey::help_workspace_list);
         row("ezmk workspace build [-j N] [--stop-on-error] [--member <n>]", I18nKey::help_workspace_build);
         row("ezmk workspace test  [-j N] [--stop-on-error] [--member <n>]", I18nKey::help_workspace_test);
+        row("ezmk workspace watch [-j N] [--stop-on-error] [--member <n>] [-r]", I18nKey::help_workspace_watch);
         row("ezmk workspace clean [--member <n>]", I18nKey::help_workspace_clean);
-        sub(get(I18nKey::help_full_form) + ": build/test/clean accept -w to redirect");
+        sub(get(I18nKey::help_full_form) + ": build/test/watch/clean accept -w to redirect");
         std::cout << "\n";
 
         // ── §5: Common options ────────────────────────────────────
