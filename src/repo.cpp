@@ -131,25 +131,29 @@ void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
 // Helpers
 // ===================================================================
 
-// Extract a repo name from a git URL (e.g. "git@github.com:user/repo.git" → "repo")
+// Extract a repo name from a git URL (e.g. "git@github.com:user/repo.git" → "repo").
+// 1.4.0-dev.5: also splits on '\' so Windows local paths ("C:\pkgs\my-repo")
+// yield "my-repo" — without this the repo-name safety check (validate_pkg_name,
+// added 1.4.0-dev.5) rejected every Windows local repo: the whole path was
+// taken as the name and failed the backslash/colon checks.
 static std::string name_from_url(std::string_view url) {
     auto s = std::string(url);
     // Strip trailing .git
     if (s.size() > 4 && s.substr(s.size() - 4) == ".git") {
         s = s.substr(0, s.size() - 4);
     }
-    // Take last component (after last '/' or ':')
+    // Take last component (after last '/', ':', or '\').
+    // NOTE: track "found" separately — comparing against std::string::npos as
+    // a seed is wrong (npos is size_t max, so `x > npos` is never true).
     auto pos_slash = s.rfind('/');
     auto pos_colon = s.rfind(':');
-    size_t pos = std::string::npos;
-    if (pos_slash != std::string::npos && pos_colon != std::string::npos) {
-        pos = std::max(pos_slash, pos_colon);
-    } else if (pos_slash != std::string::npos) {
-        pos = pos_slash;
-    } else {
-        pos = pos_colon;
-    }
-    if (pos != std::string::npos && pos + 1 < s.size()) {
+    auto pos_bslash = s.rfind('\\');
+    bool found = false;
+    size_t pos = 0;
+    if (pos_slash != std::string::npos) { pos = pos_slash; found = true; }
+    if (pos_colon != std::string::npos && (!found || pos_colon > pos)) { pos = pos_colon; found = true; }
+    if (pos_bslash != std::string::npos && (!found || pos_bslash > pos)) { pos = pos_bslash; found = true; }
+    if (found && pos + 1 < s.size()) {
         return s.substr(pos + 1);
     }
     return s;

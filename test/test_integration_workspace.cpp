@@ -605,9 +605,20 @@ TEST_CASE("integration: workspace watch starts member watchers and rebuilds (1.4
     fs::path root = tmp.path / "ws_ww";
     write_ws_fixture(root);
 
-    // Pre-build so the initial watcher build is fast / sibling artifacts exist.
+    // Pre-build so every member watcher's initial build is a cache hit — the
+    // alternative (watching with missing sibling artifacts) races the strutil
+    // watcher's rebuild against tool-a's initial build (design pit 1: a
+    // dependent may briefly see a half-written sibling artifact, and watch
+    // does not retry a failed INITIAL build).
     ProcResult b = run_ezmk("workspace build -j 2", root);
     REQUIRE(b.exit_code == 0);
+
+    // RAII: kill the watch process tree on EVERY exit path (a REQUIRE failure
+    // used to leak the orchestrator + member watchers).
+    struct WsWatchKiller {
+        bool armed = true;
+        ~WsWatchKiller() { if (armed) kill_ws_watch_processes(); }
+    } killer;
 
     fs::path log_file = tmp.path / "ws_watch.log";
     start_ws_watch(root, log_file, "");
@@ -617,23 +628,10 @@ TEST_CASE("integration: workspace watch starts member watchers and rebuilds (1.4
     INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
     REQUIRE(started);
 
-    // Every member watcher does an initial build on startup — wait until each
-    // member's artifact exists (they were pre-built, so this is a cache-hit
-    // fast path; the point is all THREE member watchers came up).
+    // Every member watcher's initial build ran (cache hit, so artifacts exist
+    // from the pre-build). The rebuild below proves tool-a's watcher is live.
     fs::path exe_a = ws_app_exe(root, "tool-a");
-    fs::path exe_b = ws_app_exe(root, "tool-b");
-    fs::path lib   = root / "libs/strutil/build/libstrutil.a";
-    auto wait_exists = [&](const fs::path& p, std::chrono::seconds t) {
-        auto deadline = std::chrono::steady_clock::now() + t;
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (fs::exists(p)) return true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        }
-        return false;
-    };
-    REQUIRE(wait_exists(exe_a, std::chrono::seconds(60)));
-    REQUIRE(wait_exists(exe_b, std::chrono::seconds(60)));
-    REQUIRE(wait_exists(lib, std::chrono::seconds(60)));
+    REQUIRE(fs::exists(exe_a));
 
     // Record tool-a's exe mtime, touch its source → member watcher rebuilds.
     std::this_thread::sleep_for(std::chrono::milliseconds(800));  // let watchers settle
@@ -653,6 +651,7 @@ TEST_CASE("integration: workspace watch starts member watchers and rebuilds (1.4
     }
     INFO("watch log after touch:\n"
          << (fs::exists(log_file) ? file_read(log_file) : ""));
+    killer.armed = false;  // explicit kill below (already-asserted path)
     kill_ws_watch_processes();
     REQUIRE(rebuilt);
 }

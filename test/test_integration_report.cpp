@@ -296,6 +296,13 @@ TEST_CASE("integration: watch --run skips on build failure (1.3.4)", "[integrati
     // Introduce a compile error → rebuild fails → no run output.
     file_write(proj_dir / "src" / "main.cpp",
         "#include <cstdio>\nint main() { this is not valid c++ }\n");
+    // 1.4.0-dev.5: RAII kill on EVERY exit path — a REQUIRE failure used to
+    // leak the background watch process (watch must SURVIVE the build failure
+    // here, so the kill can only happen after all assertions on this phase).
+    struct WatchKiller {
+        bool armed = true;
+        ~WatchKiller() { if (armed) kill_watch_processes(); }
+    } wk;
     bool failed = poll_log(log_file, "build failed", std::chrono::seconds(30));
     INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
     REQUIRE(failed);
@@ -305,6 +312,7 @@ TEST_CASE("integration: watch --run skips on build failure (1.3.4)", "[integrati
     file_write(proj_dir / "src" / "main.cpp",
         "#include <cstdio>\nint main() { std::printf(\"WATCH-RUN-MARKER\\n\"); return 0; }\n");
     bool ran_after_fix = poll_log(log_file, "WATCH-RUN-MARKER", std::chrono::seconds(30));
+    wk.armed = false;
     kill_watch_processes();
     REQUIRE(ran_after_fix);
 }
@@ -586,8 +594,13 @@ TEST_CASE("integration: pkg install sidecar missing or explicit --sha256 precede
         REQUIRE(fs::exists(proj / ".ezmk" / "pkg" / "sc_miss" / "build" / "libsc_miss.a"));
     }
     SECTION("explicit --sha256 wins over a contradictory sidecar") {
-        // Correct hash from the pack (recomputed independently so the test is
-        // self-verifying — the sidecar itself is the reference here).
+        // 1.4.0-dev.5: the old section re-packed a CORRECT sidecar and passed
+        // the same correct hash — both implementations (trust sidecar vs trust
+        // --sha256) passed, so the precedence was never actually tested. Now:
+        // corrupt the sidecar to a wrong hash, pass the CORRECT hash explicitly
+        // — only explicit-first implementations succeed.
+        std::string wrong_hash(64, 'f');
+        file_write(sidecar, wrong_hash + "  sc_miss-1.0.0.tar.gz\n");
         fs::path proj = make_consumer("app_sc_expl");
         std::string correct = ezmk::crypto::sha256_file(archive);
         ProcResult inst = run_ezmk("pkg install \"" + archive.string() +
