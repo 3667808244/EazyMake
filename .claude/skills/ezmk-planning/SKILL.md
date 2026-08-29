@@ -20,24 +20,32 @@ plans/
 │   ├── README.md          #   series version index (merged)
 │   ├── 1.1.0-dev.1.md ~ 1.1.0-pre.3.md, 1.1.0.md
 │   └── 1.1.1.md / 1.1.2.md / 1.1.3.md
-└── 1.2.x/                 # 1.2.x series (1.2.0 dev/pre/formal + 1.2.1 patch) — flat
-    ├── README.md          #   series version index (merged)
-    └── 1.2.0-dev.N.md / 1.2.0-pre.N.md / 1.2.0.md / 1.2.1.md
+├── 1.2.x/                 # 1.2.x series (1.2.0 dev/pre/formal + 1.2.1~1.2.5 patches) — flat
+│   ├── README.md          #   series version index (merged)
+│   └── 1.2.0-dev.N.md / 1.2.0-pre.N.md / 1.2.0.md / 1.2.1.md ~ 1.2.5.md
+├── 1.3.x/                 # 1.3.x series (1.3.0 dev/pre/formal + 1.3.1~1.3.6 patches) — flat
+│   ├── README.md          #   series version index (merged)
+│   └── 1.3.0-dev.N.md / 1.3.0-pre.N.md / 1.3.0.md / 1.3.1.md ~ 1.3.6.md
+├── 1.4.x/                 # 1.4.x series (1.4.0 dev/pre — current, e.g. 1.4.0-pre.1) — flat
+│   ├── README.md          #   series version index (merged)
+│   └── 1.4.0-dev.1.md ~ 1.4.0-dev.7.md / 1.4.0-pre.1.md
 └── plan.md                # (repo root) Current execution plan — mirrors the active version's design doc
 ```
 
-- **`plans/README.md`** — top-level index: brief description + link for each major series (0.x.x / 1.0.0 / 1.1.x / 1.2.x), roadmap, dependency graph, and cross-version concerns.
+- **`plans/README.md`** — top-level index: brief description + link for each major series (0.x.x / 1.0.0 / 1.1.x / 1.2.x / 1.3.x / 1.4.x), roadmap, dependency graph, and cross-version concerns.
 - **`0.x.x/`** — plans for early development versions (0.1.x ~ 0.2.x). All completed.
 - **`1.0.0/`** — plans for release versions leading up to 1.0.0 (0.9.0 ~ 1.0.0).
 - **`1.1.x/`** — plans for the 1.1.x series: 1.1.0 release series (dev sub-versions `1.1.0-dev.N`, pre-releases `1.1.0-pre.N`, final `1.1.0` plan) plus the 1.1.1/1.1.2/1.1.3 patch plans. All files are flat in this folder (no subfolders).
-- **`1.2.x/`** — plans for the 1.2.x series: 1.2.0 dev/pre sub-versions + the final `1.2.0` plan + the `1.2.1` patch plan. All files are flat in this folder (no subfolders).
+- **`1.2.x/`** — plans for the 1.2.x series: 1.2.0 dev/pre sub-versions + the final `1.2.0` plan + the `1.2.1` ~ `1.2.5` patch plans. All files are flat in this folder (no subfolders).
+- **`1.3.x/`** — plans for the 1.3.x series: 1.3.0 dev/pre sub-versions + the final `1.3.0` plan + the `1.3.1` ~ `1.3.6` patch plans. All files are flat in this folder (no subfolders).
+- **`1.4.x/`** — plans for the current 1.4.x series: `1.4.0-dev.1` ~ `1.4.0-dev.7` + `1.4.0-pre.1`. All files are flat in this folder (no subfolders).
 - **`<series>/README.md`** — per-series version index: overview + version table (theme / deliverables / dependency) with links to each plan file.
 - **`plans/README.md`** — master index with version summaries, dependency graph (Mermaid), and cross-version concerns.
 - **`plan.md`** (repo root) — the **current execution plan**, derived from the active version's design doc. Contains checkboxes `[ ]` / `[x]` tracking per-phase progress.
 
 ## Plan document format
 
-Each version plan in `plans/0.x.x/`, `plans/1.0.0/`, `plans/1.1.x/`, or `plans/1.2.x/` follows this convention:
+Each version plan in `plans/0.x.x/`, `plans/1.0.0/`, `plans/1.1.x/`, `plans/1.2.x/`, `plans/1.3.x/`, or `plans/1.4.x/` follows this convention:
 
 ```markdown
 # EazyMake <version> — <short title>
@@ -86,7 +94,7 @@ The root-level `plan.md` is the executable version of the design doc. It follows
 
 ## Workflow for adding a new version plan
 
-1. **Create the design doc**: `plans/<series>/<version>.md` — `0.x.x/` for early dev, `1.0.0/` for the 1.0.0 series, `1.1.x/` for the 1.1.x patch series, `1.2.x/` for the 1.2.x series (1.2.0 dev/pre + 1.2.1 patches, flat)
+1. **Create the design doc**: `plans/<series>/<version>.md` — `0.x.x/` for early dev, `1.0.0/` for the 1.0.0 series, `1.1.x/` for the 1.1.x patch series, `1.2.x/` for the 1.2.x series (1.2.0 dev/pre + 1.2.1~1.2.5 patches, flat), `1.3.x/` for the 1.3.x series (1.3.0 dev/pre + 1.3.1~1.3.6 patches, flat), `1.4.x/` for the current 1.4.x series (1.4.0 dev/pre, flat)
    - Follow the standard format above
    - Include §1~§6 sections
 2. **Create the execution plan**: `plan.md` in repo root
@@ -114,8 +122,9 @@ As each phase is completed:
 |---------|---------|
 | `0.1.6` ~ `0.2.6` | Early development (0.x.x/ folder) |
 | `0.9.0` ~ `1.0.0` | Release candidates and stable release (1.0.0/ folder) |
-| `1.1.0-dev.N` | Sub-versions of 1.1.0 (incremental development) |
-| `1.1.0-pre.N` | Pre-releases of 1.1.0 (documentation/checkpoints) |
-| `1.1.0` | Final merged release (1.1.x/ folder) |
+| `1.x.0-dev.N` (e.g. `1.2.0-dev.N`, `1.3.0-dev.N`, `1.4.0-dev.N`) | Development sub-versions — incremental development |
+| `1.x.0-pre.N` (e.g. `1.2.0-pre.N`, `1.3.0-pre.N`, `1.4.0-pre.N`) | Pre-releases — release-phase closing (documentation/checkpoints) |
+| `1.x.0` (e.g. `1.1.0`, `1.2.0`, `1.3.0`) | Final merged formal release (1.x.x/ folder) |
+| `1.x.N` (e.g. `1.2.1` ~ `1.2.5`, `1.3.1` ~ `1.3.6`) | Patch releases after the formal version |
 
-All completed dev sub-versions (dev.1 ~ dev.6) will eventually be merged into the final `1.1.0` release.
+All completed dev sub-versions (e.g. 1.4.0 dev.1 ~ dev.7) will eventually be merged into the final `1.x.0` release.

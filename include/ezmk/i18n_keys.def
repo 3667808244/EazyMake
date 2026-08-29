@@ -69,6 +69,7 @@ EZMK_I18N_KEY(ezmk_lua_missing_script)  // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_need_value)      // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_unknown_option)  // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_extra_arg)       // 1.2.0-dev.8
+EZMK_I18N_KEY(build_warn_lang_exceeds_capability)  // 1.4.0-pre.1
 
 // ---- cache (verbose) ----
 EZMK_I18N_KEY(cache_hit)
@@ -445,6 +446,7 @@ EZMK_I18N_KEY(help_workspace_test)
 EZMK_I18N_KEY(help_workspace_watch)             // 1.4.0-dev.5
 EZMK_I18N_KEY(help_workspace_clean)
 EZMK_I18N_KEY(help_workspace_scan)              // 1.4.0-dev.7
+EZMK_I18N_KEY(help_workspace_redirect)          // 1.4.0-pre.1 (i18n 收口：原硬编码英文)
 EZMK_I18N_KEY(help_flag_workspace)
 EZMK_I18N_KEY(help_flag_stop_on_error)
 EZMK_I18N_KEY(help_flag_member)

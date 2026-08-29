@@ -5,8 +5,6 @@ description: How to run tests in an EazyMake-managed C/C++ project — test conf
 
 # EazyMake Project Test (User)
 
-> **Note:** `ezmk project test` is a 1.1.0-dev.6 feature. If your version doesn't support it yet, use `ezmk project run` with a test target or a custom build hook.
-
 ## Quick test
 
 ```bash
@@ -19,9 +17,8 @@ Runs the project's test suite using the framework configured in `ezmk.toml`.
 
 ```toml
 [test]
-framework = "catch2"          # Test framework: "catch2" or "builtin"
-test_dirs = ["test"]          # Directories containing test source files
-test_pattern = "test_*.cpp"   # Glob pattern for test files
+framework = "catch2"          # Test framework: "catch2" or "ezmk" (anything else is an error)
+dirs = ["test"]               # Directories containing test source files
 flags = ["-g", "-O0"]         # Extra compile flags for test builds
 ```
 
@@ -37,11 +34,11 @@ lib = ["catch2"]              # Declare Catch2 as a dependency
 Then `ezmk project test` automatically:
 1. Compiles test sources + project sources (excluding `main.cpp`)
 2. Links with Catch2
-3. Runs the test binary with `--verbosity high`
+3. Runs the compiled `build/test_runner` binary and gates on its exit code (no `--verbosity high` is passed; `-v` only prints the underlying commands)
 
-### Builtin framework
+### Ezmk framework
 
-For projects without a dedicated test framework, `framework = "builtin"` compiles and runs each test file as a separate executable (each with its own `main()`).
+For projects without a dedicated test framework, `framework = "ezmk"` compiles and runs each test file as a separate executable (each with its own `main()`), with a 30s per-test timeout.
 
 ## Manual test execution
 
@@ -56,7 +53,7 @@ The Lua script can call `ezmk.run()` to execute test binaries:
 
 ```lua
 -- scripts/run_tests.lua
-local result = ezmk.run("./build/test_suite", {})
+local result = ezmk.run("./build/test_runner", {})
 if result.exit_code ~= 0 then
     ezmk.error("Tests failed: " .. result.stderr)
     os.exit(1)
@@ -80,18 +77,25 @@ project/
 
 ### Running specific tests
 
+Select tests with `--filter` (there is no `test_pattern` config key):
+
 ```bash
-# With Catch2:
-./build/test_suite "Module A: specific test"
-./build/test_suite "[tag]"
-./build/test_suite "~[integration]"   # Exclude integration tests
+ezmk project test --filter "specific test"   # Catch2: test spec (name or [tag], "~" excludes)
+ezmk project test --filter "test_module_a"   # ezmk framework: substring match on file name
+```
+
+Or run the compiled runner directly:
+
+```bash
+./build/test_runner "[tag]"
+./build/test_runner "~[integration]"   # Exclude integration tests
 ```
 
 ### Debugging test failures
 
 ```bash
 ezmk project build --profile debug    # Build with debug symbols
-gdb ./build/test_suite                 # Run under debugger
+gdb ./build/test_runner                # Run under debugger
 ```
 
 ### CI pipeline

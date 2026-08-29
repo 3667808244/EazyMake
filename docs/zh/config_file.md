@@ -119,7 +119,7 @@
 | 宏名 | 类型 | 示例值 | 说明 |
 |------|------|--------|------|
 | `EZMK` | 整数 | `1` | 始终定义为 `1`，标识构建系统为 EazyMake |
-| `EZMK_VERSION` | 字符串 | `"0.2.2"` | EazyMake 自身版本号 |
+| `EZMK_VERSION` | 字符串 | `"1.3.6"` | EazyMake 自身版本号 |
 | `EZMK_PROJECT_NAME` | 字符串 | `"myapp"` | `[project].name` |
 | `EZMK_PROJECT_VERSION` | 字符串 | `"1.0.0"` | `[project].version` |
 | `EZMK_PROJECT_TYPE` | 字符串 | `"executable"` | `[project].type` |

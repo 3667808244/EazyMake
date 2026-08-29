@@ -57,12 +57,12 @@ system_target = []
 [depends]
 lib = []
 
-# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`
-# framework = "catch2"       # "catch2" | "ezmk"（内置框架）
+# [test]                     # enable project tests: uncomment to run `ezmk test`
+# framework = "catch2"       # "catch2" | "ezmk" (built-in framework)
 # dirs = ["test"]
-# default_profile = "debug"  # 1.2.0-dev.12+：测试默认 profile
-# include_dirs = ["test/helpers"]   # 测试专属 -I（1.2.0-dev.12+）
-# link_targets = ["pthread"]        # 测试专属 -l（1.2.0-dev.12+）
+# default_profile = "debug"  # 1.2.0-dev.12+: default test profile
+# include_dirs = ["test/helpers"]   # test-only -I (1.2.0-dev.12+)
+# link_targets = ["pthread"]        # test-only -l (1.2.0-dev.12+)
 ```
 
 > **Why these defaults?** The generated config is pre-wired to the scaffolded

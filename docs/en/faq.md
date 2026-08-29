@@ -23,8 +23,8 @@ This page collects common problems and their solutions across installation, buil
 **Cause**: You don't have write permission to the install directory (default: `~/ezmk/` on Windows, `/usr/local/bin/` on Linux/macOS).
 
 **Solution**:
-1. For a user-local install, pass a writable prefix: `bash install.sh --prefix ~/.local`
-2. For a system-wide install on Linux/macOS, use `sudo bash install.sh`
+1. For a user-local install, pass a writable prefix: `PREFIX=~/.local bash install.sh`
+2. For a system-wide install on Linux/macOS, use `sudo PREFIX=/usr/local bash install.sh`
 3. On Windows, make sure you're running the terminal as a normal user (not administrator) if installing to your home directory
 
 ---

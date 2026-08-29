@@ -29,7 +29,7 @@ description: EazyMake 开发发布工作流 —— dev / pre / 正式发布三�
 5. **全量回归**：`bash build.sh test-all` 跑单元 + 集成测试，要求零回归（对比基线用例/断言数）。
 6. **更新计划文档**：`plan.md` 勾选 `[x]`；`plans/README.md` 把该版本从「当前执行」移到「已完成」；必要时更新系列 README 与依赖图。
 7. **更新 changelog**：`CHANGES.md` 新增该版本条目（新增 / 行为变更 / 文档 / 已知限制）。
-8. **核对发布门槛**（⛔ 见 `plans/1.1.x/1.1.0-pre.3.md`）：① 计划清单全部完成或明确收口 ② 公共 API 无破坏性变更 ③ 全量测试零回归 —— 门槛未满足即停止，禁止带着未收口项进入下一子版本。
+8. **核对发布门槛**（⛔ 门槛见当前正在执行的 pre 计划（如 `plans/1.4.x/1.4.0-pre.1.md` §6）与 1.1.0-pre.3 原始定义 `plans/1.1.x/1.1.0-pre.3.md`）：① 计划清单全部完成或明确收口 ② 公共 API 无破坏性变更 ③ 全量测试零回归 —— 门槛未满足即停止，禁止带着未收口项进入下一子版本。
 9. **提交并推送**：文档齐全后 `git push`。
 
 ## 2 pre 阶段开发
@@ -51,7 +51,7 @@ description: EazyMake 开发发布工作流 —— dev / pre / 正式发布三�
     2. 本机 MSYS2 + 远程 Arch Linux `makepkg` 生成并验证产物（`makepkg -si` 后 `ezmk version`）
     3. AUR 账户未开通 → 不提交 AUR，以「仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si`」为主，AUR 延后
 6. **全量回归**：`bash build.sh test-all` 零回归；CI 在 push 上绿色。
-7. **发布门槛预核对**（⛔ 见 `plans/1.1.x/1.1.0-pre.3.md`）：实现清单全部完成/收口 + API 兼容 + 零回归。
+7. **发布门槛预核对**（⛔ 门槛见当前正在执行的 pre 计划（如 `plans/1.4.x/1.4.0-pre.1.md` §6）与 1.1.0-pre.3 原始定义 `plans/1.1.x/1.1.0-pre.3.md`）：实现清单全部完成/收口 + API 兼容 + 零回归。
 8. **更新计划文档与 changelog**：`plan.md` 勾选、`plans/README.md` 状态、`CHANGES.md` pre 条目。
 9. **提交并推送**。
 

@@ -21,7 +21,7 @@ ezmk <shorthand> [options] [arguments]
 curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh | bash
 ```
 
-从源码构建并安装 `ezmk` 到 `$HOME/.local/bin`。自定义选项和环境变量参见 [README](../../README.md#quick-start)。
+从源码构建并安装 `ezmk` 到 `$HOME/.local/bin`。自定义选项和环境变量参见 [README](../../README_ZH.md#快速开始)。
 
 ### Windows（原生，无需 MSYS2）
 
@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 ```
 
-从 GitHub Releases 下载预编译的 `ezmk.exe`，校验 SHA-256，安装到 `%LOCALAPPDATA%\ezmk\bin`，并配置用户 PATH。支持 `-Version`、`-InstallDir`、`-NoPath`、`-DryRun` 参数。详见 [README](../../README.md#quick-start)。
+从 GitHub Releases 下载预编译的 `ezmk.exe`，校验 SHA-256，安装到 `%LOCALAPPDATA%\ezmk\bin`，并配置用户 PATH。支持 `-Version`、`-InstallDir`、`-NoPath`、`-DryRun` 参数。详见 [README](../../README_ZH.md#快速开始)。
 
 ---
 
@@ -264,7 +264,7 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 **`workspace scan`（1.4.0-dev.7+）：** 一键采纳现有目录树——递归扫描，把**含 `ezmk.toml` 的子目录**收集为成员并写入/更新 `ezmk-workspace.toml`，省去手写 `members`。要点：
 
 - **定位**：`<dir>` 缺省为当前目录；若 `<dir>` 自身或向上存在 workspace 根，则以该根为扫描根（在成员子目录里执行 scan 也会更新根文件）；否则以 `<dir>` 为新根创建。
-- **跳过规则**：隐藏目录（`.` 前缀，含 `.git`/`.ezmk`）、**嵌套 workspace 根**（含自身 `ezmk-workspace.toml` 的整棵子树）、符号链接逃出根的目录——前两者分别打印跳过原因；扫描根自身即使有 `ezmk.toml` 也不是成员。
+- **跳过规则**：隐藏目录（`.` 前缀，含 `.git`/`.ezmk`）**静默跳过**；**嵌套 workspace 根**（含自身 `ezmk-workspace.toml` 的整棵子树）与符号链接逃出根的目录会**打印跳过原因**；扫描根自身即使有 `ezmk.toml` 也不是成员。
 - **写盘**：文件不存在 → 直接创建（`[workspace] members = [...]`）；**已存在 → 合并更新**——保留 `name` / `[workspace.options]` / 已有成员 / 注释，只追加缺失成员（路径去重、现有顺序保留），重扫即同步。已消失的成员**不会**被移除（移除是手工操作）。
 - **确认**：合并前交互确认（[y/N]），`-y` 跳过；`--dry-run` 只预览不写盘。无成员时提示且不写盘。
 - **简写**：`ws` → `workspace scan`。成员依赖（`[depends] workspace`）扫描**不自动推断**——是用户意图，采纳后手工声明。

@@ -22,7 +22,7 @@ This compiles all sources defined in `ezmk.toml` → links → produces the outp
 | `ezmk project build` | Full build (compile + link) |
 | `ezmk project run` | Build and run the executable |
 | `ezmk project watch` | Watch mode: auto-rebuild on file changes |
-| `ezmk project compile` | Compile only (no link) |
+| `ezmk project cc` | Generate `compile_commands.json` for IDEs (no build) |
 
 ## Parallel compilation (`-j`)
 
@@ -48,9 +48,13 @@ Profiles define overrides for compile flags, link flags, and macros (see `ezmk-u
 ezmk project watch
 ezmk project watch --no-build-on-start   # Skip initial build
 ezmk project watch --profile debug
+ezmk project watch --run                 # Run the executable after each successful rebuild (1.3.4+)
+ezmk project watch --run -- <args>       # ... passing <args> to it (1.4.0-dev.5+)
 ```
 
 Watches `src/`, `include/`, and `ezmk.toml`. Rebuilds automatically on changes (300ms debounce). Build failures don't exit the watch loop — fix and save to trigger a retry.
+
+`--run` / `-r` (1.3.4+) runs the freshly built executable after each successful rebuild; with `--run -- <args>`, the arguments after `--` are passed through to it (1.4.0-dev.5+). Only `executable` projects support `--run` — it is rejected for `static`/`shared`/`utils` projects.
 
 ## Incremental build cache
 
@@ -72,5 +76,5 @@ Cache is invalidated automatically when:
 |-------------|--------|
 | `executable` | `build/<name>` (Linux/macOS) / `build/<name>.exe` (Windows) |
 | `static` | `build/lib<name>.a` (GCC/Clang) / `build/<name>.lib` (MSVC) |
-| `shared` | `build/<name>.dll` + `build/<name>.lib` (Windows) / `build/lib<name>.so` (Linux) |
+| `shared` | MSVC: `build/<name>.dll` + `build/<name>_implib.lib`; MinGW: `build/lib<name>.dll`; Linux/macOS: `build/lib<name>.so` |
 | `utils` | `build/<tool_name>` per tool |

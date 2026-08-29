@@ -43,7 +43,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 可用参数自定义：
 
 ```powershell
-.\install.ps1 -Version "0.9.5"           # 安装指定版本
+.\install.ps1 -Version "1.3.6"           # 安装指定版本（缺省 latest 自动安装最新版）
 .\install.ps1 -InstallDir "D:\tools\ezmk" # 自定义安装目录
 .\install.ps1 -DryRun                     # 预览操作，不做实际更改
 .\install.ps1 -NoPath                     # 跳过 PATH 配置
@@ -63,7 +63,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 ```bash
 $ ezmk version
-EazyMake 0.9.0
+EazyMake 1.3.6   # 输出以实际安装版本为准
 ```
 
 如果提示找不到命令，可能是因为 `$HOME/.local/bin` 不在你的 `PATH` 中。添加它：

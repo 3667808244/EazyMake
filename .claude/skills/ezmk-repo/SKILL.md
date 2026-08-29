@@ -70,7 +70,7 @@ url = "packages/zlib-1.2.13.tar.gz"
 
 ```
 mylib-1.0/
-├── ezmk.toml           # Package metadata (pkg.toml — same format)
+├── ezmk.toml           # Package metadata (required — validated by pkg.cpp)
 ├── include/
 │   └── mylib/
 │       └── mylib.h
@@ -82,7 +82,7 @@ mylib-1.0/
     └── mylib.cpp
 ```
 
-### 2. Package metadata (`pkg.toml` / `ezmk.toml`)
+### 2. Package metadata (`ezmk.toml`)
 
 ```toml
 [project]
@@ -129,7 +129,7 @@ git push
 
 ## Precompiled vs source packages
 
-| Type | `pkg.toml` field | Contents | Install |
+| Type | `ezmk.toml` field | Contents | Install |
 |------|-----------------|----------|---------|
 | Source | (none) | `src/` + `include/` | Compile from source |
 | Precompiled | `precompiled = true` | `lib/` + `include/` | Copy `.a`/`.lib` directly |
@@ -153,9 +153,14 @@ For EazyMake-managed static library projects, use `ezmk project pack` to automat
 
 ```bash
 ezmk project pack --output ./dist
+ezmk project pack --output ./dist --format tar.gz   # or: zip / tgz (tgz = tar.gz alias, 1.4.0-dev.5+)
 # Output: ./dist/mylib-1.0.tar.gz
+# Sidecar: ./dist/mylib-1.0.tar.gz.sha256  ("<hash>  <filename>")
 # Prints SHA-256 and index.toml entry template
 ```
+
+- `--format` accepts `tar.gz` (default), `zip`, or `tgz` (alias for `tar.gz` since 1.4.0-dev.5); the archive name follows the chosen format.
+- `pack` always writes a `<archive>.sha256` sidecar file next to the archive, in addition to printing the SHA-256 and an `index.toml` entry template.
 
 ## Repository registries
 

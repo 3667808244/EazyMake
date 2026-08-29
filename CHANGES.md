@@ -14,15 +14,48 @@ As of v1.1.0, the following public APIs are **permanently stable**:
 - **Configuration:** `ezmk-workspace.toml` (`[workspace]` `name`/`members`, `[workspace.options]` `default_jobs`/`stop_on_error`); the `workspace` field of `[depends]` in member `ezmk.toml` files.
 - **Environment:** `EZMK_LANG` variant tags — BCP 47 normalization (`zh_CN`/`zh-CN`/`zh_CN.UTF-8` → canonical) and the variant → base → English fallback chain.
 
-**Extended in v1.4.0 (1.4.0-dev.5):**
+**Extended in v1.4.0 (1.4.0-pre.1):**
 
-- **Commands:** `workspace watch` (with `-w` redirect on `watch` — `ezmk watch -w` ≡ `ezmk workspace watch`; `--member`, `--stop-on-error`, `-j`, `--run` forwarded to executable members; `ww` shorthand).
-
-**Extended in v1.4.0 (1.4.0-dev.7):**
-
-- **Commands:** `workspace scan` (with `[<dir>]`, `--dry-run`, `-y`; `ws` shorthand) — scan a directory tree for ezmk projects and create / merge-update `ezmk-workspace.toml`.
+- **Commands:** `project export vscode` (with `--overwrite` / `--profile`) — generates the `.vscode/` debug trio (launch/tasks/settings) with per-platform debuggers; `watch --run -- <args>` argument passthrough; `workspace watch` (with `-w` redirect on `watch` — `ezmk watch -w` ≡ `ezmk workspace watch`; `--member`, `--stop-on-error`, `-j`, `--run` forwarded to executable members; `ww` shorthand); `workspace scan` (with `[<dir>]`, `--dry-run`, `-y`; `ws` shorthand) — scan a directory tree for ezmk projects and create / merge-update `ezmk-workspace.toml`; `pack --format tgz` alias (case-insensitive `tar.gz`).
+- **Configuration:** `[pkg] strict_std_check` (default `false`; `true` upgrades the 1.3.1 standard-compatibility check from warning to hard failure).
+- **Behavior semantics:** source-package compile negotiation — a source package recompiles at `max(pkg_min, consumer_min)`, capped by the toolchain capability table (`max_supported_std`) and the package's declared range upper bound; `project import` preserves CMake `CXX_STANDARD` / `C_STANDARD` as range language (`">=CPP<N>"` / `">=C<N>"`); `pkg install` sha256 sidecar auto-verification for local archives (explicit `--sha256` / index hashes take priority; URL installs do not trust sidecars).
 
 Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
+
+---
+
+## 1.4.0 (2026-XX-XX) — 调试配置自动化 + 语言标准收尾 + workspace scan
+
+> pre.1 聚合草稿（2026-08-30）：正式发布时按 workflow 3.2 定稿日期与最终数字。
+
+1.4.0 是 1.3.x 全部补丁收口后的**首个功能 minor**，按 dev（功能）→ pre（收口）两阶段推进。dev.1 ~ dev.7 落地两大主线（**调试配置自动化** + **语言标准收尾**）与功能收口 / 质量审计 / 插队功能，pre.1 完成用户触达打磨、全量文档检查与发布门槛预核对。**公共 API 无破坏性变更**（纯增量：新命令 / 配置字段 / 行为语义增强；破坏性变更仍仅归 2.0.0）。
+
+### 新增 / 行为变更（dev 汇总）
+
+- **调试配置自动化（dev.1）**：`ezmk project export vscode` 一键生成 `.vscode/` 三件套（launch/tasks/settings）；per-platform 调试器（Windows+MSVC → `cppvsdbg`；gcc/clang → `cppdbg` + `miDebuggerPath`；macOS → `lldb`）；`preLaunchTask` 触发增量构建；与 `[compile.profile.*]` / `default_profile` 联动；`--overwrite` 覆盖保护；settings 优先 `compile_commands.json`，否则 C_Cpp includePath/defines 回退（复用 EZMK_* 宏）
+- **语言标准收尾（dev.2 ~ dev.4）**：工具链能力表 `max_supported_std`（gcc/clang/msvc 分段，保守表）+ `[pkg] strict_std_check` 校验严格化开关（warn → fatal）；**编译协商（语义 B）**——源码包按 `max(包min, 消费者min)` 重编、cap 到能力表与包上界、缓存签名自动失效；CMake 互操作补全——`import` 读 `CXX_STANDARD`/`C_STANDARD` → 区间 language、`export` 超能力注释
+- **功能收口（dev.5）**：`watch --run -- <args>` 透传；`workspace watch`（`-w` 重定向扩展 + `ww` 简写 + `--run` 转发）；`pack --format tgz` 别名；sha256 边车自动校验（本地归档自动读 `<archive>.sha256`，显式哈希优先）
+- **代码质量审计（dev.6）**：8 路并行审查修复 8 项 P0 + 高价值 P1（确定性缓存签名对称 / `--locked` 真锁版本 / 依赖名与 repo 名路径穿越 / git branch 注入 / MSVC 本地化解析 / CMake 括号注释 / Lua 根路径重注册 / 句柄泄漏与 mkstemp 误判）+ 4 个恒真测试修复
+- **workspace scan（dev.7，用户确认插队）**：`ezmk workspace scan [<dir>] [--dry-run] [-y]` 一键采纳现有目录树——递归收集含 `ezmk.toml` 的子目录为成员、生成/合并 `ezmk-workspace.toml`（文本级拼接保留注释与 options）、`ws` 简写、跳过规则（隐藏/嵌套根/符号链接逃逸）
+
+### pre.1 收口
+
+- **用户触达打磨**：顶层别名总表三处核对（kAliases vs 文档简写表 vs `--help`）；`--help` 输出复核（workspace 长行排版、zh help 英文残留 i18n 化、`--verbose` 措辞统一）；README（zh/en）命令速览补 `export vscode` / `workspace watch` / `tgz`
+- **全量文档检查**：docs（zh/en）路径/锚点/版本号/配置节引用整仓核对（faq install.sh 用法、README_ZH 跨语言链接、package_authoring 协商公式下限保护等）；tutorial zh/en 显示文本与锚点修正；i18n 三向一致（396 键 + zh-TW 变体）
+- **skill 文档一致性**：12 个 skill 全面核对并修复 37 项（6 P0：不存在的子命令/flag/字段、手工编译命令缺源文件、双 main 等）
+- **缺陷修复（代码）**：`[compile].language` 超能力配置期警告、跨盘符 cache 键碰撞、`extract_zip` 解压大小上限、`lua_to_json` 循环表检测、export C 侧能力比较修正
+- **API 稳定性承诺扩展**（本条目上方）：1.4.0 全部新增 API 纳入永久稳定
+
+### 测试
+
+- 全量回归：**988 用例 / 5770 断言零失败**（dev.7 基线；pre.1 修复后重跑确认零回归）
+- i18n 三向一致（`check_i18n.py`，396 键 × en/zh + zh-TW 变体）
+
+### 已知限制 / 跟进项
+
+- **收口 1.5.x**：launch 参数透传 / 多配置调试（test 目标）/ 语义 C（自动协商到能力上限）/ `[test]` 场景协商 / CMake features 全量映射 / `CXX_STANDARD_REQUIRED` 严格化 / `workspace watch --run` 的 `--` 成员级透传 / watch profile 热切换 / 测试链接缺依赖包归档 / watcher 事件风暴 / import `add_library` 类型误判 / `scan --prune` / build.cpp·pkg.cpp 重构 / Catch2 结构化解析
+- **收口 2.0.0 前**：cli.cpp 命令组拆文件
+- **明确不做**：`project cc`/`export cmake` 改造、`--resolve`/`--glob`/`-o` 对 vscode 目标、CLI `--strict`、成员依赖自动推断
 
 ---
 
@@ -234,6 +267,8 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **成员依赖自动推断**（`[depends] workspace`）：不进入本版本（用户意图，扫描不猜测）。
 
 ---
+
+## 1.4.0-dev.5 (2026-08-27) — 功能收口（watch `--` 透传 / workspace watch / tgz 别名 / sha256 边车）
 
 1.4.0 第五个开发子版本，集中收口 1.3.x 各补丁明确延后的四项"小而独立"功能：① **`watch --run -- <args>` 参数透传**（1.3.4 延后）；② **`workspace watch` 命令组**（1.3.0 延后，`-w` 重定向扩展到 watch）；③ **`--format tgz` 别名**（1.3.5 延后）；④ **sha256 边车自动校验**（1.3.5 延后，`pkg install` 本地归档自动读取同目录 `.sha256`）。每项独立、低风险、互不依赖；**公共 API 无破坏性变更**（纯增量：新命令 + flag 别名 + 行为增强）。
 

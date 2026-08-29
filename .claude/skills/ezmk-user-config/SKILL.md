@@ -36,6 +36,7 @@ system_target = []          # System libraries to link (e.g. "pthread" → -lpth
 [depends]
 lib = ["fmt", "zlib"]       # Hard dependencies (missing → error)
 want = ["optional-lib"]     # Optional dependencies (missing → warning)
+workspace = ["sibling-lib"] # Workspace sibling dependency (1.3.0+)
 
 [compile.profile.debug]
 flags = ["-g", "-O0"]
@@ -61,8 +62,14 @@ includedir = "include"
 sharedir = "share"
 
 [test]
-framework = "catch2"
-test_dirs = ["test"]
+framework = "catch2"            # Test framework: "catch2" | "ezmk"
+dirs = ["test"]                 # Directories containing test sources
+# default_profile = "debug"     # 1.2.0-dev.12+: default test profile (no --profile → this)
+# include_dirs = ["test/include"]  # 1.2.0-dev.12+: test-only include dirs (-I)
+# link_targets = ["m"]          # 1.2.0-dev.12+: test-only system link targets (-l)
+
+[pkg]                            # 1.4.0-dev.2+: package-management settings
+strict_std_check = false        # Package std-compat violation: warn → fatal (default: false)
 ```
 
 ## Project types
@@ -91,7 +98,7 @@ flags = ["-g", "-O0"]          # Appended: -Wall -g -O0
 
 **Macro override rule:** profile macros override base macros on key conflict (not merged).
 
-Profiles are **not auto-applied** — always use `--profile <name>` explicitly.
+Profiles are opt-in via `--profile <name>`, **except** `[compile].default_profile` (1.2.0-dev.3+): when set, a bare `ezmk build` applies it automatically. An explicit CLI `--profile` always takes priority over the default.
 
 ## Dependencies
 
@@ -134,7 +141,7 @@ includedir = "include/myapp"
 `ezmk project install` copies:
 - `executable` → `<prefix>/<bindir>/`
 - `static` → `<prefix>/<libdir>/lib<name>.a`
-- `shared` → `<prefix>/<bindir>/<name>.dll` + `<prefix>/<libdir>/<name>.lib`
+- `shared` → `<prefix>/<bindir>/<name>.dll` + `<prefix>/<libdir>/<name>_implib.lib` (MSVC) / `<prefix>/<bindir>/lib<name>.dll` (MinGW)
 - Headers → `<prefix>/<includedir>/`
 
 ## Common patterns

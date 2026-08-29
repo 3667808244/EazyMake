@@ -139,12 +139,12 @@ ezmk clean                      # 清除缓存
 ezmk watch [flags]              # 监视文件自动重建
 ezmk install [flags]            # 安装构建产物到指定前缀
 ezmk test [flags]               # 运行项目测试
-ezmk pack [flags]               # 创建可分发的归档（完整形式：ezmk project pack；--format zip|tar.gz，1.3.5+）
+ezmk pack [flags]               # 创建可分发的归档（完整形式：ezmk project pack；--format zip|tar.gz（1.3.5+）/ tgz（1.4.0-dev.5+））
 
 # 项目
 ezmk project new <name>         # 创建新项目
 ezmk project cc [flags]         # 为 clangd 生成 compile_commands.json
-ezmk project export cmake [flags]  # 从 ezmk.toml 生成 CMakeLists.txt
+ezmk project export <cmake|vscode> [flags]  # 从 ezmk.toml 生成 CMakeLists.txt / .vscode/ 调试三件套（vscode: 1.4.0-dev.1+）
 ezmk project import [flags]     # 导入 CMake 项目为 ezmk.toml（实验性）
 
 # 包管理
@@ -168,9 +168,10 @@ ezmk example hello              # 生成示例到 ./hello/
 ezmk workspace list             # 列出工作区成员
 ezmk workspace build [flags]    # 拓扑构建全部成员（依赖层先构建、同层并行）
 ezmk workspace test [flags]     # 运行成员测试
+ezmk workspace watch [flags]    # 监视全部成员，变更自动重建（1.4.0-dev.5+）
 ezmk workspace clean [flags]    # 清理成员缓存
 ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-workspace.toml（1.4.0-dev.7+）
-# build/test/clean 附 -w 重定向：ezmk build -w ≡ ezmk workspace build
+# build/test/watch/clean 附 -w 重定向：ezmk build -w ≡ ezmk workspace build
 ```
 
 完整参考：[`docs/zh/cli.md`](docs/zh/cli.md)
@@ -185,7 +186,7 @@ ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-worksp
 | 第三方 / 私有仓库 | `ezmk repo add <url>` 接入 git 仓库形式的第三方源 | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [包 03](tutorial/zh/packages/03-third-party-repos.md) |
 | CMake 互操作 | `project export cmake` 导出 / `project import --from cmake` 导入（实验性） | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [互操作 01](tutorial/zh/interop/01-import-cmake.md) |
 | compile_commands | `project cc` 为 clangd/IDE 生成 compile_commands.json | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 02](tutorial/zh/dev/02-utils.md) |
-| 工作区批量管理（1.3.0+） | `ezmk-workspace.toml` 声明成员集合；`workspace build/test/clean` 拓扑排序 + 并行；成员间单向非循环依赖、静态库产物自动注入 | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 05](tutorial/zh/dev/05-workspace.md) |
+| 工作区批量管理（1.3.0+） | `ezmk-workspace.toml` 声明成员集合；`workspace build/test/watch/clean`（watch: 1.4.0-dev.5+）拓扑排序 + 并行；成员间单向非循环依赖、静态库产物自动注入 | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 05](tutorial/zh/dev/05-workspace.md) |
 
 ## 文档
 
@@ -198,15 +199,15 @@ ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-worksp
 | [仓库系统](docs/zh/repo.md) | 基于 git 的仓库系统 |
 | [Lua 插件](docs/zh/utils.md) | 插件系统与 API 参考 |
 | [FAQ / 故障排除](docs/zh/faq.md) | 常见问题与修复 |
-| [技术细节](docs/en/technical.md) | 依赖、源码构建、编译器支持 |
+| [技术细节](docs/zh/technical.md) | 依赖、源码构建、编译器支持 |
 | [术语表](docs/zh/glossary.md) | 术语参考 |
 | [不会设计的功能](docs/zh/non-goals.md) | 刻意不做、也不会做的功能 |
 | [更新日志](CHANGES.md) | 版本历史 |
 
 ## 相关链接
 
-- [从源码构建 & 测试](docs/en/technical.md#building-eazymake)
-- [MSVC 支持](docs/en/technical.md#using-msvc)
-- [zsh 补全](docs/en/technical.md#shell-completion-zsh)
+- [从源码构建 & 测试](docs/zh/technical.md#构建-eazymake)
+- [MSVC 支持](docs/zh/technical.md#使用-msvc)
+- [zsh 补全](docs/zh/technical.md#shell-补全zsh)
 - [官方仓库](https://github.com/3667808244/ezmk-repo) — 包仓库
 - [Gitee 镜像](https://gitee.com/egglzh/EazyMake) — 本体仓库国内镜像（自动同步 GitHub）

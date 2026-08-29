@@ -52,7 +52,7 @@ A **utils** package (`type = "utils"`) provides Lua-based tools:
 | `type` | string | No | `"executable"` | `"static"` (library), `"shared"` (shared lib), `"utils"` (Lua tools) |
 | `language` | string | No | `"C++17"` | Format: `<Lang><Ver>`, e.g. `"C11"`, `"C++17"`, `"C++20"`. **1.3.1+** declare a *minimum* compatibility standard with range syntax, e.g. `">=C++11"` or `"C++11..C++17"` — write the **lowest** standard your code compiles at |
 | `header_only` | bool | No | `false` | **0.9.7+** Set to `true` to skip compilation (no `src/` required) |
-| `precompiled` | bool | No | `false` | **0.9.7+** Set to `true` to use pre-built `lib/*.a` (no `src/` required). See §3.2 below. |
+| `precompiled` | bool | No | `false` | **0.9.7+** Set to `true` to use pre-built `lib/*.a` (no `src/` required). See §3.3 below. |
 
 > **Why lowercase with hyphens?** Package names map directly to file names and
 > link names (`-l<name>`), so the lowercase-hyphen convention keeps them portable
@@ -74,9 +74,15 @@ effective = min( max(pkg_min, consumer_min), compiler_capability, pkg_max )
   (`max_supported_std`, e.g. an old GCC cannot be pushed above C++11) and by the
   package's own declared range upper bound. Declare `"C++11..C++17"` to pin a
   documented **maximum**: behavior above it is untested, so it is never used.
-- No consumer project (global/user-scope installs), or a consumer weaker than
-  the package → the package compiles at its declared minimum (unchanged), and
-  the 1.3.1 compatibility warning still applies.
+- **Lower-bound protection:** if any cap would pull the negotiated value below
+  the package's declared minimum (consumer weaker than the package, or an
+  insufficient toolchain) → **no negotiation**; the package compiles at its
+  declared minimum (1.3.1 check/warning logic unchanged).
+- No consumer project (global/user-scope installs) → the package compiles at
+  its declared minimum (unchanged); without a consumer context the 1.3.1
+  compatibility warning is not triggered. A consumer weaker than the package →
+  compile at the declared minimum, with the 1.3.1 warning / `[pkg]
+  strict_std_check` hard failure applying as usual.
 - **Precompiled packages never negotiate** (no compilation — the ABI is decided
   by the publisher; the 1.3.1 precompiled ABI warning still applies).
 - **Caching:** the negotiated standard is part of the compile signature, so a

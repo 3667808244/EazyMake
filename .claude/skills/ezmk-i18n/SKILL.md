@@ -26,12 +26,12 @@ The X-macro approach guarantees the enum and the JSON key name mapping can never
 ### Build-time embedding
 
 ```
-locale/en.json  ──┐
-                   ├── scripts/embed_locale.py ──→ src/locale_data.cpp ──→ binary
-locale/zh.json  ──┘
+locale/en.json      ──┐
+locale/zh.json      ──┼── scripts/embed_locale.py ──→ src/locale_data.cpp ──→ binary
+locale/zh-TW.json   ──┘   (variant — optional, overlays zh)
 ```
 
-`build.sh` runs `scripts/embed_locale.py` before compilation, which reads both JSON files and generates a C++ source file with the locale data embedded as compile-time strings.
+`build.sh` runs `scripts/embed_locale.py` before compilation, which reads every `locale/*.json` file (base locales + variants) and generates a C++ source file with the locale data embedded as compile-time strings.
 
 ## Adding a new translatable string
 
@@ -98,6 +98,7 @@ In debug builds, `i18n::init()` runs `audit_missing_keys()` which warns once per
 | `include/ezmk/i18n_keys.def` | X-macro key list — single source of truth | **Yes** (add new keys here) |
 | `locale/en.json` | English translations | **Yes** (add new strings here) |
 | `locale/zh.json` | Chinese translations | **Yes** (add new strings here) |
+| `locale/zh-TW.json` | Traditional Chinese variant — lists only differences from `zh` | **Yes** (add variant strings here) |
 | `src/i18n.cpp` | `key_name()` mapping + `init()` | No (auto-derived from `.def`) |
 | `include/ezmk/i18n.hpp` | `I18nKey` enum + `get()` API | No (auto-derived from `.def`) |
 | `scripts/embed_locale.py` | Compile-time JSON → C++ embedder | No (infrastructure) |
@@ -109,5 +110,13 @@ In debug builds, `i18n::init()` runs `audit_missing_keys()` which warns once per
 |----------|------|-------------|
 | English (default) | `locale/en.json` | `EZMK_LANG=en` |
 | Chinese | `locale/zh.json` | `EZMK_LANG=zh` |
+| Chinese (Traditional, variant) | `locale/zh-TW.json` | `EZMK_LANG=zh-TW` |
 
 If `EZMK_LANG` is unset, the system locale is auto-detected. English is the fallback when no translation is available.
+
+### Variant mechanism (1.3.0-dev.4+)
+
+- **BCP 47 tag normalization**: language tags are normalized to a canonical form — `zh_TW`, `zh-TW`, and `zh_TW.UTF-8` all resolve to `zh-TW` (underscore → hyphen, region/encoding suffixes stripped).
+- **Fallback chain "variant → base → English"**: loading a variant (e.g. `zh-TW`) first loads the base language `zh`, then overlays the variant's differences; keys missing from the variant inherit from `zh`; an entirely unknown base tag falls back to English.
+- **Variant files only list differences**: `zh-TW.json` only needs keys that differ from `zh` (`meta.extends` declares the inherited base, defaulting to the tag's first segment).
+- **Validation**: `scripts/check_i18n.py` enforces the three-way consistency (`i18n_keys.def` + `en.json` + `zh.json`) and additionally validates variant files (keys ⊆ def, `meta.language` matches the file tag, `meta.extends` points to an existing base locale).

@@ -1271,10 +1271,13 @@ namespace ezmk::cli
         using namespace ezmk::i18n;
 
         // Render one command row: a literal usage string left-padded to a fixed
-        // column, followed by the localized description.
+        // column, followed by the localized description. Long usage strings
+        // (e.g. workspace rows) overflow the column — keep a single space so
+        // the description never glues to the usage (1.4.0-pre.1 i18n 收口).
         auto row = [](const std::string &usage, I18nKey desc) {
-            std::cout << "  " << std::left << std::setw(52) << usage
-                      << get(desc) << "\n";
+            std::cout << "  " << std::left << std::setw(52) << usage;
+            if (usage.size() >= 52) std::cout << " ";
+            std::cout << get(desc) << "\n";
         };
         // Render an indented continuation line (e.g. full command form).
         auto sub = [](const std::string &text) {
@@ -1341,7 +1344,7 @@ namespace ezmk::cli
         row("ezmk workspace watch [-j N] [--stop-on-error] [--member <n>] [-r]", I18nKey::help_workspace_watch);
         row("ezmk workspace clean [--member <n>]", I18nKey::help_workspace_clean);
         row("ezmk workspace scan [<dir>] [--dry-run] [-y]", I18nKey::help_workspace_scan);  // 1.4.0-dev.7
-        sub(get(I18nKey::help_full_form) + ": build/test/watch/clean accept -w to redirect");
+        sub(get(I18nKey::help_full_form) + ": " + get(I18nKey::help_workspace_redirect));  // 1.4.0-pre.1: i18n 化
         std::cout << "\n";
 
         // ── §5: Common options ────────────────────────────────────

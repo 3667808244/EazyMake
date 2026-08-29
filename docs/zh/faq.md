@@ -23,8 +23,8 @@
 **原因**: 对安装目录没有写入权限（默认：Windows 上为 `~/ezmk/`，Linux/macOS 上为 `/usr/local/bin/`）。
 
 **解决**:
-1. 用户级安装，指定可写目录：`bash install.sh --prefix ~/.local`
-2. Linux/macOS 系统级安装：`sudo bash install.sh`
+1. 用户级安装，指定可写目录：`PREFIX=~/.local bash install.sh`
+2. Linux/macOS 系统级安装：`sudo PREFIX=/usr/local bash install.sh`
 3. Windows 上安装到用户目录时，请以普通用户（而非管理员）身份运行终端
 
 ---
@@ -48,7 +48,7 @@
 **解决**:
 1. 检查网络连接
 2. 如果使用了代理，设置 `http_proxy` / `https_proxy` 环境变量
-3. 离线安装方案见[离线/无网络使用](#离线无网络使用)
+3. 离线安装方案见[离线/无网络使用](#离线--无网络使用)
 
 ---
 

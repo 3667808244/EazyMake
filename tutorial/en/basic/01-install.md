@@ -44,7 +44,7 @@ installs to `%LOCALAPPDATA%\ezmk\bin`, and configures your user `PATH`.
 Customize with parameters:
 
 ```powershell
-.\install.ps1 -Version "0.9.5"           # Install a specific version
+.\install.ps1 -Version "1.3.6"           # Install a specific version (default: latest)
 .\install.ps1 -InstallDir "D:\tools\ezmk" # Custom install directory
 .\install.ps1 -DryRun                     # Preview without making changes
 .\install.ps1 -NoPath                     # Skip PATH configuration
@@ -64,7 +64,7 @@ The installer checks these for you:
 
 ```bash
 $ ezmk version
-EazyMake 0.9.0
+EazyMake 1.3.6   # output depends on the installed version
 ```
 
 If the command is not found, `$HOME/.local/bin` may not be on your `PATH`. Add it:

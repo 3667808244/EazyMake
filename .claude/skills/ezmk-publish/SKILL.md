@@ -287,4 +287,4 @@ sha256sums=('SKIP')     # 首次用 SKIP；稳定后填真实 digest（源码 ta
 - homebrew 公式：`publish/homebrew/ezmk.rb`（本地副本，需与 tap 同步）
 - pacman PKGBUILD：`publish/arch/PKGBUILD`（源码构建；AUR 延后）
 - Release 资产哈希来源：`gh api repos/3667808244/EazyMake/releases/tags/<tag>`
-- 发布流程/跟进项：`plans/1.1.x/1.1.0.md`（发布流水线章节）、`plans/1.2.0/1.2.0-pre.1.md`（pacman 渠道）、记忆 `eazymake-110-release`
+- 发布流程/跟进项：`plans/1.1.x/1.1.0.md`（发布流水线章节）、`plans/1.2.x/1.2.0-pre.1.md`（pacman 渠道）、记忆 `eazymake-110-release`
