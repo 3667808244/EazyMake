@@ -12,6 +12,9 @@
 #include "ezmk/util.hpp"
 
 #include <algorithm>
+#include <fstream>
+#include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -472,6 +475,250 @@ std::vector<std::vector<size_t>> topo_layers(const Workspace& ws) {
         layers.push_back(std::move(layer));
     }
     return layers;
+}
+
+// ---- 1.4.0-dev.7: workspace scan — adopt an existing directory tree ----
+
+namespace {
+
+// '/' -separated, trailing '/' stripped — canonical form used for member
+// comparisons in merge_members. Raw input is preserved for output; only the
+// comparison key is normalized.
+std::string member_compare_key(const std::string& p) {
+    std::string s = p;
+    std::replace(s.begin(), s.end(), '\\', '/');
+    while (s.size() > 1 && s.back() == '/') s.pop_back();
+    return s;
+}
+
+// Atomic text write: temp file + util::atomic_rename (crash-safe). Binary
+// mode — text mode would translate '\n' → '\r\n' on Windows and corrupt a
+// CRLF-preserving splice into '\r\r\n'.
+void atomic_write_text(const fs::path& target, const std::string& content) {
+    auto tmp = target;
+    tmp += ".tmp";
+    {
+        std::ofstream of(tmp, std::ios::binary);
+        of << content;
+    }
+    util::atomic_rename(tmp, target);
+}
+
+// Leading whitespace of a line.
+std::string_view ltrim(std::string_view s) {
+    size_t i = 0;
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
+    return s.substr(i);
+}
+
+// Render the merged members list as a single-line TOML assignment
+// (`members = ["a", "b"]`). util::toml_quote already wraps in quotes.
+std::string render_members_line(const std::vector<std::string>& members) {
+    std::string line = "members = [";
+    for (size_t i = 0; i < members.size(); ++i) {
+        if (i > 0) line += ", ";
+        line += util::toml_quote(members[i]);
+    }
+    line += "]";
+    return line;
+}
+
+// True when the trimmed line starts the `members` KEY (not `membership`).
+bool is_members_key(std::string_view t) {
+    if (t.rfind("members", 0) != 0) return false;
+    if (t.size() == 7) return true;           // bare "members" (no '=')
+    char c = t[7];
+    return c == ' ' || c == '\t' || c == '='; // "members =", "members=..."
+}
+
+// Replace the `members` array of the [workspace] table in the source text of
+// an existing workspace file. Everything else (name, [workspace.options],
+// comments, formatting) is preserved byte-for-byte — toml++ v3.4 does NOT
+// store comments in its AST, so a formatter round-trip would silently drop
+// them; this text-level splice is the only way to keep them.
+// Multi-line member arrays collapse to a single line. Throws when the file
+// has no [workspace] section (degenerate — never silently rewritten).
+std::string replace_members_in_text(const std::string& text,
+                                    const std::string& file_str,
+                                    const std::vector<std::string>& members) {
+    // Split into lines, keeping their terminators.
+    std::vector<std::string> lines;
+    {
+        size_t pos = 0;
+        while (pos <= text.size()) {
+            size_t nl = text.find('\n', pos);
+            if (nl == std::string::npos) {
+                lines.push_back(text.substr(pos));
+                break;
+            }
+            lines.push_back(text.substr(pos, nl - pos + 1));
+            pos = nl + 1;
+        }
+    }
+    std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    std::string new_line = render_members_line(members) + eol;
+
+    std::string section;
+    int ws_header = -1;  // line index of the [workspace] header
+    for (size_t i = 0; i < lines.size(); ++i) {
+        std::string_view t = ltrim(std::string_view(lines[i]));
+        if (!t.empty() && t.back() == '\r') t.remove_suffix(1);  // CRLF
+        if (t.empty()) continue;
+        if (t.front() == '[') {
+            size_t end = t.find(']');
+            if (end != std::string_view::npos) {
+                std::string hdr(t.substr(1, end - 1));
+                size_t a = hdr.find_first_not_of(" \t");
+                size_t b = hdr.find_last_not_of(" \t");
+                hdr = (a == std::string::npos) ? std::string()
+                                               : hdr.substr(a, b - a + 1);
+                section = hdr;
+                if (hdr == "workspace" && ws_header < 0) {
+                    ws_header = static_cast<int>(i);
+                }
+            }
+            continue;
+        }
+        if (section == "workspace" && is_members_key(t)) {
+            size_t last = i;
+            if (t.find(']') == std::string_view::npos) {
+                // Multi-line array: scan forward to the line containing ']'.
+                for (size_t j = i + 1; j < lines.size(); ++j) {
+                    if (lines[j].find(']') != std::string::npos) {
+                        last = j;
+                        break;
+                    }
+                }
+            }
+            lines[i] = new_line;
+            lines.erase(lines.begin() + static_cast<long>(i) + 1,
+                        lines.begin() + static_cast<long>(last) + 1);
+            std::string out;
+            for (const auto& l : lines) out += l;
+            if (out.empty() || out.back() != '\n') out += eol;
+            return out;
+        }
+    }
+    if (ws_header < 0) {
+        throw std::runtime_error(
+            i18n::fmt(I18nKey::workspace_err_no_section,
+                      {{"file", file_str}}));
+    }
+    // No members key yet — insert right after the [workspace] header.
+    lines.insert(lines.begin() + ws_header + 1, new_line);
+    std::string out;
+    for (const auto& l : lines) out += l;
+    if (out.empty() || out.back() != '\n') out += eol;
+    return out;
+}
+
+// Recursive scan of `dir` (rel = its path relative to `root`). Appends member
+// candidates and skipped entries into `result`. See scan_projects() doc.
+void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
+              ScanResult& result) {
+    std::error_code ec;
+    auto it = fs::directory_iterator(
+        dir, fs::directory_options::skip_permission_denied, ec);
+    for (; !ec && it != fs::directory_iterator(); it.increment(ec)) {
+        const auto& entry = *it;
+        std::string name = entry.path().filename().string();
+        if (!name.empty() && name[0] == '.') continue;  // hidden — skip subtree
+
+        std::error_code sec;
+        if (!entry.is_directory(sec)) continue;  // follows symlinks to dirs
+
+        fs::path sub = dir / name;
+        fs::path sub_rel = rel / name;
+        std::string rel_str = sub_rel.generic_string();
+
+        // Nested workspace root — the whole subtree belongs to that workspace
+        // (validate_member would reject the dir as a member anyway).
+        if (util::file_exists(sub / "ezmk-workspace.toml")) {
+            result.skipped.emplace_back(
+                rel_str, i18n::get(I18nKey::workspace_scan_skip_nested));
+            continue;
+        }
+        // Symlink escape — canonical path leaves the root.
+        if (!is_within(canonicalize(sub), canonicalize(root))) {
+            result.skipped.emplace_back(
+                rel_str, i18n::get(I18nKey::workspace_scan_skip_escape));
+            continue;
+        }
+        // Candidate member.
+        if (util::file_exists(sub / "ezmk.toml")) {
+            result.members.push_back(rel_str);
+        }
+        // Keep descending — nested projects are allowed (e.g. a project that
+        // itself contains another project directory).
+        scan_dir(root, sub_rel, sub, result);
+    }
+}
+
+} // anonymous namespace
+
+ScanResult scan_projects(const fs::path& root) {
+    ScanResult result;
+    scan_dir(root, fs::path(), root, result);
+    std::sort(result.members.begin(), result.members.end());
+    return result;
+}
+
+std::vector<std::string> merge_members(
+    const std::vector<std::string>& existing,
+    const std::vector<std::string>& discovered) {
+    std::vector<std::string> out;
+    std::set<std::string> seen;
+    for (const auto& m : existing) {
+        if (seen.insert(member_compare_key(m)).second) out.push_back(m);
+    }
+    for (const auto& m : discovered) {
+        if (seen.insert(member_compare_key(m)).second) out.push_back(m);
+    }
+    return out;
+}
+
+std::vector<std::string> read_workspace_members(const fs::path& root) {
+    auto file = root / "ezmk-workspace.toml";
+    toml::table table;
+    try {
+        table = toml::parse_file(file.string());
+    } catch (const toml::parse_error& e) {
+        throw std::runtime_error(
+            "failed to parse " + file.string() + ":\n  " + e.what());
+    }
+    std::vector<std::string> out;
+    auto ws_table = table["workspace"].as_table();
+    if (!ws_table) return out;
+    auto members_node = (*ws_table)["members"];
+    if (!members_node.is_array()) return out;
+    for (const auto& v : *members_node.as_array()) {
+        if (auto s = v.value<std::string>()) out.push_back(*s);
+    }
+    return out;
+}
+
+void write_workspace_file(const fs::path& root,
+                          const std::vector<std::string>& members) {
+    std::string content = "[workspace]\nmembers = [";
+    for (size_t i = 0; i < members.size(); ++i) {
+        if (i > 0) content += ", ";
+        content += util::toml_quote(members[i]);
+    }
+    content += "]\n";
+    atomic_write_text(root / "ezmk-workspace.toml", content);
+}
+
+void update_workspace_file(const fs::path& root,
+                           const std::vector<std::string>& members) {
+    auto file = root / "ezmk-workspace.toml";
+    // Text-level splice, NOT a toml++ formatter round-trip: toml++ v3.4 does
+    // not store comments in its AST, so a round-trip would silently drop
+    // user comments. Only the members array is replaced; everything else is
+    // preserved byte-for-byte. The caller has already parsed the file (via
+    // read_workspace_members), so a syntax error here is impossible.
+    std::string updated =
+        replace_members_in_text(util::file_read(file), file.string(), members);
+    atomic_write_text(file, updated);
 }
 
 } // namespace ezmk::workspace

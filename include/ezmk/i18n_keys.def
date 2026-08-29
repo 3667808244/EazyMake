@@ -423,6 +423,20 @@ EZMK_I18N_KEY(workspace_err_clean_stop_on_error)// clean does not support --stop
 EZMK_I18N_KEY(workspace_inject_missing)         // sibling artifact missing hint
 EZMK_I18N_KEY(workspace_inject_load_failed)     // workspace load failed during injection
 
+// 1.4.0-dev.7: workspace scan
+EZMK_I18N_KEY(workspace_scan_none)             // no projects found in dir
+EZMK_I18N_KEY(workspace_scan_would_create)     // dry-run: would create file
+EZMK_I18N_KEY(workspace_scan_would_update)     // dry-run: would add members
+EZMK_I18N_KEY(workspace_scan_created)          // created file
+EZMK_I18N_KEY(workspace_scan_updated)          // updated file (+added)
+EZMK_I18N_KEY(workspace_scan_no_change)        // file up to date
+EZMK_I18N_KEY(workspace_scan_confirm_update)   // merge confirmation prompt
+EZMK_I18N_KEY(workspace_scan_aborted)          // merge cancelled
+EZMK_I18N_KEY(workspace_scan_skip)             // one skipped entry
+EZMK_I18N_KEY(workspace_scan_skip_nested)      // skip reason: nested workspace
+EZMK_I18N_KEY(workspace_scan_skip_escape)      // skip reason: symlink escape
+EZMK_I18N_KEY(workspace_err_scan_dir)          // scan directory invalid
+
 // ---- help: workspace (1.3.0-dev.2) ----
 EZMK_I18N_KEY(help_section_workspace)
 EZMK_I18N_KEY(help_workspace_list)
@@ -430,6 +444,7 @@ EZMK_I18N_KEY(help_workspace_build)
 EZMK_I18N_KEY(help_workspace_test)
 EZMK_I18N_KEY(help_workspace_watch)             // 1.4.0-dev.5
 EZMK_I18N_KEY(help_workspace_clean)
+EZMK_I18N_KEY(help_workspace_scan)              // 1.4.0-dev.7
 EZMK_I18N_KEY(help_flag_workspace)
 EZMK_I18N_KEY(help_flag_stop_on_error)
 EZMK_I18N_KEY(help_flag_member)

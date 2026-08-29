@@ -574,6 +574,14 @@ int main(int argc, char** argv) {
             break;
         }
 
+        // 1.4.0-dev.7: workspace scan — adopt an existing directory tree.
+        // Does NOT require an existing workspace (creating one is the point).
+        case ezmk::cli::Command::WorkspaceScan: {
+            int rc = ezmk::workspace_build::run_scan(*args.workspace_scan_opts);
+            if (rc != 0) return rc;
+            break;
+        }
+
         case ezmk::cli::Command::Utils: {
             // 1.1.1: intercept `cc` — served by the built-in C++ generator
             // (drift-free compile_commands.json). Other tools keep the Lua path.

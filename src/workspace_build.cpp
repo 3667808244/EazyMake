@@ -28,8 +28,10 @@
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -124,6 +126,19 @@ void print_prefixed(const std::string& member, const std::string& text,
             std::cout << prefixed << "\n";
         }
     }
+}
+
+// 1.4.0-dev.7: yes/no confirmation for `workspace scan` merges (same pattern
+// as pkg.cpp's confirm; -y auto-accepts, interactive [y/N] otherwise).
+bool confirm(std::string_view msg, bool assume_yes) {
+    if (assume_yes) {
+        util::info(std::string(msg) + ezmk::i18n::get(ezmk::i18n::I18nKey::auto_yes));
+        return true;
+    }
+    std::cerr << "[ezmk] " << msg << " [y/N] ";
+    std::string line;
+    std::getline(std::cin, line);
+    return line == "y" || line == "Y" || line == "yes";
 }
 
 // True when the member actually has test sources (any configured test dir
@@ -482,6 +497,132 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
     // Restore the previous SIGINT handler (see above).
     std::signal(SIGINT, prev_sigint);
     return failed.load() == 0 ? 0 : 1;
+}
+
+// 1.4.0-dev.7: `ezmk workspace scan` — adopt an existing directory tree as a
+// workspace (dev.7 §3.5). Scan flow:
+//   1. start dir = opts.dir (default cwd); must exist and be a directory.
+//   2. locate the scan root: an existing workspace root found upward (via
+//      locate_workspace_root) is reused — the scan covers the WHOLE root and
+//      its file is merged; otherwise the start dir is the root (create).
+//   3. scan_projects → member candidates + skipped (nested roots / escapes).
+//   4. dispatch: no members → none; new file → create (or dry-run preview);
+//      existing file → merge (+added) or no_change, with --dry-run preview
+//      and -y/confirm gating the write.
+int run_scan(const cli::WorkspaceScanOptions& opts) {
+    // 1. Scan start dir.
+    fs::path start = opts.dir.empty() ? fs::current_path() : fs::path(opts.dir);
+    std::error_code ec;
+    if (!fs::is_directory(start, ec)) {
+        util::fatal(ezmk::i18n::fmt(I18nKey::workspace_err_scan_dir,
+                                    {{"dir", start.string()}}));
+    }
+
+    // 2. Locate the scan root (existing workspace upward wins).
+    fs::path root = start;
+    bool existing = false;
+    if (auto loc = workspace::locate_workspace_root(start)) {
+        root = *loc;
+        existing = true;
+    }
+    std::error_code rcec;
+    root = fs::weakly_canonical(root, rcec);  // canonical for display/compare
+    if (rcec) root = fs::absolute(root);
+
+    // 3. Scan.
+    auto scan = workspace::scan_projects(root);
+    for (const auto& [path, reason] : scan.skipped) {
+        util::info(ezmk::i18n::fmt(I18nKey::workspace_scan_skip,
+                                   {{"path", path}, {"reason", reason}}));
+    }
+    if (scan.members.empty()) {
+        util::info(ezmk::i18n::fmt(I18nKey::workspace_scan_none,
+                                   {{"dir", root.string()}}));
+        return 0;
+    }
+    auto file = root / "ezmk-workspace.toml";
+
+    // 4a. New workspace file (no ezmk-workspace.toml found upward).
+    if (!existing) {
+        if (opts.dry_run) {
+            util::info(ezmk::i18n::fmt(
+                I18nKey::workspace_scan_would_create,
+                {{"file", file.string()},
+                 {"count", std::to_string(scan.members.size())}}));
+            return 0;
+        }
+        workspace::write_workspace_file(root, scan.members);
+        util::info(ezmk::i18n::fmt(
+            I18nKey::workspace_scan_created,
+            {{"file", file.string()},
+             {"count", std::to_string(scan.members.size())}}));
+        return 0;
+    }
+
+    // 4b. Existing workspace file — merge.
+    std::vector<std::string> existing_members;
+    try {
+        existing_members = workspace::read_workspace_members(root);
+    } catch (const std::exception& e) {
+        util::fatal(std::string("workspace scan: ") + e.what());
+    }
+    auto merged = workspace::merge_members(existing_members, scan.members);
+
+    // Added count — normalized comparison (merge dedupes/collapses dupes, so
+    // a plain size difference would undercount).
+    size_t added = 0;
+    {
+        std::set<std::string> have;
+        for (const auto& m : existing_members) {
+            std::string k = m;
+            std::replace(k.begin(), k.end(), '\\', '/');
+            while (k.size() > 1 && k.back() == '/') k.pop_back();
+            have.insert(std::move(k));
+        }
+        for (const auto& m : merged) {
+            std::string k = m;
+            std::replace(k.begin(), k.end(), '\\', '/');
+            while (k.size() > 1 && k.back() == '/') k.pop_back();
+            if (!have.count(k)) ++added;
+        }
+    }
+    if (added == 0) {
+        util::info(ezmk::i18n::fmt(
+            I18nKey::workspace_scan_no_change,
+            {{"file", file.string()},
+             {"count", std::to_string(merged.size())}}));
+        return 0;
+    }
+    if (opts.dry_run) {
+        util::info(ezmk::i18n::fmt(
+            I18nKey::workspace_scan_would_update,
+            {{"file", file.string()}, {"added", std::to_string(added)},
+             {"count", std::to_string(merged.size())}}));
+        return 0;
+    }
+
+    // Merge confirmation (same pattern as pkg's confirm; -y auto-accepts).
+    if (!confirm(ezmk::i18n::fmt(I18nKey::workspace_scan_confirm_update,
+                                 {{"file", file.string()},
+                                  {"added", std::to_string(added)},
+                                  {"count",
+                                   std::to_string(existing_members.size())}}),
+                 opts.assume_yes)) {
+        util::info(ezmk::i18n::fmt(I18nKey::workspace_scan_aborted,
+                                   {{"file", file.string()}}));
+        return 0;
+    }
+
+    try {
+        workspace::update_workspace_file(root, merged);
+    } catch (const std::exception& e) {
+        util::fatal(std::string("workspace scan: ") + e.what());
+    }
+    util::info(ezmk::i18n::fmt(
+        I18nKey::workspace_scan_updated,
+        {{"file", file.string()}, {"count", std::to_string(merged.size())},
+         {"added", std::to_string(added)}}));
+    return 0;
 }
 
 } // namespace ezmk::workspace_build

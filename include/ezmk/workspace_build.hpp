@@ -54,4 +54,12 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
 // dependency semantics). Returns the process exit code.
 int run_clean(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts);
 
+// 1.4.0-dev.7: `ezmk workspace scan` — adopt an existing directory tree as a
+// workspace. Scans `opts.dir` (default cwd) recursively for ezmk.toml
+// members; when an existing workspace root is found upward it is reused (and
+// its file merged/updated), otherwise a new ezmk-workspace.toml is created at
+// `opts.dir`. `--dry-run` previews without writing; `-y` skips the merge
+// confirmation. Returns 0 on success/cancel, 1 on error.
+int run_scan(const cli::WorkspaceScanOptions& opts);
+
 } // namespace ezmk::workspace_build

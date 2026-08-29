@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ezmk::workspace {
@@ -97,5 +98,55 @@ std::optional<size_t> resolve_member_ref(const Workspace& ws,
 // were rejected at config time (validate_ws_deps) — this is a defensive
 // re-check that throws std::runtime_error if one somehow exists.
 std::vector<std::vector<size_t>> topo_layers(const Workspace& ws);
+
+// 1.4.0-dev.7: `ezmk workspace scan` — adopt an existing directory tree.
+//
+// Result of a recursive scan of `root`: every subdirectory containing an
+// `ezmk.toml` becomes a member candidate. Paths are relative to `root`,
+// '/' -separated (generic_string) and sorted lexicographically for
+// deterministic output. The root itself (even when it has its own ezmk.toml)
+// is never a member — it is the container.
+struct ScanResult {
+    std::vector<std::string> members;   // relative member paths (sorted)
+    std::vector<std::pair<std::string, std::string>> skipped;  // (path, reason)
+};
+
+// Recursively scan `root` for ezmk projects. Skip rules (1.4.0-dev.7 §3.2):
+//   * hidden entries (first char '.') — whole subtree skipped silently
+//   * directories containing their own ezmk-workspace.toml (nested workspace
+//     root) — whole subtree skipped, recorded in `skipped`
+//   * directories whose canonical path escapes the root (symlink escape) —
+//     skipped, recorded in `skipped`
+// Member directories are still descended into (nested projects are allowed).
+ScanResult scan_projects(const fs::path& root);
+
+// Merge an existing member list with newly discovered ones. Normalizes each
+// path for comparison ('\' → '/', trailing '/' stripped, dedupe); keeps the
+// EXISTING entries in their original order and spelling, then appends the
+// discovered entries that are missing (already sorted). Never removes.
+std::vector<std::string> merge_members(
+    const std::vector<std::string>& existing,
+    const std::vector<std::string>& discovered);
+
+// Read just the [workspace].members array of an existing workspace file —
+// a light parse that does NOT run member/dependency validation (unlike
+// load_from, which would throw on stale deps or missing member dirs).
+// Throws std::runtime_error on TOML syntax errors; returns an empty vector
+// when the file has no [workspace].members section.
+std::vector<std::string> read_workspace_members(const fs::path& root);
+
+// Write a fresh ezmk-workspace.toml at `root` with exactly `members`
+// (atomic temp + rename).
+void write_workspace_file(const fs::path& root,
+                          const std::vector<std::string>& members);
+
+// Update an existing ezmk-workspace.toml at `root`: replace its members
+// array with `members`, preserving everything else (name / [workspace.options]
+// / comments / formatting) byte-for-byte. Implemented as a text-level splice
+// (toml++ v3.4 drops comments in its AST, so a formatter round-trip would
+// lose them). Multi-line member arrays collapse to a single line. Atomic
+// write; throws when the file has no [workspace] section.
+void update_workspace_file(const fs::path& root,
+                           const std::vector<std::string>& members);
 
 } // namespace ezmk::workspace

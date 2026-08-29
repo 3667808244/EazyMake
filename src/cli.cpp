@@ -948,6 +948,32 @@ namespace ezmk::cli
             return args;
         }
 
+        // 1.4.0-dev.7: `ezmk workspace scan [<dir>] [--dry-run] [-y]` —
+        // scan a directory tree for ezmk projects and create/update
+        // ezmk-workspace.toml. Not a `-w` redirect target; accepts at most
+        // one positional (the scan directory, default cwd).
+        if (action == "scan")
+        {
+            args.cmd = Command::WorkspaceScan;
+            WorkspaceScanOptions opts;
+            std::vector<OptionSpec> spec = {
+                {'\0', "dry-run", false},
+                {'y', "yes", false},
+            };
+            add_verbose_spec(spec);
+            auto p = parse_options(argc, argv, 3, spec, "ezmk workspace scan");
+            if (p.has("dry-run")) opts.dry_run = true;
+            if (p.has("yes")) opts.assume_yes = true;
+            if (p.positionals.size() > 1) {
+                util::fatal(ezmk::i18n::fmt(
+                    ezmk::i18n::I18nKey::cli_too_many_args,
+                    {{"cmd", "ezmk workspace scan"}, {"what", "<dir>"}}));
+            }
+            if (!p.positionals.empty()) opts.dir = p.positionals[0];
+            args.workspace_scan_opts = std::move(opts);
+            return args;
+        }
+
         util::fatal(ezmk::i18n::I18nKey::cli_unknown_subcommand,
                     {{"group", "workspace"}, {"sub", std::string(action)}});
     }
@@ -1121,6 +1147,7 @@ namespace ezmk::cli
                 {"wl", {"workspace", "list"}},  {"wb", {"workspace", "build"}},
                 {"wt", {"workspace", "test"}},  {"wc", {"workspace", "clean"}},
                 {"ww", {"workspace", "watch"}}, // 1.4.0-dev.5
+                {"ws", {"workspace", "scan"}},  // 1.4.0-dev.7
                 {"u", {"utils", nullptr}},    {"h", {"help", nullptr}},
                 {"v", {"version", nullptr}},
             };
@@ -1313,6 +1340,7 @@ namespace ezmk::cli
         row("ezmk workspace test  [-j N] [--stop-on-error] [--member <n>]", I18nKey::help_workspace_test);
         row("ezmk workspace watch [-j N] [--stop-on-error] [--member <n>] [-r]", I18nKey::help_workspace_watch);
         row("ezmk workspace clean [--member <n>]", I18nKey::help_workspace_clean);
+        row("ezmk workspace scan [<dir>] [--dry-run] [-y]", I18nKey::help_workspace_scan);  // 1.4.0-dev.7
         sub(get(I18nKey::help_full_form) + ": build/test/watch/clean accept -w to redirect");
         std::cout << "\n";
 

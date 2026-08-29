@@ -36,6 +36,7 @@ enum class Command {
     WorkspaceTest,   // 1.3.0-dev.2
     WorkspaceClean,  // 1.3.0-dev.2
     WorkspaceWatch,  // 1.4.0-dev.5
+    WorkspaceScan,   // 1.4.0-dev.7
     Version,
     Help,
 };
@@ -111,6 +112,15 @@ struct WorkspaceOptions {
     bool watch_run = false;                  // 1.4.0-dev.5: --run (watch only) — forwarded to members
 };
 
+// 1.4.0-dev.7: `ezmk workspace scan` options — adopt an existing directory
+// tree as a workspace (scan for ezmk.toml members, create/update the
+// workspace file).
+struct WorkspaceScanOptions {
+    std::string dir;       // optional positional scan directory (default cwd)
+    bool dry_run = false;  // --dry-run: preview only, never write
+    bool assume_yes = false;  // -y: skip the merge confirmation prompt
+};
+
 struct InstallOptions {
     Scope scope = Scope::Project;
     std::string pkg_file;    // local path or URL
@@ -165,6 +175,9 @@ struct CliArgs {
 
     // Only valid for Workspace* commands (1.3.0-dev.2)
     std::optional<WorkspaceOptions> workspace_opts;
+
+    // Only valid for WorkspaceScan (1.4.0-dev.7)
+    std::optional<WorkspaceScanOptions> workspace_scan_opts;
 
     // Only valid for PkgInstall
     std::optional<InstallOptions> install_opts;
