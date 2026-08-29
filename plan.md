@@ -1,97 +1,106 @@
-# EazyMake 1.4.0-dev.6 执行计划
+# EazyMake 1.4.0-dev.7 执行计划
 
-> **状态：已完成（收口）**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
+> **状态：执行中**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
-> 详细设计：[**1.4.0-dev.6.md**](plans/1.4.x/1.4.0-dev.6.md)。本计划为 1.4.0 第六个开发子版本，主题为**代码质量审计（全量）**——对当前使用的全部代码做系统审计并修复正确性（P0）与健壮性（P1）缺陷：8 路并行审查覆盖 ~19k 行核心代码 + include + test。
+> 详细设计：[**1.4.0-dev.7.md**](plans/1.4.x/1.4.0-dev.7.md)。本计划为 1.4.0 第七个开发子版本，主题为 **workspace scan（现有项目一键采纳）**——`ezmk workspace scan [<dir>] [--dry-run] [-y]` 递归扫描目录树收集成员，生成 / 合并更新 `ezmk-workspace.toml`。经用户确认**插队**：dev.6 收口后重新打开 dev 阶段，唯一新增功能项。
 >
-> **范围边界**：P2 风格/死代码/需设计决策项（跨盘符路径、zip 解压上限、lua_to_json 循环表、export C 侧能力表、import add_library 形态、CMake 引号化等）**明确延后**（记录在 design doc §6）。**公共 API 无破坏性变更**。
+> **范围边界**：`scan --prune`（移除已消失成员）、成员依赖自动推断、非 workspace 场景零改动。**公共 API 无破坏性变更**。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 968 用例 / 5588 断言，1.4.0-dev.5 后实测）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 968 用例 / 5612 断言，1.4.0-dev.6 后实测）。
 
 ---
 
 ## 1 背景
 
-- dev.5 收口后对全部代码系统审计，发现一批历史遗留的正确性/健壮性缺陷，多数**静默出错**（无报错、无测试锁定）：确定性构建缓存永久失效、非英文系统 MSVC 探测失败、`--locked` 不锁版本还改写 lockfile、git branch 命令注入、Lua 钩子根路径钉死 CWD 等。
-- 测试套件存在 4 个恒真/无断言测试（回归无法被捕获）与 dev.5 新测试的脆弱点（进程泄漏/空转断言/假优先级）。
+- workspace（1.3.0）解决「一个目录下若干独立项目的批量管理」，但创建 workspace 仍靠手写 `ezmk-workspace.toml`——对已有目录树（棕地：克隆仓库 / CMake 转来 / 手写 ezmk 项目）逐个列 members 是最大上手障碍。
+- `project new`（绿地）与 `project import --from cmake`（单项目采纳）已覆盖；workspace 侧缺少「采纳现有目录树」命令。本版本补上 `ezmk workspace scan`。
+- 三个已确认决策：命令名 `workspace scan`；版本槽位 1.4.0-dev.7；已有文件走**合并更新**（保留 name/options/已有成员/注释，追加缺失成员）。
 
 ## 2 目标
 
 | # | 目标 | 优先级 |
 |---|------|--------|
-| 1 | `-Wall -Wextra` 严格编译零警告 | P0 |
-| 2 | 修复全部 P0 正确性缺陷（8 项） | P0 |
-| 3 | 修复高价值 P1 健壮性问题（源码 9 项 + 测试 4 项） | P1 |
-| 4 | 修复测试套件 P0（4 个恒真/无断言测试） | P0 |
-| 5 | 全量零回归 + 记录未修 P2 延后项 | P0 |
+| 1 | `ezmk workspace scan [<dir>]`：递归扫描收集成员，生成 `ezmk-workspace.toml` | P0 |
+| 2 | 已有文件合并更新（toml++ 往返保留注释 / name / options） | P0 |
+| 3 | 跳过规则：隐藏目录 / 嵌套 workspace 根 / 符号链接逃逸；扫描根自身不是成员 | P0 |
+| 4 | `--dry-run` 预览 + `-y` 跳过确认 + `ws` 简写 | P1 |
+| 5 | 单元 + 集成测试、文档、全量零回归 | P0 |
 
-## 3 执行阶段（全部完成）
+## 3 执行阶段
 
-### 阶段一：编译零警告 + 审计
+### 阶段一：设计文档与计划索引
 
-- [x] **1.1 严格编译**：`CXXFLAGS="-std=c++17 -Wall -Wextra"` 全量编译零警告（含测试二进制）
-- [x] **1.2 并行审计**：8 路子代理覆盖 build/cache · pkg/repo/lockfile · cli/config/toolchain · util/file_watcher/crypto · export/import/compile_db · workspace · i18n/lua/main · test
-- [x] **1.3 实证复核**：MSVC cl 本地化横幅、vswhere BuildTools、CMake 括号注释、`fs::relative` 跨盘符、Catch2 SECTION 重跑语义
-- [x] **1.4 分级清单**：P0×8 / P1×13 / P2×N
+- [ ] **1.1** `plans/1.4.x/1.4.0-dev.7.md` 设计文档
+- [ ] **1.2** `plans/1.4.x/README.md`：dev.7 行 + 系列说明 + 依赖关系
+- [ ] **1.3** `plans/README.md`：当前执行 + 汇总表 + 依赖图
+- [ ] **1.4** `plan.md` 重写为 dev.7 执行计划（本文件）
 
-### 阶段二：源码 P0/P1 修复（commit ab78208 + 15df60c 源码部分）
+### 阶段二：扫描 / 合并 / 写盘核心（workspace.hpp/cpp）
 
-- [x] **2.1 缓存签名对称**（cache.cpp）：deterministic 构建 lock 哈希并入校验侧
-- [x] **2.2 依赖名安全**（pkg.cpp）：libs/want 两处 `validate_pkg_name`
-- [x] **2.3 `--locked` 锁版本**（pkg.cpp）：Exact 约束 + 不重写 lockfile + 2 新 i18n 键
-- [x] **2.4 repo 名安全**（repo.cpp）：add 处校验 + `name_from_url` 支持 `\`（npos 哨兵 bug）
-- [x] **2.5 MSVC 版本解析语言无关**（toolchain.cpp）：digit.digit 扫描（跳过 x64）
-- [x] **2.6 git branch 注入**（util.cpp）：branch 补引号
-- [x] **2.7 `#[[...]]` 括号注释**（import.cpp）：skip_comment 复用 parse_bracket
-- [x] **2.8 Lua register_api 重注册**（lua_api.cpp）：根变化即重注册
-- [x] **2.9 其余 P1**：run_watch SIGINT 恢复、句柄泄漏/mkstemp 静默成功、SDE 崩溃、缓存写失败、config 非数组报错
+- [ ] **2.1** `scan_projects(root)`：递归 + 跳过规则（隐藏 / 嵌套根 / 逃逸）+ `/` 分隔 + 排序
+- [ ] **2.2** `merge_members(existing, discovered)`：规范化（`\`→`/`、去尾 `/`）+ 去重 + 保留现有顺序 + 追加缺失
+- [ ] **2.3** 写盘：新文件生成 + toml++ 往返合并（`toml_formatter`）+ 临时文件 + `util::atomic_rename`
 
-### 阶段三：测试 P0/P1 修复（commit f084b7e + 15df60c 测试部分）
+### 阶段三：CLI 与分发（cli.hpp / cli.cpp / main.cpp / workspace_build.hpp/cpp）
 
-- [x] **3.1 恒真/无断言测试**：hooks ctx.output、toolchain 恒真式、crypto raw 长度、repo round-trip
-- [x] **3.2 watch 测试脆弱点**：RAII 进程清理（workspace watch + watch --run 失败路径）、wait_exists 空转、sidecar 假优先级
-- [x] **3.3 MSVC 解析断言更新** + zh-CN banner 新用例
+- [ ] **3.1** `Command::WorkspaceScan` + `WorkspaceScanOptions`（dir / dry_run / assume_yes）+ 解析（positionals ≤ 1）
+- [ ] **3.2** `ws` 简写（kAliases）+ `help_workspace_scan` 帮助行
+- [ ] **3.3** `run_scan()`：定位扫描根（向上命中优先）→ 确认（`-y`/交互）→ 汇总分派（created / updated / no_change / dry-run / aborted / none）
 
-### 阶段四：收口
+### 阶段四：i18n（i18n_keys.def + locale/en.json + locale/zh.json）
 
-- [x] **4.1 全量零回归**：`bash build.sh test-all`（**968 用例 / 5612 断言零失败**，+24 断言）
-- [x] **4.2 文档**：design doc（plans/1.4.x/1.4.0-dev.6.md）+ CHANGES.md dev.6 条目 + plan.md + plans/README 状态更新
-- [x] **4.3 门槛复核**：清单完成/收口 + API 无破坏性变更 + 全量零回归
+- [ ] **4.1** 新增 13 键：`workspace_scan_*` × 11 + `workspace_err_scan_dir` + `help_workspace_scan`，三向一致
 
-> 门槛未满足即停止。**本版门槛全部满足，dev.6 收口。**
+### 阶段五：单元测试（test_workspace.cpp + test_cli.cpp）
 
----
+- [ ] **5.1** 扫描：多深度 / 隐藏 / 嵌套根（含子树排除）/ 根自身 / 排序 / `/` 斜杠 / 逃逸（POSIX 守卫）
+- [ ] **5.2** merge：去重 / 顺序 / 追加 / 规范化（反斜杠 + 尾斜杠）
+- [ ] **5.3** 写盘往返：注释 / name / options 保留；parse 后 members 合并
+- [ ] **5.4** CLI 解析：`workspace scan`（dir / `--dry-run` / `-y`）、`ws` 简写、>1 positional、未知 flag
+
+### 阶段六：集成测试（test_integration_workspace.cpp）
+
+- [ ] **6.1** 扫描生成 → `workspace list`/`build` 可用（2 成员，含依赖注入）
+- [ ] **6.2** 合并更新（options + 注释保留）
+- [ ] **6.3** `--dry-run` 不写盘 / 空目录不写 / 子目录定位向上
+
+### 阶段七：构建 + 全量回归
+
+- [ ] **7.1** `bash build.sh` 编译通过（含新 i18n 键审计）
+- [ ] **7.2** `bash build.sh test-all` 零失败（基线 968/5612 + 新用例，无回归）
+
+### 阶段八：文档（cli.md en/zh + README + README_ZH + 教程 05 en/zh）
+
+- [ ] **8.1** cli.md（en/zh）：workspace 节补 `scan` 命令 + 语义（定位 / 跳过规则 / 合并 / dry-run / -y / ws 简写）
+- [ ] **8.2** README / README_ZH 命令速览补 `ezmk workspace scan`
+- [ ] **8.3** 教程 05（en/zh）：新增「采纳现有项目」小节
+
+### 阶段九：收口
+
+- [ ] **9.1** `CHANGES.md` 1.4.0-dev.7 条目（新增 / 行为变更 / 测试 / 已知限制）
+- [ ] **9.2** plan.md 全勾选 + plans README 状态更新
+- [ ] **9.3** 门槛复核：清单完成 + API 无破坏性变更 + 全量零回归
 
 ## 4 关键设计决策
 
-| 决策 | 说明 |
-|------|------|
-| 缓存签名对称补 lock 哈希 | 校验侧按 `record.deterministic` 与保存侧同规则（复用同一 `compile_options_signature` 输入） |
-| `--locked` 改为 Exact 版本约束 | 从 lockfile 取该包记录版本 → `search_package(name, scopes, Exact)`；找不到即 fatal；`no_lock=true` 禁止改写 |
-| MSVC 版本解析语言无关 | 扫描第一个 `<digits>.<digits>`（复用 `first_version_major` 思路），跳过 "x64"/"x86" 平台标签 |
-| repo 名校验配套 name_from_url 修 `\` | npos 是 size_t 最大值，`x > npos` 恒假 → 显式 `found` 标志比较 |
-| config 非数组报错 | 节点存在但类型错 → 抛 `config_err_array_field_type`；`include_dirs` 不 fallback 到旧字段 |
-| Lua API 根变化即重注册 | `g_project_root != abs(api_project_root)` 时重注册（register_api 同时失效配置缓存） |
-| 测试 RAII 进程清理 | 局部 killer 析构兜底，任何 REQUIRE 失败路径都 kill watch 进程树 |
+| 决策 | 结论 | 理由 |
+|------|------|------|
+| 命令名 | `workspace scan`（非 scan-project） | 简洁；简写 `ws` 与 wl/wb/wt/wc/ww 简写族一致 |
+| 版本槽位 | 1.4.0-dev.7（插队） | 用户确认；dev.6 后重新打开 dev，pre.1 仍收口 |
+| 已有文件 | 合并更新 | 保留 name/options/已有成员/注释；重扫=同步 |
+| 写盘方式 | toml++ 往返 + 原子 rename | v3.4 `toml_formatter` 保留注释；`util::atomic_rename` 防损坏 |
+| 依赖推断 | 不自动（用户意图） | 扫描只收成员，`[depends] workspace` 手工声明 |
 
 ## 5 兼容性矩阵
 
-| 变更 | 影响 | 处理 |
+| 变更 | 影响 | 说明 |
 |------|------|------|
-| 确定性缓存签名含 lock 哈希 | 行为修复 | deterministic 项目首次构建重编一次，之后恢复正常增量 |
-| `--locked` 锁版本 + 不重写 | 行为收紧 | 与文档契约一致；无记录/版本不可得 → 新错误信息 |
-| repo 名安全校验 | 行为收紧 | 非法名被拒；Windows 本地路径名提取修复配套 |
-| config 非数组字段报错 | 行为收紧 | 拼写错误不再无声失效 |
-| MSVC 版本解析语言无关 | 行为修复 | 非英文系统对齐英文系统；英文结果不变 |
-| 公共 API | **无破坏性变更** | 纯修复 + 3 新 i18n 键 |
+| 新增命令 `workspace scan` | 纯新增 | `ws` 简写无冲突；scan 不接受 `-w` |
+| 新增 i18n 键 | 纯新增 | zh-TW 变体缺键回退 zh |
+| workspace.hpp/cpp 新增函数 | 纯新增 | 既有路径零改动 |
+| 公共 API | 无破坏性变更 | 新命令 + 新 flag |
 
-## 6 延后项（记录在案，随 1.4.0 后续 dev/pre 或 1.5.x）
+## 6 延后项
 
-- 跨盘符 `fs::relative` 空路径 → cache 键碰撞 + 对象覆盖
-- 测试链接缺依赖包归档/链接参数；`test --profile` 未转发内层 build
-- `extract_zip` 无总大小上限；`extract_targz` 不校验 gzip footer
-- watcher 事件风暴退出 + 关闭期 OVERLAPPED 竞态
-- `lua_to_json` 循环表无界递归崩溃
-- export C 侧能力表误报；import `add_library` 无类型形态误判
-- export CMake 字面路径/名称不引号化（含空格路径）
-- 死代码/重复/硬编码英文等 P2 清理（详见 design doc §6）
+- `scan --prune`（移除已消失成员）——后续评估。
+- 成员依赖自动推断（`[depends] workspace`）——用户意图，扫描不猜测。
