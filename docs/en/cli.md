@@ -269,6 +269,7 @@ A workspace is a **collection of independent projects (members) under one direct
 | `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...] [--report <fmt>[:<path>]]` | Run member tests; members without tests are skipped (not an error). **1.3.2+** `--report` is forwarded to every member — each writes its own report file |
 | `ezmk workspace watch [-j N] [--stop-on-error] [--member <name>...] [-r]` | **1.4.0-dev.5+** Watch **all** members and rebuild on change (member-level watch; Ctrl+C stops every member watcher together) |
 | `ezmk workspace clean [--member <name>...]` | Clean members in reverse dependency order (same semantics as single-project `ezmk clean`: caches/temp only, `build/` artifacts kept) |
+| `ezmk workspace scan [<dir>] [--dry-run] [-y]` | **1.4.0-dev.7+** Scan a directory tree for ezmk projects; create or merge-update `ezmk-workspace.toml` (one-shot adoption of existing projects) |
 
 The config file is **`ezmk-workspace.toml`** (independent of `ezmk.toml`; a root may be both a project and a workspace):
 
@@ -306,6 +307,15 @@ Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at con
 **Incremental semantics:** changing a library `.cpp` → the library rebuilds + dependents **relink only**; changing a library `.h` → dependents **recompile automatically** (their depfile tracks the injected headers). No manual `clean` needed.
 
 **Pure container root:** a directory with only `ezmk-workspace.toml` (no `ezmk.toml`) makes `ezmk build` print a hint to use `ezmk workspace build` (or `ezmk build -w`); when the root is also a project, behavior is unchanged.
+
+**`workspace scan` (1.4.0-dev.7+):** one-shot adoption of an existing directory tree — recursively scans for subdirectories containing `ezmk.toml` and writes/updates `ezmk-workspace.toml`, so you never hand-write `members` again. Key points:
+
+- **Locate:** `<dir>` defaults to the current directory; if a workspace root exists at `<dir>` or upward, that root is scanned (running `scan` inside a member subdirectory updates the root file); otherwise `<dir>` becomes a new workspace root.
+- **Skip rules:** hidden entries (`.` prefix, e.g. `.git`/`.ezmk`), **nested workspace roots** (the whole subtree containing its own `ezmk-workspace.toml`), and directories escaping the root via symlink — skipped entries are printed with their reason. The scan root itself is never a member, even when it has its own `ezmk.toml`.
+- **Write:** file absent → created (`[workspace] members = [...]`); **file present → merged** — `name` / `[workspace.options]` / existing members / comments are preserved, only missing members are appended (deduped, existing order kept), so re-scanning acts as a sync. Vanished members are **not** removed (removal is a manual operation).
+- **Confirmation:** merging prompts interactively ([y/N]); `-y` accepts, `--dry-run` previews without writing. An empty scan reports nothing found and writes nothing.
+- **Shorthand:** `ws` → `workspace scan`. Member dependencies (`[depends] workspace`) are **not** auto-inferred — that is user intent; declare them by hand after adopting.
+- Examples: `ezmk ws` (create at cwd), `ezmk ws -y` (merge without prompting), `ezmk workspace scan some/dir --dry-run` (preview).
 
 ---
 
@@ -486,10 +496,11 @@ unknown subcommand. Shorthands are typing sugar and are **not** part of zsh comp
 | `pt` | `project test` | | | | |
 | `wl` | `workspace list` (1.3.3+) | `wc` | `workspace clean` (1.3.3+) | | |
 | `wb` | `workspace build` (1.3.3+) | `ww` | `workspace watch` (1.4.0-dev.5+) | | |
-| `wt` | `workspace test` (1.3.3+) | | | | |
+| `wt` | `workspace test` (1.3.3+) | `ws` | `workspace scan` (1.4.0-dev.7+) | | |
 | `u` | `utils` | | | `h` / `v` | `help` / `version` |
 
-> **Workspace shorthands (1.3.3+):** `wl`/`wb`/`wt`/`wc` (and `ww`, 1.4.0-dev.5+) expand at the command
+> **Workspace shorthands (1.3.3+):** `wl`/`wb`/`wt`/`wc` (and `ww`, 1.4.0-dev.5+; `ws`,
+> 1.4.0-dev.7+) expand at the command
 > position exactly like the p/k/r shorthands (`ezmk wb` ≡ `ezmk workspace build`;
 > `ezmk workspace wb` is still an unknown subcommand). They are orthogonal to the
 > `-w` redirect flag (a build/test/watch/clean *option*). `w` alone and the `example`

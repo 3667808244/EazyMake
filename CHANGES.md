@@ -18,6 +18,10 @@ As of v1.1.0, the following public APIs are **permanently stable**:
 
 - **Commands:** `workspace watch` (with `-w` redirect on `watch` — `ezmk watch -w` ≡ `ezmk workspace watch`; `--member`, `--stop-on-error`, `-j`, `--run` forwarded to executable members; `ww` shorthand).
 
+**Extended in v1.4.0 (1.4.0-dev.7):**
+
+- **Commands:** `workspace scan` (with `[<dir>]`, `--dry-run`, `-y`; `ws` shorthand) — scan a directory tree for ezmk projects and create / merge-update `ezmk-workspace.toml`.
+
 Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
 
 ---
@@ -192,6 +196,42 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **export C 侧 `std_capability_note` 用 C++ 能力表比较**（C_STANDARD 99 误报/17 漏报）
 - **import `add_library` 无类型形态误判**（默认 STATIC 被当 executable + 内联源不收集）；**export CMake 字面路径/名称不引号化**（含空格路径）
 - 死代码/重复/硬编码英文等 P2（`load_msvc_env` 死代码、`FlagMapEntry::is_prefix` 未用、`lua_api_*` 死 i18n 键、watch 回调无类型过滤、`project.cpp` 写失败静默等）
+
+---
+
+## 1.4.0-dev.7 (2026-08-30) — workspace scan（现有项目一键采纳）
+
+1.4.0 第七个开发子版本（**用户确认插队**：dev.6 收口后重新打开 dev 阶段，唯一新增功能项），为 workspace 补齐**棕地采纳路径**：`ezmk workspace scan` 递归扫描目录树收集 ezmk 项目，一键生成 / 合并更新 `ezmk-workspace.toml`——省去手写 `members`，与 `project new`（绿地）和 `project import`（单项目采纳）互补。**公共 API 无破坏性变更**（纯增量：新命令 + 新 flag + 13 个新 i18n 键）。
+
+### 新增 / 行为变更
+
+- **`ezmk workspace scan [<dir>] [--dry-run] [-y]`**（`src/workspace_build.cpp` + `src/cli.cpp` + `src/main.cpp` + `include/ezmk/cli.hpp`）：`Command::WorkspaceScan` + `WorkspaceScanOptions`（dir / dry_run / assume_yes）；positionals ≤ 1（>1 → `cli_too_many_args`）；scan 不接受 `-w`（非重定向目标）
+- **扫描语义**（`src/workspace.cpp` `scan_projects()`）：递归收集含 `ezmk.toml` 的子目录为成员，相对路径 `/` 分隔 + 排序（确定性输出）；跳过规则——隐藏目录（`.` 前缀）/ **嵌套 workspace 根**（含自身 `ezmk-workspace.toml` 的整棵子树）/ 符号链接逃逸（复用 canonicalize + is_within），跳过项记录原因；扫描根自身即使有 `ezmk.toml` 也不是成员；成员目录继续下钻（嵌套项目允许）
+- **定位**：`locate_workspace_root(<dir>)` 命中（自身或向上）→ 以该根为扫描根（成员子目录内执行 scan 更新根文件）；未命中 → `<dir>` 为新根创建
+- **写盘 / 合并**：新文件 `[workspace] members = [...]`；已有文件走**文本级拼接合并**——只替换 `[workspace]` 节内的 members 数组行（单行数组输出），`name` / `[workspace.options]` / **注释** / 格式逐字节保留（选型依据：toml++ v3.4 AST 不存储注释，formatter 往返会静默丢注释），原子写（temp + `util::atomic_rename`）；`merge_members()` 规范化去重（`\`→`/`、去尾 `/`）、保留现有顺序、只追加缺失成员、不删除
+- **确认流**：合并前交互确认（[y/N]，复用 pkg confirm 模式 + `auto_yes`），`-y` 跳过，`--dry-run` 只预览；无成员 → `workspace_scan_none` 不写盘；无新增 → `workspace_scan_no_change`；取消 → `workspace_scan_aborted`
+- **`ws` 简写**：`ws` → `workspace scan`（kAliases 加一行，与 wl/wb/wt/wc/ww 简写族一致，仅命令位置生效）
+- **CLI help**：`ezmk workspace scan [<dir>] [--dry-run] [-y]` 行 + `help_workspace_scan` 文案（en/zh；zh-TW 变体缺键回退 zh）
+- **i18n**：新增 13 键（`workspace_scan_*` × 11 + `workspace_err_scan_dir` + `help_workspace_scan`），X-macro 三向一致
+
+### 文档
+
+- `docs/en|zh/cli.md`：workspace 节补 `scan` 命令行 + 语义段（定位 / 跳过规则 / 合并 / 确认 / 简写）；简写表补 `ws`
+- `README.md` / `README_ZH.md` 命令速览补 `ezmk workspace scan [<dir>]`
+- 教程 05（en/zh）新增「采纳现有项目：`ezmk workspace scan`」小节
+- `CHANGES.md` 本条目；`plan.md` 1.4.0-dev.7 执行计划（详见 `plans/1.4.x/1.4.0-dev.7.md`）
+
+### 测试
+
+- 新增 8 个单测（`test_workspace.cpp`）：扫描（多深度排序 / 隐藏 / 嵌套根含子树排除 / 根自身非成员 / 空目录 / `/` 分隔 / POSIX 符号链接逃逸）+ merge（去重 / 顺序 / 追加 / 反斜杠与尾斜杠规范化 / 重复折叠）+ 写盘往返（新文件 load_from 可加载；更新保留 name/options/注释 + 成员合并）
+- 新增 4 个 CLI 单测（`test_cli.cpp`）：scan 缺省值 / dir+flags / `ws` 简写展开（含 `ws → workspace scan` 记录与命令位置限定）/ 坏输入拒绝（>1 positional、未知 flag、`-w`）
+- 新增 5 个集成测试（`test_integration_workspace.cpp`）：扫描生成 → `workspace list`/`build` 端到端（含依赖注入与运行输出）；合并保留 options+注释 + 重扫 up-to-date；`--dry-run` 不写盘；空目录不写；成员子目录定位向上更新根文件
+- 全量 `test-all`：**988 用例 / 5770 断言零失败**（dev.6 基线 968/5612，+20 用例 / +158 断言；2 跳过为既有环境限制）
+
+### 已知限制 / 跟进项
+
+- **`scan --prune`（移除已消失成员）**：不进入本版本（移除是手工操作，避免扫描误删）。
+- **成员依赖自动推断**（`[depends] workspace`）：不进入本版本（用户意图，扫描不猜测）。
 
 ---
 

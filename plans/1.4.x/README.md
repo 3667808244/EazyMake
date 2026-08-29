@@ -25,7 +25,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 | [1.4.0-dev.4](1.4.0-dev.4.md) | CMake 互操作补全 | `import` 读 `CXX_STANDARD` → 区间 language（`">=CPP<N>"`）；`export` 超能力注释 | ✅ 已完成（2026-08-27，dev.4：全量 959/5492 零回归，+11 用例/+20 断言） |
 | [1.4.0-dev.5](1.4.0-dev.5.md) | 功能收口 | watch `--` 透传 + `workspace watch` + `tgz` 别名 + sha256 边车自动校验（1.3.x 延后项） | ✅ 已完成（2026-08-27，dev.5：全量 968/5588 零回归，+9 用例/+96 断言） |
 | [1.4.0-dev.6](1.4.0-dev.6.md) | 代码质量审计 | 8 路并行审查全量代码；修复 8 P0 + 高价值 P1（缓存签名/`--locked` 锁版本/依赖名与 repo 名校验/git branch 注入/MSVC 本地化/CMake 括号注释/Lua 根路径）+ 4 恒真测试 | ✅ 已完成（2026-08-29，dev.6：全量 968/5612 零回归，+24 断言） |
-| [1.4.0-dev.7](1.4.0-dev.7.md) | workspace scan | `ezmk workspace scan [<dir>] [--dry-run] [-y]`：递归扫描目录树收集成员、生成/合并 `ezmk-workspace.toml`（toml++ 往返保留注释与 options）、`ws` 简写、跳过规则（隐藏/嵌套根/逃逸） | 🚧 规划中（用户确认插队：dev.6 收口后重新打开 dev 阶段，唯一新增功能项） |
+| [1.4.0-dev.7](1.4.0-dev.7.md) | workspace scan | `ezmk workspace scan [<dir>] [--dry-run] [-y]`：递归扫描目录树收集成员、生成/合并 `ezmk-workspace.toml`（文本级拼接保留注释与 options）、`ws` 简写、跳过规则（隐藏/嵌套根/逃逸） | ✅ 已完成（2026-08-30，dev.7：全量 988/5770 零回归，+20 用例/+158 断言） |
 
 ### 依赖关系
 

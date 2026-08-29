@@ -99,6 +99,31 @@ $ ezmk workspace clean            # 按依赖逆序清理成员（清缓存/临�
 - **`--member <name>` 含依赖闭包**：`ezmk workspace build --member tool-a` 会先构建 `tool-a` 的依赖 `strutil`，再构建 `tool-a`——保证产物新鲜。`--member apps/tool-a`（完整路径）与 `--member tool-a`（末段）等价。
 - **只构建单个成员、不要闭包**：`cd apps/tool-a && ezmk build`——只构建当前成员，注入**已存在**的兄弟产物（`strutil` 没构建过就会提示并可能导致链接失败）。
 
+## 采纳现有项目：`ezmk workspace scan`（1.4.0-dev.7+）
+
+`ezmk-workspace.toml` 不必手写。当你已经有一个塞满 ezmk 项目的目录（克隆的仓库、CMake 转来的项目、手写的项目），一条命令全部采纳：
+
+```bash
+$ cd ws
+$ ezmk workspace scan        # 或用简写：ezmk ws
+found 3 member(s) — created ezmk-workspace.toml
+```
+
+`scan` 递归收集所有含 `ezmk.toml` 的子目录到 `members`（排序、`/` 分隔）。规则：
+
+- **隐藏**条目（`.git`、`.ezmk` 等）整棵跳过。
+- 自身是**嵌套 workspace 根**的子目录被跳过（其整棵子树属于那个 workspace）。
+- **扫描根**自身永远不是成员，即使它有自己的 `ezmk.toml`。
+
+再次运行就是**同步**：当 `ezmk-workspace.toml` 已存在时，`scan` 合并——保留你的 `name`、`[workspace.options]` 和注释，只追加新发现的成员（现有顺序不变）。合并前会交互确认（`-y` 跳过、`--dry-run` 只预览）：
+
+```bash
+$ cd ws/apps/tool-a && ezmk ws -y      # 在成员子目录里执行——更新的是根文件
+$ ezmk workspace scan --dry-run        # 只预览不写盘
+```
+
+采纳后手工声明兄弟依赖（成员 `[depends] workspace = [...]`）——`scan` 从不猜测你的依赖意图。
+
 ## 失败时怎么办
 
 ```bash

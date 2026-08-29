@@ -171,6 +171,7 @@ ezmk workspace build [flags]    # build all members (topological, parallel)
 ezmk workspace test [flags]     # run member tests
 ezmk workspace watch [flags]    # watch all members and rebuild on change (1.4.0-dev.5+)
 ezmk workspace clean [flags]    # clean member caches
+ezmk workspace scan [<dir>]     # adopt existing projects: create/update ezmk-workspace.toml (1.4.0-dev.7+)
 # build/test/watch/clean accept -w to redirect: ezmk build -w ≡ ezmk workspace build
 ```
 

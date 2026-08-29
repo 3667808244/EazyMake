@@ -99,6 +99,31 @@ $ ezmk workspace clean            # clean members in reverse dependency order (c
 - **`--member <name>` includes the dependency closure**: `ezmk workspace build --member tool-a` first builds `tool-a`'s dependency `strutil`, then `tool-a` — artifacts stay fresh. `--member apps/tool-a` (full path) and `--member tool-a` (basename) are equivalent.
 - **A single member without the closure**: `cd apps/tool-a && ezmk build` — builds only the current member, injecting **already-existing** sibling artifacts (a missing `strutil` build prints a hint and may fail at link time).
 
+## Adopting existing projects: `ezmk workspace scan` (1.4.0-dev.7+)
+
+You don't have to hand-write `ezmk-workspace.toml`. When you already have a directory full of ezmk projects (cloned repos, projects imported from CMake, hand-written ones), one command adopts them all:
+
+```bash
+$ cd ws
+$ ezmk workspace scan        # or the shorthand: ezmk ws
+found 3 member(s) — created ezmk-workspace.toml
+```
+
+`scan` recursively collects every subdirectory containing `ezmk.toml` into `members` (sorted, `/`-separated). Rules:
+
+- **Hidden** entries (`.git`, `.ezmk`, …) are skipped entirely.
+- A subdirectory that is itself a **nested workspace root** is skipped (its whole subtree belongs to that workspace).
+- The **scan root** itself is never a member, even if it has its own `ezmk.toml`.
+
+Running it again is a **sync**: when `ezmk-workspace.toml` already exists, `scan` merges — it keeps your `name`, `[workspace.options]` and comments, and appends only newly-discovered members (existing order preserved). A merge prompts for confirmation (`-y` accepts, `--dry-run` previews):
+
+```bash
+$ cd ws/apps/tool-a && ezmk ws -y      # from a member subdir — updates the ROOT file
+$ ezmk workspace scan --dry-run        # preview without writing
+```
+
+After adoption, declare sibling dependencies by hand (`[depends] workspace = [...]` in each member) — `scan` never guesses your dependency intent.
+
 ## When something fails
 
 ```bash

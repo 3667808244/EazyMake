@@ -222,6 +222,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `ezmk workspace test [-j N] [--stop-on-error] [--member <name>...] [--report <格式>[:<路径>]]` | 运行成员测试；无测试的成员跳过（不报错）。**1.3.2+** `--report` 透传给每个成员，各写各的报告文件 |
 | `ezmk workspace watch [-j N] [--stop-on-error] [--member <name>...] [-r]` | **1.4.0-dev.5+** 监视**全部**成员，变更自动重建（成员级 watch；Ctrl+C 一起停止所有成员 watcher） |
 | `ezmk workspace clean [--member <name>...]` | 按依赖逆序清理成员（与单项目 `ezmk clean` 语义一致：清缓存/临时目录，`build/` 产物保留） |
+| `ezmk workspace scan [<dir>] [--dry-run] [-y]` | **1.4.0-dev.7+** 扫描目录树中的 ezmk 项目，创建或合并更新 `ezmk-workspace.toml`（现有项目一键采纳） |
 
 配置文件为 **`ezmk-workspace.toml`**（独立于 `ezmk.toml`；根可同时是项目与工作区）：
 
@@ -259,6 +260,15 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 **增量语义：** 改库 `.cpp` → 库重编 + 依赖者**只重链接**；改库 `.h` → 依赖者**自动重编**（depfile 收录注入头）。无需手动 `clean`。
 
 **纯容器根：** 目录只有 `ezmk-workspace.toml`、没有 `ezmk.toml` 时，`ezmk build` 会提示改用 `ezmk workspace build`（或 `ezmk build -w`）；根同时是项目时行为不变。
+
+**`workspace scan`（1.4.0-dev.7+）：** 一键采纳现有目录树——递归扫描，把**含 `ezmk.toml` 的子目录**收集为成员并写入/更新 `ezmk-workspace.toml`，省去手写 `members`。要点：
+
+- **定位**：`<dir>` 缺省为当前目录；若 `<dir>` 自身或向上存在 workspace 根，则以该根为扫描根（在成员子目录里执行 scan 也会更新根文件）；否则以 `<dir>` 为新根创建。
+- **跳过规则**：隐藏目录（`.` 前缀，含 `.git`/`.ezmk`）、**嵌套 workspace 根**（含自身 `ezmk-workspace.toml` 的整棵子树）、符号链接逃出根的目录——前两者分别打印跳过原因；扫描根自身即使有 `ezmk.toml` 也不是成员。
+- **写盘**：文件不存在 → 直接创建（`[workspace] members = [...]`）；**已存在 → 合并更新**——保留 `name` / `[workspace.options]` / 已有成员 / 注释，只追加缺失成员（路径去重、现有顺序保留），重扫即同步。已消失的成员**不会**被移除（移除是手工操作）。
+- **确认**：合并前交互确认（[y/N]），`-y` 跳过；`--dry-run` 只预览不写盘。无成员时提示且不写盘。
+- **简写**：`ws` → `workspace scan`。成员依赖（`[depends] workspace`）扫描**不自动推断**——是用户意图，采纳后手工声明。
+- 示例：`ezmk ws`（当前目录生成）、`ezmk ws -y`（跳过确认合并）、`ezmk workspace scan some/dir --dry-run`（预览）。
 
 ---
 
@@ -416,10 +426,10 @@ include_dirs = ["include", "@link:shared/include"]
 | `pt` | `project test` | | | | |
 | `wl` | `workspace list`（1.3.3+） | `wc` | `workspace clean`（1.3.3+） | | |
 | `wb` | `workspace build`（1.3.3+） | `ww` | `workspace watch`（1.4.0-dev.5+） | | |
-| `wt` | `workspace test`（1.3.3+） | | | | |
+| `wt` | `workspace test`（1.3.3+） | `ws` | `workspace scan`（1.4.0-dev.7+） | | |
 | `u` | `utils` | | | `h` / `v` | `help` / `version` |
 
-> **workspace 简写（1.3.3+）：** `wl`/`wb`/`wt`/`wc`（以及 1.4.0-dev.5+ 的 `ww`）在命令位置展开，与 p/k/r 简写完全一致（`ezmk wb` ≡ `ezmk workspace build`；`ezmk workspace wb` 仍为未知子命令）。与 `-w` 重定向 flag（build/test/watch/clean 的**参数位**选项）正交。`w` 单字母与 `example` 组**刻意不做**简写——见 1.3.3 计划。
+> **workspace 简写（1.3.3+）：** `wl`/`wb`/`wt`/`wc`（以及 1.4.0-dev.5+ 的 `ww`、1.4.0-dev.7+ 的 `ws`）在命令位置展开，与 p/k/r 简写完全一致（`ezmk wb` ≡ `ezmk workspace build`；`ezmk workspace wb` 仍为未知子命令）。与 `-w` 重定向 flag（build/test/watch/clean 的**参数位**选项）正交。`w` 单字母与 `example` 组**刻意不做**简写——见 1.3.3 计划。
 
 ---
 

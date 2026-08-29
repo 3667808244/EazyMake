@@ -169,6 +169,7 @@ ezmk workspace list             # 列出工作区成员
 ezmk workspace build [flags]    # 拓扑构建全部成员（依赖层先构建、同层并行）
 ezmk workspace test [flags]     # 运行成员测试
 ezmk workspace clean [flags]    # 清理成员缓存
+ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-workspace.toml（1.4.0-dev.7+）
 # build/test/clean 附 -w 重定向：ezmk build -w ≡ ezmk workspace build
 ```
 
