@@ -155,7 +155,45 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.4.0-dev.5 (2026-08-27) — 功能收口（1.3.x 延后项）
+## 1.4.0-dev.6 (2026-08-29) — 代码质量审计（全量）
+
+1.4.0 第六个开发子版本，对**当前使用的全部代码**做系统审计并修复正确性（P0）与健壮性（P1）缺陷：8 路并行审查覆盖 ~19k 行核心代码 + include + test，`-Wall -Wextra` 严格编译零警告。多数缺陷为历史遗留且**静默出错**（无报错、无回归测试锁定）：确定性构建缓存永久失效、非英文系统 MSVC 探测失败、`--locked` 不锁版本还改写 lockfile、git branch 命令注入、Lua 钩子根路径钉死 CWD 等。**公共 API 无破坏性变更**（纯修复 + 3 个新 i18n 键）。
+
+### 新增 / 行为变更
+
+- **确定性构建缓存签名对称**（`src/cache.cpp`）：`check_cache` 校验侧按 `record.deterministic` 补 lock 哈希——保存侧（build.cpp）一直把 `ezmk.lock` 哈希并入签名而校验侧不含，两侧永不等 → deterministic 项目**每次构建全量重编**，缓存形同虚设；修复后恢复正常增量（首次构建重编一次）
+- **`--locked` 真正锁版本**（`src/pkg.cpp`）：旧实现只比较 direct-dep 规格（不含解析版本）后照常安装**最新版**并静默改写 `ezmk.lock`——正是该特性要防的漂移。现改为从 lockfile 取该包记录版本 → `search_package(name, scopes, Exact)` 锁定，找不到/版本不可得 → fatal（新 i18n 键 `lock_locked_pkg_not_in_lockfile` / `lock_locked_version_unavailable`）；`--locked` 强制不重写 lockfile
+- **pkg 依赖名安全校验**（`src/pkg.cpp`）：`[depends]` libs/want 的依赖名来自包 ezmk.toml（不可信输入），直接拼 `dest_dir/<name>` 会被用于解析/编译/写产物——`..`/盘符/分隔符可越出安装目录。两处入口补 `validate_pkg_name`（与根包名同口径，1.1.3 S2）
+- **repo 名安全校验**（`src/repo.cpp`）：`repo add` 的 repo 名（`--name` 或 URL 末段）拼进 `cache_dir` 并被 `repo remove` 递归删除——恶意/巧合 URL 末段（如 `..`）可删缓存目录外内容。add 处校验 `validate_pkg_name`；配套修复 `name_from_url` 支持 Windows 反斜杠路径（`C:\pkgs\my-repo` → `my-repo`，原 npos 哨兵比较 bug 导致整路径被当名）
+- **MSVC 版本解析语言无关**（`src/toolchain.cpp`）：`parse_msvc_cl_version` 原锚定英文字面量 "Version"——zh-CN 系统 cl 横幅（"…优化编译器 19.44.35208 版"）不含该词 → 探测静默失败（预编译包选错 ABI 段 / 能力表回退 CPP11 / 导出能力检查跳过）。改为扫描第一个 `<digits>.<digits>` 序列（跳过 "x64" 平台标签），英文系统结果不变
+- **git branch 命令注入**（`src/util.cpp`）：`git_clone`/`git_pull` 的 branch 未加引号（`escape_shell_arg` 不覆盖 `; & |` 等）——POSIX `sh -c` 下可注入，含空格合法分支名被拆词。branch 与 url/dest 一致补双引号
+- **CMake `#[[...]]` 括号注释**（`src/import.cpp`）：`skip_comment` 只到行尾，跨行括号注释体被当真实命令解析——注释含 `add_custom_command` 误拒绝合法 CMakeLists，含 `add_executable` 静默污染导入结果。检测 `#[[`/`#[=` 前缀复用 `parse_bracket` 跳过整个括号注释
+- **Lua 钩子根路径修正**（`src/lua_api.cpp`）：`register_api` 守卫只查 `ezmk` 全局是否 nil——`init()` 启动即注册、恒非 nil，守卫是死代码 → `g_project_root` 钉死启动 CWD，从子目录运行钩子时 `ezmk.project_root()/file_write 限制` 等作用在错误根。改为根路径变化即重注册（同时失效配置缓存）
+- **`run_watch` SIGINT handler 恢复**（`src/workspace_build.cpp`）：等待循环后恢复旧 handler（与 ProjectWatch 一致），删除死标志——复用进程（测试）中 Ctrl+C 不被永久劫持
+- **`run_command` 健壮性**（`src/util.cpp`）：Windows `CreateProcessA` 失败分支补关 hWriteOut/hWriteErr（原泄漏 2 句柄/次失败）；POSIX `mkstemp` 失败置 `exit_code=1`（原为 0 → 调用方如 `git_available()` 误判成功）
+- **`SOURCE_DATE_EPOCH` 容错**（`src/build.cpp`）：坏环境变量裸 `std::stoull` 抛异常崩溃 → try/catch 警告降级（与 cache.cpp 1.1.3 C1 修复对齐）
+- **缓存写失败感知**（`src/cache.cpp`）：`save_record` 忽略 `file_write` 失败 → 磁盘满时静默不持久 + record.json 陈旧。检查返回值，失败 warn
+- **config 类型误判报错**（`src/config.cpp`）：非数组节点（`flags = "-Wall"`）原被静默置空，`include_dirs` 非数组误走旧字段 fallback，depends 非字符串元素被静默丢弃——拼写错误无声失效。整体类型错误抛新键 `config_err_array_field_type`，depends 元素抛 `config_err_array_type`（三向 i18n）
+
+### 测试
+
+- **修复 4 个恒真/无断言测试**（回归无法被捕获）：hooks `ctx.output`（`rc==0\|\|rc==1` + 未定义 Lua 全局 `EXPECTED`）→ Lua 内重建期望路径断言；toolchain `load_msvc_env` 恒真式 → 断言空 map；crypto `finalize_raw` 的 `REQUIRE(true)` → 与 hex 摘要比对；repo round-trip 从未调用被测函数 → CwdGuard 切临时目录走真实 save/load 往返
+- **修复 dev.5 新测试脆弱点**：workspace watch 集成测试加 RAII 进程清理（失败路径不再泄漏 orchestrator + 成员 watcher）+ 保留预构建产物避免初始构建竞态（依赖成员先于 lib 就绪的坑 1）；`watch --run skips on build failure` 的 kill 提前到断言前；sidecar "显式 --sha256 优先" 测试改为**矛盾 sidecar**（先写错误哈希再传正确显式哈希，真实验证优先级——原测试重跑时重新打包生成正确 sidecar，无论实现先信哪个都过）
+- **新增用例**：MSVC 本地化 banner（zh-CN 含 x64）解析断言；`name_from_url` Windows 反斜杠路径行为
+- 全量 `test-all`：**968 用例 / 5612 断言零失败**（dev.5 基线 968/5588，+24 断言来自强化断言；3 跳过为既有环境限制）
+
+### 已知限制 / 跟进项（P2 延后，记录在案）
+
+- **跨盘符 `fs::relative` 空路径** → cache 键碰撞 + 对象覆盖（Windows 绝对 src_dirs 指向其他盘符）
+- **测试链接缺依赖包归档/链接参数**（`run_tests` 未复用 `prepare_build_state` 的 pkg_archives 等）；`ezmk test --profile` 未转发内层 `build_project`
+- **`extract_zip` 无解压总大小上限**（zip-bomb 防护不一致）；`extract_targz` 不校验 gzip footer CRC32/ISIZE
+- **watcher 事件风暴**（ERROR_NOTIFY_ENUM_DIR）退出 + 关闭期 OVERLAPPED 竞态
+- **`lua_to_json` 循环表无界递归** → C 栈溢出崩溃（恶意钩子可打崩工具）
+- **export C 侧 `std_capability_note` 用 C++ 能力表比较**（C_STANDARD 99 误报/17 漏报）
+- **import `add_library` 无类型形态误判**（默认 STATIC 被当 executable + 内联源不收集）；**export CMake 字面路径/名称不引号化**（含空格路径）
+- 死代码/重复/硬编码英文等 P2（`load_msvc_env` 死代码、`FlagMapEntry::is_prefix` 未用、`lua_api_*` 死 i18n 键、watch 回调无类型过滤、`project.cpp` 写失败静默等）
+
+---
 
 1.4.0 第五个开发子版本，集中收口 1.3.x 各补丁明确延后的四项"小而独立"功能：① **`watch --run -- <args>` 参数透传**（1.3.4 延后）；② **`workspace watch` 命令组**（1.3.0 延后，`-w` 重定向扩展到 watch）；③ **`--format tgz` 别名**（1.3.5 延后）；④ **sha256 边车自动校验**（1.3.5 延后，`pkg install` 本地归档自动读取同目录 `.sha256`）。每项独立、低风险、互不依赖；**公共 API 无破坏性变更**（纯增量：新命令 + flag 别名 + 行为增强）。
 
