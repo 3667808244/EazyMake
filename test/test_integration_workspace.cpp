@@ -655,3 +655,159 @@ TEST_CASE("integration: workspace watch starts member watchers and rebuilds (1.4
     kill_ws_watch_processes();
     REQUIRE(rebuilt);
 }
+
+// ==============================================================
+// 1.4.0-dev.7: workspace scan — adopt existing projects
+// (fixture: 2 projects without any workspace file — libs/strutil static lib
+//  + apps/tool-a executable depending on it; tool-a output "sum = add(2,3)")
+// ==============================================================
+namespace {
+
+// Two member projects (libs/strutil + apps/tool-a with [depends] workspace),
+// WITHOUT ezmk-workspace.toml — the pre-scan state.
+void write_scan_projects(const fs::path& root) {
+    fs::create_directories(root / "libs/strutil" / "include");
+    fs::create_directories(root / "libs/strutil" / "src");
+    fs::create_directories(root / "apps/tool-a" / "src");
+    file_write(root / "libs/strutil" / "ezmk.toml",
+        "[project]\nname = \"strutil\"\ntype = \"static\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n");
+    file_write(root / "libs/strutil" / "include" / "strutil.hpp",
+        "#pragma once\nnamespace strutil {\ninline constexpr int OFFSET = 0;\nint add(int a, int b);\n}\n");
+    file_write(root / "libs/strutil" / "src" / "strutil.cpp",
+        "#include \"strutil.hpp\"\nnamespace strutil {\nint add(int a, int b) { return a + b; }\n}\n");
+    file_write(root / "apps/tool-a" / "ezmk.toml",
+        "[project]\nname = \"tool-a\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[depends]\nworkspace = [\"strutil\"]\n");
+    file_write(root / "apps/tool-a" / "src" / "main.cpp",
+        "#include \"strutil.hpp\"\n#include <cstdio>\n"
+        "int main() { std::printf(\"sum=%d\\n\", strutil::add(2, 3) + strutil::OFFSET); return 0; }\n");
+}
+
+} // anonymous namespace
+
+// Case A: scan generates the workspace file → list + build work end-to-end.
+TEST_CASE("integration: workspace scan creates workspace from existing projects (1.4.0-dev.7)", "[integration][workspace][1.4.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws dir";
+    write_scan_projects(root);
+    REQUIRE(!fs::exists(root / "ezmk-workspace.toml"));
+
+    auto r = run_ezmk("workspace scan -y", root);
+    INFO("scan output: " << ws_output(r));
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(ws_output(r).find("created") != std::string::npos);
+    REQUIRE(fs::exists(root / "ezmk-workspace.toml"));
+
+    // The generated file lists both members (deterministic sorted order).
+    auto list = run_ezmk("workspace list", root);
+    INFO("list output: " << ws_output(list));
+    REQUIRE(list.exit_code == 0);
+    REQUIRE(ws_output(list).find("apps/tool-a") != std::string::npos);
+    REQUIRE(ws_output(list).find("libs/strutil") != std::string::npos);
+
+    // Build end-to-end: strutil first (topological), tool-a links it via
+    // self-discovery injection; the app runs.
+    auto b = run_ezmk("workspace build -j 2", root);
+    INFO("build output: " << ws_output(b));
+    REQUIRE(b.exit_code == 0);
+    REQUIRE(fs::exists(ws_app_exe(root, "tool-a")));
+    REQUIRE(fs::exists(root / "libs/strutil/build/libstrutil.a"));
+    auto app = run_command("\"" + ws_app_exe(root, "tool-a").string() + "\"");
+    REQUIRE(app.exit_code == 0);
+    REQUIRE(app.out.find("sum=5") != std::string::npos);
+}
+
+// Case B: existing file with options + comment → scan merges, everything else
+// preserved.
+TEST_CASE("integration: workspace scan merges into existing file, preserving options (1.4.0-dev.7)", "[integration][workspace][1.4.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws dir";
+    // one member already registered, with options + a comment
+    write_scan_projects(root);
+    file_write(root / "ezmk-workspace.toml",
+        "# my workspace\n"
+        "[workspace]\n"
+        "members = [\"apps/tool-a\"]\n\n"
+        "[workspace.options]\n"
+        "default_jobs = 2\n");
+
+    auto r = run_ezmk("workspace scan -y", root);
+    INFO("scan output: " << ws_output(r));
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(ws_output(r).find("updated") != std::string::npos);
+
+    std::string content = file_read(root / "ezmk-workspace.toml");
+    INFO("file:\n" << content);
+    REQUIRE(content.find("# my workspace") != std::string::npos);  // comment kept
+    REQUIRE(content.find("default_jobs = 2") != std::string::npos);  // options kept
+    REQUIRE(content.find("libs/strutil") != std::string::npos);      // member merged
+    REQUIRE(content.find("apps/tool-a") != std::string::npos);
+
+    // Re-scan: nothing new → up to date, file untouched.
+    auto r2 = run_ezmk("workspace scan -y", root);
+    REQUIRE(r2.exit_code == 0);
+    REQUIRE(ws_output(r2).find("up to date") != std::string::npos);
+    REQUIRE(file_read(root / "ezmk-workspace.toml") == content);
+}
+
+// Case C: --dry-run previews without writing.
+TEST_CASE("integration: workspace scan --dry-run does not write (1.4.0-dev.7)", "[integration][workspace][1.4.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws dir";
+    write_scan_projects(root);
+
+    auto r = run_ezmk("workspace scan --dry-run", root);
+    INFO("scan output: " << ws_output(r));
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(ws_output(r).find("dry run") != std::string::npos);
+    REQUIRE(!fs::exists(root / "ezmk-workspace.toml"));
+}
+
+// Case D: empty directory → no projects, no file, exit 0.
+TEST_CASE("integration: workspace scan on empty dir finds nothing (1.4.0-dev.7)", "[integration][workspace][1.4.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    auto r = run_ezmk("workspace scan", tmp.path);
+    INFO("scan output: " << ws_output(r));
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(ws_output(r).find("no ezmk projects") != std::string::npos);
+    REQUIRE(!fs::exists(tmp.path / "ezmk-workspace.toml"));
+}
+
+// Case E: scan from a member subdirectory locates the root upward and updates
+// the ROOT file (no nested file in the subdir).
+TEST_CASE("integration: workspace scan from member subdir updates the root (1.4.0-dev.7)", "[integration][workspace][1.4.0-dev.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws dir";
+    write_scan_projects(root);
+    file_write(root / "ezmk-workspace.toml",
+        "[workspace]\nmembers = [\"apps/tool-a\"]\n");
+
+    auto r = run_ezmk("workspace scan -y", root / "apps" / "tool-a");
+    INFO("scan output: " << ws_output(r));
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(!fs::exists(root / "apps/tool-a/ezmk-workspace.toml"));  // no nested file
+    std::string content = file_read(root / "ezmk-workspace.toml");
+    REQUIRE(content.find("libs/strutil") != std::string::npos);
+    REQUIRE(content.find("apps/tool-a") != std::string::npos);
+}

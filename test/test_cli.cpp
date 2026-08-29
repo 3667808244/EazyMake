@@ -1243,3 +1243,52 @@ TEST_CASE("cli parse: workspace watch alias ww (1.4.0-dev.5)", "[cli][1.4.0-dev.
     REQUIRE_THROWS_AS(
         TestArgs({"workspace", "watch", "--", "arg"}).parse(), ezmk::fatal_error);
 }
+
+// 1.4.0-dev.7 — workspace scan
+TEST_CASE("cli parse: workspace scan defaults", "[cli][1.4.0-dev.7]") {
+    auto args = TestArgs({"workspace", "scan"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceScan);
+    REQUIRE(args.workspace_scan_opts.has_value());
+    REQUIRE(args.workspace_scan_opts->dir.empty());       // default = cwd
+    REQUIRE(args.workspace_scan_opts->dry_run == false);
+    REQUIRE(args.workspace_scan_opts->assume_yes == false);
+}
+
+TEST_CASE("cli parse: workspace scan dir + flags", "[cli][1.4.0-dev.7]") {
+    auto args = TestArgs({"workspace", "scan", "sub/dir", "--dry-run", "-y"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceScan);
+    REQUIRE(args.workspace_scan_opts->dir == "sub/dir");
+    REQUIRE(args.workspace_scan_opts->dry_run == true);
+    REQUIRE(args.workspace_scan_opts->assume_yes == true);
+
+    // flag spelling variants
+    auto b = TestArgs({"workspace", "scan", "--yes"}).parse();
+    REQUIRE(b.workspace_scan_opts->assume_yes == true);
+    auto c = TestArgs({"workspace", "scan", "--dry-run"}).parse();
+    REQUIRE(c.workspace_scan_opts->dry_run == true);
+}
+
+TEST_CASE("cli parse: workspace scan alias ws (1.4.0-dev.7)", "[cli][1.4.0-dev.7][alias]") {
+    auto args = TestArgs({"ws", "--dry-run"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceScan);
+    REQUIRE(args.workspace_scan_opts->dry_run == true);
+
+    auto v = TestArgs({"ws", "-v"}).parse();
+    REQUIRE(v.cmd == Command::WorkspaceScan);
+    REQUIRE(v.shorthand_expansion == "ws → workspace scan");
+
+    // command-position restriction unchanged: `workspace ws` is unknown.
+    REQUIRE_THROWS_AS(TestArgs({"workspace", "ws"}).parse(), ezmk::fatal_error);
+}
+
+TEST_CASE("cli parse: workspace scan rejects bad input", "[cli][1.4.0-dev.7]") {
+    // more than one positional (scan dir)
+    REQUIRE_THROWS_AS(TestArgs({"workspace", "scan", "a", "b"}).parse(),
+                      ezmk::fatal_error);
+    // unknown flag
+    REQUIRE_THROWS_AS(TestArgs({"workspace", "scan", "--bogus"}).parse(),
+                      ezmk::fatal_error);
+    // -w is not a scan option (scan is not a redirect target)
+    REQUIRE_THROWS_AS(TestArgs({"workspace", "scan", "-w"}).parse(),
+                      ezmk::fatal_error);
+}

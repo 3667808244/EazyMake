@@ -5,6 +5,7 @@
 
 #include "ezmk/util.hpp"
 #include "test_helpers.hpp"
+#include "toml.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -486,4 +487,164 @@ TEST_CASE("workspace resolve_member_ref: exact path / basename / unknown / ambig
     REQUIRE_FALSE(resolve_member_ref(*ws, "nope").has_value());
     // Empty ref → nullopt (no crash).
     REQUIRE_FALSE(resolve_member_ref(*ws, "").has_value());
+}
+
+// ===================================================================
+// 1.4.0-dev.7: workspace scan — adopt an existing directory tree
+// ===================================================================
+
+TEST_CASE("workspace scan: finds projects at any depth, sorted", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, "a");
+    write_member(tmp.path, "b/c");
+    write_member(tmp.path, "d/e/f");
+    // non-project dirs are ignored
+    ezmk::util::create_directories(tmp.path / "plain");
+    ezmk::util::create_directories(tmp.path / "x/y");
+
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members == std::vector<std::string>({"a", "b/c", "d/e/f"}));
+    REQUIRE(res.skipped.empty());
+}
+
+TEST_CASE("workspace scan: skips hidden directories entirely", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, "visible");
+    write_member(tmp.path, ".hidden");  // hidden project — not a member
+    ezmk::util::create_directories(tmp.path / ".git");
+    std::ofstream(tmp.path / ".git" / "ezmk.toml") << "[project]\n";
+
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members == std::vector<std::string>({"visible"}));
+    REQUIRE(res.skipped.empty());
+}
+
+TEST_CASE("workspace scan: skips nested workspace roots (whole subtree)", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, "outer");
+    // nested workspace root containing a project of its own
+    write_ws_toml(tmp.path / "sub-ws", "[workspace]\nmembers = [\"inner\"]\n");
+    write_member(tmp.path, "sub-ws/inner");
+
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members == std::vector<std::string>({"outer"}));
+    REQUIRE(res.skipped.size() == 1);
+    REQUIRE(res.skipped[0].first == "sub-ws");
+}
+
+TEST_CASE("workspace scan: root itself with ezmk.toml is not a member", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, ".");   // writes ezmk.toml INTO the root
+    write_member(tmp.path, "member");
+
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members == std::vector<std::string>({"member"}));
+}
+
+TEST_CASE("workspace scan: empty directory finds nothing", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members.empty());
+    REQUIRE(res.skipped.empty());
+}
+
+TEST_CASE("workspace scan: member paths are '/'-separated on all platforms", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, "apps/tool-a");
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members.size() == 1);
+    REQUIRE(res.members[0] == "apps/tool-a");  // never "apps\\tool-a"
+}
+
+#ifndef EZMK_WIN
+TEST_CASE("workspace scan: symlink escaping the root is skipped", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;       // scan root
+    TempDir outside;   // target lives outside the scan root
+    write_member(outside.path, "escaped-proj");  // has ezmk.toml
+    std::error_code ec;
+    fs::create_directory_symlink(outside.path / "escaped-proj",
+                                 tmp.path / "escaped-link", ec);
+    REQUIRE_FALSE(ec);  // symlinks must work in this environment
+    write_member(tmp.path, "real");
+
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members == std::vector<std::string>({"real"}));
+    REQUIRE(res.skipped.size() == 1);
+    REQUIRE(res.skipped[0].first == "escaped-link");
+}
+#endif
+
+TEST_CASE("workspace merge: dedupe + preserve existing order + append sorted", "[workspace][1.4.0-dev.7]") {
+    std::vector<std::string> existing = {"libs/b", "apps/a"};
+    std::vector<std::string> discovered = {"apps/a", "apps/c", "libs/b"};
+    auto merged = ezmk::workspace::merge_members(existing, discovered);
+    REQUIRE(merged == std::vector<std::string>({"libs/b", "apps/a", "apps/c"}));
+}
+
+TEST_CASE("workspace merge: backslash and trailing-slash normalization", "[workspace][1.4.0-dev.7]") {
+    // existing spelling is preserved verbatim; only the comparison normalizes.
+    std::vector<std::string> existing = {"libs\\a", "libs/b/"};
+    std::vector<std::string> discovered = {"libs/a", "libs/b"};
+    auto merged = ezmk::workspace::merge_members(existing, discovered);
+    REQUIRE(merged.size() == 2);
+    REQUIRE(merged[0] == "libs\\a");
+    REQUIRE(merged[1] == "libs/b/");
+}
+
+TEST_CASE("workspace merge: duplicate existing entries collapse", "[workspace][1.4.0-dev.7]") {
+    std::vector<std::string> existing = {"a", "a", "b"};
+    std::vector<std::string> discovered = {"c"};
+    auto merged = ezmk::workspace::merge_members(existing, discovered);
+    REQUIRE(merged == std::vector<std::string>({"a", "b", "c"}));
+}
+
+TEST_CASE("workspace scan: write fresh file loads back as a valid workspace", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, "apps/tool-a");
+    write_member(tmp.path, "libs/strutil", "static");
+
+    ezmk::workspace::write_workspace_file(
+        tmp.path, {"apps/tool-a", "libs/strutil"});
+
+    auto ws = load_from(tmp.path);
+    REQUIRE(ws.has_value());
+    REQUIRE(ws->members.size() == 2);
+    REQUIRE(ws->members[0].name == "apps/tool-a");
+    REQUIRE(ws->members[1].name == "libs/strutil");
+    for (const auto& m : ws->members) REQUIRE(m.valid);
+}
+
+TEST_CASE("workspace scan: update preserves name/options/comments, merges members", "[workspace][1.4.0-dev.7]") {
+    TempDir tmp;
+    write_member(tmp.path, "apps/tool-a");
+    write_member(tmp.path, "libs/strutil", "static");
+    // hand-written file with a comment, name and options
+    {
+        std::ofstream of(tmp.path / "ezmk-workspace.toml");
+        of << "# my workspace\n"
+           << "[workspace]\n"
+           << "name = \"my-ws\"\n"
+           << "members = [\"apps/tool-a\"]\n\n"
+           << "[workspace.options]\n"
+           << "default_jobs = 4\n";
+    }
+
+    ezmk::workspace::update_workspace_file(
+        tmp.path, {"apps/tool-a", "libs/strutil"});
+
+    // Round-trip: name / options / comment preserved, members merged.
+    auto table = toml::parse_file((tmp.path / "ezmk-workspace.toml").string());
+    REQUIRE(table["workspace"]["name"].value<std::string>().value() == "my-ws");
+    REQUIRE(table["workspace"]["options"]["default_jobs"].value<int64_t>().value() == 4);
+    auto members = table["workspace"]["members"].as_array();
+    REQUIRE(members->size() == 2);
+    REQUIRE(members->get(0)->value<std::string>().value() == "apps/tool-a");
+    REQUIRE(members->get(1)->value<std::string>().value() == "libs/strutil");
+    std::string text;
+    {
+        std::ifstream ifs(tmp.path / "ezmk-workspace.toml");
+        text.assign(std::istreambuf_iterator<char>(ifs),
+                    std::istreambuf_iterator<char>());
+    }
+    REQUIRE(text.find("# my workspace") != std::string::npos);  // comment kept
 }
