@@ -574,13 +574,14 @@ TEST_CASE("export cmake: std capability note — within capability is empty", "[
 TEST_CASE("export cmake: std capability note — exceeding emits a comment", "[export][1.4.0-dev.4]") {
     ezmk::toolchain::Toolchain tc;
     tc.family = ezmk::toolchain::CompilerFamily::Gcc;
-    tc.version = "g++ (GCC) 4.8.5";    // cap CPP11
+    tc.version = "g++ (GCC) 4.8.5";    // C++ cap CPP11
     auto note = std_capability_note("CXX", 17, tc);
     REQUIRE(note.find("CXX_STANDARD 17 exceeds the target toolchain capability (CPP11)")
             != std::string::npos);
-    // C spelling
+    // C spelling — 1.4.0-pre.1: C 侧改用 C 能力（max_supported_c_std），
+    // 4.8.5 → cap C11（不再是 C++ 的 CPP11）。
     auto note_c = std_capability_note("C", 17, tc);
-    REQUIRE(note_c.find("C_STANDARD 17 exceeds the target toolchain capability (CPP11)")
+    REQUIRE(note_c.find("C_STANDARD 17 exceeds the target toolchain capability (C11)")
             != std::string::npos);
 }
 
@@ -611,4 +612,57 @@ TEST_CASE("export cmake: normal export has no capability comment (dev.4)", "[exp
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
     REQUIRE(t.find("exceeds the target toolchain capability") == std::string::npos);
     REQUIRE(t.find("CXX_STANDARD 17") != std::string::npos);
+}
+
+// ===================================================================
+// 1.4.0-pre.1: std_capability_note() C 侧序数比较
+// （C89→0、C99→1、C11→2、C17→3，能力来自 max_supported_c_std 的 C17/C11）
+// ===================================================================
+
+TEST_CASE("export cmake: std capability note — C within capability is empty (pre.1)", "[export][1.4.0-pre.1]") {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "g++ (GCC) 13.2.0";   // C 侧 cap C17
+    REQUIRE(std_capability_note("C", 11, tc).empty());   // 序数 2 ≤ 3
+    REQUIRE(std_capability_note("C", 17, tc).empty());   // 序数 3 ≤ 3
+}
+
+TEST_CASE("export cmake: std capability note — C exceeding emits a (C11) comment (pre.1)", "[export][1.4.0-pre.1]") {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "g++ (GCC) 4.8.5";    // C 侧 cap C11（17 序数 3 > C11 序数 2）
+    auto note = std_capability_note("C", 17, tc);
+    REQUIRE(note.find("C_STANDARD 17 exceeds the target toolchain capability (C11)")
+            != std::string::npos);
+}
+
+TEST_CASE("export cmake: std capability note — C_STANDARD 99 is no longer misreported (pre.1)", "[export][1.4.0-pre.1]") {
+    // 旧逻辑用 C++ 能力数值比较：99 > 23 → 误报。新逻辑按序数：C99 → 1。
+    ezmk::toolchain::Toolchain tc13;
+    tc13.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc13.version = "g++ (GCC) 13.2.0";   // C 侧 cap C17（序数 3）：1 ≤ 3 → 空
+    REQUIRE(std_capability_note("C", 99, tc13).empty());
+    ezmk::toolchain::Toolchain tc48;
+    tc48.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc48.version = "g++ (GCC) 4.8.5";    // C 侧 cap C11（序数 2）：1 ≤ 2 → 空
+    REQUIRE(std_capability_note("C", 99, tc48).empty());
+    // C89 → 序数 0 ≤ 2 → 空
+    REQUIRE(std_capability_note("C", 89, tc48).empty());
+}
+
+TEST_CASE("export cmake: std capability note — C out-of-domain standard is empty (pre.1)", "[export][1.4.0-pre.1]") {
+    // std_ver 不在 {89,99,11,17}（如 C23）→ 能力表域外，不警告。
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "g++ (GCC) 4.8.5";
+    REQUIRE(std_capability_note("C", 23, tc).empty());
+}
+
+TEST_CASE("export cmake: std capability note — C unknown version is conservative (pre.1)", "[export][1.4.0-pre.1]") {
+    ezmk::toolchain::Toolchain tc;
+    tc.family = ezmk::toolchain::CompilerFamily::Gcc;
+    tc.version = "";   // no version line → compiler_tag 空 → 不警告
+    REQUIRE(std_capability_note("C", 17, tc).empty());
+    REQUIRE(std_capability_note("C", 99, tc).empty());
+    REQUIRE(std_capability_note("C", 0, tc).empty());   // no standard
 }

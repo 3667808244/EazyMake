@@ -608,6 +608,24 @@ std::string max_supported_std(CompilerFamily family, const std::string& version)
     return "CPP11";
 }
 
+// 1.4.0-pre.1: C 侧能力（同代规则见 max_supported_std 头注释）——最高 -std=c
+// 标准：gcc >= 8 / clang >= 5 → C17，否则 C11（含 MSVC——cl 仅通过 /std:c11
+// 支持 C，且 MSVC 无 C17 支持）。未知版本 → 保守下限 "C11"。
+std::string max_supported_c_std(CompilerFamily family, const std::string& version) {
+    if (family == CompilerFamily::Gcc) {
+        unsigned long major = 0;
+        if (!first_version_major(version, major)) return "C11";
+        return major >= 8 ? "C17" : "C11";
+    }
+    if (family == CompilerFamily::Clang) {
+        unsigned long major = 0;
+        if (!first_version_major(version, major)) return "C11";
+        return major >= 5 ? "C17" : "C11";
+    }
+    // MSVC：一律 C11
+    return "C11";
+}
+
 Toolchain detect_toolchain() {
     // Cache the result — detect only once per process
     static Toolchain cached;

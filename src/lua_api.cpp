@@ -779,7 +779,9 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j) {
 
 // Recursive helper: convert a Lua value at the given stack index to nlohmann::json
 // NOTE: uses lua_absindex so the index stays valid across stack pushes/pops.
-static nlohmann::json lua_to_json(lua_State* L, int idx) {
+// seen 记录当前引用链上已展开的表（lua_topointer 指针）；真循环（自引用）抛错，
+// 共享引用（同一子表挂在多个 key 下）靠 return 前的 erase 放行，允许重复序列化。
+static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& seen) {
     idx = lua_absindex(L, idx);  // stabilize against stack changes
     int t = lua_type(L, idx);
     switch (t) {
@@ -795,6 +797,12 @@ static nlohmann::json lua_to_json(lua_State* L, int idx) {
     case LUA_TSTRING:
         return lua_tostring(L, idx);
     case LUA_TTABLE: {
+        // 1.4.0-pre.1: 循环表检测 —— 同一张表沿引用链再次出现（t[1]=t、t.self=t）
+        // 即自引用，直接抛错，避免无限递归打崩 C 栈。共享引用靠下方各 return 前
+        // 的 seen.erase(ptr) 放行：兄弟分支重新 insert，允许重复序列化。
+        const void* ptr = lua_topointer(L, idx);
+        if (!seen.insert(ptr).second)
+            throw std::runtime_error("circular reference in table");
         // Determine if this is an array or object.
         // Array = all keys are consecutive integers 1..N with no gaps.
         // Object = everything else (including empty table and mixed keys).
@@ -821,6 +829,7 @@ static nlohmann::json lua_to_json(lua_State* L, int idx) {
         }
 
         if (!has_any) {
+            seen.erase(ptr);  // 空表也须放行：同一空表共享到多个 key 时不是循环
             return nlohmann::json::object(); // empty → {}
         }
 
@@ -829,9 +838,10 @@ static nlohmann::json lua_to_json(lua_State* L, int idx) {
             nlohmann::json arr = nlohmann::json::array();
             for (lua_Integer i = 1; i <= max_int_key; ++i) {
                 lua_rawgeti(L, idx, (int)i);
-                arr.push_back(lua_to_json(L, -1));
+                arr.push_back(lua_to_json(L, -1, seen));
                 lua_pop(L, 1);
             }
+            seen.erase(ptr);
             return arr;
         } else {
             // Everything else → JSON object
@@ -847,9 +857,10 @@ static nlohmann::json lua_to_json(lua_State* L, int idx) {
                     lua_pop(L, 1);
                     continue;
                 }
-                obj[key] = lua_to_json(L, -1);
+                obj[key] = lua_to_json(L, -1, seen);
                 lua_pop(L, 1);
             }
+            seen.erase(ptr);
             return obj;
         }
     }
@@ -863,7 +874,8 @@ static int ezmk_json_encode(lua_State* L) {
     luaL_checktype(L, 1, LUA_TTABLE);
 
     try {
-        nlohmann::json j = lua_to_json(L, 1);
+        std::set<const void*> seen;  // 1.4.0-pre.1: 循环表检测（入口建一次，贯穿递归）
+        nlohmann::json j = lua_to_json(L, 1, seen);
         std::string s = j.dump();
         lua_pushstring(L, s.c_str());
         return 1;

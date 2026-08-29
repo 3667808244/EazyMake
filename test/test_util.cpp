@@ -9,10 +9,12 @@ extern "C" {
 #include "miniz.h"
 }
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -859,6 +861,87 @@ TEST_CASE("extract_zip: valid nested entry extracts correctly", "[util]") {
     ezmk::util::extract_zip(z, dest);
     REQUIRE(fs::exists(dest / "dir" / "sub" / "file.txt"));
     REQUIRE(ezmk::util::file_read(dest / "dir" / "sub" / "file.txt") == "hello");
+    ezmk::util::remove_all(tmp);
+}
+
+// ===================================================================
+// Archive extraction security — 1.1.2 S1 (zip-bomb / size limit)
+// ===================================================================
+//
+// miniz 在 init 阶段就读中央目录。这里先写一个真实小 zip，再手工篡改中央目录
+// 条目，伪造巨大的 uncompressed size，验证 extract_zip 在解压前拒绝（与 targz
+// 的 kMaxDecompressedSize = 1 GiB 上限同口径）。
+
+TEST_CASE("extract_zip: rejects oversized entry (zip-bomb)", "[util]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_zip_bomb_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto dest = tmp / "out";
+    ezmk::util::create_directories(dest);
+    auto z = tmp / "bomb.zip";
+
+    // 真实小 zip（STORE，单条目 "x"）
+    write_zip_with_entry(z, "bomb.txt", "x");
+
+    // 读取字节流，定位中央目录条目（签名 PK\x01\x02 = 0x504b0102 小端）。
+    // miniz 中央目录头固定偏移（miniz_zip.c 的 MZ_ZIP_CDH_*_OFS）：
+    //   method（压缩方式）   offset 10，2 字节
+    //   compressed size      offset 20，4 字节
+    //   uncompressed size    offset 24，4 字节
+    // 注意：只改 uncompressed size 时，miniz 会在 init 阶段发现 STORE 条目
+    // (method==0) 的 comp_size != uncomp_size（miniz_zip.c:813）而直接拒绝，
+    // 走不到 extract_zip 的大小检查；故把 method 一并改成 DEFLATE(8)，让 init
+    // 通过、由 extract_zip 的 per-entry 上限真正拦截。
+    std::string bytes;
+    {
+        std::ifstream in(z, std::ios::binary);
+        std::ostringstream ss;
+        ss << in.rdbuf();
+        bytes = ss.str();
+    }
+    const size_t cd = bytes.find(std::string("\x50\x4b\x01\x02", 4));
+    REQUIRE(cd != std::string::npos);
+    REQUIRE(cd + 28 <= bytes.size());  // 至少覆盖到 uncompressed size 字段（24..27）
+
+    bytes[cd + 10] = '\x08';  // method: STORE(0) → DEFLATE(8)
+    bytes[cd + 11] = '\x00';
+    // uncompressed size: 1 → 1 GiB + 1（0x40000001，与 kMaxDecompressedSize 对齐，
+    // uint32 可表示，且 ≠ 0xFFFFFFFF 不会被 miniz 当作 zip64 标记）
+    const uint32_t huge = 0x40000001u;
+    for (int b = 0; b < 4; ++b)
+        bytes[cd + 24 + b] = static_cast<char>((huge >> (8 * b)) & 0xff);
+
+    {
+        std::ofstream out(z, std::ios::binary);
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    }
+
+    REQUIRE_THROWS_AS(ezmk::util::extract_zip(z, dest), std::runtime_error);
+    ezmk::util::remove_all(tmp);
+}
+
+TEST_CASE("extract_zip: valid multi-entry zip still extracts", "[util]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_zip_multi_test";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp);
+    auto dest = tmp / "out";
+    ezmk::util::create_directories(dest);
+    auto z = tmp / "multi.zip";
+
+    // 总量累计（1.1.2 S1）不能误伤正常的多条目小 zip
+    mz_zip_archive zip{};
+    bool ok = mz_zip_writer_init_file(&zip, z.string().c_str(), 0) &&
+              mz_zip_writer_add_mem(&zip, "a.txt", "aaa", 3, MZ_NO_COMPRESSION) &&
+              mz_zip_writer_add_mem(&zip, "dir/b.txt", "bbbb", 4, MZ_NO_COMPRESSION) &&
+              mz_zip_writer_finalize_archive(&zip);
+    mz_zip_writer_end(&zip);
+    REQUIRE(ok);
+
+    ezmk::util::extract_zip(z, dest);
+    REQUIRE(fs::exists(dest / "a.txt"));
+    REQUIRE(fs::exists(dest / "dir" / "b.txt"));
+    REQUIRE(ezmk::util::file_read(dest / "a.txt") == "aaa");
+    REQUIRE(ezmk::util::file_read(dest / "dir" / "b.txt") == "bbbb");
     ezmk::util::remove_all(tmp);
 }
 

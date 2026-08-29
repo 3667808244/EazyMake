@@ -47,6 +47,12 @@ std::string compiler_tag(const Toolchain& tc);
 // implementation; see plans/1.4.x/1.4.0-dev.2.md §3.1. Pure — no subprocess.
 std::string max_supported_std(CompilerFamily family, const std::string& version);
 
+// 1.4.0-pre.1: Highest -std=c standard this toolchain's C compiler supports,
+// as a canonical C form ("C17" / "C11") — same-generation caps as
+// max_supported_std (gcc >= 8 / clang >= 5 → C17, otherwise C11, incl. MSVC).
+// Unknown versions → conservative floor "C11". Pure — no subprocess.
+std::string max_supported_c_std(CompilerFamily family, const std::string& version);
+
 // Run vcvars64.bat and capture the resulting environment variables.
 // Returns a map of env vars. Windows/MSVC only.
 std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path);

@@ -778,6 +778,50 @@ TEST_CASE("lua: json_decode invalid JSON errors", "[lua][api][json]") {
     lua_pop(L, 1);
 }
 
+TEST_CASE("lua: json_encode rejects circular tables", "[lua][api][json]") {
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    // 自引用表（t.self = t）：真循环必须报错，而不是无限递归打崩 C 栈
+    int rc = luaL_dostring(L, "local t = {}; t.self = t; return ezmk.json_encode(t)");
+    REQUIRE(rc != 0);  // should error (circular reference)
+    lua_pop(L, 1);
+
+    // 数组自引用（t[1] = t）同理
+    rc = luaL_dostring(L, "local t = {}; t[1] = t; return ezmk.json_encode(t)");
+    REQUIRE(rc != 0);  // should error (circular reference)
+    lua_pop(L, 1);
+}
+
+TEST_CASE("lua: json_encode allows shared (non-cyclic) subtables", "[lua][api][json]") {
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    // 同一子表挂在两个 key 下 → 共享引用，允许重复序列化（不是循环）
+    int rc = luaL_dostring(L,
+        "local s = {1}; local t = {a=s, b=s}; return ezmk.json_encode(t)");
+    REQUIRE(rc == 0);
+    REQUIRE(lua_isstring(L, -1));
+    std::string json(lua_tostring(L, -1));
+    // s 被序列化两次：{"a":[1],"b":[1]}（key 顺序不定，只检查出现两次 "[1]"）
+    size_t first = json.find("[1]");
+    REQUIRE(first != std::string::npos);
+    REQUIRE(json.find("[1]", first + 1) != std::string::npos);
+    lua_pop(L, 1);
+
+    // 空表共享同样允许（空表分支在 return 前也必须 erase，否则第二个 key
+    // 会被误判为循环）
+    rc = luaL_dostring(L,
+        "local e = {}; local t = {a=e, b=e}; return ezmk.json_encode(t)");
+    REQUIRE(rc == 0);
+    std::string json2(lua_tostring(L, -1));
+    REQUIRE(json2.find("\"a\":{}") != std::string::npos);
+    REQUIRE(json2.find("\"b\":{}") != std::string::npos);
+    lua_pop(L, 1);
+}
+
 // ===================================================================
 // run_script tests — success, error, help
 // ===================================================================

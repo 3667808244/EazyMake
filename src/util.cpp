@@ -724,13 +724,26 @@ void extract_zip(const fs::path& archive, const fs::path& dest) {
     // makes safe_extract_path throw — otherwise the reader's FILE* leaks and the
     // archive stays locked on Windows, so callers can't delete it.
     try {
+        // 1.1.2 S1: zip-bomb 防护 —— 累计解压总量（与 targz 的 kMaxDecompressedSize
+        // 上限同口径）；目录条目不占配额。m_uncomp_size 是 uint64，size_t 均为 64 位。
+        size_t total = 0;
         for (mz_uint i = 0; i < num; ++i) {
             mz_zip_archive_file_stat stat{};
             if (!mz_zip_reader_file_stat(&zip, i, &stat)) continue;
+            // 单条目解压大小不得超过 1 GiB（miniz 只把 m_uncomp_size 声明为 uint32，
+            // 但 stat 里已是 uint64；伪造中央目录即可声称任意大小，须在解压前拦截）
+            if (stat.m_uncomp_size > kMaxDecompressedSize) {
+                throw std::runtime_error("zip entry exceeds size limit: " + std::string(stat.m_filename));
+            }
             fs::path out = safe_extract_path(dest, stat.m_filename);
             if (mz_zip_reader_is_file_a_directory(&zip, i)) {
                 fs::create_directories(out);
             } else {
+                // 累计总量同样限 1 GiB；用减法判断防 total 溢出（每条已限 ≤ 1 GiB）
+                if (stat.m_uncomp_size > kMaxDecompressedSize - total) {
+                    throw std::runtime_error("zip archive exceeds total size limit");
+                }
+                total += stat.m_uncomp_size;
                 fs::create_directories(out.parent_path());
                 if (!mz_zip_reader_extract_to_file(&zip, i, out.string().c_str(), 0)) {
                     mz_zip_reader_end(&zip);

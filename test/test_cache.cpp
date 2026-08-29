@@ -411,6 +411,102 @@ TEST_CASE("check_cache: header hash changed → nullopt", "[cache]") {
 }
 
 // ===================================================================
+// 1.4.0-pre.1: 跨盘符/跨根缓存键 — safe_relative 空路径回退
+// ===================================================================
+//
+// Windows 跨盘符（绝对 src_dir 在 D:\、项目根在 C:\ 等）时 fs::relative 返回
+// 空路径：旧代码把空串当缓存键，不同源文件键碰撞（对象覆盖、增量构建结果
+// 错误）。修复后键回退为绝对路径。以下用例通过公共 API（check_cache）验证。
+
+TEST_CASE("check_cache: cross-root source never hits an empty-key entry", "[cache][1.4.0-pre.1]") {
+    // 旧代码在跨盘符下会把键写成空串（fs::relative 返回空）——含空键的条目
+    // 不得再被任何跨根/跨盘符源文件命中，否则就是不同源文件共享同一键。
+    auto tmp_dir = fs::temp_directory_path() / ("ezmk_cache_emptykey_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp_dir);
+
+    fs::path src = tmp_dir / "a.cpp";
+    { std::ofstream f(src); f << "// source"; }
+
+    // 项目根与源文件不同根（Windows 跨盘符；POSIX 用不存在的根目录）
+#ifdef EZMK_WIN
+    fs::path proj_root = (tmp_dir.root_name() == "C:" ? fs::path("D:/root")
+                                                      : fs::path("C:/root"));
+#else
+    fs::path proj_root("/nonexistent_ezmk_root_xyz");
+#endif
+
+    CompileSection compile;
+    CacheRecord record;
+    record.compile_options_signature = compile_options_signature(compile);
+
+    // 条目刻意填成「旧代码会写出的空键」，且 hash/签名都匹配——若空键仍可被
+    // 命中，说明修复失效（误命中即对象覆盖）。
+    FileEntry fe;
+    fe.source_hash = sha256_file(src);
+    fe.object_file = "obj/a.o";
+    fe.compiler = "g++";
+    record.files[""] = fe;
+
+    auto result = check_cache(src, compile, record, proj_root);
+    REQUIRE_FALSE(result.has_value());
+
+    fs::remove_all(tmp_dir);
+}
+
+#ifdef EZMK_WIN
+TEST_CASE("check_cache: cross-drive sources map to distinct absolute keys", "[cache][1.4.0-pre.1]") {
+    // 修复后键回退为绝对 generic 路径：两个不同位置的源文件在跨盘符 proj_root
+    // 下各自命中自己的条目（键不碰撞），而不是都 miss 或互相命中。
+    auto tmp_dir = fs::temp_directory_path() / ("ezmk_cache_xdrive_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp_dir / "sub");
+
+    fs::path src_a = tmp_dir / "a.cpp";
+    fs::path src_b = tmp_dir / "sub" / "b.cpp";
+    { std::ofstream f(src_a); f << "// source a"; }
+    { std::ofstream f(src_b); f << "// source b"; }
+
+    // 项目根固定在与源文件不同盘符的绝对路径（无需真实存在——fs::relative
+    // 只比较根名，跨盘符即返回空路径）。
+    fs::path proj_root = (tmp_dir.root_name() == "C:" ? fs::path("D:/root")
+                                                      : fs::path("C:/root"));
+
+    CompileSection compile;
+    CacheRecord record;
+    record.compile_options_signature = compile_options_signature(compile);
+
+    FileEntry fe_a;
+    fe_a.source_hash = sha256_file(src_a);
+    fe_a.object_file = "obj/a.o";
+    fe_a.compiler = "g++";
+
+    FileEntry fe_b;
+    fe_b.source_hash = sha256_file(src_b);
+    fe_b.object_file = "obj/b.o";
+    fe_b.compiler = "g++";
+
+    // 键 = 回退后的绝对 generic 路径，两个源文件互不相同
+    std::string key_a = fs::absolute(src_a).generic_string();
+    std::string key_b = fs::absolute(src_b).generic_string();
+    REQUIRE(key_a != key_b);
+    record.files[key_a] = fe_a;
+    record.files[key_b] = fe_b;
+
+    auto hit_a = check_cache(src_a, compile, record, proj_root);
+    auto hit_b = check_cache(src_b, compile, record, proj_root);
+
+    REQUIRE(hit_a.has_value());
+    REQUIRE(hit_b.has_value());
+    REQUIRE(*hit_a == proj_root / "obj/a.o");
+    REQUIRE(*hit_b == proj_root / "obj/b.o");
+    REQUIRE(*hit_a != *hit_b);
+
+    fs::remove_all(tmp_dir);
+}
+#endif
+
+// ===================================================================
 // parse_depfile_and_hash()
 // ===================================================================
 

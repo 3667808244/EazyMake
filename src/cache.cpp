@@ -40,6 +40,18 @@ std::string iso_time() {
     return buf;
 }
 
+// 1.4.0-pre.1: fs::relative 在跨盘符（Windows，如绝对 src_dir 在 D:\、项目根在
+// C:\）时返回空路径，空串缓存键会让不同源文件在 record.files 上碰撞（对象覆盖、
+// 增量构建结果错误）——空则回退为绝对路径（绝对路径天然唯一）。error_code 重载
+// 同时消除抛异常风险（-jN 下在 worker 线程调用，抛异常会崩线程）。只用于生成
+// 缓存键 / 记录相对路径的场合。
+static fs::path safe_relative(const fs::path& p, const fs::path& root) {
+    std::error_code ec;
+    auto r = fs::relative(p, root, ec);
+    if (ec || r.empty()) return p;
+    return r;
+}
+
 static std::string record_to_json(const CacheRecord& rec) {
     nlohmann::json j;
     j["version"] = rec.version;
@@ -279,7 +291,9 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
                                     std::string_view std_flag,
                                     std::string_view stdlib,
                                     bool use_pic) {
-    auto rel_src = fs::relative(src_file, proj_root).generic_string();
+    // 1.4.0-pre.1: rel_src 是 record.files 的缓存键——跨盘符空路径会让不同源
+    // 文件键碰撞；safe_relative 空则回退绝对路径（唯一）。
+    auto rel_src = safe_relative(src_file, proj_root).generic_string();
 
     auto it = record.files.find(rel_src);
     if (it == record.files.end()) return std::nullopt;
@@ -423,7 +437,9 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
                                             const fs::path& obj) {
     std::vector<std::string> args;
     bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
-    auto rel = fs::relative(src, in.proj_root);
+    // 1.4.0-pre.1: rel 用于 dep 文件路径（in.dep_dir / rel）——跨盘符空路径会让
+    // 所有跨盘符源文件写到同一 .d 文件（依赖数据串扰）；safe_relative 回退绝对路径。
+    auto rel = safe_relative(src, in.proj_root);
 
     if (is_msvc) {
         args.push_back("cl.exe");
@@ -560,7 +576,9 @@ static void fill_record_entry(FileEntry& entry, const CompileInput& in,
                               const fs::path& src, const fs::path& cache_obj,
                               bool is_msvc) {
     entry.source_hash = crypto::sha256_file(src);
-    entry.object_file = fs::relative(cache_obj, in.proj_root).generic_string();
+    // 1.4.0-pre.1: object_file 是记录字段——跨盘符空路径会让命中时解析到
+    // proj_root 本身（对象错乱）；safe_relative 回退绝对路径。
+    entry.object_file = safe_relative(cache_obj, in.proj_root).generic_string();
     entry.compiler = is_msvc ? "cl.exe" : in.lang.compiler;
     if (is_msvc) {
         auto flag_trans = toolchain::translate_compile_flags(
@@ -596,7 +614,9 @@ static std::vector<DepEntry> parse_compile_dependencies(
     for (auto& d : deps) {
         fs::path dp(d.path);
         if (dp.is_absolute()) {
-            auto r = fs::relative(dp, in.proj_root);
+            // 1.4.0-pre.1: safe_relative——跨盘符返回空路径时回退绝对路径
+            // （保持原样存储），同时消除无 ec 重载的抛异常风险。
+            auto r = safe_relative(dp, in.proj_root);
             if (!r.empty() && r.string().find("..") == std::string::npos) {
                 d.path = r.generic_string();
             }
@@ -616,7 +636,11 @@ SingleCompileResult compile_one_source(const fs::path& src,
     const char* obj_suffix = is_msvc ? kObjExtMsvc : kObjExt;
     const char* tmp_suffix = is_msvc ? kTempObjSuffixMsvc : kTempObjSuffix;
 
-    auto rel = fs::relative(src, in.proj_root);
+    // 1.4.0-pre.1: rel_src 是 record.files 的缓存键（compile_sources 用它写入/
+    // 查找条目）——跨盘符空路径会键碰撞（不同源文件互相覆盖记录）；safe_relative
+    // 空则回退绝对路径（唯一）。obj/cache_obj 路径随之回退到源文件所在目录，
+    // 虽不在 obj_dir 内但每源唯一，不会互相覆盖。
+    auto rel = safe_relative(src, in.proj_root);
     result.rel_src = rel.generic_string();
 
     fs::path obj = in.obj_dir / rel;

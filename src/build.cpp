@@ -608,6 +608,68 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
             st.lang.compiler == "g++" ? "C++" : "C");
     }
 
+    // 1.4.0-pre.1: [compile].language 超出检测到的工具链能力 → 配置期警告
+    // （在 profile 应用前、工具链探测后）。prepare_build_state 也被 test 等
+    // 路径调用，static bool 去重保证每进程只 warn 一次（参考 pkg.cpp 的
+    // consumer_std_ctx 模式）。
+    {
+        static bool g_warned_lang_exceeds_cap = false;
+        auto warn_once = [&](const std::string& msg) {
+            if (!g_warned_lang_exceeds_cap) {
+                g_warned_lang_exceeds_cap = true;
+                util::warn(msg);
+            }
+        };
+        // C 标准 → 序数（年份不是单调序）：C89→0、C99→1、C11→2、C17→3。
+        auto c_ordinal = [](int ver) -> int {
+            switch (ver) {
+                case 89: return 0;
+                case 99: return 1;
+                case 11: return 2;
+                case 17: return 3;
+                default: return -1;
+            }
+        };
+        if (st.lang.compiler == "gcc") {
+            // C 侧：仅当 min_ver ∈ {89,99,11,17} 时比较（其它不在能力表域内，跳过）。
+            int decl_ord = c_ordinal(st.lang.min_ver);
+            if (decl_ord >= 0) {
+                const std::string cap =
+                    toolchain::max_supported_c_std(st.tc.family, st.tc.version);
+                int cap_ver = 0;
+                try {
+                    if (cap.size() > 1) cap_ver = std::stoi(cap.substr(1));  // "C17" → 17
+                } catch (...) {}
+                int cap_ord = c_ordinal(cap_ver);
+                if (cap_ord >= 0 && decl_ord > cap_ord) {
+                    warn_once(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::build_warn_lang_exceeds_capability,
+                        {{"lang", cfg.project.language},
+                         {"std", st.lang.normalized_lang},
+                         {"cap", cap}}));
+                }
+            }
+        } else {
+            // C++ 侧：仅当 min_ver ∈ [11, 26] 时比较（98/03 等旧标准不在
+            // 能力表域内，跳过）；cap 数字从 max_supported_std 解析（"CPP17" → 17）。
+            if (st.lang.min_ver >= 11 && st.lang.min_ver <= 26) {
+                const std::string cap =
+                    toolchain::max_supported_std(st.tc.family, st.tc.version);
+                int cap_ver = 0;
+                try {
+                    if (cap.size() > 3) cap_ver = std::stoi(cap.substr(3));
+                } catch (...) {}
+                if (cap_ver > 0 && st.lang.min_ver > cap_ver) {
+                    warn_once(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::build_warn_lang_exceeds_capability,
+                        {{"lang", cfg.project.language},
+                         {"std", st.lang.normalized_lang},
+                         {"cap", cap}}));
+                }
+            }
+        }
+    }
+
     // Apply build profile (1.2.0-dev.12: shared apply_profile helper —
     // CLI --profile > [compile].default_profile; test path uses the same logic)
     {

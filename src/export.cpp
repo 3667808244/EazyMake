@@ -698,10 +698,42 @@ int export_vscode(const config::EzConfig& cfg,
 // Conservative: an unparseable toolchain version (compiler_tag empty) skips
 // the check entirely (the generated CMake may run on a different toolchain
 // than the one detected at export time).
+// 1.4.0-pre.1: C 侧按**序数**比较（年份不是单调序）——C89→0、C99→1、C11→2、
+// C17→3，能力来自 max_supported_c_std（C17/C11）；旧的数值比较会把
+// C_STANDARD 99 误报为超出 C++ 能力（99 > 23），C17 也用错了 C++ 能力表。
 std::string std_capability_note(const std::string& std_kind, int std_ver,
                                 const toolchain::Toolchain& tc) {
     if (std_ver <= 0) return "";
     if (toolchain::compiler_tag(tc).empty()) return "";  // 版本未知 → 不警告
+
+    if (std_kind == "C") {
+        // C 标准 → 序数；不在 {89,99,11,17}（如 C23）→ 能力表域外，不警告。
+        auto c_ordinal = [](int ver) -> int {
+            switch (ver) {
+                case 89: return 0;
+                case 99: return 1;
+                case 11: return 2;
+                case 17: return 3;
+                default: return -1;
+            }
+        };
+        int decl_ord = c_ordinal(std_ver);
+        if (decl_ord < 0) return "";
+        const std::string cap = toolchain::max_supported_c_std(tc.family, tc.version);
+        int cap_ver = 0;
+        try {
+            if (cap.size() > 1) cap_ver = std::stoi(cap.substr(1));  // "C17" → 17
+        } catch (...) {}
+        int cap_ord = c_ordinal(cap_ver);
+        if (cap_ord < 0) return "";  // 未知 cap → 保守不警告
+        if (decl_ord > cap_ord) {
+            return "# " + std_kind + "_STANDARD " + std::to_string(std_ver) +
+                   " exceeds the target toolchain capability (" + cap + ")";
+        }
+        return "";
+    }
+
+    // C++ 侧（std_kind == "CXX" 等）：保持 dev.4 原逻辑不变。
     const std::string cap = toolchain::max_supported_std(tc.family, tc.version);
     int cap_ver = 0;
     try {

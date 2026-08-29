@@ -526,3 +526,48 @@ TEST_CASE("max_supported_std: unknown versions fall back to the conservative flo
     REQUIRE(tc::max_supported_std(CompilerFamily::Gcc,
         "g++ (GCC) 9999999999999999999999999999.0") == "CPP11");
 }
+
+// ===================================================================
+// 1.4.0-pre.1: max_supported_c_std() — C 侧能力（同代规则：gcc >= 8 /
+// clang >= 5 → C17，否则 C11，含 MSVC）
+// ===================================================================
+
+TEST_CASE("max_supported_c_std: GCC segmentation by major version", "[toolchain][1.4.0-pre.1]") {
+    using tc::CompilerFamily;
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++ (GCC) 4.8.5") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++ (GCC) 7.5.0") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++ (GCC) 8.3.0") == "C17");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++ (GCC) 13.2.0") == "C17");
+    // MSYS2-style version line (Rev2 prefix must not confuse the parser)
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++ (Rev2, Built by MSYS2 project) 16.1.0") == "C17");
+}
+
+TEST_CASE("max_supported_c_std: Clang segmentation by major version", "[toolchain][1.4.0-pre.1]") {
+    using tc::CompilerFamily;
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Clang, "clang version 3.8.1") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Clang, "clang version 4.0.1") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Clang, "clang version 5.0.2") == "C17");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Clang, "clang version 16.0.6") == "C17");
+}
+
+TEST_CASE("max_supported_c_std: MSVC is always C11", "[toolchain][1.4.0-pre.1]") {
+    using tc::CompilerFamily;
+    auto cl = [](const char* minor) {
+        return std::string("Microsoft (R) C/C++ Optimizing Compiler Version 19.") + minor + " for x64";
+    };
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Msvc, cl("10")) == "C11");  // _MSC_VER 1910
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Msvc, cl("43")) == "C11");  // _MSC_VER 1943
+    // Unparseable MSVC version → 兜底 C11
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Msvc, "cl.exe") == "C11");
+}
+
+TEST_CASE("max_supported_c_std: unknown versions fall back to the conservative floor", "[toolchain][1.4.0-pre.1]") {
+    using tc::CompilerFamily;
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++: fatal error: no input files") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc, "g++ (GCC) 3.4.6") == "C11");
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Clang, "clang (unknown)") == "C11");
+    // Overflowing digit runs must not throw (same guard as max_supported_std).
+    REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc,
+        "g++ (GCC) 9999999999999999999999999999.0") == "C11");
+}
