@@ -47,13 +47,20 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 ### 测试
 
 - 全量回归：**1003 用例 / 5835 断言零失败**（dev.7 基线 988/5770，pre.1 +15 用例/+65 断言；2 跳过为既有环境限制）
-- i18n 三向一致（`check_i18n.py`，396 键 × en/zh + zh-TW 变体）
+- i18n 三向一致（`check_i18n.py`，397 键 × en/zh + zh-TW 变体）
 
 ### 已知限制 / 跟进项
 
 - **收口 1.5.x**：launch 参数透传 / 多配置调试（test 目标）/ 语义 C（自动协商到能力上限）/ `[test]` 场景协商 / CMake features 全量映射 / `CXX_STANDARD_REQUIRED` 严格化 / `workspace watch --run` 的 `--` 成员级透传 / watch profile 热切换 / 测试链接缺依赖包归档 / watcher 事件风暴 / import `add_library` 类型误判 / `scan --prune` / build.cpp·pkg.cpp 重构 / Catch2 结构化解析
 - **收口 2.0.0 前**：cli.cpp 命令组拆文件
 - **明确不做**：`project cc`/`export cmake` 改造、`--resolve`/`--glob`/`-o` 对 vscode 目标、CLI `--strict`、成员依赖自动推断
+
+### 发布（2026-08-30，tag `v1.4.0`）
+
+- **GitHub Release**：windows-x64 zip + linux-x64 / macos-arm64 tar.gz + 独立 `ezmk.exe`/`ezmk-lua.exe`（含 `.sha256` 边车）已上传（`macos-x64` 仍无资产——`macos-13` runner 在 free tier 不分配，与 1.2.x/1.3.x 相同）；边车一致性已验证（`ezmk.exe.sha256` 内容 = `ezmk.exe` 资产真实 digest `9472e929…`）
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.0（macos-arm64 `7b2d481a…` / linux-x64 `9f9f0e73…` 真实 digest；仓库副本 `publish/homebrew/ezmk.rb` 同步）
+- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.0（pkgver + 源码 tarball 真实 digest `b399ef1a…`）；`makepkg -si` 自取
+- **winget**：split manifests 已备妥（`InstallerSha256` = `ezmk-windows-x64.zip` 真实 digest `37749869…`），提交 `microsoft/winget-pkgs` PR 进行中（license/cla + CI 校验为发布后跟进项，不阻塞发布）
 
 ---
 
