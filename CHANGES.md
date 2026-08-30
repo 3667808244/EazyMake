@@ -60,7 +60,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **GitHub Release**：windows-x64 zip + linux-x64 / macos-arm64 tar.gz + 独立 `ezmk.exe`/`ezmk-lua.exe`（含 `.sha256` 边车）已上传（`macos-x64` 仍无资产——`macos-13` runner 在 free tier 不分配，与 1.2.x/1.3.x 相同）；边车一致性已验证（`ezmk.exe.sha256` 内容 = `ezmk.exe` 资产真实 digest `9472e929…`）
 - **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.0（macos-arm64 `7b2d481a…` / linux-x64 `9f9f0e73…` 真实 digest；仓库副本 `publish/homebrew/ezmk.rb` 同步）
 - **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.0（pkgver + 源码 tarball 真实 digest `b399ef1a…`）；`makepkg -si` 自取
-- **winget**：split manifests 已备妥（`InstallerSha256` = `ezmk-windows-x64.zip` 真实 digest `37749869…`），提交 `microsoft/winget-pkgs` PR 进行中（license/cla + CI 校验为发布后跟进项，不阻塞发布）
+- **winget**：split manifests（`InstallerSha256` = `ezmk-windows-x64.zip` 真实 digest `37749869…`）已提交 `microsoft/winget-pkgs#426317`；`license/cla` 已回复，CI 校验 + 版主审批为发布后跟进项，不阻塞发布（1.1.3 `#416835` / 1.3.6 `#424481` 仍在队列）
 
 ---
 
