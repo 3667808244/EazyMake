@@ -24,9 +24,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.4.0 (2026-XX-XX) — 调试配置自动化 + 语言标准收尾 + workspace scan
-
-> pre.1 聚合草稿（2026-08-30）：正式发布时按 workflow 3.2 定稿日期与最终数字。
+## 1.4.0 (2026-08-30) — 调试配置自动化 + 语言标准收尾 + workspace scan
 
 1.4.0 是 1.3.x 全部补丁收口后的**首个功能 minor**，按 dev（功能）→ pre（收口）两阶段推进。dev.1 ~ dev.7 落地两大主线（**调试配置自动化** + **语言标准收尾**）与功能收口 / 质量审计 / 插队功能，pre.1 完成用户触达打磨、全量文档检查与发布门槛预核对。**公共 API 无破坏性变更**（纯增量：新命令 / 配置字段 / 行为语义增强；破坏性变更仍仅归 2.0.0）。
 
@@ -48,7 +46,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ### 测试
 
-- 全量回归：**988 用例 / 5770 断言零失败**（dev.7 基线；pre.1 修复后重跑确认零回归）
+- 全量回归：**1003 用例 / 5835 断言零失败**（dev.7 基线 988/5770，pre.1 +15 用例/+65 断言；2 跳过为既有环境限制）
 - i18n 三向一致（`check_i18n.py`，396 键 × en/zh + zh-TW 变体）
 
 ### 已知限制 / 跟进项
