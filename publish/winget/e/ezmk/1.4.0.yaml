@@ -1,0 +1,40 @@
+# winget manifest for EazyMake
+#
+# Submit to microsoft/winget-pkgs after the GitHub Release is published.
+# See: https://github.com/microsoft/winget-pkgs
+#
+# Install:
+#   winget install EazyMake.EazyMake
+#
+# v1.4.0 (2026-08-30): portable zip + exe. InstallerSha256 is the real hash
+# of ezmk-windows-x64.zip (verified against the v1.4.0 release asset).
+
+PackageIdentifier: EazyMake.EazyMake
+PackageVersion: 1.4.0
+PackageLocale: en-US
+Publisher: EazyMake
+PackageName: EazyMake
+License: MIT
+ShortDescription: A simple C/C++ build tool
+Description: EazyMake is a simple C/C++ build tool (CLI named ezmk) designed for ease of use. Supports GCC, Clang, and MSVC. Features zero-config setup, automatic package management, Lua scripting, and cross-compiler compatibility.
+Homepage: https://github.com/3667808244/EazyMake
+Tags:
+  - build-tool
+  - cpp
+  - c
+  - compiler
+  - package-manager
+ReleaseNotesUrl: https://github.com/3667808244/EazyMake/releases/tag/v1.4.0
+ManifestType: defaultManifest
+ManifestVersion: 1.6.0
+
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/3667808244/EazyMake/releases/download/v1.4.0/ezmk-windows-x64.zip
+    InstallerSha256: 37749869c62f0e3648c804ac4604099d0a83266b3e6b06b2d08834f978fac80c
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: ezmk.exe
+        PortableCommandAlias: ezmk
+    InstallerLocale: en-US
