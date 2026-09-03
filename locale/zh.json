@@ -23,6 +23,7 @@
 "lock_locked_depends_mismatch": "ezmk.toml 依赖自 ezmk.lock 生成后已变更。运行 'ezmk pkg install'（不加 --locked）更新 lockfile。",
 "lock_locked_pkg_not_in_lockfile": "--locked：'{pkg}' 未记录在 ezmk.lock 中。请先运行 'ezmk pkg install'（不加 --locked）。",
 "lock_locked_version_unavailable": "--locked：'{pkg}' 的版本 '{version}' 在已注册仓库中不可用。",
+"lock_commit_mismatch": "--locked：克隆得到的 git HEAD {actual} 与 ezmk.lock 记录的 commit（{expected}）不一致。分支/标签可能已被 force-push 或移动 — 拒绝安装。请去掉 --locked 重新安装以更新 lockfile。",
 "lock_sha256_mismatch": "lockfile sha256 不匹配: {pkg}",
 "install_summary": "已安装 {name} {version} 到 {prefix} ({files} 个文件{size})",
 "install_dry_run": " (试运行)",

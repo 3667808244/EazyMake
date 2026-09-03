@@ -1516,6 +1516,31 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     for (auto& d : pkg_cfg.depends.libs) lp.dependencies.push_back(d.name);
                     for (auto& d : pkg_cfg.depends.want) lp.dependencies.push_back(d.name);
 
+                    // 1.4.1: git-source provenance marker — written into the
+                    // installed package dir by install_git_source. Git sources
+                    // are pinned by their commit SHA (not an archive), so the
+                    // lib hash is left empty and source/source_url/commit are
+                    // recorded instead.
+                    fs::path git_marker = entry.path() / ".ezmk-git-source";
+                    if (util::file_exists(git_marker)) {
+                        std::string content = util::file_read(git_marker);
+                        auto nl = content.find('\n');
+                        if (nl != std::string::npos) {
+                            std::string url = content.substr(0, nl);
+                            std::string commit = content.substr(nl + 1);
+                            while (!commit.empty() &&
+                                   (commit.back() == '\n' || commit.back() == '\r'))
+                                commit.pop_back();
+                            if (!url.empty() && !commit.empty()) {
+                                lp.source = "git";
+                                lp.source_url = url;
+                                lp.commit = commit;
+                                lf.packages.push_back(std::move(lp));
+                                continue;   // sha256 stays empty
+                            }
+                        }
+                    }
+
                     // Hash the built library — 1.2.0-dev.11: deterministic
                     // pick (shared with lockfile verify side) so record and
                     // verify hash the SAME archive.
@@ -1570,11 +1595,14 @@ static void install_from_directory(const fs::path& dir, cli::Scope scope,
 // dir, then reuse the full directory-install chain (install_from_directory).
 // `source_url` is the clone URL WITHOUT any "#ref" fragment; `ref` is the
 // requested branch/tag ("" = the remote's default branch).
-// Returns false when the user cancelled a git:// plaintext prompt.
+// `expected_commit` (--locked git reinstall): the url+commit come from
+// ezmk.lock — a full clone + detached checkout of that exact commit must land
+// on it, otherwise the source drifted (force-push) → fatal lock_commit_mismatch.
 static void install_git_source(const std::string& source_url,
                                std::string_view ref,
                                cli::Scope scope,
-                               bool assume_yes, bool no_lock) {
+                               bool assume_yes, bool no_lock,
+                               const std::string* expected_commit = nullptr) {
     // git:// is plaintext (MITM) — mirror url_integrity_confirm's http:// branch.
     std::string lower_url = source_url;
     for (auto& c : lower_url) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -1605,12 +1633,13 @@ static void install_git_source(const std::string& source_url,
     // reachable) followed by a detached checkout of that exact commit.
     bool is_sha = ref.size() == 40 && ref.find_first_not_of("0123456789abcdefABCDEF") == std::string_view::npos;
     bool ok;
-    if (is_sha) {
+    if (is_sha || expected_commit) {
         ok = util::git_clone(source_url, clone_dir, "", /*shallow=*/false);
         if (ok) {
             // checkout <sha> → detached HEAD at the pinned commit
+            std::string pin = expected_commit ? *expected_commit : std::string(ref);
             std::string cmd = "git -C \"" + util::escape_shell_arg(clone_dir.string()) +
-                              "\" checkout --detach \"" + util::escape_shell_arg(ref) + "\"";
+                              "\" checkout --detach \"" + util::escape_shell_arg(pin) + "\"";
             auto res = util::run_command(cmd);
             ok = res.exit_code == 0;
         }
@@ -1621,6 +1650,12 @@ static void install_git_source(const std::string& source_url,
     }
     if (!ok) {
         { std::error_code ec; fs::remove_all(clone_dir, ec); }
+        if (expected_commit) {
+            // The pinned commit could not be reproduced (force-push drift).
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::lock_commit_mismatch,
+                {{"expected", *expected_commit}, {"actual", "(unreachable)"}}));
+        }
         util::fatal(std::string("failed to clone git repository: ") + source_url);
     }
 
@@ -1630,6 +1665,13 @@ static void install_git_source(const std::string& source_url,
         std::string head = util::git_head_commit(clone_dir);
         if (head.empty()) {
             throw std::runtime_error("failed to resolve HEAD of cloned repository: " + source_url);
+        }
+        // --locked: the clone must land exactly on the recorded commit —
+        // otherwise the branch/tag was force-pushed or moved since the lockfile.
+        if (expected_commit && head != *expected_commit) {
+            throw std::runtime_error(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::lock_commit_mismatch,
+                {{"expected", *expected_commit}, {"actual", head}}));
         }
         // The clone's .git metadata must not ride into the installed package.
         { std::error_code ec; fs::remove_all(clone_dir / ".git", ec); }
@@ -1663,6 +1705,9 @@ void install(const std::string& pkg_file, cli::Scope scope,
     // constraint for the repo search, and the lockfile is never rewritten.
     std::string locked_version;    // non-empty only in --locked mode
     std::string locked_sha256;
+    // 1.4.1: git-source lockfile entries are re-cloned at the recorded commit.
+    std::string locked_git_url;
+    std::string locked_git_commit;
     if (locked) {
         auto proj_root = util::locate_project_root(fs::current_path())
                             .value_or(fs::current_path());
@@ -1675,20 +1720,43 @@ void install(const std::string& pkg_file, cli::Scope scope,
             util::fatal(ezmk::i18n::get(ezmk::i18n::I18nKey::lock_locked_depends_mismatch));
         }
         // Find the package in the lockfile (by bare name; the CLI passes the
-        // package name, not a constraint, in --locked mode).
+        // package name, not a constraint, in --locked mode). For git sources
+        // the recorded source_url is the identity — a URL argument matches too.
         std::string pkg_name = pkg_file;
-        {
+        if (!is_git_install_source(pkg_file)) {
             auto at = pkg_file.find('@');
             if (at != std::string::npos) pkg_name = pkg_file.substr(0, at);
         }
+        bool found = false;
         for (const auto& lp : lf->packages) {
             if (lp.name == pkg_name) {
-                locked_version = lp.version;
-                locked_sha256 = lp.sha256;
+                found = true;
+                if (lp.source == "git") {
+                    locked_git_url = lp.source_url;
+                    locked_git_commit = lp.commit;
+                } else {
+                    locked_version = lp.version;
+                    locked_sha256 = lp.sha256;
+                }
                 break;
             }
         }
-        if (locked_version.empty()) {
+        // 1.4.1: --locked re-running a git URL → match the recorded source_url
+        // (ignore the "#ref" fragment — the lockfile commit is authoritative).
+        if (!found && is_git_install_source(pkg_file)) {
+            std::string want = pkg_file;
+            auto hash = want.find('#');
+            if (hash != std::string::npos) want = want.substr(0, hash);
+            for (const auto& lp : lf->packages) {
+                if (lp.source == "git" && lp.source_url == want) {
+                    locked_git_url = lp.source_url;
+                    locked_git_commit = lp.commit;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found || (locked_git_url.empty() && locked_version.empty())) {
             util::fatal(ezmk::i18n::fmt(
                 ezmk::i18n::I18nKey::lock_locked_pkg_not_in_lockfile,
                 {{"pkg", pkg_name}}));
@@ -1715,6 +1783,18 @@ void install(const std::string& pkg_file, cli::Scope scope,
             util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
         }
         install_from_directory(input, scope, assume_yes, no_lock);
+        return;
+    }
+
+    // 1.4.1: --locked git source — the url+commit were resolved from ezmk.lock
+    // above (matched by package name or by source_url). Clone at the recorded
+    // commit and refuse on drift (lock_commit_mismatch).
+    if (!locked_git_url.empty()) {
+        if (!expected_sha256.empty()) {
+            util::warn(ezmk::i18n::I18nKey::pkg_git_sha256_skipped);
+        }
+        install_git_source(locked_git_url, locked_git_commit, scope,
+                           assume_yes, no_lock, &locked_git_commit);
         return;
     }
 

@@ -202,3 +202,90 @@ TEST_CASE("integration: pkg install git URL — --branch beats the URL #ref (1.4
     REQUIRE(r.exit_code == 0);
     REQUIRE(installed_version(proj) == "2.0.0");
 }
+
+TEST_CASE("integration: pkg install git URL — lockfile records source=git + commit (1.4.1)", "[integration][1.4.1]") {
+    if (!ezmk_available() || !git_available()) {
+        SKIP("ezmk binary or git not available");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    GitFixture fx;
+    TempDir proj_tmp;
+    fs::path proj = proj_tmp.path / "proj";
+    fs::create_directories(proj / "src");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"proj\"\ntype = \"executable\"\nversion = \"0.1.0\"\n");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    ProcResult r = run_ezmk("pkg install \"" + file_url(fx.repo) + "#v1.0\" -p -y", proj);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+
+    // ezmk.lock records the git provenance: source = "git" + the pinned commit.
+    fs::path lock = proj / "ezmk.lock";
+    REQUIRE(fs::exists(lock));
+    std::string lock_text = file_read(lock);
+    REQUIRE(lock_text.find("source = \"git\"") != std::string::npos);
+    REQUIRE(lock_text.find("commit = \"" + fx.sha_a + "\"") != std::string::npos);
+}
+
+TEST_CASE("integration: pkg install git URL — --locked re-clones the recorded commit (1.4.1)", "[integration][1.4.1]") {
+    if (!ezmk_available() || !git_available()) {
+        SKIP("ezmk binary or git not available");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    GitFixture fx;
+    TempDir proj_tmp;
+    fs::path proj = proj_tmp.path / "proj";
+    fs::create_directories(proj / "src");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"proj\"\ntype = \"executable\"\nversion = \"0.1.0\"\n");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    // First install from #v1.0 (records commit A in ezmk.lock).
+    ProcResult r1 = run_ezmk("pkg install \"" + file_url(fx.repo) + "#v1.0\" -p -y", proj);
+    REQUIRE(r1.exit_code == 0);
+    REQUIRE(installed_version(proj) == "1.0.0");
+
+    // --locked: matches the lockfile entry by source_url, re-clones at commit A.
+    ProcResult r2 = run_ezmk(
+        "pkg install \"" + file_url(fx.repo) + "\" --locked -p -y", proj);
+    INFO("locked stderr: " << r2.err);
+    INFO("locked stdout: " << r2.out);
+    REQUIRE(r2.exit_code == 0);
+    REQUIRE(installed_version(proj) == "1.0.0");   // still the pinned commit
+}
+
+TEST_CASE("integration: pkg install git URL — --locked rejects a tampered commit (1.4.1)", "[integration][1.4.1]") {
+    if (!ezmk_available() || !git_available()) {
+        SKIP("ezmk binary or git not available");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    GitFixture fx;
+    TempDir proj_tmp;
+    fs::path proj = proj_tmp.path / "proj";
+    fs::create_directories(proj / "src");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"proj\"\ntype = \"executable\"\nversion = \"0.1.0\"\n");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    ProcResult r1 = run_ezmk("pkg install \"" + file_url(fx.repo) + "#v1.0\" -p -y", proj);
+    REQUIRE(r1.exit_code == 0);
+
+    // Tamper: replace the recorded commit with a bogus SHA — simulates a
+    // force-pushed branch/tag whose recorded commit no longer exists upstream.
+    fs::path lock = proj / "ezmk.lock";
+    std::string lock_text = file_read(lock);
+    std::string bogus(40, '0');
+    auto pos = lock_text.find("commit = \"" + fx.sha_a + "\"");
+    REQUIRE(pos != std::string::npos);
+    lock_text.replace(pos + 10, fx.sha_a.size(), bogus);
+    file_write(lock, lock_text);
+
+    ProcResult r2 = run_ezmk(
+        "pkg install \"" + file_url(fx.repo) + "\" --locked -p -y", proj);
+    INFO("locked stderr: " << r2.err);
+    INFO("locked stdout: " << r2.out);
+    REQUIRE(r2.exit_code != 0);
+    REQUIRE((r2.out + r2.err).find("ezmk.lock") != std::string::npos);
+}

@@ -23,6 +23,7 @@
 "lock_locked_depends_mismatch": "ezmk.toml depends have changed since ezmk.lock was generated. Run 'ezmk pkg install' (without --locked) to update the lockfile.",
 "lock_locked_pkg_not_in_lockfile": "--locked: '{pkg}' is not recorded in ezmk.lock. Run 'ezmk pkg install' without --locked first.",
 "lock_locked_version_unavailable": "--locked: version '{version}' of '{pkg}' is not available in any registered repo.",
+"lock_commit_mismatch": "--locked: cloned git HEAD {actual} does not match the commit recorded in ezmk.lock ({expected}). The branch/tag may have been force-pushed or moved — refusing to install. Re-run without --locked to update the lockfile.",
 "lock_sha256_mismatch": "lockfile sha256 mismatch for: {pkg}",
 "install_summary": "Installed {name} {version} to {prefix} ({files} files{size})",
 "install_dry_run": " (dry-run)",

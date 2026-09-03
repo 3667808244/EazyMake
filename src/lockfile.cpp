@@ -64,6 +64,9 @@ std::optional<config::Lockfile> load(const fs::path& proj_root) {
                 pkg.source = (*tbl)["source"].value_or("");
                 pkg.source_url = (*tbl)["source_url"].value_or("");
                 pkg.sha256 = (*tbl)["sha256"].value_or("");
+                // 1.4.1: optional commit pin for git sources — absent in old
+                // lockfiles → empty string, normalizes fine.
+                pkg.commit = (*tbl)["commit"].value_or("");
                 pkg.type = (*tbl)["type"].value_or("static");
                 pkg.scope = (*tbl)["scope"].value_or("user");
                 pkg.platform = (*tbl)["platform"].value_or("");
@@ -121,6 +124,11 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
         out << "source = " << util::toml_quote(pkg.source) << "\n";
         out << "source_url = " << util::toml_quote(pkg.source_url) << "\n";
         out << "sha256 = " << util::toml_quote(pkg.sha256) << "\n";
+        // 1.4.1: git-source commit pin — only written when non-empty so old
+        // lockfile output stays byte-stable.
+        if (!pkg.commit.empty()) {
+            out << "commit = " << util::toml_quote(pkg.commit) << "\n";
+        }
         out << "type = " << util::toml_quote(pkg.type) << "\n";
         out << "scope = " << util::toml_quote(pkg.scope) << "\n";
         out << "platform = " << util::toml_quote(pkg.platform) << "\n";

@@ -146,9 +146,10 @@ struct EzConfig {
 struct LockedPackage {
     std::string name;
     std::string version;
-    std::string source;            // repo name
+    std::string source;            // repo name; "git" for git-URL installs (1.4.1)
     std::string source_url;
     std::string sha256;            // SHA-256 of the installed artifact
+    std::string commit;            // 1.4.1: pinned commit SHA for git sources (optional)
     std::string type;              // "static" / "shared" / "header-only"
     std::string scope;             // "project" / "user" / "global"
     std::string platform;          // e.g. "windows_x86_64_msvc"

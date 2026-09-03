@@ -3,6 +3,7 @@
 #include "catch2.hpp"
 #include "ezmk/lockfile.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/util.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -87,6 +88,59 @@ TEST_CASE("lockfile save/load: escapes and round-trips special characters", "[lo
     REQUIRE(loaded->packages.size() == 1);
     REQUIRE(loaded->packages[0].name == "a\"b");
     REQUIRE(loaded->packages[0].version == "1.0\nx");
+}
+
+// 1.4.1: git-source commit field — optional; written only when non-empty so
+// old lockfile output stays byte-stable; parsed back on load.
+TEST_CASE("lockfile save/load: optional git commit field round-trips (1.4.1)", "[lockfile][1.4.1]") {
+    TempDir tmp;
+    Lockfile lf;
+    lf.version = 1;
+    LockedPackage p;
+    p.name = "greet";
+    p.version = "1.0.0";
+    p.source = "git";
+    p.source_url = "https://github.com/user/repo.git";
+    p.commit = "0123456789abcdef0123456789abcdef01234567";
+    lf.packages = { p };
+
+    ezmk::lockfile::save(tmp.path, lf);
+    auto text = ezmk::util::file_read(tmp.path / "ezmk.lock");
+    REQUIRE(text.find("commit = \"0123456789abcdef0123456789abcdef01234567\"") != std::string::npos);
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->packages.size() == 1);
+    REQUIRE(loaded->packages[0].source == "git");
+    REQUIRE(loaded->packages[0].commit == "0123456789abcdef0123456789abcdef01234567");
+}
+
+// 1.4.1: a pre-1.4.1 lockfile has no commit field → load leaves it empty
+// (no crash, no drift — backward compatible).
+TEST_CASE("lockfile load: old lockfile without commit field parses (1.4.1)", "[lockfile][1.4.1]") {
+    TempDir tmp;
+    // Hand-written old-format ezmk.lock (source/source_url absent).
+    ezmk::util::file_write(tmp.path / "ezmk.lock",
+        "# ezmk.lock\n"
+        "[metadata]\n"
+        "version = 1\n"
+        "generated_by = \"ezmk 1.4.0\"\n"
+        "direct_deps = []\n"
+        "\n"
+        "[[packages]]\n"
+        "name = \"greet\"\n"
+        "version = \"1.0.0\"\n"
+        "sha256 = \"\"\n"
+        "type = \"static\"\n"
+        "scope = \"project\"\n"
+        "platform = \"windows_x86_64_gcc\"\n"
+        "dependencies = []\n");
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->packages.size() == 1);
+    REQUIRE(loaded->packages[0].name == "greet");
+    REQUIRE(loaded->packages[0].commit.empty());
 }
 
 TEST_CASE("depends_changed: transitive deps in packages do NOT trip a change", "[lockfile][1.1.2]") {

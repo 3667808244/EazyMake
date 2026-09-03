@@ -28,6 +28,7 @@ EZMK_I18N_KEY(lock_locked_missing)         // 1.1.0
 EZMK_I18N_KEY(lock_locked_depends_mismatch)// 1.1.0
 EZMK_I18N_KEY(lock_locked_pkg_not_in_lockfile)      // 1.4.0-dev.5: --locked, package not recorded in ezmk.lock
 EZMK_I18N_KEY(lock_locked_version_unavailable)      // 1.4.0-dev.5: --locked, locked version not found in repos
+EZMK_I18N_KEY(lock_commit_mismatch)        // 1.4.1: --locked, cloned git HEAD != lockfile commit (force-push drift)
 EZMK_I18N_KEY(lock_sha256_mismatch)        // 1.1.0
 EZMK_I18N_KEY(install_summary)             // 1.1.0
 EZMK_I18N_KEY(install_dry_run)             // 1.1.0
