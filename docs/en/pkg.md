@@ -237,6 +237,39 @@ ezmk pkg install -u ~/dev/bar        # absolute paths work too
 - Unpacked package directories under `packages/` in a local `ezmk-repo` checkout
   can be installed this way too.
 
+### Git Repository URL (1.4.1+)
+
+A git repository URL is cloned and installed as a package — the repository root
+must be a valid package (an `ezmk.toml` with `include/` + source dirs, or a
+precompiled/header-only layout), i.e. the repo root is the package root:
+
+```bash
+# SSH (scp-style)
+ezmk pkg install -p git@github.com:user/mylib.git
+# https / explicit protocol
+ezmk pkg install -p https://github.com/user/mylib.git
+ezmk pkg install -p file:///tmp/mylib.git          # local repo
+```
+
+- **Ref selection**: `#<ref>` fragment or `--branch <ref>` (branch, tag, or full
+  commit SHA). Priority: `--branch` > URL fragment > default branch.
+  - Branch/tag/default: shallow clone (`--depth 1`).
+  - Commit SHA: full clone + checkout of that exact commit (a shallow clone may
+    not reach it).
+  - Bare URLs without a scheme (`github.com/user/mylib.git`) get `https://`
+    prepended automatically.
+- **Detection**: the argument is treated as a git source when it starts with
+  `git@`, uses the `git://` / `file://` scheme, or ends with `.git` (after any
+  `#ref` fragment). Archive URLs (`.zip` / `.tar.gz`) never match.
+- **`git://` is plaintext**: a warning + confirmation is shown (skipped with
+  `-y`) before cloning, mirroring `http://` downloads.
+- **Integrity**: git sources are pinned by the **commit SHA**, not a sha256
+  archive hash. An explicit `--sha256` prints a skip notice.
+- **Lockfile**: `ezmk.lock` records `source = "git"`, `source_url`, and the
+  pinned `commit`; `ezmk pkg install <url> --locked` re-clones the recorded
+  commit and refuses to install if the upstream ref was force-pushed or moved
+  (`lock_commit_mismatch`).
+
 ### URL Download
 
 ```bash
@@ -268,9 +301,10 @@ ezmk pkg install -p foo          # automatically searches for "foo" in registere
 
 Search order:
 0. Directory (if the argument is an existing directory) → install directly (1.2.0-dev.7+)
-1. Local file path / explicit URL (same as before)
-2. Search by name in local cache of registered repos (project → user → global)
-3. Still not found → error
+1. Git repository URL (1.4.1+) → clone → install from the cloned directory
+2. Local file path / explicit URL (same as before)
+3. Search by name in local cache of registered repos (project → user → global)
+4. Still not found → error
 
 > **Why search every registered repo?** So a bare package name resolves no matter
 > which repo (or scope) hosts it — you never need to remember which repository

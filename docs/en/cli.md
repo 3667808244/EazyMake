@@ -339,6 +339,14 @@ Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at con
 | `-y` / `--yes` | Skip confirmation prompts (non-interactive) |
 | `--locked` | Install only against the existing `ezmk.lock` — error on mismatch (1.1.0+) |
 | `--no-lock` | Skip `ezmk.lock` generation (1.1.0+) |
+| `--branch <ref>` | Git URL sources: clone this branch/tag/commit (1.4.1+) — beats the URL's `#<ref>` fragment |
+
+**`install` source argument** can be a local file/archive, a local directory, a
+download URL, a registered-repo **name**, or a **git repository URL** (1.4.1+):
+`git@host:user/repo.git`, `git://host/repo.git`, `file:///path/repo.git`, or any
+`…repo.git` URL — with an optional `#<ref>` fragment for branch/tag/commit
+selection. Git sources are pinned by their commit SHA and recorded in
+`ezmk.lock` as `source = "git"` (see [`pkg.md`](pkg.md)).
 
 **Local-archive `.sha256` sidecar auto-verification (1.4.0-dev.5+):** when installing a **local** archive (`pkg install <file>.tar.gz`) **without** an explicit `--sha256` (or index-provided hash), and a sibling `<archive>.sha256` sidecar exists (the `ezmk project pack` output format `<hash>  <filename>`), the hash is read from the sidecar and verified automatically — `ezmk pkg install mylib-1.0.0.tar.gz` gains full integrity checking for free. Precedence and safety: an explicit `--sha256` / index.toml `sha256` always wins (a sidecar only fills an **empty** expected hash); URL installs never trust a companion sidecar (only explicit `--sha256`); a **missing or malformed** sidecar (not 64 hex chars) simply skips verification — it never blocks the install.
 

@@ -218,6 +218,27 @@ ezmk pkg install -u ~/dev/bar        # 绝对路径亦可
 - 安装路径、作用域（`-p/-u/-g`）、安装钩子、依赖解析与归档安装完全一致。
 - 本地 checkout 的 `ezmk-repo` 中 `packages/` 目录下**解包后的包目录**同样可直接安装。
 
+### 从 Git 仓库 URL 安装（1.4.1+）
+
+Git 仓库 URL 会被克隆后作为包安装——仓库根必须是合法的包（根含 `ezmk.toml` 且具备 `include/` + 源码目录，或预编译/header-only 布局），即 **git 仓库根即包根**：
+
+```bash
+# SSH（scp 风格）
+ezmk pkg install -p git@github.com:user/mylib.git
+# https / 显式协议
+ezmk pkg install -p https://github.com/user/mylib.git
+ezmk pkg install -p file:///tmp/mylib.git          # 本地仓库
+```
+
+- **ref 定位**：`#<ref>` 片段或 `--branch <ref>`（分支、标签或完整 commit SHA）。优先级：`--branch` > URL 片段 > 默认分支。
+  - 分支/标签/默认分支：浅克隆（`--depth 1`）。
+  - commit SHA：全量克隆后检出该提交（浅克隆可能取不到）。
+  - 无协议头的裸 URL（`github.com/user/mylib.git`）自动补全 `https://`。
+- **识别规则**：参数以 `git@` 开头、使用 `git://` / `file://` 协议、或（剥去 `#ref` 片段后）以 `.git` 结尾时判定为 git 源；归档 URL（`.zip` / `.tar.gz`）绝不会误判。
+- **`git://` 为明文协议**：克隆前警告并确认（`-y` 跳过），与 `http://` 下载一致。
+- **完整性**：git 源以 **commit SHA** 为指纹，无归档 sha256；显式 `--sha256` 会提示跳过。
+- **lockfile**：`ezmk.lock` 记录 `source = "git"`、`source_url` 与固定的 `commit`；`ezmk pkg install <url> --locked` 按记录的 commit 重新克隆，若上游 ref 被 force-push 或漂移则拒绝安装（`lock_commit_mismatch`）。
+
 ### URL 下载
 
 ```bash
@@ -246,9 +267,10 @@ ezmk pkg install -p foo          # 自动在已注册仓库中搜索 "foo"
 
 查找顺序：
 0. 目录（参数为已存在的目录）→ 直接安装（1.2.0-dev.7+）
-1. 本地文件路径 / 显式 URL（和之前一样）
-2. 已注册仓库的本地缓存中按名称搜索（项目 → 用户 → 全局）
-3. 仍未找到 → 报错
+1. Git 仓库 URL（1.4.1+）→ 克隆 → 从克隆目录安装
+2. 本地文件路径 / 显式 URL（和之前一样）
+3. 已注册仓库的本地缓存中按名称搜索（项目 → 用户 → 全局）
+4. 仍未找到 → 报错
 
 > **为什么搜索所有已注册仓库？** 这样按包名安装时，无论哪个仓库（或作用域）提供该包都能解析成功——无需记住包来自哪个仓库，镜像也能作为备用透明生效。
 

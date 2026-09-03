@@ -45,6 +45,7 @@ ezmk run                  # build + run
 ```bash
 ezmk pkg install fmt      # by name — official repo pre-registered
 ezmk pkg install ./mylib  # from a source directory (1.2.0+, no packing needed)
+ezmk pkg install https://github.com/user/mylib.git  # from a git repo (1.4.1+)
 ```
 
 ## Install

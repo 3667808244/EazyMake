@@ -292,6 +292,9 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 | `-y` / `--yes` | 跳过确认提示（非交互模式） |
 | `--locked` | 仅按现有 `ezmk.lock` 安装，不一致则报错（1.1.0+） |
 | `--no-lock` | 跳过 `ezmk.lock` 生成（1.1.0+） |
+| `--branch <ref>` | Git URL 源：克隆该分支/标签/提交（1.4.1+）——优先级高于 URL 的 `#<ref>` 片段 |
+
+**`install` 的源参数** 可以是本地文件/归档、本地目录、下载 URL、已注册仓库的**名称**，或 **git 仓库 URL**（1.4.1+）：`git@host:user/repo.git`、`git://host/repo.git`、`file:///path/repo.git`，或任意 `…repo.git` URL——可带 `#<ref>` 片段选择分支/标签/提交。git 源以 commit SHA 为指纹，`ezmk.lock` 记录 `source = "git"`（详见 [`pkg.md`](pkg.md)）。
 
 **本地归档 `.sha256` 边车自动校验（1.4.0-dev.5+）：** 安装**本地**归档（`pkg install <file>.tar.gz`）且**未**显式给 `--sha256`（或 index 未提供哈希）时，若同目录存在 `<archive>.sha256` 边车（`ezmk project pack` 的产出格式 `<hash>  <filename>`），自动读取边车哈希并校验——`ezmk pkg install mylib-1.0.0.tar.gz` 免费获得完整完整性校验。优先级与安全：显式 `--sha256` / index.toml `sha256` 始终优先（边车只填空的期望哈希）；URL 安装**从不**信任伴生边车（只认显式 `--sha256`）；**缺失或格式非法**的边车（非 64 位十六进制）直接跳过校验，绝不阻断安装。
 

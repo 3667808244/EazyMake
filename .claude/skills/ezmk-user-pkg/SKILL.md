@@ -44,7 +44,22 @@ ezmk pkg install fmt@10.0.0    # Specific version
 ezmk pkg install fmt@^9.0      # Version constraint
 ```
 
-A package argument is **required** — `ezmk pkg install` with no argument is an error (there is no "install all dependencies" mode). Install each `[depends]` entry individually. `pkg install` also accepts a local source directory, a local archive (`*.zip` / `*.tar.gz`), or a URL as the argument.
+A package argument is **required** — `ezmk pkg install` with no argument is an error (there is no "install all dependencies" mode). Install each `[depends]` entry individually. `pkg install` also accepts a local source directory, a local archive (`*.zip` / `*.tar.gz`), a URL, or — since 1.4.1 — a **git repository URL** as the argument.
+
+### Install from a git repository (1.4.1+)
+
+```bash
+ezmk pkg install git@github.com:user/mylib.git        # SSH scp-style
+ezmk pkg install https://github.com/user/mylib.git    # https
+ezmk pkg install file:///tmp/mylib.git                # local repo
+ezmk pkg install https://github.com/user/mylib.git#v1.0   # tag / branch / commit ref
+ezmk pkg install https://github.com/user/mylib.git --branch dev   # --branch beats #ref
+```
+
+- The repo root must be a valid package root (an `ezmk.toml` package).
+- Detection: `git@` / `git://` / `file://` prefixes, or a `.git` suffix (after any `#ref`).
+- Branch/tag/default → shallow clone; a full commit SHA → full clone + checkout of that commit.
+- Git sources are pinned by commit SHA; `ezmk.lock` records `source = "git"` + `commit`, and `pkg install <url> --locked` re-clones the recorded commit (force-push drift → error).
 
 ### Install with verification
 
