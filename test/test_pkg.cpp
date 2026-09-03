@@ -1160,3 +1160,44 @@ TEST_CASE("negotiate: GNU extensions preserved in the negotiated flag", "[pkg][1
     REQUIRE(out.std_flag == "-std=gnu++17");
     REQUIRE(out.normalized_lang == "GNUCPP17");
 }
+
+// ===================================================================
+// 1.4.1 — git-source detection (strict subset of util::is_git_url)
+// ===================================================================
+
+TEST_CASE("is_git_install_source: SSH scp-style matches", "[pkg][1.4.1]") {
+    REQUIRE(is_git_install_source("git@github.com:user/repo.git"));
+    REQUIRE(is_git_install_source("git@github.com:user/repo.git#v1.0.0"));
+}
+
+TEST_CASE("is_git_install_source: explicit git:// and file:// match", "[pkg][1.4.1]") {
+    REQUIRE(is_git_install_source("git://github.com/user/repo.git"));
+    REQUIRE(is_git_install_source("git://host/repo"));
+    REQUIRE(is_git_install_source("file:///tmp/repo.git"));
+    REQUIRE(is_git_install_source("file:///tmp/repo"));
+}
+
+TEST_CASE("is_git_install_source: .git suffix (with/without scheme/ref) matches", "[pkg][1.4.1]") {
+    REQUIRE(is_git_install_source("https://github.com/user/repo.git"));
+    REQUIRE(is_git_install_source("https://github.com/user/repo.git#v1.0.0"));
+    REQUIRE(is_git_install_source("github.com/user/repo.git"));
+    REQUIRE(is_git_install_source("https://host/user/repo.git#feature/x"));
+}
+
+TEST_CASE("is_git_install_source: archive URLs never match", "[pkg][1.4.1]") {
+    REQUIRE_FALSE(is_git_install_source("foo.zip"));
+    REQUIRE_FALSE(is_git_install_source("foo.tar.gz"));
+    REQUIRE_FALSE(is_git_install_source("https://host/pkg.zip"));
+    REQUIRE_FALSE(is_git_install_source("https://host/pkg.tar.gz"));
+    REQUIRE_FALSE(is_git_install_source("https://host/foo.git.zip"));
+    REQUIRE_FALSE(is_git_install_source("foo.zip#x"));
+    REQUIRE_FALSE(is_git_install_source("https://host/pkg.tar.gz#ref"));
+}
+
+TEST_CASE("is_git_install_source: plain names and local paths never match", "[pkg][1.4.1]") {
+    REQUIRE_FALSE(is_git_install_source("fmt"));
+    REQUIRE_FALSE(is_git_install_source("mylib"));
+    REQUIRE_FALSE(is_git_install_source("C:/repo/repo.git"));
+    REQUIRE_FALSE(is_git_install_source("/abs/path/repo.git"));
+    REQUIRE_FALSE(is_git_install_source("\\abs\\path\\repo.git"));
+}

@@ -204,12 +204,27 @@ struct RunOptions {
 ProcResult run_command(const std::string& cmd, const RunOptions& opts);
 
 // ---- Git helpers ----
+// 1.4.1: guess if a string is a git repository URL. Loose heuristic shared by
+// `repo add` and `pkg install` source detection:
+//   - "git@host:user/repo.git" (SSH scp-style)
+//   - any "scheme://" URL
+//   - a bare "host/user/repo" string (contains '.' and '/') that is NOT a
+//     local filesystem path (drive-letter / absolute / rooted)
+// Local paths (C:/..., /abs, \root) are never URLs → false.
+bool is_git_url(std::string_view s);
+
 // Check if git is available in PATH.
 bool git_available();
 
 // Clone a git repository. Returns true on success.
-// branch: branch to track (default "main").
-bool git_clone(const std::string& url, const fs::path& dest, std::string_view branch = "main");
+// branch: branch/tag to clone (default "main"). An EMPTY branch means "clone
+// the remote's default branch" (the --branch flag is omitted) — 1.4.1, used by
+// `pkg install <git-url>` when no ref is requested.
+// shallow: 1.4.1 — add `--depth 1` (single-branch shallow clone). Only safe
+// for branch/tag/default-head clones; commit SHAs may be unreachable in a
+// shallow clone and must use a full clone + checkout instead.
+bool git_clone(const std::string& url, const fs::path& dest,
+               std::string_view branch = "main", bool shallow = false);
 
 // Pull latest changes in a git repository. Returns true on success.
 bool git_pull(const fs::path& repo_dir, std::string_view branch = "main");
@@ -217,6 +232,10 @@ bool git_pull(const fs::path& repo_dir, std::string_view branch = "main");
 // Get the ISO 8601 timestamp of the last commit in a git repo.
 // Returns empty string on failure.
 std::string git_last_commit_time(const fs::path& repo_dir);
+
+// 1.4.1: resolve the full commit SHA of the repo's current HEAD
+// (`git rev-parse HEAD`, trimmed). Returns empty string on failure.
+std::string git_head_commit(const fs::path& repo_dir);
 
 // ---- Editor & script execution ----
 

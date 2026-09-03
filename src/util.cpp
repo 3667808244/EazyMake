@@ -1355,17 +1355,43 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
 // Git helpers
 // ===================================================================
 
+// 1.4.1: extracted from repo.cpp's private is_git_url() so `repo add` and
+// `pkg install` share one implementation. Loose heuristic (repo semantics):
+//   git@... / any scheme:// / bare host/user/repo with '.' + '/' — while
+//   drive-letter, absolute and rooted paths are always treated as local.
+bool is_git_url(std::string_view s) {
+    // git@... style (SSH)
+    if (s.substr(0, 4) == "git@") return true;
+    // https://... or http://...
+    if (s.find("://") != std::string_view::npos) return true;
+    // Windows drive letter (e.g., C:/...) or absolute path → local
+    if (s.size() >= 2 && s[1] == ':') return false;
+    if (s.size() >= 1 && (s[0] == '/' || s[0] == '\\')) return false;
+    // If it looks like a URL (contains dots in host), treat as git
+    if (s.find('.') != std::string_view::npos &&
+        s.find('/') != std::string_view::npos) return true;
+    return false;
+}
+
 bool git_available() {
     auto res = run_command("git --version");
     return res.exit_code == 0;
 }
 
-bool git_clone(const std::string& url, const fs::path& dest, std::string_view branch) {
+bool git_clone(const std::string& url, const fs::path& dest,
+               std::string_view branch, bool shallow) {
     std::ostringstream cmd;
     // branch is quoted like url/dest: escape_shell_arg only covers `" \ ` $`,
     // and a bare branch name with spaces/; would split or inject under sh -c.
-    cmd << "git clone --branch \"" << escape_shell_arg(branch)
-        << "\" \"" << escape_shell_arg(url) << "\" \""
+    cmd << "git clone";
+    // 1.4.1: `--depth 1` — single-branch shallow clone. Only used for
+    // branch/tag/default-head clones (repo.cpp callers never set it).
+    if (shallow) cmd << " --depth 1";
+    // An empty branch means "remote default branch" — omit --branch entirely.
+    if (!branch.empty()) {
+        cmd << " --branch \"" << escape_shell_arg(branch) << "\"";
+    }
+    cmd << " \"" << escape_shell_arg(url) << "\" \""
         << escape_shell_arg(dest.string()) << "\"";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) {
@@ -1394,6 +1420,20 @@ std::string git_last_commit_time(const fs::path& repo_dir) {
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) return {};
     // Trim trailing newline
+    auto s = res.out;
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+    return s;
+}
+
+// 1.4.1: `git rev-parse HEAD` — the full commit SHA currently checked out.
+// Used by `pkg install <git-url>` to record the installed commit in the
+// lockfile and by `--locked` to reject force-pushed / drifted refs.
+std::string git_head_commit(const fs::path& repo_dir) {
+    std::ostringstream cmd;
+    cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
+        << "\" rev-parse HEAD";
+    auto res = run_command(cmd.str());
+    if (res.exit_code != 0) return {};
     auto s = res.out;
     while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
     return s;

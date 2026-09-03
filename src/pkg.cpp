@@ -87,6 +87,33 @@ bool satisfies_version_constraint(std::string_view version,
     }
 }
 
+// 1.4.1: strict git-source detection for `pkg install` (see pkg.hpp).
+bool is_git_install_source(std::string_view s) {
+    // Loose gate first (repo semantics): local filesystem paths are excluded
+    // here (drive letters / absolute / rooted paths → not a URL).
+    if (!util::is_git_url(s)) return false;
+
+    // Strip the "#<ref>" fragment before the ".git" suffix test — the fragment
+    // is a git ref selector, never part of the clone URL.
+    std::string base(s);
+    auto hash = base.rfind('#');
+    if (hash != std::string::npos) base = base.substr(0, hash);
+
+    // SSH scp-style: git@github.com:user/repo.git
+    if (base.rfind("git@", 0) == 0) return true;
+    // Explicit git protocols
+    auto lower = [](std::string_view v) {
+        std::string r(v);
+        for (auto& c : r) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return r;
+    };
+    std::string lbase = lower(base);
+    if (lbase.rfind("git://", 0) == 0 || lbase.rfind("file://", 0) == 0) return true;
+    // Any URL whose path ends ".git" (after fragment strip): https://…/repo.git
+    if (base.size() >= 4 && lbase.substr(lbase.size() - 4) == ".git") return true;
+    return false;
+}
+
 // ===================================================================
 // Path resolution
 // ===================================================================
@@ -1539,6 +1566,88 @@ static void install_from_directory(const fs::path& dir, cli::Scope scope,
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);
 }
 
+// 1.4.1: pkg install <git-url> — clone a git repository into a unique temp
+// dir, then reuse the full directory-install chain (install_from_directory).
+// `source_url` is the clone URL WITHOUT any "#ref" fragment; `ref` is the
+// requested branch/tag ("" = the remote's default branch).
+// Returns false when the user cancelled a git:// plaintext prompt.
+static void install_git_source(const std::string& source_url,
+                               std::string_view ref,
+                               cli::Scope scope,
+                               bool assume_yes, bool no_lock) {
+    // git:// is plaintext (MITM) — mirror url_integrity_confirm's http:// branch.
+    std::string lower_url = source_url;
+    for (auto& c : lower_url) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (lower_url.rfind("git://", 0) == 0) {
+        if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_git_plain_confirm), assume_yes)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled);
+            return;
+        }
+    }
+
+    if (!util::git_available()) {
+        util::fatal(ezmk::i18n::I18nKey::pkg_git_not_available);
+    }
+
+    // Unique temp clone dir (PID + high-res counter, like the extract staging).
+    static std::atomic<uint64_t> counter{0};
+    auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    fs::path clone_dir = fs::temp_directory_path() /
+        ("ezmk_git_" + std::to_string(now_us) + "_" +
+         std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
+
+    util::info(ezmk::i18n::I18nKey::pkg_git_cloning, {{"url", source_url}});
+
+    // Clone. Shallow by default (design: branches/tags AND the remote's
+    // default branch all clone with --depth 1 — fastest path); only commit-SHA
+    // pins need a full clone (a shallow clone cannot guarantee the SHA is
+    // reachable) followed by a detached checkout of that exact commit.
+    bool is_sha = ref.size() == 40 && ref.find_first_not_of("0123456789abcdefABCDEF") == std::string_view::npos;
+    bool ok;
+    if (is_sha) {
+        ok = util::git_clone(source_url, clone_dir, "", /*shallow=*/false);
+        if (ok) {
+            // checkout <sha> → detached HEAD at the pinned commit
+            std::string cmd = "git -C \"" + util::escape_shell_arg(clone_dir.string()) +
+                              "\" checkout --detach \"" + util::escape_shell_arg(ref) + "\"";
+            auto res = util::run_command(cmd);
+            ok = res.exit_code == 0;
+        }
+    } else {
+        // branch/tag → --branch <ref> --depth 1; no ref → default branch,
+        // --depth 1 (git_clone omits --branch when the branch is empty).
+        ok = util::git_clone(source_url, clone_dir, ref, /*shallow=*/true);
+    }
+    if (!ok) {
+        { std::error_code ec; fs::remove_all(clone_dir, ec); }
+        util::fatal(std::string("failed to clone git repository: ") + source_url);
+    }
+
+    try {
+        // Resolve the cloned HEAD BEFORE dropping .git — rev-parse needs the
+        // repository metadata (this is the commit pin recorded for git sources).
+        std::string head = util::git_head_commit(clone_dir);
+        if (head.empty()) {
+            throw std::runtime_error("failed to resolve HEAD of cloned repository: " + source_url);
+        }
+        // The clone's .git metadata must not ride into the installed package.
+        { std::error_code ec; fs::remove_all(clone_dir / ".git", ec); }
+        // 1.4.1: provenance marker — install_from_directory copies the whole
+        // clone dir into the installed package, so this lands at
+        // <pkg>/.ezmk-git-source and lets maybe_write_lockfile re-derive
+        // source="git" + source_url + commit on later lockfile regenerations
+        // (the lockfile is rebuilt from installed dirs, not kept incrementally).
+        util::file_write(clone_dir / ".ezmk-git-source",
+                         source_url + "\n" + head + "\n");
+        install_from_directory(clone_dir, scope, assume_yes, no_lock);
+    } catch (...) {
+        { std::error_code ec; fs::remove_all(clone_dir, ec); }
+        throw;
+    }
+    { std::error_code ec; fs::remove_all(clone_dir, ec); }
+}
+
 void install(const std::string& pkg_file, cli::Scope scope,
              std::string_view expected_sha256,
              bool assume_yes,
@@ -1605,6 +1714,36 @@ void install(const std::string& pkg_file, cli::Scope scope,
             util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
         }
         install_from_directory(input, scope, assume_yes, no_lock);
+        return;
+    }
+
+    // 1.4.1: git repository URL source — clone & install via the directory
+    // chain. Detection order: local dir → git → archive URL → repo name.
+    // Must run BEFORE the is_url heuristic: scp-style "git@host:user/repo.git"
+    // (no "://") would otherwise be misread as a URL and mangled with an
+    // https:// prefix; "…/repo.git" must never be downloaded as an archive.
+    if (is_git_install_source(pkg_file)) {
+        // A git source is pinned by its commit SHA — an explicit --sha256 has
+        // no archive to verify (skip notice, mirroring directory installs).
+        if (!expected_sha256.empty()) {
+            util::warn(ezmk::i18n::I18nKey::pkg_git_sha256_skipped);
+        }
+        // 1.4.1: split "url[#ref]" — the fragment is the requested
+        // branch/tag/commit (git clone rejects fragments; strip before clone
+        // and pass the ref as the clone's branch selector).
+        std::string base = pkg_file;
+        std::string ref;
+        auto hash = base.find('#');
+        if (hash != std::string::npos) {
+            ref = base.substr(hash + 1);
+            base = base.substr(0, hash);
+        }
+        // Bare "github.com/user/repo.git" (no scheme, not scp/file:// style)
+        // needs an explicit protocol for git clone.
+        if (base.find("://") == std::string::npos && base.rfind("git@", 0) != 0) {
+            base = "https://" + base;
+        }
+        install_git_source(base, ref, scope, assume_yes, no_lock);
         return;
     }
 

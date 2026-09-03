@@ -74,6 +74,16 @@ std::string build_archive_command(bool is_msvc,
 // assume_yes 为 true 时（-y）全部跳过，行为与现有确认逻辑一致。
 bool url_integrity_confirm(const std::string& url, bool has_sha256, bool assume_yes);
 
+// 1.4.1: strict git-source detection for `pkg install` (a STRICT subset of
+// util::is_git_url — archive URLs must never match). True only for:
+//   - SSH scp-style:  "git@github.com:user/repo.git"
+//   - explicit scheme: "git://host/repo.git" / "file:///tmp/repo.git"
+//   - a URL (scheme or bare "host/user/repo") whose path ends ".git" after
+//     stripping any "#ref" fragment: "https://github.com/user/repo.git[#v1]"
+// Archive URLs (".zip" / ".tar.gz" / ".tgz"), local names and local paths
+// are never git sources.
+bool is_git_install_source(std::string_view s);
+
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.
 bool satisfies_version_constraint(std::string_view version,

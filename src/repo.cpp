@@ -159,19 +159,9 @@ static std::string name_from_url(std::string_view url) {
     return s;
 }
 
-// Guess if a string is a git URL (not a local filesystem path).
-static bool is_git_url(std::string_view s) {
-    // git@... style (SSH)
-    if (s.substr(0, 4) == "git@") return true;
-    // https://... or http://...
-    if (s.find("://") != std::string::npos) return true;
-    // Windows drive letter (e.g., C:/...) or absolute path → local
-    if (s.size() >= 2 && s[1] == ':') return false;
-    if (s.size() >= 1 && (s[0] == '/' || s[0] == '\\')) return false;
-    // If it looks like a URL (contains dots in host), treat as git
-    if (s.find('.') != std::string::npos && s.find('/') != std::string::npos) return true;
-    return false;
-}
+// 1.4.1: is_git_url() moved to util.cpp (shared with pkg install source
+// detection) — repo keeps the loose heuristic semantics (git@ / any :// /
+// bare host/user/repo); see util::is_git_url in include/ezmk/util.hpp.
 
 // Verify that a local directory is a valid EazyMake repo.
 // Enhanced in 0.2.5: validates each package's file existence and sha256 format.
@@ -414,7 +404,7 @@ void add(const cli::RepoOptions& opts) {
     RepoEntry entry;
     entry.name = repo_name;
 
-    if (is_git_url(opts.url)) {
+    if (util::is_git_url(opts.url)) {
         entry.type = "git";
         entry.url = opts.url;
         entry.branch = opts.branch;

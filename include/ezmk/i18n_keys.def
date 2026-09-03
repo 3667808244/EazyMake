@@ -112,6 +112,10 @@ EZMK_I18N_KEY(pkg_info_precompiled_variants)        // 1.2.0-dev.10
 EZMK_I18N_KEY(pkg_install_from_dir)       // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_sha256_skipped_dir)     // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_sha256_sidecar)         // 1.4.0-dev.5: verifying via <archive>.sha256 sidecar
+EZMK_I18N_KEY(pkg_git_cloning)            // 1.4.1: cloning a git-source package
+EZMK_I18N_KEY(pkg_git_not_available)      // 1.4.1: git binary missing
+EZMK_I18N_KEY(pkg_git_sha256_skipped)     // 1.4.1: --sha256 given for a git source
+EZMK_I18N_KEY(pkg_git_plain_confirm)      // 1.4.1: plain git:// transport warning
 EZMK_I18N_KEY(pkg_warn_std_mismatch)              // 1.3.1: source-package std check (pkg min > consumer min)
 EZMK_I18N_KEY(pkg_warn_std_mismatch_precompiled)  // 1.3.1: precompiled std check — ABI-flavored wording
 EZMK_I18N_KEY(pkg_fatal_std_mismatch)             // 1.4.0-dev.2: [pkg] strict_std_check=true — warn escalated to fatal
