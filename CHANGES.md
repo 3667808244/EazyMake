@@ -50,6 +50,13 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **明确不做**（见设计文档 §3.8）：子模块递归（`--recurse-submodules`）、仓库子目录选择（git 仓库根即包根）、`pkg update` 的 git 版本语义（提示用 `pkg install <git-url>` 重新安装）、`git+https://` 等 scheme 别名、`[depends]` 声明中的 git URL
 - 1.4.0 裁定表「收口 1.5.x」项不受影响，继续按原归宿
 
+### 发布（2026-09-03，tag `v1.4.1`）
+
+- **GitHub Release**：windows-x64 zip + linux-x64 / macos-arm64 tar.gz + 独立 `ezmk.exe`/`ezmk-lua.exe`（含 `.sha256` 边车）已上传（`macos-x64` 仍无资产——`macos-13` runner 在 free tier 不分配，与 1.2.x/1.3.x/1.4.0 相同）；边车一致性已验证（`ezmk.exe.sha256` 内容 = `ezmk.exe` 资产真实 digest `d95ff14a…`）
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.1（macos-arm64 `e7c2ca87…` / linux-x64 `debcc1f3…` 真实 digest；仓库副本 `publish/homebrew/ezmk.rb` 同步）
+- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.1（pkgver + 源码 tarball 真实 digest `2bfc4917…`）；本机 MSYS2 `makepkg` 验证通过（`usr/bin/ezmk.exe`/`ezmk-lua.exe`/`_ezmk` 落位，`ezmk version` → 1.4.1）；`makepkg -si` 自取
+- **winget**：split manifests（`InstallerSha256` = `ezmk-windows-x64.zip` 真实 digest `604c41b0…`）已提交 `microsoft/winget-pkgs#428792`；`license/cla` pass（历史签署仍有效），CI 校验 + 版主审批为发布后跟进项，不阻塞发布（1.1.3 `#416835` ~ 1.4.0 `#426317` 仍在队列）
+
 ---
 
 ## 1.4.0 (2026-08-30) — 调试配置自动化 + 语言标准收尾 + workspace scan
