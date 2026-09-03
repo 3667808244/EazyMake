@@ -24,7 +24,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.4.1 (dev) — pkg install 支持 git 仓库 URL
+## 1.4.1 (2026-09-03) — pkg install 支持 git 仓库 URL
 
 1.4.0 正式发布后的**首个补丁版本**（单主题：`ezmk pkg install` 支持 git 仓库 URL）。主题来自 1.4.0 发布后收集到的用户需求：`git@github.com:user/repo.git` / `https://github.com/user/repo.git` 此前无法作为包来源安装。本版把「git 仓库作为包来源」落地为完整链路：识别 → 克隆 → ref 定位 → 复用目录安装链路 → lockfile 记录。**公共 API 无破坏性变更**（纯增量：新来源 + 新可选 flag `--branch` + 新可选 lockfile 字段）。
 
@@ -42,6 +42,8 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - 判定表单测：`git@` / `git://` / `file://` / `.git` / `.git#ref` 命中；`.zip` / `.tar.gz` / `foo.zip#x` / 本地路径不误判
 - lockfile 单测：commit 字段 round-trip + 旧格式（无 commit）兼容解析
 - 集成测试（离线本地 git fixture）：`file://` 端到端安装（lockfile 记录 `source = "git"` + commit）、`#tag` / `#<sha>` / `--branch` / 默认分支四形态（`--branch` 胜 `#ref`）、`--locked` commit 匹配成功 / 篡改后失败、`--sha256` 跳过提示、`git://` 明文确认（取消 / `-y` 跳过）
+- 全量回归：**1020 用例 / 5970 断言零失败**（1.4.0 基线 1003/5835，+17 用例/+135 断言；3 跳过为既有环境限制）
+- i18n 三向一致（`check_i18n.py`，402 键 × en/zh + zh-TW 变体）
 
 ### 已知限制 / 跟进项
 
