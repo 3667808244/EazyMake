@@ -24,6 +24,32 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.1 (dev) — pkg install 支持 git 仓库 URL
+
+1.4.0 正式发布后的**首个补丁版本**（单主题：`ezmk pkg install` 支持 git 仓库 URL）。主题来自 1.4.0 发布后收集到的用户需求：`git@github.com:user/repo.git` / `https://github.com/user/repo.git` 此前无法作为包来源安装。本版把「git 仓库作为包来源」落地为完整链路：识别 → 克隆 → ref 定位 → 复用目录安装链路 → lockfile 记录。**公共 API 无破坏性变更**（纯增量：新来源 + 新可选 flag `--branch` + 新可选 lockfile 字段）。
+
+### 新增 / 行为变更
+
+- **git 来源检测（src/pkg.cpp）**：安装参数按「本地目录 → git URL → 归档 URL → 名称搜索」顺序判定；严格判定 = `git@`（SSH scp）前缀 / `git://`·`file://` 协议 / 剥 `#ref` 后以 `.git` 结尾——归档 URL（`.zip` / `.tar.gz`）零误伤。`is_git_url` 启发式提取到 `util`（repo add 与 pkg install 共享同一实现，repo 宽松语义不变）
+- **克隆安装链路**：克隆到唯一临时目录 → 复用目录安装全链路（校验 → 钩子 → 依赖 → 编译 → 拷贝 → postinstall → lockfile）；克隆目录不携带 `.git` 元数据；`git_head_commit()` helper 解析锁定 commit
+- **ref 定位**：URL 片段 `#<ref>` + 新可选 flag `--branch <ref>`（优先级：flag > 片段 > 默认分支）；分支/标签/默认分支浅克隆 `--depth 1`，commit SHA 全量克隆 + 检出
+- **lockfile 记录 git 源**：`LockedPackage` 新增可选 `commit` 字段（旧 lockfile 无字段正常解析，`lockfile version` 保持 1）；git 源记录 `source = "git"` + `source_url` + `commit`（sha256 留空，commit 为指纹）；`--locked` 按记录的 source_url + commit 重新克隆，克隆后 HEAD 与 lockfile commit 不一致 → fatal（`lock_commit_mismatch`，防分支/标签 force-push 漂移）；`--locked` 不重写 lockfile（既有约束保持）
+- **完整性语义**：git 源以 commit SHA 为指纹，无 sha256 归档校验；显式 `--sha256` 提示跳过；`git://` 明文协议警告 + 确认（`-y` 跳过）
+- **i18n 三向**：5 个新 key（`pkg_git_cloning` / `pkg_git_not_available` / `pkg_git_sha256_skipped` / `pkg_git_plain_confirm` / `lock_commit_mismatch`），`check_i18n.py` 通过（键数 397 → 402）
+
+### 测试
+
+- 判定表单测：`git@` / `git://` / `file://` / `.git` / `.git#ref` 命中；`.zip` / `.tar.gz` / `foo.zip#x` / 本地路径不误判
+- lockfile 单测：commit 字段 round-trip + 旧格式（无 commit）兼容解析
+- 集成测试（离线本地 git fixture）：`file://` 端到端安装（lockfile 记录 `source = "git"` + commit）、`#tag` / `#<sha>` / `--branch` / 默认分支四形态（`--branch` 胜 `#ref`）、`--locked` commit 匹配成功 / 篡改后失败、`--sha256` 跳过提示、`git://` 明文确认（取消 / `-y` 跳过）
+
+### 已知限制 / 跟进项
+
+- **明确不做**（见设计文档 §3.8）：子模块递归（`--recurse-submodules`）、仓库子目录选择（git 仓库根即包根）、`pkg update` 的 git 版本语义（提示用 `pkg install <git-url>` 重新安装）、`git+https://` 等 scheme 别名、`[depends]` 声明中的 git URL
+- 1.4.0 裁定表「收口 1.5.x」项不受影响，继续按原归宿
+
+---
+
 ## 1.4.0 (2026-08-30) — 调试配置自动化 + 语言标准收尾 + workspace scan
 
 1.4.0 是 1.3.x 全部补丁收口后的**首个功能 minor**，按 dev（功能）→ pre（收口）两阶段推进。dev.1 ~ dev.7 落地两大主线（**调试配置自动化** + **语言标准收尾**）与功能收口 / 质量审计 / 插队功能，pre.1 完成用户触达打磨、全量文档检查与发布门槛预核对。**公共 API 无破坏性变更**（纯增量：新命令 / 配置字段 / 行为语义增强；破坏性变更仍仅归 2.0.0）。
