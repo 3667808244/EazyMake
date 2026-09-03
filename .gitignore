@@ -12,7 +12,7 @@ build/
 !.claude/skills/
 
 # DSH local skill bridge (junctions into .claude/skills)
-.dsh/
+.dsh/ 
 
 # IDE files
 .vscode/
@@ -38,3 +38,5 @@ include/ezmk/version.hpp
 !.claude/skills/
 sessions.md
 include/ezmk/logo.gen.h
+
+*.eml
