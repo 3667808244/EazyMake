@@ -27,7 +27,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 | [1.4.0-dev.6](1.4.0-dev.6.md) | 代码质量审计 | 8 路并行审查全量代码；修复 8 P0 + 高价值 P1（缓存签名/`--locked` 锁版本/依赖名与 repo 名校验/git branch 注入/MSVC 本地化/CMake 括号注释/Lua 根路径）+ 4 恒真测试 | ✅ 已完成（2026-08-29，dev.6：全量 968/5612 零回归，+24 断言） |
 | [1.4.0-dev.7](1.4.0-dev.7.md) | workspace scan | `ezmk workspace scan [<dir>] [--dry-run] [-y]`：递归扫描目录树收集成员、生成/合并 `ezmk-workspace.toml`（文本级拼接保留注释与 options）、`ws` 简写、跳过规则（隐藏/嵌套根/逃逸） | ✅ 已完成（2026-08-30，dev.7：全量 988/5770 零回归，+20 用例/+158 断言） |
 | [1.4.0-pre.1](1.4.0-pre.1.md) | 发布前收口 | 用户触达打磨（别名总表 / `--help` / README 速览）+ 全量文档检查（docs/README/tutorial/skill + i18n 三向）+ 缺陷收集与未实现项补全（dev 已知限制聚合裁定表）+ 1.4.0 聚合 changelog + API 稳定性承诺扩展 + 发布门槛预核对 | ✅ 收口完成（2026-08-30：全量 1003/5835 零回归，+15 用例/+65 断言；门槛 ①②③ 满足） |
-| [1.4.1](1.4.1.md) | pkg install 支持 git 仓库 URL | `pkg install` 识别 git URL（`git@`/`git://`/`file://`/`.git`）→ 克隆 → ref 定位（`#<ref>`/`--branch`，分支/标签浅克隆、commit 全量）→ 复用目录安装链路 → lockfile 记录 `source="git"` + `commit` + `--locked` 校验 | ✅ 已发布（2026-09-03，tag `v1.4.1`；全量 1020/5970 零回归） |
+| [1.4.1](1.4.1.md) | pkg install 支持 git 仓库 URL | `pkg install` 识别 git URL（`git@`/`git://`/`file://`/`.git`）→ 克隆 → ref 定位（`#<ref>`/`--branch`，分支/标签浅克隆、commit 全量）→ 复用目录安装链路 → lockfile 记录 `source="git"` + `commit` + `--locked` 校验 | ✅ 已发布（2026-09-03，tag `v1.4.1`；全量 1020/5970 零回归；三渠道：winget PR #428792 / homebrew tap / pacman PKGBUILD） |
 
 ### 依赖关系
 
