@@ -1,94 +1,99 @@
-# EazyMake 1.4.1 执行计划
+# EazyMake 1.4.2 执行计划
 
-> **状态：已发布**（2026-09-03，tag `v1.4.1`）。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
+> **状态：规划中（未开始实现）**。1.4.1 发布后的补丁版本，主题：**代码质量审计修复（第二轮）**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
-> 详细设计：[**1.4.1.md**](plans/1.4.x/1.4.1.md)。本计划为 1.4.0 正式发布后的**第一个补丁版本**（单主题：`pkg install` 支持 git 仓库 URL），对照 1.3.1~1.3.6 的单功能补丁惯例。
+> 详细设计：[**1.4.2.md**](plans/1.4.x/1.4.2.md)。本计划为 v1.4.1 全量代码六路并行逐行审计 + 独立核查的修复落地（对照 1.4.0-dev.6 / 1.3.6 审计收口先例），P0~P4 共 36 项修复 + 低危随附项。
 >
-> **范围边界**：只做 git URL 安装支持——识别（`git@` / `git://` / `file://` / `.git` 后缀）→ 克隆 → ref 定位（`#<ref>` / `--branch`，分支/标签浅克隆、commit 全量）→ 复用 `install_from_directory` 安装 → lockfile 记录 `source="git"` + `commit` + `--locked` 校验。子模块递归 / 仓库子目录 / `pkg update` git 语义**明确不做**。**公共 API 无破坏性变更**。
+> **范围边界**：只修缺陷与健壮性，**零功能新增**。Linux/macOS 文件监视真递归**明确不做**（设计 §3.9）。**公共 API 无破坏性变更**。
 >
-> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 1003 用例 / 5835 断言，1.4.0 发布态；1.4.1 dev 后 1020/5970 零回归）。
+> **⛔ 发布门槛**：① 计划清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 **1020 用例 / 5970 断言**，1.4.1 发布态）。
 >
-> **版本决策**：dev 阶段二进制版本号保持 1.4.0（1.2.x/1.3.x 补丁先例不提前 bump），正式发布 commit 按 workflow §3 bump 1.4.1。
+> **版本决策**：dev 阶段二进制版本号保持 1.4.1（1.2.x/1.3.x/1.4.1 补丁先例不提前 bump），正式发布 commit 按 workflow §3 置 1.4.2。
 
 ---
 
 ## 1 背景
 
-- `pkg install` 支持名称（仓库）/ 本地归档 / 本地目录 / 归档 URL 四种来源，**git 仓库 URL 不支持**：`git@github.com:user/repo.git` 被 `is_url` 启发式误判为 URL 补 `https://` 前缀后下载失败；`https://github.com/user/repo.git` 被当作归档下载、解压失败（`src/pkg.cpp` 1611-1623）。
-- 基础设施已齐备：`util::git_available()/git_clone()/git_pull()`（`util.cpp` Git helpers）、`repo.cpp` 私有 `is_git_url()`、`install_from_directory()`（`pkg.cpp:1519`）目录安装全链路。缺口仅为：来源判定 + 克隆落地 + ref 定位 + lockfile 记录。
+- 1.4.0-dev.6 完成第一轮审计（8 P0/P1）；本版第二轮审计发现的问题集中在**子系统接口层与跨平台路径/编码**：Lua 报错对象 UB 崩溃、`workspace watch` 成员饿死/多次 Ctrl+C、文件监视器 worker 静默死亡、MSVC 依赖跟踪失效（stdout/stderr 流错位 + 前缀英文硬编码）、`--locked` 产物哈希与归档哈希混用、`[test].framework` 缺省大小写不一致、CMake 导入器 `add_library` 丢源/未知条件 `else` 反转、Windows 窄 API 非 ASCII 乱码、repo 路径信任边界、watcher/workspace 文件层多处（详见设计文档 §1/§2）。
 
 ## 2 目标
 
-| # | 目标 | 优先级 |
-|---|------|--------|
-| 1 | `pkg install` 识别 git 仓库 URL 并克隆安装，复用 `install_from_directory` 全链路 | P0 |
-| 2 | ref 定位：`#<ref>` 片段 + `--branch <ref>`（分支/标签/commit SHA），浅克隆策略 | P0 |
-| 3 | lockfile 记录 git 源（`source="git"` + `source_url` + 可选 `commit` 字段）；`--locked` 校验 commit | P0 |
-| 4 | 完整性语义：commit 为指纹、`--sha256` 跳过提示、`git://` 明文警告 | P1 |
-| 5 | 文档三向 + i18n 三向（+5 key，`check_i18n.py` 通过） | P0 |
-| 6 | 全量回归 `bash build.sh test-all` 零失败（基线 1003/5835）；CI push 绿色 | P0 |
+| 组 | 优先级 | 覆盖 |
+|----|--------|------|
+| 崩溃/缓存正确性（F-01~F-05） | P0 | Lua UB 崩溃、watch 饿死、MSVC 头文件失效、`--locked` 哈希、watcher 假死 |
+| 语义/CLI/import（F-06~F-15） | P1 | test.framework 缺省、import ×2、`--disable-cache`、C++17 标准性、测试链接、相对路径、clean -w、位置参数、Windows 参数装配 |
+| Windows/路径（F-16~F-22） | P2 | example 解析、watch 文案、Lua 权限/预算、窄 API 非 ASCII、MSVC 标准映射、cl 探测 |
+| pkg/repo/锁（F-23~F-30） | P3 | repo 路径约束/名字校验、preinstall cwd、platform 字段、预发布 tie-break、verify 盲点、update 流程 |
+| watcher/workspace 文件（F-31~F-36） | P4 | 目录补挂、存在性过滤、members 拼接、符号链接环、校验不动点、kevent 槽 |
+| 低危随附（F-37） | P5 | iso_time/双 close/进程组/get_home_dir/record version/scaffold 等择优随附 |
 
-## 3 执行阶段
+## 3 执行阶段（每阶段一个 commit，阶段间 `bash build.sh test-all` 全量回归）
 
-### 阶段一：git 来源检测 + 克隆安装链路（对应设计 §3.1/3.2）
+### 阶段一：Lua 运行时健壮性（F-01/F-18/F-19，对应设计 §3.1/4.1）
 
-- [x] **1.1** `util::is_git_url()` 提取（**保留 repo 宽松语义**：`git@`/任意 `://`/含点含斜杠 + 本地路径排除，repo add 行为零变化），`repo.cpp` 改调 util 版本（repo add 兼容性回归测试覆盖）；`pkg.cpp` 用严格子集判定（剥 `#ref` 后 `.git` 结尾 / `git@` / `git://` / `file://`）
-- [x] **1.2** `pkg.cpp` 检测顺序插入 git 分支：目录 → **git** → 归档 URL → 名称搜索；判定短路不误伤 `.zip`/`.tar.gz`
-- [x] **1.3** 克隆 → 临时目录 → `install_from_directory` 全链路；git 不可用 → fatal；`util::git_head_commit()` helper（`rev-parse HEAD`）
-- [x] **1.4** 单测：`is_git_install_source` 判定表（命中：`git@`/`git://`/`file://`/`.git`/`.git#ref`；不误判：`.zip`/`.tar.gz`/`foo.zip#x`/无协议非 git）
+- [ ] `lua_tostring` NULL 判空（`luaL_tolstring`），10 处报错路径（lua_api.cpp 1106/1124/1150/1183/1294/1306/1327/1456/1464/1491）；单测 `error()`/`error({...})`/`assert(false,{})` 不崩
+- [ ] `file_exists`/`list_sources` 走 `check_read_permission`（deny → false/空，不弹 ask）；`run_script` 重注册基准对齐 `run_lua_script_with_ctx`
+- [ ] 沙箱执行预算：`lua_sethook` 指令上限（约 1e8）+ `ezmk.run`/`run_capture` 超时 + `lua_to_json` 深度上限（200）；钩子用完 restore
 
-### 阶段二：ref 定位与克隆策略（对应设计 §3.2）
+### 阶段二：workspace watch 与文件监视（F-02/F-05/F-31/F-32/F-36，对应设计 §3.2/4.2）
 
-- [x] **2.1** `#<ref>` 片段解析（最后一个 `#` 后全部，克隆前剥离）+ `--branch <ref>` flag（优先级：flag > 片段 > 默认分支）
-- [x] **2.2** `util::git_clone` 加 `shallow` 参数（默认 false，repo 调用零变化）：分支/标签/默认分支 `--depth 1`；commit SHA 全量克隆 + checkout
-- [x] **2.3** 集成测试：`#tag` / `#<sha>` / `--branch` / 默认分支四形态安装，lockfile commit 与 `rev-parse HEAD` 一致
+- [ ] `run_watch` 改为每选中成员一个 `std::thread`（层序仅定启动次序）；一次 Ctrl+C 全部退出
+- [ ] FileWatcher worker 错误通道（`worker_error_` + 消息）：run() 观测到 worker 死亡即告警清理返回，不假死
+- [ ] 目录运行中消失 → 周期重试补挂（Windows 重开句柄重挂、Linux 清理 wd 残留 + 重 add_watch、macOS 重开 fd）
+- [ ] flush 前 `fs::exists` 存在性过滤 + 忽略前缀/后缀 API；main.cpp ProjectWatch 注册忽略 `build/`、`.ezmk/`、`.o/.d/.tmp`
+- [ ] macOS kevent `changes/events` 按监视数动态分配（去 32 槽硬编码）
 
-### 阶段三：lockfile commit + `--locked` 校验（对应设计 §3.3）
+### 阶段三：构建缓存正确性（F-03/F-04/F-09/F-10/F-11/F-12，对应设计 §3.3/4.3）
 
-- [x] **3.1** `LockfilePackage` 新增可选 `commit` 字段（load/save 兼容：空串缺省、非空才写出、lockfile version 保持 1）
-- [x] **3.2** git 源写入 `source="git"` + `source_url` + `commit`；sha256 留空
-- [x] **3.3** `--locked`：按 lockfile 的 source_url+commit 克隆，`rev-parse HEAD` 不一致 → fatal（`lock_commit_mismatch`）；lockfile 不重写
-- [x] **3.4** 测试：commit 匹配成功 / 篡改后失败 / 旧 lockfile（无 commit 字段）正常解析
+- [ ] MSVC `/showIncludes` 依赖注解改解析 `res.out`；`parse_show_includes` 前缀本地化无关（en/zh 前缀 + `:` 后路径形态兜底）
+- [ ] lockfile 哈希语义分离：`archive_sha256`（重装校验下载归档）vs `lib_sha256`（仅 verify）；URL/本地归档安装补记 source/archive hash；旧 lockfile 兼容
+- [ ] `--disable-cache` 全停：跳缓存拷贝、record 合并与 save
+- [ ] build.cpp:2569 TestRunContext 去 C++20 designated initializers（改成员赋值）
+- [ ] `run_tests` 链接纳入 `[depends].lib` 包归档与 system targets（复用 prepare_build_state 解析）
+- [ ] 相对 `link_dirs`（及 `-L/-I` 族 flags）按 `proj_root` 绝对化，子目录调用安全
 
-### 阶段四：i18n 三向（对应设计 §3.4）
+### 阶段四：CLI/配置/导入（F-06/F-07/F-08/F-13/F-14/F-16/F-17，对应设计 §3.4/4.4）
 
-- [x] **4.1** 5 个新 key（`pkg_git_cloning` / `pkg_git_not_available` / `pkg_git_sha256_skipped` / `pkg_git_plain_confirm` / `lock_commit_mismatch`）入 `i18n_keys.def` + en/zh JSON（zh-TW 继承回退）
-- [x] **4.2** `python scripts/check_i18n.py` 通过（键数 397 → 402）
+- [ ] `test.framework` 分发处 `normalize_lang` 归一化；`test_config.cpp:852` 断言同步为 `"CATCH2"`；集成：省略键可 `ezmk test`
+- [ ] import `add_library` 收集源码 + 无关键字默认 static + `INTERFACE`→header-only；`else`/`elseif` 对 nullopt 帧保持跳过 + TODO
+- [ ] `clean -w` 首轮 spec 对齐 `workspace_cmd_spec()`（复活 stop-on-error/多余参数拒绝）
+- [ ] `project install/pack/test` 补 `reject_positionals`
+- [ ] `ezmk example` 参数解析重写（index 2 起按 spec；`-h`/`-o <dir>`/名称 positional/`list` 拒多余参数；output_dir 缺省 "."）
+- [ ] watch 失败路径改打新 i18n key `watch_watching`（en/zh/zh-TW + `check_i18n.py`；键数 402 → 403）
 
-### 阶段五：测试补齐 + 收口（对应设计 §3.6/§4）
+### 阶段五：Windows/路径/进程（F-15/F-20/F-21/F-22，对应设计 §3.5/4.5）
 
-- [x] **5.1** 集成补齐：`file://` 端到端（fixture `git init` + tag + 提交）、`--sha256` 跳过提示、`git://` 明文确认（`-y` 跳过）
-- [x] **5.2** 全量回归 `bash build.sh test-all` 零失败（**1003 用例 / 5835 断言**基线，零回归）；CI 工作流覆盖核对
-- [x] **5.3** 文档：docs/en|zh `pkg.md`「Package Sources」新增 Git 小节 + 检测顺序、`cli.md` `pkg install` 参数表（git URL / `--branch`）、README 速览核对、`.claude/skills/ezmk-user-pkg/SKILL.md` 同步
-- [x] **5.4** `CHANGES.md` 1.4.1 条目（新增 / 行为变更 / 测试 / 已知限制）
-- [x] **5.5** `plans/1.4.x/README.md` / `plan.md` / `plans/README.md` 状态更新（全勾选）
-- [x] **5.6** 发布门槛复核（⛔：① 清单全部完成或明确收口 ② 公共 API 无破坏性变更 ③ 全量零回归）——满足后按 workflow 正式发布（bump 1.4.1）
+- [ ] Windows 参数装配分支（`quote_windows_arg`）：`run_executable`/`run_member`（`--report`、`extra_flags`）不再用 POSIX `escape_shell_arg`
+- [ ] 窄↔宽转换层（CP_UTF8）：`CreateProcessW`（cwd/env）、`GetModuleFileNameW`、zip 归档名、`file_watcher` 宽字符存 `fs::path`
+- [ ] MSVC 标准映射修正（98/11 去无效 `/std:` 开关、23/26→latest、`gnu++`/`c++2a` 处理）+ translate 全表单测
+- [ ] MSVC 探测改 `cl /Bv`（exit 0 + banner/Version 解析），弃「裸 cl exit==0」判据
+
+### 阶段六：pkg/repo/lockfile（F-23~F-30，对应设计 §3.6/4.6）
+
+- [ ] repo `index.toml` `file`/`[platform]` 前缀约束在 repo_dir 内（safe_extract_path 同款校验）；`repo update` 后复查；`type="dir"` 同口径
+- [ ] `repo remove/update/info` 入口 `validate_pkg_name`
+- [ ] preinstall 钩子 cwd 改 `pkg_root`（全新安装可用）；shell 钩子 `-y`/非交互不 open_in_editor
+- [ ] lockfile `platform` 写真实 os_arch_toolchain
+- [ ] 预发布平局 tie-break（release 优先 → 字典序），消除 TOML 顺序依赖
+- [ ] lockfile verify：header-only 校验 include/ 清单哈希（或文档化 install 时校验）；git 源校验 `.ezmk-git-source` marker 与 commit 一致
+- [ ] `pkg update/update_all`：CLI `-y` 透传、install 三态（ok/cancelled/failed）分计、failed>0 exit 1；update_all 先快照名单；自动安装依赖失败 best-effort 回滚；`is_url` scheme/`.git` 优先判定
+
+### 阶段七：workspace 文件层（F-33/F-34/F-35，对应设计 §3.7/4.7）
+
+- [ ] `replace_members_in_text` 引号/注释状态机定位数组尾（防含 `]` 注释截断）
+- [ ] `scan_dir` 已访问 canonical 集合（自指符号链接环终止 + skipped）
+- [ ] 成员失效传播迭代至不动点；topo_layers "internal error" 改可解释成员错误
+
+### 阶段八：低危随附 + 收口（F-37 随附项 + 设计 §4.8）
+
+- [ ] iso_time 线程安全（localtime_r/localtime_s）、POSIX run_command 双 close 修正、超时杀子进程组、`get_home_dir` HOME 优先策略、record version 校验、scaffold 写失败检查、progress 序号等择优落地（详见设计 F-37）
+- [ ] 收口：`-Wall -Wextra -Wpedantic -Wshadow -Wformat=2` 全量零告警；`bash build.sh test-all` 全量零回归（1020/5970）；i18n 三向 + `check_i18n.py`；docs 已知限制更新（watch 失败文案 / `--disable-cache` 语义 / lockfile 字段）；CHANGES.md 1.4.2 条目；`plans/1.4.x/README.md`/`plan.md`/`plans/README.md` 状态更新；发布门槛复核
+
+---
 
 ## 4 关键设计决策
 
-| 决策 | 结论 | 理由 |
-|------|------|------|
-| 补丁范围 | 单主题：git URL 安装 | 用户需求聚焦；对照 1.3.1~1.3.5 单功能补丁惯例 |
-| git 判定 | `.git` 后缀（剥 `#ref` 后）+ `git@`/`git://`/`file://` 前缀 | 最短可判定规则，零误伤归档 URL；判定表单测锁定 |
-| 安装路径 | 克隆 → `install_from_directory` 复用 | 目录安装全链路（校验/钩子/依赖/编译/拷贝/lockfile）零新代码 |
-| ref 语法 | `#<ref>` 片段 + `--branch` flag | `#` 是 URL fragment 天然分隔，无歧义；不采用 `@ref`（与 SSH `git@` 冲突） |
-| 浅克隆 | 分支/标签/默认 `--depth 1`；commit SHA 全量 | SHA 在浅克隆下可能不可达，正确性优先 |
-| lockfile | 新增可选 `commit` 字段，version 保持 1 | 向后兼容旧 lockfile；git 源以 commit 为可复现指纹 |
-| `--locked` | 克隆后比对 `rev-parse HEAD` | 防 tag/branch force-push 漂移，与「lockfile 是唯一真相」语义一致 |
-| `pkg update` | git 源提示重新安装，不做升级逻辑 | git 源无语义版本；自动刷新分支会静默升级，与 `--locked` 冲突 |
-
-## 5 兼容性矩阵
-
-| 变更 | 影响 | 说明 |
-|------|------|------|
-| 来源检测插入 git 分支 | 新增来源 | 仅 `.git` 后缀 / 特殊前缀命中时生效；既有 4 种来源行为不变 |
-| `util::git_clone` 加 `shallow` | 内部签名 | 默认 false，repo.cpp 调用零变化 |
-| `util::is_git_url()` 提取 | 内部重构 | repo add 行为对齐 + 回归测试锁定 |
-| `LockfilePackage.commit` | 格式扩展 | 可选字段，旧 lockfile 兼容；非空才写出 |
-| 新 flag `--branch` / 新 i18n key | 纯增量 | 不改变既有 flag/key 语义 |
-| 公共 API | **无破坏性变更** | 纯增量补丁 |
-
-## 6 延后项（裁定表完整版见设计文档 §3.8）
-
-- **明确不做**：子模块递归（`--recurse-submodules`）、仓库子目录选择（git 仓库根即包根）、`pkg update` 的 git 版本语义（提示重新安装）、`git+https://` 等 scheme 别名、`[depends]` 中的 git URL
-- **不影响**：1.4.0 裁定表「收口 1.5.x」项（launch 透传 / 语义 C / workspace 相关）继续按原归宿
+- **P0 优先序**：Lua UB（F-01）、watch 线程模型（F-02）、MSVC 依赖流（F-03）、`--locked` 哈希（F-04）、watcher 死亡感知（F-05）先落，其余按阶段推进。
+- **行为修正为主**：全部为缺陷修复；错误行为修正（如 `--locked` 从必失败 → 可校验重装、watch 文案）不需要迁移步骤。
+- **测试锁定修复**：每个修复配单测/集成，防止「单测锁死错误行为」重演（F-06 先例：test_config.cpp:852）。
+- **每阶段全量回归**后才进入下一阶段（设计 §3.8 坑 8）。
