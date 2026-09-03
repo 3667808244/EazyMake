@@ -1603,10 +1603,12 @@ static void install_git_source(const std::string& source_url,
                                cli::Scope scope,
                                bool assume_yes, bool no_lock,
                                const std::string* expected_commit = nullptr) {
-    // git:// is plaintext (MITM) — mirror url_integrity_confirm's http:// branch.
+    // git:// is plaintext (MITM) — warn + confirm, mirroring
+    // url_integrity_confirm's http:// branch (1.1.3 S3 pattern).
     std::string lower_url = source_url;
     for (auto& c : lower_url) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (lower_url.rfind("git://", 0) == 0) {
+        util::warn(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_git_plain_confirm));
         if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_git_plain_confirm), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
             return;

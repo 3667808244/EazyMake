@@ -289,3 +289,58 @@ TEST_CASE("integration: pkg install git URL — --locked rejects a tampered comm
     REQUIRE(r2.exit_code != 0);
     REQUIRE((r2.out + r2.err).find("ezmk.lock") != std::string::npos);
 }
+
+TEST_CASE("integration: pkg install git URL — explicit --sha256 is skipped with a notice (1.4.1)", "[integration][1.4.1]") {
+    if (!ezmk_available() || !git_available()) {
+        SKIP("ezmk binary or git not available");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    GitFixture fx;
+    TempDir proj_tmp;
+    fs::path proj = proj_tmp.path / "proj";
+    fs::create_directories(proj / "src");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"proj\"\ntype = \"executable\"\nversion = \"0.1.0\"\n");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    // git sources are pinned by commit SHA — an explicit --sha256 must be
+    // skipped (notice), not verified against any archive.
+    ProcResult r = run_ezmk("pkg install \"" + file_url(fx.repo) + "\" -p -y --sha256 " +
+                            std::string(64, 'a'), proj);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE((r.out + r.err).find("SHA-256 verification skipped") != std::string::npos);
+    REQUIRE(installed_version(proj) == "2.0.0");
+}
+
+TEST_CASE("integration: pkg install git URL — git:// plaintext warns; -y skips the prompt (1.4.1)", "[integration][1.4.1]") {
+    if (!ezmk_available() || !git_available()) {
+        SKIP("ezmk binary or git not available");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir proj_tmp;
+    fs::path proj = proj_tmp.path / "proj";
+    fs::create_directories(proj / "src");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"proj\"\ntype = \"executable\"\nversion = \"0.1.0\"\n");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    // Without -y, a git:// source must not reach the clone step — the
+    // plaintext warning + prompt aborts the install (non-interactive stdin).
+    std::string plain = "git://127.0.0.1:9/nonexistent.git";
+    ProcResult r = run_ezmk("pkg install \"" + plain + "\" -p", proj);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);   // cancelled, not a clone attempt
+    REQUIRE((r.out + r.err).find("git://") != std::string::npos);
+    REQUIRE((r.out + r.err).find("Install cancelled") != std::string::npos);
+
+    // With -y the confirm is skipped → the clone is attempted (and fails: no
+    // git daemon on that port) — proving the prompt, not the clone, was gated.
+    ProcResult r2 = run_ezmk("pkg install \"" + plain + "\" -p -y", proj);
+    INFO("stderr: " << r2.err);
+    INFO("stdout: " << r2.out);
+    REQUIRE(r2.exit_code != 0);
+    REQUIRE((r2.out + r2.err).find("failed to clone") != std::string::npos);
+}
