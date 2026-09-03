@@ -638,6 +638,7 @@ namespace ezmk::cli
                 {'y', "yes", false},
                 {'\0', "locked", false},    // 1.1.0
                 {'\0', "no-lock", false},   // 1.1.0
+                {'\0', "branch", true},     // 1.4.1: git URL sources
             };
             add_scope_specs(spec);
             add_verbose_spec(spec);
@@ -675,6 +676,8 @@ namespace ezmk::cli
                 opts.locked = true;
             if (p.has("no-lock"))      // 1.1.0
                 opts.no_lock = true;
+            if (auto b = p.value("branch"))   // 1.4.1: git URL sources
+                opts.branch = *b;
             args.install_opts = opts;
             return args;
         }

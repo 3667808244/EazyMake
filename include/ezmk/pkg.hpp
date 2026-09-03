@@ -23,11 +23,14 @@ std::vector<fs::path> pkg_search_dirs(const std::vector<cli::Scope>& scopes);
 // assume_yes: skip all interactive prompts (for CI/scripts).
 // locked: 1.1.0 — install from lockfile only, error on mismatch.
 // no_lock: 1.1.0 — skip lockfile generation.
+// branch: 1.4.1 — explicit ref for git URL sources (--branch <ref>);
+// takes priority over the URL's "#ref" fragment.
 void install(const std::string& pkg_file, cli::Scope scope,
              std::string_view expected_sha256 = {},
              bool assume_yes = false,
              bool locked = false,
-             bool no_lock = false);
+             bool no_lock = false,
+             std::string_view branch = {});
 
 // Remove a package: search scopes in order, delete the first match.
 void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);

@@ -1652,7 +1652,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
              std::string_view expected_sha256,
              bool assume_yes,
              bool locked,
-             bool no_lock) {
+             bool no_lock,
+             std::string_view branch_flag) {
     // 1.1.0: --locked mode — install from lockfile only
     // 1.2.0-dev.7: lockfile + config resolved against the located project root
     // 1.4.0-dev.5: --locked must actually PIN the version (previously it only
@@ -1730,13 +1731,18 @@ void install(const std::string& pkg_file, cli::Scope scope,
         }
         // 1.4.1: split "url[#ref]" — the fragment is the requested
         // branch/tag/commit (git clone rejects fragments; strip before clone
-        // and pass the ref as the clone's branch selector).
+        // and pass the ref as the clone's branch selector). An explicit
+        // --branch flag takes priority over the URL fragment (flag > #ref >
+        // default branch).
         std::string base = pkg_file;
         std::string ref;
         auto hash = base.find('#');
         if (hash != std::string::npos) {
             ref = base.substr(hash + 1);
             base = base.substr(0, hash);
+        }
+        if (!branch_flag.empty()) {
+            ref = std::string(branch_flag);
         }
         // Bare "github.com/user/repo.git" (no scheme, not scp/file:// style)
         // needs an explicit protocol for git clone.

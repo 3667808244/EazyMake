@@ -128,6 +128,7 @@ struct InstallOptions {
     bool assume_yes = false; // -y: skip all interactive prompts
     bool locked = false;     // 1.1.0: --locked: install from lockfile only, error on mismatch
     bool no_lock = false;    // 1.1.0: --no-lock: skip lockfile generation
+    std::string branch;      // 1.4.1: --branch <ref> for git URL sources
 };
 
 struct QueryOptions {

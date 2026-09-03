@@ -462,7 +462,7 @@ int main(int argc, char** argv) {
         case ezmk::cli::Command::PkgInstall: {
             auto& opts = *args.install_opts;
             ezmk::pkg::install(opts.pkg_file, opts.scope, opts.sha256, opts.assume_yes,
-                                opts.locked, opts.no_lock);
+                                opts.locked, opts.no_lock, opts.branch);
             break;
         }
 
