@@ -60,6 +60,60 @@ static std::set<std::string> g_ask_allow;  // session cache: "cat:target" → al
 static std::set<std::string> g_ask_deny;   // session cache: "cat:target" → denied
 
 // ===================================================================
+// 1.4.2 F-01 / F-19: Lua error-message safety + sandbox execution budget
+// ===================================================================
+
+// F-01: read the message of the Lua error object at `idx` WITHOUT assuming it
+// is a string. The pre-1.4.2 code did `std::string err = lua_tostring(L, -1);`
+// — lua_tostring returns NULL for non-string error objects (error(),
+// error({...}), assert(false, {}) …) and std::string(NULL) is UB (SIGSEGV), so
+// any build/install hook or third-party utils script could crash ezmk.
+// Strings AND numbers convert safely via lua_tolstring (numbers are converted
+// in place; no metamethod runs, nothing is pushed), so error(42) keeps its
+// message. Everything else (nil, boolean, table, …) degrades to a stable
+// placeholder. Stack shape is unchanged — callers keep their pop counts.
+static std::string error_message(lua_State* L, int idx) {
+    if (lua_isstring(L, idx) || lua_isnumber(L, idx)) {
+        size_t len = 0;
+        const char* s = lua_tolstring(L, idx, &len);
+        if (s) return std::string(s, len);
+    }
+    return "unknown Lua error";
+}
+
+// F-19: sandbox execution budget. Sandboxed scripts (utils / build / install
+// hooks) previously had no lua_sethook, so a runaway loop (`while true do end`)
+// hung ezmk forever. The count hook below fires every kInstructionBudget VM
+// instructions and aborts the script with a Lua error.
+static constexpr int kInstructionBudget = 100000000;   // ~1e8 instructions per script
+static constexpr int kRunCommandTimeoutSec = 300;      // default timeout for ezmk.run / run_capture
+static constexpr int kJsonMaxDepth = 200;              // json_encode nesting cap
+// Initial Lua-stack slots reserved at init() (see init() for why): must stay
+// comfortably above kJsonMaxDepth * (slots per level + margin) so the json
+// converters never force a mid-recursion stack reallocation.
+static constexpr int kLuaStackSlots = 4096;
+
+static void instruction_budget_hook(lua_State* L, lua_Debug*) {
+    // Disarm first — the error unwinding after luaL_error must not re-enter
+    // this hook while Lua cleans up the aborted chunk.
+    lua_sethook(L, nullptr, 0, 0);
+    luaL_error(L, "script exceeded the instruction budget (%d)", kInstructionBudget);
+}
+
+// RAII: arm the count hook for one script execution and always disarm on scope
+// exit (success, Lua error, or early return) so the budget can never leak into
+// a later script running on the same state.
+struct InstructionBudgetGuard {
+    lua_State* L;
+    explicit InstructionBudgetGuard(lua_State* s) : L(s) {
+        if (L) lua_sethook(L, instruction_budget_hook, LUA_MASKCOUNT, kInstructionBudget);
+    }
+    ~InstructionBudgetGuard() {
+        if (L) lua_sethook(L, nullptr, 0, 0);
+    }
+};
+
+// ===================================================================
 // 0.2.5+ Utils permission model (pure checks + ask resolver)
 // ===================================================================
 
@@ -288,13 +342,24 @@ void init() {
         util::fatal(ezmk::i18n::I18nKey::lua_init_failed);
     }
 
+    // 1.4.2 F-19: pre-grow the Lua stack. The json <-> Lua converters
+    // (lua_to_json / json_to_lua) recurse in C++ while pushing one or two
+    // stack slots per nesting level; if that recursion ever forces Lua's
+    // stack to REALLOCATE mid-recursion (initial stack is only 40 slots),
+    // the process heap gets corrupted (crash at ≥ ~36 nesting levels).
+    // Pre-growing far beyond any depth the converters can reach (they are
+    // capped at kJsonMaxDepth below) makes the conversion never trigger a
+    // stack reallocation, so deep nesting degrades to a clean Lua error
+    // instead of heap corruption.
+    lua_checkstack(g_L, kLuaStackSlots);
+
     // Open the safe subset of standard libraries.
     // linit.c has been modified to exclude io and os for security.
     luaL_openlibs(g_L);
 
     // Verify Lua is working
     if (luaL_dostring(g_L, "return 50407")) {
-        std::string err = lua_tostring(g_L, -1);
+        std::string err = error_message(g_L, -1);
         lua_pop(g_L, 1);
         util::fatal("lua init failed: " + err);
     }
@@ -481,7 +546,21 @@ static int ezmk_list_sources(lua_State* L) {
         for (auto& f : files) {
             std::string fname = f.filename().string();
             if (seen.insert(fname).second) {
-                result.push_back(fs::absolute(f));
+                fs::path abs = fs::absolute(f);
+                // 1.4.2 F-18: list_sources must honour the same read policy as
+                // file_read — a denied source is filtered out (no ask is
+                // popped; targets that are neither allowed nor denied keep
+                // being listed, content access stays gated at file_read).
+                if (g_in_script_context && g_current_perms) {
+                    fs::path abs_norm(norm_path(abs));
+                    if (check_read_permission(abs_norm, g_current_perms,
+                                              g_project_root,
+                                              g_current_script_pkg_root)
+                        == PermResult::Deny) {
+                        continue;
+                    }
+                }
+                result.push_back(abs);
             }
         }
     }
@@ -518,7 +597,23 @@ static bool permit(PermResult r, PermCategory cat, const std::string& target) {
 static int ezmk_file_exists(lua_State* L) {
     check_arg_count(L, 1);
     const char* path = luaL_checkstring(L, 1);
-    lua_pushboolean(L, util::file_exists(resolve_path(path)) ? 1 : 0);
+    fs::path resolved = resolve_path(path);
+
+    // 1.4.2 F-18: an existence probe must honour the same read policy as
+    // file_read — a denied path answers false even when it exists. No ask is
+    // popped for probes: a target that is neither allowed nor denied (Ask)
+    // keeps the raw existence answer; content access is still gated at
+    // file_read.
+    if (g_in_script_context && g_current_perms) {
+        fs::path abs(norm_path(resolved));
+        if (check_read_permission(abs, g_current_perms, g_project_root,
+                                  g_current_script_pkg_root) == PermResult::Deny) {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+    }
+
+    lua_pushboolean(L, util::file_exists(resolved) ? 1 : 0);
     return 1;
 }
 
@@ -639,7 +734,9 @@ static int ezmk_run(lua_State* L) {
         }
     }
 
-    auto res = util::run_command(cmd);
+    // 1.4.2 F-19: subprocesses are bounded by a default timeout so a hung
+    // child (or a script that keeps spawning work) cannot hang ezmk forever.
+    auto res = util::run_command(cmd, kRunCommandTimeoutSec);
 
     lua_createtable(L, 0, 3);
     lua_pushinteger(L, res.exit_code);
@@ -668,7 +765,8 @@ static int ezmk_run_capture(lua_State* L) {
         }
     }
 
-    auto res = util::run_command(cmd);
+    // 1.4.2 F-19: bounded like ezmk.run — see above.
+    auto res = util::run_command(cmd, kRunCommandTimeoutSec);
     if (res.exit_code != 0) {
         luaL_error(L, "command failed (exit %d): %s", res.exit_code, res.err.c_str());
     }
@@ -781,7 +879,8 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j) {
 // NOTE: uses lua_absindex so the index stays valid across stack pushes/pops.
 // seen 记录当前引用链上已展开的表（lua_topointer 指针）；真循环（自引用）抛错，
 // 共享引用（同一子表挂在多个 key 下）靠 return 前的 erase 放行，允许重复序列化。
-static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& seen) {
+static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& seen,
+                                  int depth) {
     idx = lua_absindex(L, idx);  // stabilize against stack changes
     int t = lua_type(L, idx);
     switch (t) {
@@ -797,6 +896,13 @@ static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& 
     case LUA_TSTRING:
         return lua_tostring(L, idx);
     case LUA_TTABLE: {
+        // 1.4.2 F-19: nesting cap — an acyclic but arbitrarily deep chain of
+        // tables would otherwise recurse until the C stack blows up (the seen
+        // set only catches cycles). Error out past the cap instead.
+        if (depth > kJsonMaxDepth) {
+            throw std::runtime_error("json encode: table nesting exceeds depth limit (" +
+                                     std::to_string(kJsonMaxDepth) + ")");
+        }
         // 1.4.0-pre.1: 循环表检测 —— 同一张表沿引用链再次出现（t[1]=t、t.self=t）
         // 即自引用，直接抛错，避免无限递归打崩 C 栈。共享引用靠下方各 return 前
         // 的 seen.erase(ptr) 放行：兄弟分支重新 insert，允许重复序列化。
@@ -838,7 +944,7 @@ static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& 
             nlohmann::json arr = nlohmann::json::array();
             for (lua_Integer i = 1; i <= max_int_key; ++i) {
                 lua_rawgeti(L, idx, (int)i);
-                arr.push_back(lua_to_json(L, -1, seen));
+                arr.push_back(lua_to_json(L, -1, seen, depth + 1));
                 lua_pop(L, 1);
             }
             seen.erase(ptr);
@@ -857,7 +963,7 @@ static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& 
                     lua_pop(L, 1);
                     continue;
                 }
-                obj[key] = lua_to_json(L, -1, seen);
+                obj[key] = lua_to_json(L, -1, seen, depth + 1);
                 lua_pop(L, 1);
             }
             seen.erase(ptr);
@@ -875,7 +981,7 @@ static int ezmk_json_encode(lua_State* L) {
 
     try {
         std::set<const void*> seen;  // 1.4.0-pre.1: 循环表检测（入口建一次，贯穿递归）
-        nlohmann::json j = lua_to_json(L, 1, seen);
+        nlohmann::json j = lua_to_json(L, 1, seen, 0);
         std::string s = j.dump();
         lua_pushstring(L, s.c_str());
         return 1;
@@ -1053,13 +1159,20 @@ int run_script(lua_State* L, const fs::path& script_path,
         ~ScriptContextGuard() { g_in_script_context = false; g_current_perms.reset(); }
     } script_ctx_guard;
 
-    // Ensure ezmk API is registered (in case register_api wasn't called explicitly)
+    // Ensure ezmk API is registered with the CURRENT located project root.
+    // 1.4.2 F-18: align with run_lua_script_with_ctx — the old "ezmk is nil"
+    // guard was dead code (init() registers at process start, so `ezmk` is
+    // never nil), which kept g_project_root pinned to the process CWD when a
+    // utils script ran from a project subdirectory. Re-register whenever the
+    // located project root differs. Outside any project (global utils) the
+    // located root falls back to the CWD, so nothing changes there.
+    auto located = util::locate_project_root(fs::current_path());
+    fs::path abs_root = fs::absolute(located ? *located : fs::current_path());
     lua_getglobal(L, "ezmk");
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        register_api(L, g_project_root.empty() ? fs::current_path() : g_project_root);
-    } else {
-        lua_pop(L, 1);
+    bool needs_reg = lua_isnil(L, -1) || g_project_root != abs_root;
+    lua_pop(L, 1);
+    if (needs_reg) {
+        register_api(L, abs_root);
     }
 
     // ---- Build sandbox environment ----
@@ -1103,7 +1216,7 @@ int run_script(lua_State* L, const fs::path& script_path,
     // ---- Load the script file ----
     if (luaL_loadfile(L, script_path.string().c_str())) {
         // Compile error
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 2); // pop error + sandbox
         return 1;
@@ -1119,9 +1232,12 @@ int run_script(lua_State* L, const fs::path& script_path,
     }
 
     // ---- Execute the script chunk (define help/run functions) ----
+    // 1.4.2 F-19: arm the instruction budget now — it covers the chunk AND the
+    // help()/run() protected calls below; the guard disarms on every exit path.
+    InstructionBudgetGuard budget_guard(L);
     if (lua_pcall(L, 0, 0, 0)) {
         // Runtime error in script body
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 2); // pop error + sandbox
         return 1;
@@ -1147,7 +1263,7 @@ int run_script(lua_State* L, const fs::path& script_path,
                 }
                 lua_pop(L, 1);
             } else {
-                std::string err = lua_tostring(L, -1);
+                std::string err = error_message(L, -1);
                 util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
                 lua_pop(L, 2); // error + sandbox
                 return 1;
@@ -1180,7 +1296,7 @@ int run_script(lua_State* L, const fs::path& script_path,
         // Lua error in run()
         // After pcall failure: function + args are popped, error msg is pushed
         // Stack: [sandbox, error_msg]
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 2); // error_msg + sandbox
         return 1;
@@ -1291,7 +1407,7 @@ static int run_lua_script_with_ctx(lua_State* L,
 
     // Load the script file
     if (luaL_loadfile(L, script_path.string().c_str())) {
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 2); // error + sandbox
         return 1;
@@ -1302,8 +1418,11 @@ static int run_lua_script_with_ctx(lua_State* L,
     lua_setupvalue(L, -2, 1);
 
     // Execute the script chunk (define run function)
+    // 1.4.2 F-19: arm the instruction budget — covers the chunk and run(ctx);
+    // the guard disarms on every exit path.
+    InstructionBudgetGuard budget_guard(L);
     if (lua_pcall(L, 0, 0, 0)) {
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 2); // error + sandbox
         return 1;
@@ -1324,7 +1443,7 @@ static int run_lua_script_with_ctx(lua_State* L,
 
     // Call run(ctx)
     if (lua_pcall(L, 1, 1, 0)) {
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 2); // error + sandbox
         return 1;
@@ -1453,7 +1572,7 @@ int run_script_unrestricted(lua_State* L, const fs::path& script_path,
     // NO sandbox: load the script with the default global environment (which
     // already carries the full stdlib + the ezmk table from register_api).
     if (luaL_loadfile(L, script_path.string().c_str())) {
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 1);
         return 1;
@@ -1461,7 +1580,7 @@ int run_script_unrestricted(lua_State* L, const fs::path& script_path,
 
     // Execute the chunk (defines run() in the global env).
     if (lua_pcall(L, 0, 0, 0)) {
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 1);
         return 1;
@@ -1488,7 +1607,7 @@ int run_script_unrestricted(lua_State* L, const fs::path& script_path,
 
     // Call run(ctx).
     if (lua_pcall(L, 1, 1, 0)) {
-        std::string err = lua_tostring(L, -1);
+        std::string err = error_message(L, -1);
         util::error(ezmk::i18n::I18nKey::lua_error, {{"msg", err}});
         lua_pop(L, 1);
         return 1;

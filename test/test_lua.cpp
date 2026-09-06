@@ -1609,3 +1609,204 @@ end
 )");
     REQUIRE(run_script_unrestricted(state(), script, tmp.path.string(), "", "") == 1);
 }
+
+// ===================================================================
+// 1.4.2 F-01 / F-18 / F-19 — Lua runtime robustness (阶段一)
+// ===================================================================
+
+// RAII working-directory guard: run_script binds the ezmk API to the located
+// project root, so tests that rely on a tmp project root must chdir into it.
+struct CwdRestore {
+    fs::path original = fs::current_path();
+    ~CwdRestore() { fs::current_path(original); }
+};
+
+// F-01: non-string error objects must never reach std::string(NULL) (UB).
+// error() → nil error object; error({...}) → table; assert(false, {}) → table;
+// error(42) → number. Each previously crashed ezmk with SIGSEGV.
+TEST_CASE("run_script: error() nil error object does not crash (F-01)", "[lua][script][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "err_nil", R"(
+function run(args)
+    error()
+    return 0
+end
+)");
+    REQUIRE(run_script(L, script, {}) == 1);
+}
+
+TEST_CASE("run_script: error({...}) table error object does not crash (F-01)", "[lua][script][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "err_table", R"(
+function run(args)
+    error({ code = 1, msg = "boom" })
+    return 0
+end
+)");
+    REQUIRE(run_script(L, script, {}) == 1);
+}
+
+TEST_CASE("run_script: assert(false, {}) does not crash (F-01)", "[lua][script][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "assert_table", R"(
+function run(args)
+    assert(false, { code = 2 })
+    return 0
+end
+)");
+    REQUIRE(run_script(L, script, {}) == 1);
+}
+
+TEST_CASE("run_script: error(42) number error object reports, no crash (F-01)", "[lua][script][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "err_number", R"(
+function run(args)
+    error(42)
+    return 0
+end
+)");
+    REQUIRE(run_script(L, script, {}) == 1);
+}
+
+// F-19: the instruction-count hook must abort a runaway loop instead of
+// hanging ezmk, and must never leak into a later script.
+TEST_CASE("run_script: infinite loop aborted by instruction budget (F-19)", "[lua][script][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "infinite_loop", R"(
+function run(args)
+    local x = 0
+    while true do x = x + 1 end
+    return 0
+end
+)");
+    // Pre-1.4.2 this hung forever; now the count hook raises a Lua error.
+    int rc = run_script(L, script, {});
+    REQUIRE(rc == 1);
+}
+
+TEST_CASE("run_script: budget hook does not leak into the next script (F-19)", "[lua][script][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto loop_script = write_lua_script(tmp.path, "infinite_2", R"(
+function run(args)
+    while true do end
+end
+)");
+    REQUIRE(run_script(L, loop_script, {}) == 1);  // aborted by the budget
+
+    // A plain finite script on the same state must run to completion.
+    auto ok_script = write_lua_script(tmp.path, "finite_after", R"(
+function run(args)
+    local s = 0
+    for i = 1, 100000 do s = s + i end
+    return s > 0 and 0 or 1
+end
+)");
+    REQUIRE(run_script(L, ok_script, {}) == 0);
+}
+
+// F-19: json_encode must reject acyclic-but-over-deep nesting instead of
+// recursing until the C stack blows up.
+TEST_CASE("lua: json_encode rejects over-deep nesting (F-19)", "[lua][api][json][1.4.2]") {
+    init();  // idempotent — safe even in a filtered run
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    // 300 nested tables — far beyond the 200-level cap.
+    int rc = luaL_dostring(L,
+        "local t = {}; local cur = t; "
+        "for i = 1, 300 do cur[1] = {}; cur = cur[1] end "
+        "return ezmk.json_encode(t)");
+    REQUIRE(rc != 0);
+    REQUIRE(lua_isstring(L, -1));
+    std::string err(lua_tostring(L, -1));
+    REQUIRE(err.find("depth") != std::string::npos);
+    lua_pop(L, 1);
+
+    // A depth just under the cap still encodes fine.
+    rc = luaL_dostring(L,
+        "local t = {}; local cur = t; "
+        "for i = 1, 150 do cur[1] = {}; cur = cur[1] end "
+        "return ezmk.json_encode(t)");
+    REQUIRE(rc == 0);
+    lua_pop(L, 1);
+}
+
+// F-18: file_exists / list_sources honour [utils.permissions] when a package
+// declares read permissions — a denied path answers false / is filtered out.
+TEST_CASE("run_script: file_exists/list_sources respect read_deny (F-18)", "[lua][utils][perms][1.4.2]") {
+    init();  // idempotent
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+
+    TempDir tmp;  // doubles as project root and utils-package root
+    {
+        std::ofstream of(tmp.path / "ezmk.toml");
+        of << "[project]\nname = \"probe\"\ntype = \"utils\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+           << "[utils]\ntools = [\"probe\"]\n\n"
+           << "[utils.permissions]\n"
+           << "read = [\"src/\", \"ezmk.toml\"]\n"
+           << "read_deny = [\".env\", \"src/secret.cpp\"]\n";
+    }
+    fs::create_directories(tmp.path / "utils");
+    fs::create_directories(tmp.path / "src");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp.path / "src" / "secret.cpp") << "int hidden() { return 0; }\n";
+    std::ofstream(tmp.path / ".env") << "TOKEN=secret\n";
+
+    auto script = write_lua_script(tmp.path / "utils", "probe", R"(
+function run(args)
+    -- denied paths answer false even though they exist
+    assert(ezmk.file_exists(args[1]) == false, "denied .env must be false: " .. args[1])
+    assert(ezmk.file_exists(args[2]) == false, "denied secret.cpp must be false: " .. args[2])
+    -- an allowed path keeps its real existence answer
+    assert(ezmk.file_exists(args[3]) == true, "allowed main.cpp must be true: " .. args[3])
+    -- list_sources must not leak the denied source
+    local s = ezmk.list_sources()
+    for _, f in ipairs(s) do
+        assert(not tostring(f):find("secret"), "list_sources leaked denied file: " .. tostring(f))
+    end
+    assert(#s == 1, "expected exactly the allowed source, got " .. #s)
+    return 0
+end
+)");
+
+    register_api(L, tmp.path);
+    CwdRestore cwd_guard;
+    fs::current_path(tmp.path);
+    int rc = run_script(L, script,
+                        {(tmp.path / ".env").generic_string(),
+                         (tmp.path / "src" / "secret.cpp").generic_string(),
+                         (tmp.path / "src" / "main.cpp").generic_string()});
+    REQUIRE(rc == 0);
+}
