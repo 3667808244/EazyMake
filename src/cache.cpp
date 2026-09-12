@@ -437,6 +437,17 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
                                             const fs::path& obj) {
     std::vector<std::string> args;
     bool is_msvc = (in.tc.family == toolchain::CompilerFamily::Msvc);
+    // 1.4.2 F-12: relative path-carrying flags (-I/-isystem/-include, MSVC
+    // /I) are resolved against the project root when the build is invoked from
+    // a subdirectory. At the project root the flags are left byte-identical, so
+    // existing command lines (and cache signatures) do not change.
+    const bool resolve_flags = !util::cwd_is(in.proj_root);
+    const std::vector<std::string> effective_flags =
+        resolve_flags ? util::resolve_relative_path_flags(in.compile.flags, in.proj_root)
+                      : in.compile.flags;
+    const std::vector<std::string> effective_msvc_flags =
+        resolve_flags ? util::resolve_relative_path_flags(in.compile.msvc_flags, in.proj_root)
+                      : in.compile.msvc_flags;
     // 1.4.0-pre.1: rel 用于 dep 文件路径（in.dep_dir / rel）——跨盘符空路径会让
     // 所有跨盘符源文件写到同一 .d 文件（依赖数据串扰）；safe_relative 回退绝对路径。
     auto rel = safe_relative(src, in.proj_root);
@@ -454,14 +465,14 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
             args.push_back(translated.translated[0]);
         }
         auto flag_trans = toolchain::translate_compile_flags(
-            in.compile.flags, toolchain::CompilerFamily::Msvc);
+            effective_flags, toolchain::CompilerFamily::Msvc);
         for (auto& f : flag_trans.translated) args.push_back(f);
         for (auto& f : flag_trans.unrecognized) {
             if (in.verbose) {
                 util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
             }
         }
-        for (auto& f : in.compile.msvc_flags) args.push_back(f);
+        for (auto& f : effective_msvc_flags) args.push_back(f);
         args.push_back("/utf-8");
         args.push_back("/MD");
         // 1.2.0-dev.9: def_inc + include_dirs 保序去重
@@ -486,7 +497,7 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
             args.push_back("-ffile-prefix-map=" + in.proj_root.string() + "=.");
             args.push_back("-frandom-seed=" + src.filename().string());
         }
-        for (auto& f : in.compile.flags) args.push_back(f);
+        for (auto& f : effective_flags) args.push_back(f);
         if (in.use_pic) args.push_back("-fPIC");
         // 1.2.0-dev.9: def_inc + include_dirs 保序去重
         for (auto& inc : resolve_compile_include_paths(in)) args.push_back("-I" + inc.string());
@@ -596,7 +607,11 @@ static std::vector<DepEntry> parse_compile_dependencies(
         const util::ProcResult& res, bool is_msvc) {
     std::vector<DepEntry> deps;
     if (is_msvc) {
-        auto includes = toolchain::parse_show_includes(res.err);
+        // 1.4.2 F-03: MSVC writes /showIncludes notes to STDOUT (clang-cl and
+        // non-English UI builds included), not stderr. Parsing res.err made
+        // every MSVC dependency set empty — header edits never invalidated the
+        // cache. The parser itself is localization-independent (toolchain.cpp).
+        auto includes = toolchain::parse_show_includes(res.out);
         for (auto& inc_path : includes) {
             DepEntry dep;
             dep.path = inc_path.string();
@@ -802,7 +817,9 @@ SingleCompileResult compile_one_source(const fs::path& src,
     result.object = obj;
 
     // Copy compiled object to cache (atomic)
-    {
+    // 1.4.2 F-09: --disable-cache means "do not touch the incremental state":
+    // the object is produced, but nothing is written to the cache directory.
+    if (!in.disable_cache) {
         std::error_code ec;
         fs::path cache_tmp = cache_obj;
         cache_tmp += ".tmp";
@@ -852,7 +869,11 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                            {{"file", sr.rel_src}});
             }
             // Update cache record with new entry
-            record.files[sr.rel_src] = std::move(sr.record_entry);
+            // 1.4.2 F-09: --disable-cache must not merge entries into the
+            // record either (the caller saves an empty record).
+            if (!in.disable_cache) {
+                record.files[sr.rel_src] = std::move(sr.record_entry);
+            }
         } else {
             // Compilation failed
             util::error(sr.error_msg);

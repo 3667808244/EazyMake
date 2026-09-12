@@ -4,6 +4,7 @@
 #include "ezmk/lockfile.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/util.hpp"
+#include "ezmk/crypto.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -195,4 +196,90 @@ TEST_CASE("depends_changed: no deps anywhere → not changed", "[lockfile][1.1.2
     EzConfig cfg;
     Lockfile lf;  // empty direct_deps AND empty packages
     REQUIRE_FALSE(ezmk::lockfile::depends_changed(cfg, lf));
+}
+
+// ===================================================================
+// 1.4.2 F-04: archive hash vs artifact hash are different values
+// ===================================================================
+
+TEST_CASE("lockfile save/load: archive + lib hashes round-trip (1.4.2 F-04)", "[lockfile][1.4.2]") {
+    TempDir tmp;
+    Lockfile lf;
+    lf.version = 1;
+    LockedPackage p;
+    p.name = "greet";
+    p.version = "1.0.0";
+    p.source = "repo1";
+    p.source_url = "https://example.com/greet-1.0.0.tar.gz";
+    p.archive_sha256 = std::string(64, 'a');
+    p.lib_sha256 = std::string(64, 'b');
+    p.sha256 = p.lib_sha256;  // legacy alias keeps pre-1.4.2 readers working
+    lf.packages = { p };
+
+    ezmk::lockfile::save(tmp.path, lf);
+    auto text = ezmk::util::file_read(tmp.path / "ezmk.lock");
+    REQUIRE(text.find("archive_sha256 = \"" + p.archive_sha256 + "\"") != std::string::npos);
+    REQUIRE(text.find("lib_sha256 = \"" + p.lib_sha256 + "\"") != std::string::npos);
+    REQUIRE(text.find("sha256 = \"" + p.lib_sha256 + "\"") != std::string::npos);
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->packages.size() == 1);
+    REQUIRE(loaded->packages[0].archive_sha256 == p.archive_sha256);
+    REQUIRE(loaded->packages[0].lib_sha256 == p.lib_sha256);
+    REQUIRE(ezmk::lockfile::archive_hash(loaded->packages[0]) == p.archive_sha256);
+    REQUIRE(ezmk::lockfile::artifact_hash(loaded->packages[0]) == p.lib_sha256);
+}
+
+TEST_CASE("lockfile load: legacy sha256 is the artifact hash, archive hash empty (1.4.2 F-04)", "[lockfile][1.4.2]") {
+    TempDir tmp;
+    ezmk::util::file_write(tmp.path / "ezmk.lock",
+        "# ezmk.lock\n"
+        "[metadata]\n"
+        "version = 1\n"
+        "generated_by = \"ezmk 1.4.1\"\n"
+        "direct_deps = []\n"
+        "\n"
+        "[[packages]]\n"
+        "name = \"greet\"\n"
+        "version = \"1.0.0\"\n"
+        "source = \"repo1\"\n"
+        "source_url = \"\"\n"
+        "sha256 = \"deadbeef\"\n"
+        "type = \"static\"\n"
+        "scope = \"project\"\n"
+        "platform = \"windows_x86_64_gcc\"\n"
+        "dependencies = []\n");
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->packages.size() == 1);
+    const auto& p = loaded->packages[0];
+    // Pre-1.4.2 files only carry the artifact hash — it must be used for the
+    // verify-side check, and there is no archive hash to re-verify.
+    REQUIRE(ezmk::lockfile::artifact_hash(p) == "deadbeef");
+    REQUIRE(ezmk::lockfile::archive_hash(p).empty());
+}
+
+TEST_CASE("lockfile verify uses the artifact hash, never the archive hash (1.4.2 F-04)", "[lockfile][1.4.2]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/pkg/greet/build");
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/greet/build/libgreet.a", "artifact-bytes");
+
+    Lockfile lf;
+    LockedPackage p;
+    p.name = "greet";
+    p.scope = "project";
+    p.type = "static";
+    p.lib_sha256 = ezmk::crypto::sha256_file(tmp.path / ".ezmk/pkg/greet/build/libgreet.a");
+    p.archive_sha256 = std::string(64, 'c');  // must NOT be compared to the artifact
+    lf.packages = { p };
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf).empty());
+
+    // A wrong artifact hash is still detected — the (correct) archive hash must
+    // not mask a tampered library.
+    Lockfile lf2 = lf;
+    lf2.packages[0].lib_sha256 = std::string(64, 'd');
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf2) ==
+            std::vector<std::string>{"greet"});
 }

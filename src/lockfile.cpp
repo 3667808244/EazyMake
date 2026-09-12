@@ -64,6 +64,12 @@ std::optional<config::Lockfile> load(const fs::path& proj_root) {
                 pkg.source = (*tbl)["source"].value_or("");
                 pkg.source_url = (*tbl)["source_url"].value_or("");
                 pkg.sha256 = (*tbl)["sha256"].value_or("");
+                // 1.4.2 F-04: explicit hash fields. A pre-1.4.2 lockfile has only
+                // `sha256` (the artifact hash) → it is the legacy alias of
+                // lib_sha256; archive_sha256 stays empty (nothing to verify the
+                // install archive against).
+                pkg.archive_sha256 = (*tbl)["archive_sha256"].value_or("");
+                pkg.lib_sha256 = (*tbl)["lib_sha256"].value_or("");
                 // 1.4.1: optional commit pin for git sources — absent in old
                 // lockfiles → empty string, normalizes fine.
                 pkg.commit = (*tbl)["commit"].value_or("");
@@ -124,6 +130,16 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
         out << "source = " << util::toml_quote(pkg.source) << "\n";
         out << "source_url = " << util::toml_quote(pkg.source_url) << "\n";
         out << "sha256 = " << util::toml_quote(pkg.sha256) << "\n";
+        // 1.4.2 F-04: the artifact hash (verify) and the install-source archive
+        // hash (--locked reinstall) are distinct values. `sha256` is kept as the
+        // legacy alias of lib_sha256 so pre-1.4.2 readers keep working; both new
+        // fields are written only when known (old output stays byte-stable).
+        if (!pkg.lib_sha256.empty()) {
+            out << "lib_sha256 = " << util::toml_quote(pkg.lib_sha256) << "\n";
+        }
+        if (!pkg.archive_sha256.empty()) {
+            out << "archive_sha256 = " << util::toml_quote(pkg.archive_sha256) << "\n";
+        }
         // 1.4.1: git-source commit pin — only written when non-empty so old
         // lockfile output stays byte-stable.
         if (!pkg.commit.empty()) {
@@ -151,6 +167,19 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
 // ===================================================================
 // Verify
 // ===================================================================
+
+// 1.4.2 F-04: the artifact hash of a lockfile entry — the explicit lib_sha256
+// when present, otherwise the pre-1.4.2 `sha256` field (which always held the
+// artifact hash).
+std::string artifact_hash(const config::LockedPackage& pkg) {
+    return !pkg.lib_sha256.empty() ? pkg.lib_sha256 : pkg.sha256;
+}
+
+// 1.4.2 F-04: the installation-source archive hash. Empty for git, directory
+// and pre-1.4.2 entries — there is no archive to verify against.
+std::string archive_hash(const config::LockedPackage& pkg) {
+    return pkg.archive_sha256;
+}
 
 std::vector<std::string> verify(const fs::path& proj_root,
                                 const config::Lockfile& lf) {
@@ -193,9 +222,9 @@ std::vector<std::string> verify(const fs::path& proj_root,
         // the previous "first directory entry" was non-deterministic.
         lib_file = util::find_package_archive(build_dir, pkg.name);
 
-        if (!lib_file.empty() && !pkg.sha256.empty()) {
+        if (!lib_file.empty() && !artifact_hash(pkg).empty()) {
             std::string actual = crypto::sha256_file(lib_file);
-            if (actual != pkg.sha256) {
+            if (actual != artifact_hash(pkg)) {
                 mismatches.push_back(pkg.name);
             }
         }

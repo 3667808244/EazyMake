@@ -757,42 +757,88 @@ Toolchain detect_toolchain() {
 // MSVC /showIncludes parser
 // ===================================================================
 
+// 1.4.2 F-03: does the text after a colon look like a file path? Used as the
+// localization-independent fallback for /showIncludes lines. Conservative:
+// whitespace disqualifies a candidate, so a diagnostic sentence that merely
+// starts with a path is not mistaken for an include note.
+static bool looks_like_path(const std::string& s) {
+    if (s.empty()) return false;
+    if (s.find(' ') != std::string::npos || s.find('\t') != std::string::npos) {
+        return false;
+    }
+    // "C:\dir\file.h" — drive-letter prefix.
+    if (s.size() >= 2 && std::isalpha(static_cast<unsigned char>(s[0])) && s[1] == ':') {
+        return true;
+    }
+    // Absolute POSIX path, rooted path or UNC share.
+    if (s[0] == '/' || s[0] == '\\') return true;
+    // Relative path with at least one separator ("sub/dir/file.h").
+    return s.find('/') != std::string::npos || s.find('\\') != std::string::npos;
+}
+
+static std::string trim_ws(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && (s[start] == ' ' || s[start] == '\t')) ++start;
+    size_t end = s.size();
+    while (end > start && (s[end - 1] == ' ' || s[end - 1] == '\t')) --end;
+    return s.substr(start, end - start);
+}
+
 std::vector<fs::path> parse_show_includes(const std::string& compiler_output) {
     std::vector<fs::path> includes;
 
-    // Format: "Note: including file:  C:\path\to\header.h\n"
-    // Each line starts with "Note: including file:" followed by the path.
-    // The path may have leading/trailing whitespace.
+    // 1.4.2 F-03: /showIncludes output follows the compiler UI language, so the
+    // old hardcoded English prefix made every dependency invisible on a
+    // localized (e.g. zh-CN) MSVC — header edits never invalidated the cache.
+    // Accept the known en/zh prefixes, then fall back to "the text after the
+    // last colon looks like a path" so an unknown localization still parses.
+    // Lines that do not look like include notes (ordinary diagnostics) are
+    // ignored; the caller passes the rest of stdout through untouched.
+    static const char* kKnownPrefixes[] = {
+        "Note: including file:",     // en
+        "注意: 包含文件:",            // zh-CN (half-width colons)
+        "注意：包含文件：",            // zh-CN (full-width colons)
+    };
 
     std::istringstream stream(compiler_output);
     std::string line;
-    const std::string NOTE_PREFIX = "Note: including file:";
-
     while (std::getline(stream, line)) {
         // Trim trailing \r (CRLF)
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
 
-        // Check for the "Note: including file:" prefix
-        auto pos = line.find(NOTE_PREFIX);
-        if (pos == std::string::npos) continue;
-
-        // Extract the path after the prefix
-        std::string path_str = line.substr(pos + NOTE_PREFIX.size());
-
-        // Trim leading and trailing whitespace
-        size_t start = 0;
-        while (start < path_str.size() && (path_str[start] == ' ' || path_str[start] == '\t')) {
-            ++start;
+        std::string path_str;
+        for (const char* prefix : kKnownPrefixes) {
+            auto pos = line.find(prefix);
+            if (pos != std::string::npos) {
+                path_str = line.substr(pos + std::strlen(prefix));
+                break;
+            }
         }
-        size_t end = path_str.size();
-        while (end > start && (path_str[end - 1] == ' ' || path_str[end - 1] == '\t')) {
-            --end;
+        if (path_str.empty()) {
+            auto colon = line.rfind(':');
+            if (colon == std::string::npos) continue;
+            std::string candidate = trim_ws(line.substr(colon + 1));
+            // A drive colon ("C:\dir\file.h") splits the path itself: if the
+            // text after the colon is a rooted path preceded by a single
+            // letter, the path really starts at that letter.
+            if (!candidate.empty() && (candidate[0] == '/' || candidate[0] == '\\') &&
+                colon > 0 && std::isalpha(static_cast<unsigned char>(line[colon - 1])) &&
+                (colon == 1 || line[colon - 2] == ' ' || line[colon - 2] == '\t' ||
+                 line[colon - 2] == ':')) {
+                candidate = line.substr(colon - 1);
+            }
+            if (looks_like_path(candidate)) {
+                path_str = candidate;
+            } else {
+                continue;
+            }
         }
 
-        if (start < end) {
-            includes.push_back(fs::path(path_str.substr(start, end - start)));
+        std::string trimmed = trim_ws(path_str);
+        if (!trimmed.empty()) {
+            includes.push_back(fs::path(trimmed));
         }
     }
 

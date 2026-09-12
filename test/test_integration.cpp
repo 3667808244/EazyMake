@@ -2724,3 +2724,176 @@ TEST_CASE("integration: pack --precompiled always builds fresh artifacts (1.3.0-
     REQUIRE(out3.find("1 cached, 0 compiled") != std::string::npos);
 }
 
+// ==============================================================
+// 1.4.2 phase 3: build cache correctness (F-09 / F-11 / F-12)
+// ==============================================================
+namespace {
+
+// Count regular files under a directory tree (cache-state assertions).
+size_t count_files(const fs::path& dir) {
+    size_t n = 0;
+    std::error_code ec;
+    if (!fs::exists(dir, ec)) return 0;
+    for (auto it = fs::recursive_directory_iterator(dir, ec);
+         !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (it->is_regular_file(ec)) ++n;
+    }
+    return n;
+}
+
+// First archive (.a/.lib) inside a project's build/ dir, or empty.
+fs::path find_built_archive(const fs::path& build_dir) {
+    std::error_code ec;
+    if (!fs::exists(build_dir, ec)) return {};
+    for (auto& e : fs::directory_iterator(build_dir, ec)) {
+        auto ext = e.path().extension().string();
+        if (ext == ".a" || ext == ".lib") return e.path();
+    }
+    return {};
+}
+
+} // anonymous namespace
+
+// F-09: --disable-cache must not write cache objects or record entries, and the
+// next normal build must recompile everything (escape the incremental state).
+TEST_CASE("integration: --disable-cache leaves no cache state behind (1.4.2 F-09)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "dc";
+    fs::create_directories(proj);
+    write_minimal_config(proj, "dc");
+    fs::create_directories(proj / "src");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+
+    // 1) Normal build populates the cache + record.
+    ProcResult b1 = run_ezmk("build", proj);
+    INFO("build1: " << b1.err);
+    REQUIRE(b1.exit_code == 0);
+    fs::path cache_obj_dir = proj / ".ezmk/cache/obj";
+    fs::path record_path = proj / ".ezmk/cache/record.json";
+    size_t cached_before = count_files(cache_obj_dir);
+    REQUIRE(cached_before > 0);
+    REQUIRE(fs::exists(record_path));
+
+    // 2) Change the source, rebuild with --disable-cache: compiles, but writes
+    //    neither the cache copy nor a record entry.
+    file_write(proj / "src" / "main.cpp", "int main() { return 1; }\n");
+    ProcResult b2 = run_ezmk("build --disable-cache", proj);
+    INFO("build2: " << b2.err);
+    REQUIRE(b2.exit_code == 0);
+    REQUIRE(count_files(cache_obj_dir) == cached_before);
+
+    {
+        std::ifstream in(record_path);
+        std::string text((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+        auto j = nlohmann::json::parse(text, nullptr, false);
+        REQUIRE_FALSE(j.is_discarded());
+        REQUIRE(j.contains("files"));
+        REQUIRE(j["files"].empty());
+    }
+
+    // 3) The next normal build has no record entries left → full recompile.
+    ProcResult b3 = run_ezmk("build", proj);
+    INFO("build3: " << b3.err);
+    REQUIRE(b3.exit_code == 0);
+    std::string out3 = b3.out + "\n" + b3.err;
+    REQUIRE(out3.find("0 cached, 1 compiled") != std::string::npos);
+}
+
+// F-11: a test that references a dependency package symbol must link — the test
+// link now includes the package archives exactly like a real build.
+TEST_CASE("integration: ezmk test links dependency package archives (1.4.2 F-11)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    // Dependency package (static library) source dir.
+    fs::path dep = tmp.path / "dep1";
+    fs::create_directories(dep / "include");
+    fs::create_directories(dep / "src");
+    file_write(dep / "ezmk.toml",
+        "[project]\nname = \"dep1\"\ntype = \"static\"\nversion = \"1.0.0\"\nlanguage = \"C++17\"\n");
+    file_write(dep / "include" / "dep1.hpp",
+        "#pragma once\nnamespace dep1 { int answer(); }\n");
+    file_write(dep / "src" / "dep1.cpp",
+        "#include \"dep1.hpp\"\nnamespace dep1 { int answer() { return 42; } }\n");
+
+    // Consumer project with an EZMK-framework test that uses the package symbol.
+    fs::path proj = tmp.path / "consumer";
+    fs::create_directories(proj / "src");
+    fs::create_directories(proj / "test");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"consumer\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[depends]\nlib = [\"dep1\"]\n\n"
+        "[test]\nframework = \"ezmk\"\ndirs = [\"test\"]\n");
+    file_write(proj / "src" / "main.cpp",
+        "#include \"dep1.hpp\"\nint main() { return dep1::answer() == 42 ? 0 : 1; }\n");
+    file_write(proj / "test" / "test_dep.cpp",
+        "#include \"dep1.hpp\"\nint main() { return dep1::answer() == 42 ? 0 : 1; }\n");
+
+    // Install the package into the project scope (.ezmk/pkg/dep1).
+    ProcResult inst = run_ezmk("pkg install \"" + dep.string() + "\" -y", proj);
+    INFO("install: " << inst.err);
+    REQUIRE(inst.exit_code == 0);
+    REQUIRE(fs::exists(proj / ".ezmk/pkg/dep1"));
+
+    ProcResult t = run_ezmk("test", proj);
+    INFO("test out:\n" << t.out << "\ntest err:\n" << t.err);
+    REQUIRE(t.exit_code == 0);
+}
+
+// F-12: a build invoked from a SUBDIRECTORY resolves relative [link].link_dirs
+// (and path-carrying flags) against the project root, so linking works exactly
+// like a build from the root.
+TEST_CASE("integration: subdirectory build resolves relative link dirs (1.4.2 F-12)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    // 1) Build a static helper library with ezmk.
+    fs::path helper = tmp.path / "helper";
+    fs::create_directories(helper / "include");
+    fs::create_directories(helper / "src");
+    file_write(helper / "ezmk.toml",
+        "[project]\nname = \"helper\"\ntype = \"static\"\nversion = \"1.0.0\"\nlanguage = \"C++17\"\n");
+    file_write(helper / "include" / "helper.hpp",
+        "#pragma once\nint helper_value();\n");
+    file_write(helper / "src" / "helper.cpp",
+        "#include \"helper.hpp\"\nint helper_value() { return 7; }\n");
+    ProcResult hb = run_ezmk("build", helper);
+    INFO("helper build: " << hb.err);
+    REQUIRE(hb.exit_code == 0);
+    fs::path helper_lib = find_built_archive(helper / "build");
+    REQUIRE_FALSE(helper_lib.empty());
+
+    // 2) Consumer project: relative include + link dirs, library copied in.
+    fs::path proj = tmp.path / "consumer";
+    fs::create_directories(proj / "src");
+    fs::create_directories(proj / "libs");
+    fs::copy_file(helper_lib, proj / "libs" / helper_lib.filename(),
+                  fs::copy_options::overwrite_existing);
+    fs::copy_file(helper / "include" / "helper.hpp", proj / "libs" / "helper.hpp",
+                  fs::copy_options::overwrite_existing);
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"consumer\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[compile]\ninclude_dirs = [\"libs\"]\n\n"
+        "[link]\nlink_dirs = [\"libs\"]\nsystem_target = [\"helper\"]\n");
+    file_write(proj / "src" / "main.cpp",
+        "#include \"helper.hpp\"\nint main() { return helper_value() == 7 ? 0 : 1; }\n");
+
+    // 3) Build from inside src/ — the relative link dir must resolve against the
+    //    project root, not the process CWD.
+    ProcResult b = run_ezmk("build", proj / "src");
+    INFO("subdir build out:\n" << b.out << "\nsubdir build err:\n" << b.err);
+    REQUIRE(b.exit_code == 0);
+    REQUIRE(fs::exists(proj / "build" / ("consumer" EZMK_EXE_SUFFIX)));
+}
+

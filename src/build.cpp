@@ -585,6 +585,41 @@ static std::vector<fs::path> package_include_dirs(const fs::path& pkg_root,
     return dirs;
 }
 
+// 1.4.2 F-11: link inputs contributed by one installed dependency package —
+// archives built under build/ plus the platform-selected precompiled archive
+// from lib/. Shared by prepare_build_state (build path) and run_tests so
+// `ezmk test` links the same dependency archives as a real build.
+static std::vector<fs::path> collect_package_archives(const fs::path& pkg_root,
+                                                      bool is_msvc) {
+    std::vector<fs::path> archives;
+    auto pkg_build = pkg_root / "build";
+    if (util::file_exists(pkg_build)) {
+        for (auto& f : fs::directory_iterator(pkg_build)) {
+            auto ext = f.path().extension().string();
+            if (ext == ".a" || (is_msvc && ext == ".lib")) {
+                archives.push_back(f.path());
+            }
+        }
+    }
+    // 0.9.7+: also collect precompiled archives from lib/
+    // 1.1.0-dev.2: platform-aware — select only the archive for current platform
+    auto pkg_lib = pkg_root / "lib";
+    if (util::file_exists(pkg_lib)) {
+        try {
+            archives.push_back(pkg::select_precompiled_archive(
+                pkg_lib, pkg_root.filename().string()));
+        } catch (const std::exception& e) {
+            // 1.2.0-dev.10: precompiled_strict mismatch is a deliberate
+            // fail-fast (ezmk::fatal_error) — propagate instead of degrading to
+            // a skip warning.
+            if (dynamic_cast<const ezmk::fatal_error*>(&e)) throw;
+            util::warn(std::string("skipping precompiled archive for '") +
+                       pkg_root.filename().string() + "': " + e.what());
+        }
+    }
+    return archives;
+}
+
 // Phase 1: Setup + package scanning + pre-build hook.
 // Returns fully initialized build state with effective compile flags.
 BuildState prepare_build_state(const config::EzConfig& cfg,
@@ -780,32 +815,12 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
                     st.extra_includes.push_back(pkg_include);
                 }
             }
-            // Collect built archives
-            auto pkg_build = entry.path() / "build";
-            if (util::file_exists(pkg_build)) {
-                for (auto& f : fs::directory_iterator(pkg_build)) {
-                    auto ext = f.path().extension().string();
-                    if (ext == ".a" || (st.is_msvc && ext == ".lib")) {
-                        st.pkg_archives.push_back(f.path());
-                    }
-                }
-            }
-            // 0.9.7+: also collect precompiled archives from lib/
-            // 1.1.0-dev.2: platform-aware — select only the archive for current platform
-            auto pkg_lib = entry.path() / "lib";
-            if (util::file_exists(pkg_lib)) {
-                try {
-                    auto archive = pkg::select_precompiled_archive(pkg_lib,
-                        entry.path().filename().string());
-                    st.pkg_archives.push_back(archive);
-                } catch (const std::exception& e) {
-                    // 1.2.0-dev.10: precompiled_strict mismatch is a deliberate
-                    // fail-fast (ezmk::fatal_error) — propagate instead of
-                    // degrading to a skip warning.
-                    if (dynamic_cast<const ezmk::fatal_error*>(&e)) throw;
-                    util::warn(std::string("skipping precompiled archive for '") +
-                               entry.path().filename().string() + "': " + e.what());
-                }
+            // Collect built + precompiled archives (1.4.2 F-11: shared helper,
+            // also used by run_tests).
+            {
+                auto archives = collect_package_archives(entry.path(), st.is_msvc);
+                st.pkg_archives.insert(st.pkg_archives.end(),
+                                       archives.begin(), archives.end());
             }
         }
     }
@@ -1120,14 +1135,18 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
             } else if (sr.success) {
                 comp_result.objects.push_back(sr.object);
                 ++comp_result.cache_misses;
-                auto& entry = record.files[sr.rel_src];
-                auto old_it = record.files.find(sr.rel_src);
-                if (old_it != record.files.end() &&
-                    !cache::same_dependency_paths(old_it->second.dependencies, sr.new_deps)) {
-                    util::info(ezmk::i18n::I18nKey::include_structure_changed,
-                               {{"file", sr.rel_src}});
+                // 1.4.2 F-09: --disable-cache must not merge entries into the
+                // in-memory record either (an emptied record is saved below).
+                if (!opts.disable_cache) {
+                    auto& entry = record.files[sr.rel_src];
+                    auto old_it = record.files.find(sr.rel_src);
+                    if (old_it != record.files.end() &&
+                        !cache::same_dependency_paths(old_it->second.dependencies, sr.new_deps)) {
+                        util::info(ezmk::i18n::I18nKey::include_structure_changed,
+                                   {{"file", sr.rel_src}});
+                    }
+                    entry = std::move(sr.record_entry);
                 }
-                entry = std::move(sr.record_entry);
             } else {
                 has_failure = true;
                 ++error_count;
@@ -1145,6 +1164,12 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
         }
     }
 
+    // 1.4.2 F-09: --disable-cache means "escape the incremental state". The
+    // record is emptied before saving so a build that bypassed the cache cannot
+    // leave stale entries behind for the next (normal) build to trust.
+    if (opts.disable_cache) {
+        record.files.clear();
+    }
     cache::save_record(record);
 
     // 0.9.6+: Build completion summary with elapsed time
@@ -1258,6 +1283,14 @@ fs::path link_phase(const BuildState& st,
     for (auto& f : st.pkg_link_flags) merged_link.flags.push_back(f);
     for (auto& d : st.pkg_link_dirs) merged_link.link_dirs.push_back(d);
     for (auto& t : st.pkg_system_targets) merged_link.system_targets.push_back(t);
+    // 1.4.2 F-12: relative link dirs and path-carrying link flags resolve
+    // against the project root when the build runs from a subdirectory, so the
+    // link line no longer depends on the process CWD. At the project root the
+    // commands stay byte-identical.
+    if (!util::cwd_is(st.proj_root)) {
+        merged_link.link_dirs = util::resolve_relative_paths(merged_link.link_dirs, st.proj_root);
+        merged_link.flags = util::resolve_relative_path_flags(merged_link.flags, st.proj_root);
+    }
 
     // Helper: try to link; on failure, run on_failure hook before re-throwing.
     auto try_link = [&](auto&& link_fn) -> fs::path {
@@ -2001,6 +2034,9 @@ struct TestRunContext {
     cache::CompileInput cin;
     config::LinkSection test_link;
     std::vector<fs::path> project_objs;
+    // 1.4.2 F-11: archives of the project's dependency packages — the test link
+    // must include them exactly like a real build does.
+    std::vector<fs::path> pkg_archives;
     std::vector<fs::path> test_sources;
     std::string test_filter;
     bool verbose = false;
@@ -2115,6 +2151,8 @@ static void run_catch2_tests(TestRunContext& ctx) {
             archives.push_back(catch2_lib);
         }
     }
+    // 1.4.2 F-11: dependency package archives (same set the build link uses).
+    archives.insert(archives.end(), ctx.pkg_archives.begin(), ctx.pkg_archives.end());
 
     // 1.3.0-dev.2: response-file fallback for the test-runner link too.
     auto jc = ctx.is_msvc
@@ -2308,9 +2346,10 @@ static void run_ezmk_tests(TestRunContext& ctx) {
         std::vector<fs::path> objs = ctx.project_objs;
         objs.push_back(test_obj);
         // 1.3.0-dev.2: response-file fallback for the per-test link.
+        // 1.4.2 F-11: dependency package archives are linked here too.
         auto jc = ctx.is_msvc
-            ? cache::JoinedCommand{make_msvc_exe_cmd(objs, {}, test_exe, ctx.test_link), {}}
-            : make_gcc_link_cmd(objs, {}, test_exe, ctx.test_link, ctx.lang_info, ctx.cache_dir);
+            ? cache::JoinedCommand{make_msvc_exe_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link), {}}
+            : make_gcc_link_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link, ctx.lang_info, ctx.cache_dir);
         RspGuard rsp_guard{jc.rsp_file};
         std::string comp_cmd = jc.cmd;
 
@@ -2497,7 +2536,13 @@ void run_tests(const config::EzConfig& cfg,
 
     // 1.2.0-dev.11: dependency package include dirs — same as the build path
     // (shared package_include_dirs helper with prepare_build_state).
+    // 1.4.2 F-11: also collect the packages' link inputs (archives, link flags,
+    // link dirs, system targets) so the test link matches a real build.
     std::vector<fs::path> pkg_includes;
+    std::vector<fs::path> pkg_archives;
+    std::vector<std::string> pkg_link_flags;
+    std::vector<std::string> pkg_link_dirs;
+    std::vector<std::string> pkg_system_targets;
     {
         fs::path pkg_dir = proj_root / ".ezmk/pkg";
         if (util::file_exists(pkg_dir)) {
@@ -2509,11 +2554,17 @@ void run_tests(const config::EzConfig& cfg,
                         auto pkg_cfg = config::parse_config(pkg_toml);
                         auto incs = package_include_dirs(entry.path(), pkg_cfg);
                         pkg_includes.insert(pkg_includes.end(), incs.begin(), incs.end());
+                        for (auto& f : pkg_cfg.link.flags) pkg_link_flags.push_back(f);
+                        for (auto& d : pkg_cfg.link.link_dirs) pkg_link_dirs.push_back(d);
+                        for (auto& t : pkg_cfg.link.system_targets) pkg_system_targets.push_back(t);
                     } catch (...) { /* skip broken package configs */ }
                 } else {
                     auto pkg_include = entry.path() / "include";
                     if (util::file_exists(pkg_include)) pkg_includes.push_back(pkg_include);
                 }
+                // Archives are config-independent (mirrors prepare_build_state).
+                auto archives = collect_package_archives(entry.path(), is_msvc);
+                pkg_archives.insert(pkg_archives.end(), archives.begin(), archives.end());
             }
         }
     }
@@ -2560,27 +2611,41 @@ void run_tests(const config::EzConfig& cfg,
     // Merged link config: profile-merged link + test-only link targets.
     config::LinkSection test_link = applied.link;
     for (auto& t : cfg.test.link_targets) test_link.system_targets.push_back(t);
+    // 1.4.2 F-11: dependency package link inputs (same set the build merges in
+    // link_phase) — without them a test referencing a package symbol failed to
+    // link even though the project built fine.
+    for (auto& f : pkg_link_flags) test_link.flags.push_back(f);
+    for (auto& d : pkg_link_dirs) test_link.link_dirs.push_back(d);
+    for (auto& t : pkg_system_targets) test_link.system_targets.push_back(t);
+    // 1.4.2 F-12: resolve project-root-relative link paths when ezmk test is
+    // invoked from a subdirectory (no-op at the project root).
+    if (!util::cwd_is(proj_root)) {
+        test_link.link_dirs = util::resolve_relative_paths(test_link.link_dirs, proj_root);
+        test_link.flags = util::resolve_relative_path_flags(test_link.flags, proj_root);
+    }
 
     // Ensure cache dirs exist
     fs::create_directories(cache_dir / "obj_test");
     fs::create_directories(build_dir);
 
     // 1.3.6: assemble the runner context and dispatch (mechanical split).
-    TestRunContext ctx{
-        .proj_root = proj_root,
-        .build_dir = build_dir,
-        .cache_dir = cache_dir,
-        .cin = std::move(cin),
-        .test_link = std::move(test_link),
-        .project_objs = std::move(project_objs),
-        .test_sources = std::move(test_sources),
-        .test_filter = test_filter,
-        .verbose = verbose,
-        .report_fmt = std::move(report_fmt),
-        .report_path = std::move(report_path),
-        .is_msvc = is_msvc,
-        .lang_info = std::move(lang_info),
-    };
+    // 1.4.2 F-10: plain member assignments (C++20 designated initializers are a
+    // GCC extension under -std=c++17 and warned on every build).
+    TestRunContext ctx;
+    ctx.proj_root = proj_root;
+    ctx.build_dir = build_dir;
+    ctx.cache_dir = cache_dir;
+    ctx.cin = std::move(cin);
+    ctx.test_link = std::move(test_link);
+    ctx.pkg_archives = std::move(pkg_archives);
+    ctx.project_objs = std::move(project_objs);
+    ctx.test_sources = std::move(test_sources);
+    ctx.test_filter = test_filter;
+    ctx.verbose = verbose;
+    ctx.report_fmt = std::move(report_fmt);
+    ctx.report_path = std::move(report_path);
+    ctx.is_msvc = is_msvc;
+    ctx.lang_info = std::move(lang_info);
 
     if (framework == "CATCH2") {
         run_catch2_tests(ctx);

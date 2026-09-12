@@ -129,6 +129,25 @@ inline constexpr int kProjectRootMaxUp = 5;
 std::optional<fs::path> locate_project_root(const fs::path& start,
                                             int max_up = kProjectRootMaxUp);
 
+// ---- 1.4.2 F-12: project-root-relative path flags ----
+// True when the process CWD is `dir` (weakly-canonical comparison). Used to
+// skip command-line path rewriting when a build is invoked from the project
+// root, so root-invoked builds keep byte-identical command lines — and
+// therefore identical cache signatures.
+bool cwd_is(const fs::path& dir);
+
+// Resolve relative entries of a path list (e.g. [link].link_dirs) against
+// `base`; absolute entries are kept verbatim.
+std::vector<std::string> resolve_relative_paths(const std::vector<std::string>& paths,
+                                                const fs::path& base);
+
+// Rewrite relative operands of the known path-carrying flags (-I, -L, -include,
+// -isystem; MSVC /I, /LIBPATH:) so they resolve against `base` instead of the
+// process CWD. Both the joined form ("-Iinc") and the split form ("-I" "inc")
+// are handled; every other flag is passed through verbatim.
+std::vector<std::string> resolve_relative_path_flags(const std::vector<std::string>& flags,
+                                                     const fs::path& base);
+
 // ---- Platform detection ----
 // 1.1.0-dev.2: Returns a simplified platform tag in "os-arch" format.
 // Examples: "win-x64", "linux-x64", "mac-arm64".

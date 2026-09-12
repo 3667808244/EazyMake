@@ -1541,6 +1541,29 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                         }
                     }
 
+                    // 1.4.2 F-04: archive provenance marker (written by archive
+                    // installs) — records the install source and the ARCHIVE
+                    // hash, which is a different value from the built artifact
+                    // hash below and is what `--locked` re-verifies.
+                    fs::path archive_marker = entry.path() / ".ezmk-archive-source";
+                    if (util::file_exists(archive_marker)) {
+                        std::string content = util::file_read(archive_marker);
+                        std::istringstream ss(content);
+                        std::string kind, source, hash;
+                        std::getline(ss, kind);
+                        std::getline(ss, source);
+                        std::getline(ss, hash);
+                        for (std::string* s : {&kind, &source, &hash}) {
+                            while (!s->empty() &&
+                                   (s->back() == '\r' || s->back() == '\n')) {
+                                s->pop_back();
+                            }
+                        }
+                        lp.source = kind.empty() ? "archive" : kind;
+                        lp.source_url = source;
+                        lp.archive_sha256 = hash;
+                    }
+
                     // Hash the built library — 1.2.0-dev.11: deterministic
                     // pick (shared with lockfile verify side) so record and
                     // verify hash the SAME archive.
@@ -1548,7 +1571,11 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     auto lib_file = util::find_package_archive(
                         build_dir, pkg_cfg.project.name);
                     if (!lib_file.empty()) {
-                        lp.sha256 = crypto::sha256_file(lib_file);
+                        // 1.4.2 F-04: artifact hash → lib_sha256, with `sha256`
+                        // kept as the legacy alias (pre-1.4.2 readers/writers
+                        // only know that field).
+                        lp.lib_sha256 = crypto::sha256_file(lib_file);
+                        lp.sha256 = lp.lib_sha256;
                     }
                     lf.packages.push_back(std::move(lp));
                 } catch (...) {
@@ -1706,7 +1733,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
     // Now: the lockfile's recorded version for this package becomes an Exact
     // constraint for the repo search, and the lockfile is never rewritten.
     std::string locked_version;    // non-empty only in --locked mode
-    std::string locked_sha256;
+    std::string locked_sha256;     // 1.4.2 F-04: artifact hash (verify semantics)
+    std::string locked_archive_sha256;  // 1.4.2 F-04: install-source archive hash
     // 1.4.1: git-source lockfile entries are re-cloned at the recorded commit.
     std::string locked_git_url;
     std::string locked_git_commit;
@@ -1738,7 +1766,11 @@ void install(const std::string& pkg_file, cli::Scope scope,
                     locked_git_commit = lp.commit;
                 } else {
                     locked_version = lp.version;
-                    locked_sha256 = lp.sha256;
+                    // 1.4.2 F-04: only the ARCHIVE hash can verify the archive
+                    // that will be installed; `sha256`/lib_sha256 is the built
+                    // artifact hash and is used by lockfile::verify.
+                    locked_sha256 = lockfile::artifact_hash(lp);
+                    locked_archive_sha256 = lockfile::archive_hash(lp);
                 }
                 break;
             }
@@ -1851,7 +1883,16 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
     fs::path archive_path;
 
+    // 1.4.2 F-04: install-source provenance. Recorded next to the installed
+    // package as `.ezmk-archive-source` (kind / source / archive hash) so the
+    // lockfile can pin where a package came from and a later `--locked`
+    // reinstall can verify the archive it installs from.
+    std::string prov_kind;    // "url" / "local" / "repo"
+    std::string prov_source;  // URL, local path or repo name
+
     if (is_url) {
+        prov_kind = "url";
+        prov_source = url;
         // 1.1.3 S3: URL 完整性前置确认（无 sha256 / 明文 http://），下载前中止
         if (!url_integrity_confirm(url, !expected_sha256.empty(), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
@@ -1870,8 +1911,12 @@ void install(const std::string& pkg_file, cli::Scope scope,
         util::download(url, archive_path);
     } else {
         archive_path = input;
+        prov_kind = "local";
+        prov_source = fs::absolute(archive_path).string();
         if (!util::file_exists(archive_path)) {
             // Not a local file or URL — try searching registered repos
+            prov_kind.clear();
+            prov_source.clear();
             util::info(ezmk::i18n::I18nKey::searching_repos, {{"pkg", pkg_file}});
             auto search_result = [&]() {
                 if (!locked_version.empty()) {
@@ -1896,6 +1941,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 util::fatal(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_file}});
             }
             archive_path = search_result.archive_path;
+            prov_kind = "repo";
+            prov_source = search_result.repo_name;
             // Use sha256 from index.toml if user didn't provide one explicitly.
             // expected_sha256 is a string_view param — bind it to a local copy
             // (repo_sha) that outlives this block: search_result dies at the end
@@ -1905,10 +1952,14 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 repo_sha = search_result.sha256;
                 expected_sha256 = repo_sha;
             }
-            // --locked: prefer the lockfile-recorded sha256 over the (possibly
-            // drifted) index value — the lockfile is the source of truth.
-            if (!locked_sha256.empty()) {
-                repo_sha = locked_sha256;
+            // --locked: prefer the lockfile-recorded ARCHIVE hash over the
+            // (possibly drifted) index value — the lockfile is the source of
+            // truth. 1.4.2 F-04: this used to apply the built-artifact hash,
+            // which can never match a downloaded archive — so compiled packages
+            // could not be reinstalled with --locked at all. A legacy lockfile
+            // (no archive hash) falls back to the index value.
+            if (!locked_archive_sha256.empty()) {
+                repo_sha = locked_archive_sha256;
                 expected_sha256 = repo_sha;
             }
             util::info(ezmk::i18n::I18nKey::found_in_repo, {{"path", archive_path.string()}});
@@ -1972,6 +2023,15 @@ void install(const std::string& pkg_file, cli::Scope scope,
         util::info(ezmk::i18n::I18nKey::sha256_ok);
     }
 
+    // 1.4.2 F-04: pin the installation archive's hash even when the caller gave
+    // no --sha256 and the index provided none, so a later `--locked` reinstall
+    // can verify the archive it installs from.
+    std::string archive_sha = std::string(expected_sha256);
+    if (archive_sha.empty() && !archive_path.empty() &&
+        !fs::is_directory(archive_path) && util::file_exists(archive_path)) {
+        archive_sha = crypto::sha256_file(archive_path);
+    }
+
     // Safety: global install confirmation
     if (scope == cli::Scope::Global) {
         if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::global_confirm), assume_yes)) {
@@ -1988,6 +2048,10 @@ void install(const std::string& pkg_file, cli::Scope scope,
         ("ezmk_pkg_" + std::to_string(now_us) + "_" +
          std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
     fs::create_directories(stage);
+
+    // 1.4.2 F-04: the staged package root, kept for the provenance marker below
+    // (the marker is written after the stage is cleaned up).
+    fs::path staged_pkg_root = stage;
 
     try {
         util::info(ezmk::i18n::I18nKey::extracting);
@@ -2010,6 +2074,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
         // Shared post-validate processing: validate → hooks → deps → compile →
         // copy → postinstall (1.2.0-dev.7). Also shared by directory installs.
         process_installed_pkg(pkg_root, dest_dir, scope, assume_yes, tc, stage);
+        staged_pkg_root = pkg_root;
     } catch (...) {
         // Clean up staging on error (best-effort — a cleanup failure must not
         // mask the original error)
@@ -2019,6 +2084,27 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
     // Cleanup temp (best-effort)
     { std::error_code ec; fs::remove_all(stage, ec); }
+
+    // 1.4.2 F-04: write the install-source marker into the INSTALLED package dir
+    // (it must outlive the staging cleanup above) so maybe_write_lockfile can
+    // pin source/source_url/archive hash into ezmk.lock.
+    if (!prov_kind.empty()) {
+        std::string installed_name;
+        try {
+            installed_name =
+                config::parse_config(staged_pkg_root / "ezmk.toml").project.name;
+        } catch (...) {
+            // Unreadable staged config → nothing to record.
+        }
+        if (!installed_name.empty()) {
+            fs::path installed_dir = dest_dir / installed_name;
+            if (util::file_exists(installed_dir)) {
+                util::file_write(installed_dir / ".ezmk-archive-source",
+                                 prov_kind + "\n" + prov_source + "\n" +
+                                     archive_sha + "\n");
+            }
+        }
+    }
 
     // 1.1.0: generate/update ezmk.lock with resolved dependency snapshot
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);

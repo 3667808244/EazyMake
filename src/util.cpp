@@ -342,6 +342,83 @@ std::optional<fs::path> locate_project_root(const fs::path& start, int max_up) {
     return std::nullopt;
 }
 
+// ===================================================================
+// 1.4.2 F-12: project-root-relative path flags
+// ===================================================================
+
+bool cwd_is(const fs::path& dir) {
+    std::error_code ec;
+    auto cwd = fs::current_path(ec);
+    if (ec) return false;
+    auto a = fs::weakly_canonical(cwd, ec);
+    if (ec) a = cwd.lexically_normal();
+    auto b = fs::weakly_canonical(fs::absolute(dir), ec);
+    if (ec) b = fs::absolute(dir).lexically_normal();
+    return a == b;
+}
+
+std::vector<std::string> resolve_relative_paths(const std::vector<std::string>& paths,
+                                                const fs::path& base) {
+    std::vector<std::string> out;
+    out.reserve(paths.size());
+    for (const auto& p : paths) {
+        if (p.empty()) {
+            out.push_back(p);
+            continue;
+        }
+        fs::path fp(p);
+        if (fp.is_absolute()) {
+            out.push_back(p);
+        } else {
+            out.push_back((base / fp).lexically_normal().string());
+        }
+    }
+    return out;
+}
+
+std::vector<std::string> resolve_relative_path_flags(const std::vector<std::string>& flags,
+                                                     const fs::path& base) {
+    auto resolve = [&](const std::string& value) -> std::string {
+        if (value.empty()) return value;
+        fs::path fp(value);
+        if (fp.is_absolute()) return value;
+        return (base / fp).lexically_normal().string();
+    };
+    // Flags whose path operand is the NEXT element ("-I" "dir", "/I" "dir").
+    auto is_split = [](const std::string& f) {
+        return f == "-I" || f == "-L" || f == "-include" || f == "-isystem" ||
+               f == "/I" || f == "/LIBPATH:";
+    };
+    // Flags whose path operand is joined to the flag ("-Iinc", "/LIBPATH:lib").
+    auto joined_prefix = [](const std::string& f) -> std::string {
+        static const char* kPrefixes[] = {"-I", "-L", "-include", "-isystem",
+                                          "/I", "/LIBPATH:"};
+        for (const char* p : kPrefixes) {
+            const size_t n = std::strlen(p);
+            if (f.size() > n && f.compare(0, n, p) == 0) return std::string(p);
+        }
+        return {};
+    };
+
+    std::vector<std::string> out;
+    out.reserve(flags.size());
+    for (size_t i = 0; i < flags.size(); ++i) {
+        const std::string& f = flags[i];
+        if (is_split(f) && i + 1 < flags.size()) {
+            out.push_back(f);
+            out.push_back(resolve(flags[++i]));
+            continue;
+        }
+        std::string prefix = joined_prefix(f);
+        if (!prefix.empty()) {
+            out.push_back(prefix + resolve(f.substr(prefix.size())));
+            continue;
+        }
+        out.push_back(f);
+    }
+    return out;
+}
+
 // 1.1.0-dev.2: Returns a simplified platform tag (e.g. "win-x64", "linux-x64", "mac-arm64").
 // Used for precompiled package file matching and index.toml platform filtering.
 // Distinct from repo.cpp's build_platform_key() which uses "os_arch_toolchain" triplets.

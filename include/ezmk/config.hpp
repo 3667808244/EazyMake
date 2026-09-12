@@ -148,7 +148,18 @@ struct LockedPackage {
     std::string version;
     std::string source;            // repo name; "git" for git-URL installs (1.4.1)
     std::string source_url;
-    std::string sha256;            // SHA-256 of the installed artifact
+    std::string sha256;            // SHA-256 of the installed artifact (legacy alias of lib_sha256)
+    // 1.4.2 F-04: the two hashes have DIFFERENT meanings and must never be
+    // mixed:
+    //   archive_sha256 — hash of the ARCHIVE the package was installed from
+    //                    (re-verified when reinstalling with --locked);
+    //   lib_sha256     — hash of the built/installed artifact
+    //                    (lockfile::verify content check).
+    // Lockfile version stays 1; a pre-1.4.2 file only carries `sha256`, which
+    // has always meant the artifact hash — loaders treat it as the legacy alias
+    // of lib_sha256.
+    std::string archive_sha256;
+    std::string lib_sha256;
     std::string commit;            // 1.4.1: pinned commit SHA for git sources (optional)
     std::string type;              // "static" / "shared" / "header-only"
     std::string scope;             // "project" / "user" / "global"

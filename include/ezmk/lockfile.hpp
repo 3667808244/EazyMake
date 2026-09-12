@@ -20,6 +20,15 @@ void save(const fs::path& proj_root, const config::Lockfile& lf);
 std::vector<std::string> verify(const fs::path& proj_root,
                                 const config::Lockfile& lf);
 
+// 1.4.2 F-04: the ARTIFACT hash of a lockfile entry (lib_sha256 when present,
+// else the legacy sha256 field). Used by verify's content check.
+std::string artifact_hash(const config::LockedPackage& pkg);
+
+// 1.4.2 F-04: the installation-source ARCHIVE hash (empty when unknown: git,
+// directory and pre-1.4.2 entries). Used by `--locked` reinstall to verify the
+// archive it is about to install from.
+std::string archive_hash(const config::LockedPackage& pkg);
+
 // Compare ezmk.toml [depends] with lockfile packages.
 // Returns true if there are added/removed/modified dependencies.
 bool depends_changed(const config::EzConfig& cfg,

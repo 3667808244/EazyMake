@@ -1199,3 +1199,72 @@ TEST_CASE("locate_project_root: max_up override controls the search depth", "[ut
 
     ezmk::util::remove_all(base);
 }
+
+// ===================================================================
+// 1.4.2 F-12: project-root-relative path flags
+// ===================================================================
+
+TEST_CASE("resolve_relative_paths: relative entries resolve against the base", "[util][1.4.2]") {
+    fs::path base =
+#ifdef EZMK_WIN
+        "C:/proj";
+#else
+        "/proj";
+#endif
+    auto out = resolve_relative_paths({"libs", "other/dir", (base / "abs").string()}, base);
+    REQUIRE(out.size() == 3);
+    REQUIRE(fs::path(out[0]) == base / "libs");
+    REQUIRE(fs::path(out[1]) == base / "other" / "dir");
+    REQUIRE(fs::path(out[2]) == base / "abs");
+    // Empty entries survive untouched.
+    REQUIRE(resolve_relative_paths({""}, base) == std::vector<std::string>{""});
+}
+
+TEST_CASE("resolve_relative_path_flags: joined and split forms (F-12)", "[util][1.4.2]") {
+    fs::path base =
+#ifdef EZMK_WIN
+        "C:/proj";
+#else
+        "/proj";
+#endif
+    std::vector<std::string> flags = {
+        "-Llibs",          // joined -L
+        "-I", "include",   // split -I + value
+        "-isystemvendor",  // joined -isystem
+        "-DNAME=1",        // untouched
+        "-lhelper",        // library NAME, must not be resolved
+        "/LIBPATH:libs",   // MSVC joined
+        "/I", "misc",      // MSVC split
+    };
+    auto out = resolve_relative_path_flags(flags, base);
+    REQUIRE(out.size() == flags.size());  // split forms keep their pair
+    REQUIRE(fs::path(out[0].substr(2)) == base / "libs");   // -Llibs
+    REQUIRE(out[1] == "-I");
+    REQUIRE(fs::path(out[2]) == base / "include");
+    REQUIRE(fs::path(out[3].substr(8)) == base / "vendor"); // -isystemvendor
+    REQUIRE(out[4] == "-DNAME=1");
+    REQUIRE(out[5] == "-lhelper");
+    REQUIRE(fs::path(out[6].substr(9)) == base / "libs");   // /LIBPATH:libs
+    REQUIRE(out[7] == "/I");
+    REQUIRE(fs::path(out[8]) == base / "misc");
+}
+
+TEST_CASE("resolve_relative_path_flags: absolute values are kept verbatim (F-12)", "[util][1.4.2]") {
+    fs::path base =
+#ifdef EZMK_WIN
+        "C:/proj";
+#else
+        "/proj";
+#endif
+    std::string abs =
+#ifdef EZMK_WIN
+        "C:/elsewhere/inc";
+#else
+        "/elsewhere/inc";
+#endif
+    auto out = resolve_relative_path_flags({"-I" + abs, "-L", abs}, base);
+    REQUIRE(out[0] == "-I" + abs);
+    REQUIRE(out[1] == "-L");
+    REQUIRE(out[2] == abs);
+}
+

@@ -4,13 +4,13 @@
 #include <vector>
 
 namespace tc = ezmk::toolchain;
+namespace fs = std::filesystem;
 
 // ===================================================================
 // Flag translation — compile flags
 // ===================================================================
 
-TEST_CASE("translate_compile_flags returns identity for non-MSVC target", "[toolchain][translate]") {
-    std::vector<std::string> flags = {"-Wall", "-O2", "-std=c++17"};
+TEST_CASE("translate_compile_flags returns identity for non-MSVC target", "[toolchain][translate]") {    std::vector<std::string> flags = {"-Wall", "-O2", "-std=c++17"};
     auto result = tc::translate_compile_flags(flags, tc::CompilerFamily::Gcc);
     REQUIRE(result.translated == flags);
     REQUIRE(result.unrecognized.empty());
@@ -571,3 +571,59 @@ TEST_CASE("max_supported_c_std: unknown versions fall back to the conservative f
     REQUIRE(tc::max_supported_c_std(CompilerFamily::Gcc,
         "g++ (GCC) 9999999999999999999999999999.0") == "C11");
 }
+
+// ===================================================================
+// 1.4.2 F-03: /showIncludes parsing (localization-independent)
+// ===================================================================
+
+TEST_CASE("parse_show_includes: English prefix", "[toolchain][1.4.2]") {
+    std::string out =
+        "Note: including file: C:\\proj\\include\\a.h\n"
+        "Note: including file:  C:\\proj\\include\\b.h\r\n"
+        "some unrelated compiler output\n";
+    auto incs = tc::parse_show_includes(out);
+    REQUIRE(incs.size() == 2);
+    REQUIRE(incs[0] == fs::path("C:\\proj\\include\\a.h"));
+    REQUIRE(incs[1] == fs::path("C:\\proj\\include\\b.h"));
+}
+
+TEST_CASE("parse_show_includes: zh-CN prefix (half- and full-width colons)", "[toolchain][1.4.2]") {
+    std::string out =
+        "注意: 包含文件:  C:\\proj\\include\\a.h\n"
+        "注意：包含文件：C:\\proj\\include\\b.h\n";
+    auto incs = tc::parse_show_includes(out);
+    REQUIRE(incs.size() == 2);
+    REQUIRE(incs[0] == fs::path("C:\\proj\\include\\a.h"));
+    REQUIRE(incs[1] == fs::path("C:\\proj\\include\\b.h"));
+}
+
+TEST_CASE("parse_show_includes: unknown localization falls back to path shape", "[toolchain][1.4.2]") {
+    // A localization we do not know: the note prefix differs, but the text
+    // after the last colon is still a path — it must be parsed.
+    std::string out =
+        "Hinweis: Einlesen der Datei: C:\\proj\\include\\c.h\n"
+        "Eingefuegt: /usr/include/stdio.h\n";
+    auto incs = tc::parse_show_includes(out);
+    REQUIRE(incs.size() == 2);
+    REQUIRE(incs[0] == fs::path("C:\\proj\\include\\c.h"));
+    REQUIRE(incs[1] == fs::path("/usr/include/stdio.h"));
+}
+
+TEST_CASE("parse_show_includes: ordinary diagnostics are not misparsed", "[toolchain][1.4.2]") {
+    // These are real compiler diagnostics that contain colons; the text after
+    // the colon is not path-shaped, so they must be ignored.
+    std::string out =
+        "main.cpp(3): error C2065: 'x': undeclared identifier\n"
+        "main.cpp(5): fatal error C1083: Cannot open include file: 'foo.h': No such file or directory\n"
+        "warning: unused variable 'y' [-Wunused-variable]\n";
+    auto incs = tc::parse_show_includes(out);
+    REQUIRE(incs.empty());
+}
+
+TEST_CASE("parse_show_includes: drive-letter-only line is parsed", "[toolchain][1.4.2]") {
+    // Some localizations emit the path without a separating note prefix.
+    auto incs = tc::parse_show_includes("C:\\proj\\include\\only.h\n");
+    REQUIRE(incs.size() == 1);
+    REQUIRE(incs[0] == fs::path("C:\\proj\\include\\only.h"));
+}
+
