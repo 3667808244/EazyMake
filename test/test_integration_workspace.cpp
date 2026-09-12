@@ -656,6 +656,46 @@ TEST_CASE("integration: workspace watch starts member watchers and rebuilds (1.4
     REQUIRE(rebuilt);
 }
 
+// 1.4.2 F-02: `workspace watch -j1` must start a watcher in EVERY selected
+// member. The pre-1.4.2 fixed-size ThreadPool held long-lived watch tasks
+// forever, so members beyond the job count stayed queued and were never
+// watched (and after Ctrl+C the pool kept draining its queue, starting fresh
+// watchers — the "multiple Ctrl+C" symptom).
+TEST_CASE("integration: workspace watch -j1 starts every member watcher (1.4.2 F-02)", "[integration][workspace][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path root = tmp.path / "ws_ww_j1";
+    write_ws_fixture(root);  // 3 members: apps/tool-a, apps/tool-b, libs/strutil
+
+    struct WsWatchKiller {
+        bool armed = true;
+        ~WsWatchKiller() { if (armed) kill_ws_watch_processes(); }
+    } killer;
+
+    fs::path log_file = tmp.path / "ws_watch_j1.log";
+    start_ws_watch(root, log_file, "-j 1");
+
+    REQUIRE(poll_log(log_file, "workspace watch:", std::chrono::seconds(15)));
+
+    // The orchestrator prints "[<member>] watch..." when it dispatches each
+    // member (member names are the workspace paths, e.g. "apps/tool-a"). With
+    // -j1 all three must still appear (watch tasks never return until the
+    // member watcher does).
+    bool started_a = poll_log(log_file, "[apps/tool-a] watch", std::chrono::seconds(20));
+    bool started_b = poll_log(log_file, "[apps/tool-b] watch", std::chrono::seconds(20));
+    bool started_s = poll_log(log_file, "[libs/strutil] watch", std::chrono::seconds(20));
+
+    INFO("watch log:\n" << (fs::exists(log_file) ? file_read(log_file) : ""));
+    killer.armed = false;
+    kill_ws_watch_processes();
+    REQUIRE(started_a);
+    REQUIRE(started_b);
+    REQUIRE(started_s);
+}
+
 // ==============================================================
 // 1.4.0-dev.7: workspace scan — adopt existing projects
 // (fixture: 2 projects without any workspace file — libs/strutil static lib

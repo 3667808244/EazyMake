@@ -448,17 +448,28 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
     std::atomic<int> failed{0}, skipped{0};
     std::mutex print_mutex;
 
-    util::ThreadPool pool(static_cast<size_t>(jobs));
-    std::vector<std::future<void>> futures;
-    futures.reserve(order.size());
+    // 1.4.2 F-02: one thread per selected member — NOT a fixed-size pool. Watch
+    // tasks are long-lived (run_member blocks until the member watcher exits),
+    // so with more members than jobs the pool's queue never drained: queued
+    // members were never watched, and after Ctrl+C the pool immediately picked
+    // up the next queued task and started a fresh watcher (hence "multiple
+    // Ctrl+C needed"). Layer order is still honored for START order only:
+    // dependencies launch first so their initial builds land before dependents
+    // begin watching.
+    //
+    // `jobs` no longer caps watch concurrency (watch is long-lived by design);
+    // it is kept in the start message because the CLI still accepts -j.
+    std::vector<std::thread> threads;
+    threads.reserve(order.size());
     for (size_t idx : order) {
-        futures.push_back(pool.submit([&ws, idx, &stop, &print_mutex,
-                                       &failed, &skipped, &opts]() {
-            // --stop-on-error fired while this task was queued → skipped.
-            if (stop.load()) {
-                skipped.fetch_add(1);
-                return;
-            }
+        // --stop-on-error fired earlier in the start order → skipped (never
+        // started), not failed.
+        if (stop.load()) {
+            skipped.fetch_add(1);
+            continue;
+        }
+        threads.emplace_back([&ws, idx, &stop, &print_mutex,
+                              &failed, &opts]() {
             const auto& m = ws.members[idx];
             // 1.4.0-dev.5: `workspace watch --run` forwards --run to member
             // watchers — but only for executable members (1.3.4 config-time
@@ -467,18 +478,17 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
             if (opts.watch_run && m.type == "executable") extra = "--run";
             bool ok = run_member(m, "watch", print_mutex, /*test_report=*/{},
                                  extra);
-            if (ok) {
-                // watcher exited cleanly (e.g. SIGINT) — nothing to record.
-            } else {
+            if (!ok) {
                 failed.fetch_add(1);
                 if (opts.stop_on_error) stop.store(true);
             }
-        }));
+            // A clean exit (SIGINT) records nothing.
+        });
     }
     // Await every member watcher (SIGINT makes each child exit → run_command
-    // returns → future completes). Never kill a running subprocess.
-    for (auto& f : futures) {
-        f.get();
+    // returns → the thread finishes). Never kill a running subprocess.
+    for (auto& t : threads) {
+        if (t.joinable()) t.join();
     }
 
     // Warn about invalid members (they are not in any layer).

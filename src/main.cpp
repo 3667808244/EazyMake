@@ -440,15 +440,31 @@ int main(int argc, char** argv) {
                 }
             }
 
+            // 1.4.2 F-32: never rebuild because of our own outputs. The build
+            // tree and the .ezmk/ state dir are ignored wholesale, and
+            // object/dep/temp files are ignored by suffix (matters when a
+            // src_dir is "." or contains the build tree).
+            watcher.add_ignore_prefix((proj_root / "build").string());
+            watcher.add_ignore_prefix((proj_root / ".ezmk").string());
+            watcher.add_ignore_suffix(".o");
+            watcher.add_ignore_suffix(".d");
+            watcher.add_ignore_suffix(".tmp");
+
             // Run watcher in background thread, main thread waits for SIGINT
-            std::thread watcher_thread([&watcher]() {
+            std::atomic<bool> watcher_done{false};
+            std::thread watcher_thread([&watcher, &watcher_done]() {
                 watcher.run();
+                watcher_done.store(true);
             });
 
-            // Wait for SIGINT
-            while (!sigint_received) {
+            // Wait for SIGINT — or for the watcher to stop on its own.
+            // 1.4.2 F-05: a dead platform worker (or a watcher that could not
+            // open any directory) previously left this loop spinning forever,
+            // so watch looked alive while nothing was being monitored.
+            while (!sigint_received && !watcher_done.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
             }
+            bool watcher_ended_early = !sigint_received && watcher_done.load();
 
             ezmk::util::info(ezmk::i18n::I18nKey::watch_stopping);
             watcher.stop();
@@ -456,6 +472,14 @@ int main(int argc, char** argv) {
 
             // Restore previous handler
             std::signal(SIGINT, prev_handler);
+
+            if (watcher_ended_early) {
+                // Exit non-zero so `workspace watch` members (and scripts) see
+                // the failure instead of counting it as a clean stop.
+                ezmk::util::warn(
+                    "file watcher stopped unexpectedly; leaving watch mode");
+                return 1;
+            }
             break;
         }
 

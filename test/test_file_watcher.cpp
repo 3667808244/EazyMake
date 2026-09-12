@@ -375,3 +375,207 @@ TEST_CASE("FileWatcher: is non-copyable (compile-time check)", "[file_watcher][0
     static_assert(!std::is_move_assignable_v<FileWatcher>, "FileWatcher must not be move-assignable");
     REQUIRE(true);
 }
+
+// ===================================================================
+// 1.4.2 F-05 / F-31 / F-32
+// ===================================================================
+
+// F-05: the worker-death channel reports nothing for a healthy run (the
+// real-error path is an OS-level failure that cannot be forced portably here;
+// this locks the accessor contract used by main.cpp's watch loop).
+TEST_CASE("FileWatcher: no worker error for a healthy run (F-05)", "[file_watcher][1.4.2]") {
+    auto tmp = create_temp_dir();
+    std::atomic<int> call_count{0};
+    FileWatcher watcher([&call_count](const fs::path&) { call_count.fetch_add(1); }, 50);
+    watcher.add_directory(tmp);
+
+    REQUIRE_FALSE(watcher.had_worker_error());
+    std::thread t([&watcher]() { watcher.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    watcher.stop();
+    if (t.joinable()) t.join();
+
+    REQUIRE_FALSE(watcher.had_worker_error());
+    REQUIRE(watcher.worker_error_message().empty());
+    fs::remove_all(tmp);
+}
+
+// F-32: an ignored suffix (.o build artifact) never reaches the callback, while
+// a normal source file next to it still does.
+TEST_CASE("FileWatcher: ignore suffix filters build artifacts (F-32)", "[file_watcher][integration][1.4.2]") {
+    auto tmp = create_temp_dir();
+    std::atomic<int> call_count{0};
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+
+    FileWatcher watcher([&](const fs::path& p) {
+        call_count.fetch_add(1);
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
+    }, 100);
+    watcher.add_directory(tmp);
+    watcher.add_ignore_suffix(".o");
+
+    std::thread t([&watcher]() { watcher.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    fs::path keep = tmp / "keep.cpp";
+    fs::path skip = tmp / "skip.o";
+    { std::ofstream f(keep); f << "// keep\n"; }
+    { std::ofstream f(skip); f << "object\n"; }
+
+    bool delivered = wait_for_event(call_count, 1, 3000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));  // late flushes
+
+    watcher.stop();
+    if (t.joinable()) t.join();
+    fs::remove_all(tmp);
+
+    if (!delivered) {
+        SKIP("file watcher events not delivered in this environment");
+    }
+    std::lock_guard<std::mutex> lock(paths_mutex);
+    REQUIRE(changed.count(fs::absolute(keep).generic_string()) == 1);
+    REQUIRE(changed.count(fs::absolute(skip).generic_string()) == 0);
+}
+
+// F-32: an ignored directory tree (build/) is dropped whole — including the
+// event for the directory itself, which is what made `src_dirs = ["."]`
+// self-trigger rebuilds.
+TEST_CASE("FileWatcher: ignore prefix filters a whole tree (F-32)", "[file_watcher][integration][1.4.2]") {
+    auto tmp = create_temp_dir();
+    std::atomic<int> call_count{0};
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+
+    FileWatcher watcher([&](const fs::path& p) {
+        call_count.fetch_add(1);
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
+    }, 100);
+    watcher.add_directory(tmp);
+    watcher.add_ignore_prefix((tmp / "build").string());
+
+    std::thread t([&watcher]() { watcher.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    fs::path keep = tmp / "app.cpp";
+    fs::create_directories(tmp / "build");
+    { std::ofstream f(tmp / "build" / "app.o"); f << "object\n"; }
+    { std::ofstream f(keep); f << "// app\n"; }
+
+    bool delivered = wait_for_event(call_count, 1, 3000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    watcher.stop();
+    if (t.joinable()) t.join();
+    fs::remove_all(tmp);
+
+    if (!delivered) {
+        SKIP("file watcher events not delivered in this environment");
+    }
+    std::lock_guard<std::mutex> lock(paths_mutex);
+    REQUIRE(changed.count(fs::absolute(keep).generic_string()) == 1);
+    REQUIRE(changed.count(fs::absolute(tmp / "build").generic_string()) == 0);
+    REQUIRE(changed.count(fs::absolute(tmp / "build" / "app.o").generic_string()) == 0);
+}
+
+// F-32: a path that is gone by flush time must not fire (a delete event is not
+// a reason to rebuild — the pre-1.4.2 comment claimed this but never did it).
+TEST_CASE("FileWatcher: path deleted before flush does not fire (F-32)", "[file_watcher][integration][1.4.2]") {
+    auto tmp = create_temp_dir();
+    std::atomic<int> call_count{0};
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+
+    FileWatcher watcher([&](const fs::path& p) {
+        call_count.fetch_add(1);
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
+    }, 300);
+    watcher.add_directory(tmp);
+
+    std::thread t([&watcher]() { watcher.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    fs::path live = tmp / "live.cpp";
+    fs::path gone = tmp / "gone.cpp";
+    { std::ofstream f(gone); f << "// transient\n"; }
+    { std::ofstream f(live); f << "// live\n"; }
+    // Remove the transient file well before the debounce window expires.
+    std::error_code ec;
+    fs::remove(gone, ec);
+
+    bool delivered = wait_for_event(call_count, 1, 3000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+    watcher.stop();
+    if (t.joinable()) t.join();
+    fs::remove_all(tmp);
+
+    if (!delivered) {
+        SKIP("file watcher events not delivered in this environment");
+    }
+    std::lock_guard<std::mutex> lock(paths_mutex);
+    REQUIRE(changed.count(fs::absolute(live).generic_string()) == 1);
+    REQUIRE(changed.count(fs::absolute(gone).generic_string()) == 0);
+}
+
+// F-31: after the watched directory is removed and recreated, the watch is
+// re-established and new changes fire again (pre-1.4.2 the watch stayed dead).
+TEST_CASE("FileWatcher: watch recovers after directory recreation (F-31)", "[file_watcher][integration][1.4.2]") {
+    auto tmp = create_temp_dir();
+    fs::path watched = tmp / "watched";
+    fs::create_directories(watched);
+
+    std::atomic<int> call_count{0};
+    std::mutex paths_mutex;
+    std::set<std::string> changed;
+
+    FileWatcher watcher([&](const fs::path& p) {
+        call_count.fetch_add(1);
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        changed.insert(fs::absolute(p).generic_string());
+    }, 100);
+    watcher.add_directory(watched, true);
+
+    std::thread t([&watcher]() { watcher.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Prove the watcher is live before the disruption (else the environment
+    // simply does not deliver events — skip instead of a false failure).
+    fs::path first = watched / "live.cpp";
+    { std::ofstream f(first); f << "// live\n"; }
+    bool delivered_before = wait_for_event(call_count, 1, 3000);
+    if (!delivered_before) {
+        watcher.stop();
+        if (t.joinable()) t.join();
+        fs::remove_all(tmp);
+        SKIP("file watcher events not delivered in this environment");
+    }
+
+    // Kill the watch: remove the directory, wait for the repair pass to notice
+    // it is missing, then bring it back and wait for the re-arm.
+    std::error_code ec;
+    fs::remove_all(watched, ec);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+    fs::create_directories(watched, ec);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+
+    int before = call_count.load();
+    fs::path again = watched / "again.cpp";
+    { std::ofstream f(again); f << "// back\n"; }
+    bool recovered = wait_for_event(call_count, before + 1, 5000);
+
+    watcher.stop();
+    if (t.joinable()) t.join();
+
+    {
+        std::lock_guard<std::mutex> lock(paths_mutex);
+        INFO("changed paths: " << (changed.empty() ? std::string("<none>")
+                                                   : *changed.begin()));
+        REQUIRE(recovered);
+        REQUIRE(changed.count(fs::absolute(again).generic_string()) == 1);
+    }
+    fs::remove_all(tmp);
+}
