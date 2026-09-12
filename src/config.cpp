@@ -851,6 +851,11 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
+    // 1.4.2 F-06: normalize the framework even when the key is absent. The
+    // built-in default is lowercase "catch2" while dispatch compares uppercase
+    // names, so omitting [test].framework made `ezmk test` fatal with
+    // "unknown test framework" — the documented default never worked.
+    cfg.test.framework = normalize_lang(cfg.test.framework);
 }
 
 static void parse_utils(const toml::table& root, EzConfig& cfg) {

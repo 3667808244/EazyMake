@@ -310,6 +310,9 @@ EZMK_I18N_KEY(lua_api_arg_count)
 // ---- watch (0.2.3+) ----
 EZMK_I18N_KEY(watch_started)
 EZMK_I18N_KEY(watch_skip_initial)
+// 1.4.2 F-17: independent watching text — the "Build succeeded." wording was
+// printed even after a FAILED build, which read as a false success.
+EZMK_I18N_KEY(watch_watching)
 EZMK_I18N_KEY(watch_config_changed)
 EZMK_I18N_KEY(watch_detected_change)
 EZMK_I18N_KEY(watch_stopping)

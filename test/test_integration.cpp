@@ -2897,3 +2897,118 @@ TEST_CASE("integration: subdirectory build resolves relative link dirs (1.4.2 F-
     REQUIRE(fs::exists(proj / "build" / ("consumer" EZMK_EXE_SUFFIX)));
 }
 
+// ==============================================================
+// 1.4.2 phase 4: CLI / config semantics (F-06 / F-16 / F-17)
+// ==============================================================
+
+// F-06: omitting [test].framework must use the documented Catch2 default — the
+// old lowercase default made `ezmk test` fatal with "unknown test framework".
+TEST_CASE("integration: ezmk test without [test].framework uses the Catch2 default (1.4.2 F-06)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "fwdefault";
+    fs::create_directories(proj / "src");
+    fs::create_directories(proj / "test");
+    // Deliberately NO [test] section: the framework default must apply.
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"fwdefault\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n");
+    file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
+    file_write(proj / "test" / "test_x.cpp",
+        "int main() { return 0; }\n");
+
+    ProcResult t = run_ezmk("test", proj);
+    std::string combined = t.out + "\n" + t.err;
+    INFO("test out:\n" << t.out << "\ntest err:\n" << t.err);
+    // It must reach the Catch2 runner (which reports the missing header) —
+    // never the "unknown test framework" fatal from the un-normalized default.
+    REQUIRE(combined.find("unknown test framework") == std::string::npos);
+    REQUIRE(combined.find("Catch2") != std::string::npos);
+}
+
+// F-16: `ezmk example --help` must print usage instead of being read as an
+// example name, and `example -o <dir> <name>` must honor the option order.
+TEST_CASE("integration: ezmk example --help and option-before-name (1.4.2 F-16)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    ProcResult h = run_ezmk("example --help", tmp.path);
+    std::string hout = h.out + "\n" + h.err;
+    INFO("help out:\n" << h.out << "\nhelp err:\n" << h.err);
+    REQUIRE(h.exit_code == 0);
+    REQUIRE(hout.find("unknown example") == std::string::npos);
+    REQUIRE(hout.find("example") != std::string::npos);
+
+    // A real scaffold with the option placed before the name.
+    ProcResult g = run_ezmk("example -o \"" + tmp.path.string() + "\" hello", tmp.path);
+    INFO("gen out:\n" << g.out << "\ngen err:\n" << g.err);
+    REQUIRE(g.exit_code == 0);
+    REQUIRE(fs::exists(tmp.path / "hello" / "ezmk.toml"));
+}
+
+// F-17: a FAILED initial build must not print the "Build succeeded." watching
+// text — watch keeps running with the neutral watching message instead.
+TEST_CASE("integration: watch failure prints watching text, not success (1.4.2 F-17)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "wfail";
+    fs::create_directories(proj / "src");
+    file_write(proj / "ezmk.toml",
+        "[project]\nname = \"wfail\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n");
+    // A source that cannot compile → the initial build fails.
+    file_write(proj / "src" / "main.cpp", "this is not valid C++ @@@\n");
+
+    // `ezmk watch` blocks by design — start it BACKGROUNDED with its output
+    // redirected to a log, poll the log, then kill the process tree (never let
+    // the blocking watcher hold the test's output pipes open).
+    fs::path log_file = tmp.path / "watch.log";
+    std::string ezmk_bin = find_ezmk_binary().string();
+    std::string start_cmd;
+#ifdef EZMK_WIN
+    start_cmd = "cmd /c start \"\" /D \"" + proj.string() + "\" /B " +
+                escape_shell_arg(ezmk_bin) + " watch > \"" + log_file.string() +
+                "\" 2>&1";
+#else
+    start_cmd = "cd " + escape_shell_arg(proj.string()) + " && " +
+                escape_shell_arg(ezmk_bin) + " watch > " +
+                escape_shell_arg(log_file.string()) + " 2>&1 &";
+#endif
+    run_command(start_cmd);
+
+    struct WatchKiller {
+        bool armed = true;
+        ~WatchKiller() {
+            if (!armed) return;
+#ifdef EZMK_WIN
+            run_command("cmd /c taskkill /F /IM ezmk.exe 2>nul");
+#else
+            run_command("pkill -f \"ezmk watch\" 2>/dev/null || true");
+#endif
+        }
+    } killer;
+
+    bool saw_failure = poll_log(log_file, "initial build failed", std::chrono::seconds(30));
+    bool saw_watching = poll_log(log_file, "Watching for changes", std::chrono::seconds(15));
+    std::string content = fs::exists(log_file) ? file_read(log_file) : "";
+
+    killer.armed = false;
+#ifdef EZMK_WIN
+    run_command("cmd /c taskkill /F /IM ezmk.exe 2>nul");
+#else
+    run_command("pkill -f \"ezmk watch\" 2>/dev/null || true");
+#endif
+
+    INFO("watch log:\n" << content);
+    REQUIRE(saw_failure);
+    REQUIRE(saw_watching);                                     // watch_watching
+    REQUIRE(content.find("Build succeeded") == std::string::npos);  // no false success
+}
+

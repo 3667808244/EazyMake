@@ -841,15 +841,17 @@ TEST_CASE("write_default_config: commented [test] example present", "[config][1.
     REQUIRE(raw.find("# flags =") == std::string::npos);
 
     // Zero parse impact: config still round-trips; the commented lines must not
-    // activate anything. dirs/framework carry their built-in defaults ({"test"} /
-    // "catch2") and the 1.2.0-dev.12 additions stay absent.
+    // activate anything. dirs carries its built-in default ({"test"}) and the
+    // 1.2.0-dev.12 additions stay absent.
     auto cfg = parse_config(tmp);
     fs::remove(tmp);
 
     REQUIRE(cfg.project.name == "testapp");
     REQUIRE(cfg.test.dirs.size() == 1);
     REQUIRE(cfg.test.dirs[0] == "test");
-    REQUIRE(cfg.test.framework == "catch2");  // built-in default (unparsed → not uppercased)
+    // 1.4.2 F-06: the default is normalized too — dispatch compares uppercase
+    // names, so a lowercase default made an omitted [test].framework fatal.
+    REQUIRE(cfg.test.framework == "CATCH2");
     REQUIRE(cfg.test.default_profile.empty());
     REQUIRE(cfg.test.include_dirs.empty());
     REQUIRE(cfg.test.link_targets.empty());
@@ -1932,6 +1934,33 @@ link_targets = ["pthread"]
     REQUIRE(cfg.test.include_dirs[1] == "misc");
     REQUIRE(cfg.test.link_targets.size() == 1);
     REQUIRE(cfg.test.link_targets[0] == "pthread");
+}
+
+TEST_CASE("parse_config: [test].framework defaults to normalized CATCH2 (1.4.2 F-06)", "[config][1.4.2]") {
+    using namespace ezmk::config;
+
+    // No [test] section at all.
+    auto toml1 = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+    auto cfg1 = parse_config(toml1);
+    fs::remove(toml1);
+    REQUIRE(cfg1.test.framework == "CATCH2");
+
+    // [test] without the framework key.
+    auto toml2 = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[test]
+dirs = ["test"]
+)");
+    auto cfg2 = parse_config(toml2);
+    fs::remove(toml2);
+    REQUIRE(cfg2.test.framework == "CATCH2");
 }
 
 TEST_CASE("parse_config: [test] defaults stay empty/absent", "[config][1.2.0-dev.12]") {

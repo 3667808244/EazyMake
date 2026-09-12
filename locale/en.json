@@ -188,6 +188,7 @@
     "pkg_update_updating": "updating '{pkg}' from {old} to {new}",
     "watch_started": "Build succeeded. Watching for changes... (Ctrl+C to stop)",
     "watch_skip_initial": "Skipping initial build. Watching for changes... (Ctrl+C to stop)",
+    "watch_watching": "Watching for changes... (Ctrl+C to stop)",
     "watch_config_changed": "ezmk.toml changed — re-parsing config and rebuilding from scratch",
     "watch_detected_change": "detected change: {path}",
     "watch_stopping": "Stopping file watcher...",

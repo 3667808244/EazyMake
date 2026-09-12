@@ -237,3 +237,101 @@ TEST_CASE("import: no standard keeps the C++17 fallback (dev.4)", "[import][1.4.
     CHECK(t.find("language = \"C++17\"") != std::string::npos);
     CHECK(t.find(">=") == std::string::npos);
 }
+
+// ===================================================================
+// 1.4.2 F-07 / F-08: add_library semantics + unevaluated conditions
+// ===================================================================
+
+TEST_CASE("import: add_library without a type collects sources as static (1.4.2 F-07)", "[import][1.4.2]") {
+    // CMake's default for add_library is STATIC; the old importer left the type
+    // at "executable" and never collected the source arguments.
+    auto t = ezmk::import::import_cmake_text(
+        "project(mylib LANGUAGES CXX)\n"
+        "add_library(mylib src/a.cpp src/b.cpp)\n",
+        test_root());
+    CHECK(t.find("type = \"static\"") != std::string::npos);
+    CHECK(t.find("src_dirs = [\"src\"]") != std::string::npos);
+    CHECK(t.find("type = \"executable\"") == std::string::npos);
+}
+
+TEST_CASE("import: add_library SHARED collects sources, keyword not a path (1.4.2 F-07)", "[import][1.4.2]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(mylib LANGUAGES CXX)\n"
+        "add_library(mylib SHARED src/a.cpp)\n",
+        test_root());
+    CHECK(t.find("type = \"shared\"") != std::string::npos);
+    CHECK(t.find("src_dirs = [\"src\"]") != std::string::npos);
+    CHECK(t.find("\"SHARED\"") == std::string::npos);
+}
+
+TEST_CASE("import: add_library STATIC with EXCLUDE_FROM_ALL parses (1.4.2 F-07)", "[import][1.4.2]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(mylib LANGUAGES CXX)\n"
+        "add_library(mylib STATIC EXCLUDE_FROM_ALL src/a.cpp)\n",
+        test_root());
+    CHECK(t.find("type = \"static\"") != std::string::npos);
+    CHECK(t.find("src_dirs = [\"src\"]") != std::string::npos);
+    CHECK(t.find("EXCLUDE_FROM_ALL") == std::string::npos);
+}
+
+TEST_CASE("import: INTERFACE library becomes header-only (1.4.2 F-07)", "[import][1.4.2]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(iface LANGUAGES CXX)\n"
+        "add_library(iface INTERFACE)\n"
+        "target_include_directories(iface INTERFACE include)\n",
+        test_root());
+    CHECK(t.find("type = \"static\"") != std::string::npos);
+    CHECK(t.find("header_only = true") != std::string::npos);
+}
+
+// F-08: an unevaluable condition must stay skipped — the old code inverted the
+// indeterminate frame and adopted the else branch.
+TEST_CASE("import: unevaluated if/else does not adopt the else branch (1.4.2 F-08)", "[import][1.4.2]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "if(MY_UNKNOWN_VAR)\n"
+        "  target_link_libraries(app from_if)\n"
+        "else()\n"
+        "  target_link_libraries(app from_else)\n"
+        "endif()\n",
+        test_root());
+    CHECK(t.find("from_if") == std::string::npos);
+    CHECK(t.find("from_else") == std::string::npos);
+    CHECK(t.find("未求值") != std::string::npos);   // TODO comment recorded
+}
+
+TEST_CASE("import: unevaluated elseif chain stays skipped (1.4.2 F-08)", "[import][1.4.2]") {
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "if(MY_UNKNOWN_VAR)\n"
+        "  target_link_libraries(app from_if)\n"
+        "elseif(OTHER_UNKNOWN)\n"
+        "  target_link_libraries(app from_elseif)\n"
+        "else()\n"
+        "  target_link_libraries(app from_else2)\n"
+        "endif()\n",
+        test_root());
+    CHECK(t.find("from_if") == std::string::npos);
+    CHECK(t.find("from_elseif") == std::string::npos);
+    CHECK(t.find("from_else2") == std::string::npos);
+}
+
+TEST_CASE("import: evaluated false if still selects the else branch (1.4.2 F-08)", "[import][1.4.2]") {
+    // Regression guard: the fix must not break a DETERMINATE condition.
+    auto t = ezmk::import::import_cmake_text(
+        "project(app LANGUAGES CXX)\n"
+        "add_executable(app src/main.cpp)\n"
+        "if(UNIX)\n"
+        "  target_link_libraries(app from_if)\n"
+        "else()\n"
+        "  target_link_libraries(app from_else)\n"
+        "endif()\n",
+        test_root());
+    CHECK(t.find("from_if") == std::string::npos);
+#ifdef EZMK_WIN
+    // UNIX is evaluated to false on Windows → the else branch applies.
+    CHECK(t.find("from_else") != std::string::npos);
+#endif
+}

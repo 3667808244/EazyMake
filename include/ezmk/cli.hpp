@@ -98,6 +98,7 @@ struct ProjectImportOptions {
 // 1.2.3: example command options — `ezmk example` (list / <name> / -o)
 struct ExampleOptions {
     bool list = false;        // list mode (no name / explicit `list`)
+    bool help = false;        // 1.4.2 F-16: -h/--help
     std::string name;         // example name (generate mode)
     std::string output_dir;   // -o/--output <dir> (default: ".")
 };

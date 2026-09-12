@@ -182,6 +182,88 @@ TEST_CASE("cli parse: project clean rejects unknown options and positionals", "[
 }
 
 // ===================================================================
+// 1.4.2 F-13 / F-14 / F-16
+// ===================================================================
+
+// F-13: the clean redirect must parse the workspace flag set, so the
+// clean-specific rejection runs instead of a generic "unknown option".
+TEST_CASE("cli parse: clean -w accepts workspace flags and rejects extra args (1.4.2 F-13)", "[cli][1.4.2]") {
+    // --stop-on-error is parsed, then rejected with the clean-specific error.
+    REQUIRE_THROWS_AS(
+        TestArgs({"project", "clean", "-w", "--stop-on-error"}).parse(),
+        ezmk::fatal_error);
+    // Extra positional after `clean -w` is a usage error.
+    REQUIRE_THROWS_AS(TestArgs({"project", "clean", "-w", "x"}).parse(),
+                      ezmk::fatal_error);
+    // -v / -j parse fine (workspace clean accepts them; -v is ignored).
+    auto args = TestArgs({"project", "clean", "-w", "-v"}).parse();
+    REQUIRE(args.cmd == Command::WorkspaceClean);
+    auto args_j = TestArgs({"project", "clean", "-w", "-j", "2"}).parse();
+    REQUIRE(args_j.cmd == Command::WorkspaceClean);
+    REQUIRE(args_j.workspace_opts->jobs == 2);
+    // Without -w, workspace-only flags are rejected as such.
+    REQUIRE_THROWS_AS(TestArgs({"project", "clean", "--stop-on-error"}).parse(),
+                      ezmk::fatal_error);
+    REQUIRE_THROWS_AS(TestArgs({"project", "clean", "-j", "2"}).parse(),
+                      ezmk::fatal_error);
+    // Plain clean still works.
+    REQUIRE(TestArgs({"project", "clean"}).parse().cmd == Command::ProjectClean);
+}
+
+// F-14: trailing positionals on install/pack/test are a usage error.
+TEST_CASE("cli parse: install/pack/test reject trailing positionals (1.4.2 F-14)", "[cli][1.4.2]") {
+    REQUIRE_THROWS_AS(TestArgs({"project", "install", "extra"}).parse(),
+                      ezmk::fatal_error);
+    REQUIRE_THROWS_AS(TestArgs({"project", "pack", "extra"}).parse(),
+                      ezmk::fatal_error);
+    REQUIRE_THROWS_AS(TestArgs({"project", "test", "extra"}).parse(),
+                      ezmk::fatal_error);
+    REQUIRE_THROWS_AS(TestArgs({"project", "test", "--filter", "x", "extra"}).parse(),
+                      ezmk::fatal_error);
+    // Flag-only forms keep working.
+    REQUIRE(TestArgs({"project", "install", "--dry-run"}).parse().cmd ==
+            Command::ProjectInstall);
+    REQUIRE(TestArgs({"project", "pack", "--format", "zip"}).parse().cmd ==
+            Command::ProjectPack);
+    REQUIRE(TestArgs({"project", "test", "--filter", "x"}).parse().cmd ==
+            Command::ProjectTest);
+}
+
+// F-16: `ezmk example` parses options from index 2 like every other subcommand.
+TEST_CASE("cli parse: example option/positional handling (1.4.2 F-16)", "[cli][1.4.2]") {
+    // Bare → list, output_dir default ".".
+    auto list_default = TestArgs({"example"}).parse();
+    REQUIRE(list_default.cmd == Command::Example);
+    REQUIRE(list_default.example_opts->list);
+    REQUIRE(list_default.example_opts->output_dir == ".");
+
+    // Explicit `list`.
+    REQUIRE(TestArgs({"example", "list"}).parse().example_opts->list);
+    // `list` with garbage → usage error.
+    REQUIRE_THROWS_AS(TestArgs({"example", "list", "garbage"}).parse(),
+                      ezmk::fatal_error);
+
+    // -h / --help.
+    REQUIRE(TestArgs({"example", "--help"}).parse().example_opts->help);
+    REQUIRE(TestArgs({"example", "-h"}).parse().example_opts->help);
+
+    // Option BEFORE the name (the old parser took argv[2] as the name).
+    auto before = TestArgs({"example", "-o", "outdir", "hello"}).parse();
+    REQUIRE_FALSE(before.example_opts->list);
+    REQUIRE(before.example_opts->name == "hello");
+    REQUIRE(before.example_opts->output_dir == "outdir");
+
+    // Name before the option still works.
+    auto after = TestArgs({"example", "hello", "-o", "outdir"}).parse();
+    REQUIRE(after.example_opts->name == "hello");
+    REQUIRE(after.example_opts->output_dir == "outdir");
+
+    // Two names → usage error.
+    REQUIRE_THROWS_AS(TestArgs({"example", "hello", "world"}).parse(),
+                      ezmk::fatal_error);
+}
+
+// ===================================================================
 // pkg install
 // ===================================================================
 

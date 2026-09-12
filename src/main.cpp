@@ -363,7 +363,9 @@ int main(int argc, char** argv) {
                     ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                 } catch (const std::exception& e) {
                     ezmk::util::error(std::string("initial build failed: ") + e.what());
-                    ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
+                    // 1.4.2 F-17: the failure path must not claim success —
+                    // watching continues, but without the "Build succeeded." text.
+                    ezmk::util::info(ezmk::i18n::I18nKey::watch_watching);
                 }
             } else {
                 ezmk::util::info(ezmk::i18n::I18nKey::watch_skip_initial);
@@ -407,7 +409,8 @@ int main(int argc, char** argv) {
                             ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                         } catch (const std::exception& e) {
                             ezmk::util::error(std::string("build failed: ") + e.what());
-                            ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
+                            // 1.4.2 F-17: watching text, not "Build succeeded.".
+                            ezmk::util::info(ezmk::i18n::I18nKey::watch_watching);
                         }
                         return;
                     }
@@ -423,7 +426,8 @@ int main(int argc, char** argv) {
                         ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
                     } catch (const std::exception& e) {
                         ezmk::util::error(std::string("build failed: ") + e.what());
-                        ezmk::util::info(ezmk::i18n::I18nKey::watch_started);
+                        // 1.4.2 F-17: watching text, not "Build succeeded.".
+                        ezmk::util::info(ezmk::i18n::I18nKey::watch_watching);
                     }
                 },
                 300  // 300ms debounce
@@ -555,7 +559,12 @@ int main(int argc, char** argv) {
 
         case ezmk::cli::Command::Example: {   // 1.2.3
             const auto& opts = args.example_opts.value();
-            if (opts.list) {
+            // 1.4.2 F-16: `ezmk example --help` / `-h` prints usage + the
+            // available examples instead of being treated as an example name.
+            if (opts.help) {
+                std::cout << ezmk::i18n::get(ezmk::i18n::I18nKey::help_example) << "\n";
+                ezmk::example::list_examples();
+            } else if (opts.list) {
                 ezmk::example::list_examples();
             } else {
                 ezmk::example::create_example(opts.name, opts.output_dir);

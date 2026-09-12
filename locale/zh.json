@@ -188,6 +188,7 @@
     "pkg_update_updating": "正在更新 '{pkg}' 从 {old} 到 {new}",
     "watch_started": "构建成功。正在监听文件变更... (Ctrl+C 停止)",
     "watch_skip_initial": "跳过初始构建。正在监听文件变更... (Ctrl+C 停止)",
+    "watch_watching": "正在监听文件变更... (Ctrl+C 停止)",
     "watch_config_changed": "ezmk.toml 已变更 — 重新解析配置并全量重编译",
     "watch_detected_change": "检测到变更: {path}",
     "watch_stopping": "正在停止文件监听...",

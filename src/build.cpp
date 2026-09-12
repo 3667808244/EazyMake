@@ -2470,9 +2470,11 @@ void run_tests(const config::EzConfig& cfg,
     // through the shared apply_profile() helper — same semantics as a build.
     auto applied = apply_profile(cfg, test_profile_override, cfg.test.default_profile);
 
-    // Determine framework (CLI override takes priority)
+    // Determine framework (CLI override takes priority).
+    // 1.4.2 F-06: normalize BOTH paths here (single entry point for dispatch) —
+    // the config default used to reach this comparison un-normalized.
     std::string framework = test_framework_override.empty()
-        ? cfg.test.framework
+        ? config::normalize_lang(cfg.test.framework)
         : config::normalize_lang(test_framework_override);
 
     // 1.3.0-dev.5: always build first (incremental) so tests run against FRESH

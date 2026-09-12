@@ -367,6 +367,7 @@ struct ImportedProject {
     std::string type = "executable";
     std::string version = "0.1.0";
     std::string language = "C++17";
+    bool header_only = false;                   // 1.4.2 F-07: INTERFACE library → header-only
     std::string main_target;                    // 首个 add_executable/library 目标
     std::vector<std::string> src_files;
     std::vector<std::string> src_dirs;          // 源文件所在目录（相对项目根，去重）
@@ -418,7 +419,13 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
         }
         if (call.name == "elseif") {
             if (!cond_stack.empty()) {
-                if (!cond_stack.back().value_or(false)) {
+                if (!cond_stack.back().has_value()) {
+                    // 1.4.2 F-08: the enclosing if could not be evaluated, so the
+                    // whole chain is indeterminate — never adopt this branch
+                    // (the old code evaluated it and replaced the nullopt frame,
+                    // effectively treating an unknown condition as true).
+                    add_todo("未求值的条件块: elseif(" + join(call.args) + ")");
+                } else if (!cond_stack.back().value()) {
                     auto r = eval_cond(call.args, table);
                     cond_stack.back() = r;
                     if (!r) add_todo("未求值的条件块: elseif(" + join(call.args) + ")");
@@ -429,8 +436,16 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
             continue;
         }
         if (call.name == "else") {
-            if (!cond_stack.empty())
-                cond_stack.back() = !cond_stack.back().value_or(false) ? true : false;
+            if (!cond_stack.empty()) {
+                if (!cond_stack.back().has_value()) {
+                    // 1.4.2 F-08: keep the indeterminate frame — the else branch
+                    // of an unevaluated condition must stay skipped, not be
+                    // inverted into "true".
+                    add_todo("未求值的条件块: else()");
+                } else {
+                    cond_stack.back() = !cond_stack.back().value();
+                }
+            }
             continue;
         }
         if (call.name == "endif") {
@@ -476,12 +491,45 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                 }
             }
         } else if (call.name == "add_library") {
+            // 1.4.2 F-07: keyword-aware parsing. The old code read args[1] as the
+            // library type and never collected sources: `add_library(foo a.cpp)`
+            // imported as an executable with no sources, and INTERFACE libraries
+            // silently became static ones.
             if (!call.args.empty()) p.main_target = call.args[0];
-            if (call.args.size() >= 2) {
-                std::string t = call.args[1];
-                ascii_upper(t);
-                if (t == "SHARED") p.type = "shared";
-                else if (t == "STATIC" || t == "INTERFACE" || t == "MODULE") p.type = "static";
+            std::string lib_type;
+            for (size_t k = 1; k < call.args.size(); ++k) {
+                const std::string& a = call.args[k];
+                std::string u = a;
+                ascii_upper(u);
+                if (u == "STATIC" || u == "SHARED" || u == "MODULE" || u == "INTERFACE") {
+                    if (lib_type.empty()) lib_type = u;
+                    continue;
+                }
+                if (u == "EXCLUDE_FROM_ALL" || u == "ALIAS" || u == "IMPORTED" ||
+                    u == "GLOBAL" || is_target_keyword(u)) {
+                    continue;
+                }
+                for (auto& src : expand_args(a, table)) {
+                    if (unparsed(src)) add_todo("未解析的参数: " + a);
+                    else if (is_source_file(src)) p.src_files.push_back(src);
+                }
+            }
+            if (lib_type == "INTERFACE") {
+                // Header-only library: static type + header_only, so only
+                // include/ is installed and nothing is compiled.
+                p.type = "static";
+                p.header_only = true;
+            } else if (lib_type == "MODULE") {
+                // CMake MODULE = runtime-loadable plugin → closest EazyMake
+                // mapping is a shared library (flagged as a TODO).
+                p.type = "shared";
+                add_todo("MODULE 库按 shared 处理: " +
+                         (call.args.empty() ? std::string("<unnamed>") : call.args[0]));
+            } else if (lib_type == "SHARED") {
+                p.type = "shared";
+            } else {
+                // No explicit type → CMake's default is STATIC (never executable).
+                p.type = "static";
             }
         } else if (call.name == "target_sources" && !p.main_target.empty() &&
                    call.args.size() >= 2 && call.args[0] == p.main_target) {
@@ -646,6 +694,8 @@ std::string build_toml(const ImportedProject& p) {
     t += "[project]\n";
     t += "name = " + util::toml_quote(p.name) + "\n";
     t += "type = " + util::toml_quote(p.type) + "\n";
+    // 1.4.2 F-07: INTERFACE library → header-only project.
+    if (p.header_only) t += "header_only = true\n";
     t += "version = " + util::toml_quote(p.version) + "\n";
     t += "language = " + util::toml_quote(p.language) + "\n\n";
 

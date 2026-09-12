@@ -375,14 +375,13 @@ namespace ezmk::cli
             // 1.2.0-dev.11: clean previously accepted any garbage silently
             // (--bogus / positionals) — parse it like every other subcommand.
             args.cmd = Command::ProjectClean;
-            std::vector<OptionSpec> spec = {
-                // 1.3.0-dev.2: -w/--workspace redirect → `ezmk workspace clean`;
-                // --member is workspace-only (rejected without -w below).
-                {'w', "workspace", false},
-                {'\0', "member", true},
-            };
+            // 1.4.2 F-13: the redirect's first pass parses the full workspace
+            // spec (mirroring build/test/watch). The old reduced spec accepted
+            // only -w/--member, so `clean -w --stop-on-error` / `-j` / `-v`
+            // failed with "unknown option" before the redirect below could run —
+            // which made the dedicated clean rejection dead code.
+            std::vector<OptionSpec> spec = workspace_cmd_spec();
             auto p = parse_options(argc, argv, 3, spec, "ezmk project clean");
-            reject_positionals(p, "ezmk project clean");
 
             if (p.has("workspace"))
             {
@@ -398,9 +397,18 @@ namespace ezmk::cli
                 args.workspace_opts = std::move(w);
                 return args;
             }
-            if (p.has("member"))
+            // Without -w the workspace-only flags are a usage error (the
+            // workspace spec above accepted them so the message stays precise).
+            if (p.has("member") || p.has("stop-on-error") || p.has("jobs") ||
+                p.has("report"))
+            {
+                std::string flag = p.has("member") ? "--member"
+                                   : p.has("stop-on-error") ? "--stop-on-error"
+                                   : p.has("jobs") ? "-j/--jobs" : "--report";
                 util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
-                            {{"flag", "--member"}});
+                            {{"flag", flag}});
+            }
+            reject_positionals(p, "ezmk project clean");
             return args;
         }
 
@@ -417,6 +425,9 @@ namespace ezmk::cli
                 {'\0', "no-data", false},
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project install");
+            // 1.4.2 F-14: trailing positionals are a usage error (they used to
+            // be silently ignored).
+            reject_positionals(p, "ezmk project install");
             if (p.has("verbose"))       opts.verbose = true;
             if (p.has("dry-run"))       opts.dry_run = true;
             if (p.has("no-headers"))    opts.no_headers = true;
@@ -439,6 +450,8 @@ namespace ezmk::cli
                 {'\0', "format", true},        // 1.3.5: <tar.gz|zip>
             };
             auto p = parse_options(argc, argv, 3, spec, "ezmk project pack");
+            // 1.4.2 F-14: trailing positionals are a usage error.
+            reject_positionals(p, "ezmk project pack");
             if (p.has("verbose"))     opts.verbose = true;
             if (p.has("precompiled")) opts.precompiled = true;  // 1.2.5
             if (auto v = p.value("output"))
@@ -598,6 +611,8 @@ namespace ezmk::cli
                 util::fatal(ezmk::i18n::I18nKey::cli_flag_needs_workspace,
                             {{"flag", flag}});
             }
+            // 1.4.2 F-14: trailing positionals are a usage error.
+            reject_positionals(p, "ezmk project test");
             if (auto v = p.value("framework"))
                 args.test_framework = *v;
             if (auto v = p.value("filter"))
@@ -985,28 +1000,55 @@ namespace ezmk::cli
     //   ezmk example                    → list
     //   ezmk example list               → list
     //   ezmk example <name> [-o <dir>]  → scaffold ./<name>/ (or <dir>/<name>/)
+    // 1.4.2 F-16: parse from index 2 like every other subcommand. The old code
+    // took argv[2] as the name unconditionally, so `--help` (as a name), an
+    // option placed before the name (`-o dir name`), and `list garbage` all
+    // misbehaved.
     static CliArgs parse_example_args(int argc, char **argv)
     {
         CliArgs args;
         args.cmd = Command::Example;
 
-        if (argc < 3 || std::string(argv[2]) == "list")
+        std::vector<OptionSpec> spec = {
+            {'o', "output", true},
+            {'h', "help", false},
+        };
+        // 1.4.2 F-16: `ezmk example` is the only single-level command group —
+        // argv[2] is already an option or the example name, so parsing starts at
+        // index 2 (every other command has a two-word prefix at argv[1..2]).
+        auto p = parse_options(argc, argv, 2, spec, "ezmk example");
+
+        ExampleOptions opts;
+        if (p.has("help"))
         {
-            ExampleOptions opts;
-            opts.list = true;
+            opts.help = true;
             args.example_opts = std::move(opts);
             return args;
         }
 
-        std::vector<OptionSpec> spec = {
-            {'o', "output", true},
-        };
-        auto p = parse_options(argc, argv, 3, spec, "ezmk example");
-        reject_positionals(p, "ezmk example");
+        // Documented default (cli.hpp): scaffold into the current directory.
+        opts.output_dir = ".";
+        if (auto o = p.value("output"))
+            opts.output_dir = *o;
 
-        ExampleOptions opts;
-        opts.name = argv[2];  // fixed positional at index 2
-        if (auto o = p.value("output")) opts.output_dir = *o;
+        if (p.positionals.empty())
+        {
+            opts.list = true;                       // `ezmk example` → list
+        }
+        else if (p.positionals[0] == "list")
+        {
+            if (p.positionals.size() > 1)
+                util::fatal(ezmk::i18n::I18nKey::cli_unexpected_arg,
+                            {{"cmd", "ezmk example"}, {"arg", p.positionals[1]}});
+            opts.list = true;
+        }
+        else
+        {
+            opts.name = p.positionals[0];
+            if (p.positionals.size() > 1)
+                util::fatal(ezmk::i18n::I18nKey::cli_unexpected_arg,
+                            {{"cmd", "ezmk example"}, {"arg", p.positionals[1]}});
+        }
         args.example_opts = std::move(opts);
         return args;
     }
