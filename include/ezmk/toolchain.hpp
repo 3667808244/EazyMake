@@ -86,6 +86,12 @@ std::vector<std::string> get_stdlib_flags(const std::string& stdlib,
 // Format: "Note: including file:  C:\path\to\header.h"
 std::vector<fs::path> parse_show_includes(const std::string& compiler_output);
 
+// ---- 1.4.2 F-26: platform key ----
+// "{os}_{arch}_{toolchain}" (e.g. "windows_x86_64_msvc"); triple=false gives the
+// legacy "{os}_{arch}" form. Shared by repo platform resolution and the
+// lockfile `platform` field (which used to be hardcoded to windows).
+std::string platform_key(const Toolchain& tc, bool triple = true);
+
 // ---- 1.4.2 F-22: MSVC availability probe ----
 // A bare `cl` with no input exits non-zero (D8003: missing source filename), so
 // the old "exit == 0" judgement rejected a perfectly good installation. The

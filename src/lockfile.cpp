@@ -164,6 +164,35 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
     util::file_write(path, out.str());
 }
 
+// 1.4.2 F-28: see header. Sorted (relative path, content hash) pairs → one hash.
+std::string payload_manifest_hash(const fs::path& pkg_dir) {
+    fs::path include_dir = pkg_dir / "include";
+    std::error_code ec;
+    if (!fs::exists(include_dir, ec)) return {};
+
+    std::vector<std::pair<std::string, fs::path>> entries;
+    for (auto it = fs::recursive_directory_iterator(include_dir, ec);
+         !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        std::error_code rec;
+        fs::path rel = fs::relative(it->path(), pkg_dir, rec);
+        std::string name = rec ? it->path().filename().string()
+                               : rel.generic_string();
+        entries.emplace_back(std::move(name), it->path());
+    }
+    std::sort(entries.begin(), entries.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    std::string manifest;
+    for (auto& [name, path] : entries) {
+        manifest += name;
+        manifest += '\n';
+        manifest += crypto::sha256_file(path);
+        manifest += '\n';
+    }
+    return crypto::sha256(manifest);
+}
+
 // ===================================================================
 // Verify
 // ===================================================================
@@ -209,10 +238,36 @@ std::vector<std::string> verify(const fs::path& proj_root,
             continue;
         }
 
-        // For header-only packages, hash the entire include/ directory
-        // For static/shared, hash the .a/.lib file
+        // 1.4.2 F-28: header-only packages have no built archive — verify the
+        // include/ payload against the pinned manifest hash. Legacy lockfiles
+        // recorded no hash for them → keep the old "verified at install time"
+        // behavior instead of failing every entry.
         if (pkg.type == "header-only") {
-            // Skip sha256 check for header-only (include/ content is verified via install)
+            const std::string recorded = artifact_hash(pkg);
+            if (!recorded.empty()) {
+                std::string actual = payload_manifest_hash(pkg_path);
+                if (actual != recorded) mismatches.push_back(pkg.name);
+            }
+            continue;
+        }
+
+        // 1.4.2 F-28: git sources are pinned by commit, not by content hash —
+        // verify the provenance marker written at install time.
+        if (pkg.source == "git") {
+            fs::path marker = pkg_path / ".ezmk-git-source";
+            if (pkg.commit.empty() || !util::file_exists(marker)) {
+                mismatches.push_back(pkg.name);
+                continue;
+            }
+            std::string content = util::file_read(marker);
+            auto nl = content.find('\n');
+            std::string marker_commit =
+                nl == std::string::npos ? std::string() : content.substr(nl + 1);
+            while (!marker_commit.empty() &&
+                   (marker_commit.back() == '\n' || marker_commit.back() == '\r')) {
+                marker_commit.pop_back();
+            }
+            if (marker_commit != pkg.commit) mismatches.push_back(pkg.name);
             continue;
         }
 
@@ -222,9 +277,18 @@ std::vector<std::string> verify(const fs::path& proj_root,
         // the previous "first directory entry" was non-deterministic.
         lib_file = util::find_package_archive(build_dir, pkg.name);
 
-        if (!lib_file.empty() && !artifact_hash(pkg).empty()) {
+        const std::string recorded = artifact_hash(pkg);
+        if (recorded.empty()) {
+            // 1.4.2 F-28: nothing was pinned for this entry (pre-1.4.2 lockfile
+            // or a source with no artifact) — warn instead of failing, so old
+            // lockfiles keep working while new ones are actually verified.
+            util::warn(std::string("lockfile entry '") + pkg.name +
+                       "' has no content hash to verify — reinstall it to pin one");
+            continue;
+        }
+        if (!lib_file.empty()) {
             std::string actual = crypto::sha256_file(lib_file);
-            if (actual != artifact_hash(pkg)) {
+            if (actual != recorded) {
                 mismatches.push_back(pkg.name);
             }
         }

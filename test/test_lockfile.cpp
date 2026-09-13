@@ -283,3 +283,84 @@ TEST_CASE("lockfile verify uses the artifact hash, never the archive hash (1.4.2
     REQUIRE(ezmk::lockfile::verify(tmp.path, lf2) ==
             std::vector<std::string>{"greet"});
 }
+
+// ===================================================================
+// 1.4.2 F-28: verify the previously blind spots
+// ===================================================================
+
+TEST_CASE("lockfile verify: header-only payload is content-checked (F-28)", "[lockfile][1.4.2]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/pkg/hdr/include");
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/hdr/include/hdr.hpp",
+                           "#pragma once\nint hdr();\n");
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/hdr/include/extra.hpp",
+                           "#pragma once\nint extra();\n");
+
+    const std::string manifest =
+        ezmk::lockfile::payload_manifest_hash(tmp.path / ".ezmk/pkg/hdr");
+    REQUIRE_FALSE(manifest.empty());
+
+    Lockfile lf;
+    LockedPackage p;
+    p.name = "hdr";
+    p.scope = "project";
+    p.type = "header-only";
+    p.lib_sha256 = manifest;
+    p.sha256 = manifest;
+    lf.packages = { p };
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf).empty());
+
+    // Tampering with a header breaks the manifest hash.
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/hdr/include/hdr.hpp",
+                           "#pragma once\nint hdr(); // tampered\n");
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"hdr"});
+
+    // Adding a file also breaks it — the manifest covers the whole payload.
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/hdr/include/hdr.hpp",
+                           "#pragma once\nint hdr();\n");
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/hdr/include/injected.hpp",
+                           "#pragma once\n");
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"hdr"});
+}
+
+TEST_CASE("lockfile verify: legacy header-only entry without hash still passes (F-28)", "[lockfile][1.4.2]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/pkg/hdr/include");
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/hdr/include/hdr.hpp", "#pragma once\n");
+
+    Lockfile lf;
+    LockedPackage p;
+    p.name = "hdr";
+    p.scope = "project";
+    p.type = "header-only";   // no lib_sha256 / sha256 recorded (pre-1.4.2 lockfile)
+    lf.packages = { p };
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf).empty());
+}
+
+TEST_CASE("lockfile verify: git source checks the commit marker (F-28)", "[lockfile][1.4.2]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/pkg/gitpkg");
+    const std::string commit = "0123456789abcdef0123456789abcdef01234567";
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/gitpkg/.ezmk-git-source",
+                           "https://example.com/x.git\n" + commit + "\n");
+
+    Lockfile lf;
+    LockedPackage p;
+    p.name = "gitpkg";
+    p.scope = "project";
+    p.type = "static";
+    p.source = "git";
+    p.source_url = "https://example.com/x.git";
+    p.commit = commit;
+    lf.packages = { p };
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf).empty());
+
+    // Deleted marker → mismatch.
+    fs::remove(tmp.path / ".ezmk/pkg/gitpkg/.ezmk-git-source");
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"gitpkg"});
+
+    // Marker pointing at a DIFFERENT commit → mismatch (source drifted).
+    ezmk::util::file_write(tmp.path / ".ezmk/pkg/gitpkg/.ezmk-git-source",
+                           "https://example.com/x.git\n" + std::string(40, 'f') + "\n");
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"gitpkg"});
+}

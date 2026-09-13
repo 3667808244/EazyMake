@@ -496,7 +496,6 @@ int main(int argc, char** argv) {
                                 opts.locked, opts.no_lock, opts.branch);
             break;
         }
-
         case ezmk::cli::Command::PkgRemove: {
             auto& opts = *args.query_opts;
             ezmk::pkg::remove(opts.pkg_name, opts.scopes);
@@ -533,9 +532,11 @@ int main(int argc, char** argv) {
         case ezmk::cli::Command::PkgUpdate: {
             auto& opts = *args.query_opts;
             if (opts.update_all) {
-                ezmk::pkg::update_all(opts.scopes);
+                // 1.4.2 F-29: a failed update exits non-zero.
+                int rc = ezmk::pkg::update_all(opts.scopes, opts.assume_yes);
+                if (rc != 0) return rc;
             } else {
-                ezmk::pkg::update(opts.pkg_name, opts.scopes);
+                ezmk::pkg::update(opts.pkg_name, opts.scopes, opts.assume_yes);
             }
             break;
         }

@@ -1,4 +1,5 @@
 #include "ezmk/toolchain.hpp"
+#include "ezmk/util.hpp"   // platform macros (EZMK_WIN / EZMK_MACOS / EZMK_LINUX)
 #include "catch2.hpp"
 #include <string>
 #include <vector>
@@ -694,5 +695,40 @@ TEST_CASE("parse_msvc_banner_version: prefers the Version line (F-22)", "[toolch
     // No Version line → first non-empty line, CR stripped.
     REQUIRE(tc::parse_msvc_banner_version("\r\ncl.exe\r\nmore\r\n") == "cl.exe");
     REQUIRE(tc::parse_msvc_banner_version("").empty());
+}
+
+// ===================================================================
+// 1.4.2 F-26: platform key
+// ===================================================================
+
+TEST_CASE("platform_key: os_arch_toolchain triple and legacy double (F-26)", "[toolchain][1.4.2]") {
+    tc::Toolchain gcc;
+    gcc.family = tc::CompilerFamily::Gcc;
+    tc::Toolchain msvc;
+    msvc.family = tc::CompilerFamily::Msvc;
+    tc::Toolchain clang;
+    clang.family = tc::CompilerFamily::Clang;
+
+    const std::string triple = tc::platform_key(gcc, true);
+    const std::string dbl = tc::platform_key(gcc, false);
+
+    // Toolchain tag reflects the family (the lockfile used to hardcode windows).
+    REQUIRE(triple.size() > dbl.size());
+    REQUIRE(triple.rfind("_gcc") == triple.size() - 4);
+    REQUIRE(tc::platform_key(msvc, true).rfind("_msvc") ==
+            tc::platform_key(msvc, true).size() - 5);
+    REQUIRE(tc::platform_key(clang, true).rfind("_clang") ==
+            tc::platform_key(clang, true).size() - 6);
+    // The double form is exactly the triple minus the toolchain suffix.
+    REQUIRE(triple.rfind(dbl + "_", 0) == 0);
+
+    // The OS component matches the platform this test runs on.
+#ifdef EZMK_WIN
+    REQUIRE(dbl.rfind("windows_", 0) == 0);
+#elif defined(EZMK_MACOS)
+    REQUIRE(dbl.rfind("darwin_", 0) == 0);
+#else
+    REQUIRE(dbl.rfind("linux_", 0) == 0);
+#endif
 }
 

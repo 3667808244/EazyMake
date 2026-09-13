@@ -136,6 +136,7 @@ struct QueryOptions {
     std::vector<Scope> scopes;
     std::string pkg_name;
     bool update_all = false;       // 0.2.4+: --all flag for pkg update
+    bool assume_yes = false;       // 1.4.2 F-29: -y/--yes — skip prompts
 };
 
 struct RepoOptions {

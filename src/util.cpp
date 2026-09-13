@@ -848,6 +848,31 @@ static fs::path safe_extract_path(const fs::path& dest, std::string_view entry) 
     return joined;
 }
 
+// 1.4.2 F-23: containment check for repo index.toml paths. `child` may be
+// relative (resolved against `parent`); anything that normalizes outside
+// `parent` — a `..` escape, an absolute path, a drive letter or a UNC prefix —
+// is rejected. Comparison folds case on Windows.
+bool is_path_within(const fs::path& child, const fs::path& parent) {
+    if (child.empty()) return false;
+    fs::path base = fs::absolute(parent).lexically_normal();
+    fs::path combined = child.is_absolute() ? child.lexically_normal()
+                                            : (base / child).lexically_normal();
+    std::string needle = combined.generic_string();
+    std::string hay = base.generic_string();
+#ifdef EZMK_WIN
+    auto fold = [](std::string s) {
+        for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    };
+    needle = fold(needle);
+    hay = fold(hay);
+#endif
+    while (hay.size() > 1 && hay.back() == '/') hay.pop_back();
+    if (needle == hay) return true;
+    return needle.size() > hay.size() && needle.compare(0, hay.size(), hay) == 0 &&
+           needle[hay.size()] == '/';
+}
+
 void extract_zip(const fs::path& archive, const fs::path& dest) {
     // 1.4.2 F-20: open the archive ourselves (UTF-8 path → FILE* with the wide
     // CRT on Windows) and hand the stream to miniz — miniz's *_file APIs take a

@@ -786,6 +786,42 @@ Toolchain detect_toolchain() {
 }
 
 // ===================================================================
+// 1.4.2 F-26: platform key ("{os}_{arch}_{toolchain}")
+// ===================================================================
+
+std::string platform_key(const Toolchain& tc, bool triple) {
+    std::string os;
+#ifdef EZMK_WIN
+    os = "windows";
+#elif defined(EZMK_MACOS)
+    os = "darwin";
+#else
+    os = "linux";
+#endif
+
+    std::string arch;
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)
+    arch = "x86_64";
+#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+    arch = "arm64";
+#elif defined(__i386__) || defined(__i686__) || defined(_M_IX86)
+    arch = "x86";
+#else
+    arch = "unknown";
+#endif
+
+    if (!triple) return os + "_" + arch;
+
+    std::string toolchain_tag;
+    switch (tc.family) {
+    case CompilerFamily::Msvc:  toolchain_tag = "msvc";  break;
+    case CompilerFamily::Clang: toolchain_tag = "clang"; break;
+    default:                    toolchain_tag = "gcc";   break;
+    }
+    return os + "_" + arch + "_" + toolchain_tag;
+}
+
+// ===================================================================
 // 1.4.2 F-22: MSVC availability probe
 // ===================================================================
 

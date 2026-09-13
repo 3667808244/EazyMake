@@ -263,6 +263,24 @@ TEST_CASE("cli parse: example option/positional handling (1.4.2 F-16)", "[cli][1
                       ezmk::fatal_error);
 }
 
+// F-29: `pkg update -y/--yes` must reach the install flow (it used to hardcode
+// assume_yes=false, so an update could never run unattended).
+TEST_CASE("cli parse: pkg update -y (1.4.2 F-29)", "[cli][1.4.2]") {
+    auto with_y = TestArgs({"pkg", "update", "-y", "fmt"}).parse();
+    REQUIRE(with_y.cmd == Command::PkgUpdate);
+    REQUIRE(with_y.query_opts.has_value());
+    REQUIRE(with_y.query_opts->pkg_name == "fmt");
+    REQUIRE(with_y.query_opts->assume_yes);
+
+    auto all_y = TestArgs({"pkg", "update", "--all", "--yes"}).parse();
+    REQUIRE(all_y.query_opts->update_all);
+    REQUIRE(all_y.query_opts->assume_yes);
+
+    // Without -y the flag stays false (interactive prompts remain).
+    auto plain = TestArgs({"pkg", "update", "fmt"}).parse();
+    REQUIRE_FALSE(plain.query_opts->assume_yes);
+}
+
 // ===================================================================
 // pkg install
 // ===================================================================

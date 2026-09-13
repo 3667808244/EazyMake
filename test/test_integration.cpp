@@ -20,6 +20,7 @@
 #include "ezmk/util.hpp"
 #include "ezmk/crypto.hpp"
 #include "ezmk/toolchain.hpp"
+#include "ezmk/config.hpp"
 #include "nlohmann_json.hpp"
 
 #include <algorithm>
@@ -3082,5 +3083,166 @@ TEST_CASE("integration: non-ASCII project path packs and installs a package (1.4
     ProcResult b = run_ezmk_at("build", zh_dir);
     INFO("build out:\n" << b.out << "\nbuild err:\n" << b.err);
     REQUIRE(b.exit_code == 0);
+}
+
+// ==============================================================
+// 1.4.2 phase 6: pkg / repo / lockfile (F-23 / F-25 / F-27 / F-30)
+// ==============================================================
+namespace {
+
+// A minimal static-library package project at `dir` with the given version.
+void write_lib_pkg(const fs::path& dir, const std::string& name,
+                   const std::string& version) {
+    fs::create_directories(dir / "src");
+    fs::create_directories(dir / "include");
+    file_write(dir / "ezmk.toml",
+        "[project]\nname = \"" + name + "\"\ntype = \"static\"\nversion = \"" +
+        version + "\"\nlanguage = \"C++17\"\n");
+    file_write(dir / "include" / (name + ".hpp"),
+        "#pragma once\nint " + name + "_f();\n");
+    file_write(dir / "src" / (name + ".cpp"),
+        "#include \"" + name + ".hpp\"\nint " + name + "_f() { return 1; }\n");
+}
+
+} // anonymous namespace
+
+// F-23: an index.toml `file` (or `[platform]` prefix) that escapes the repo
+// directory must be rejected when the repo is added — otherwise a hostile index
+// could point the installer at any local path.
+TEST_CASE("integration: repo index paths escaping the repo are rejected (1.4.2 F-23)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "proj";
+    fs::create_directories(proj);
+    write_lib_pkg(proj, "f23app", "0.1.0");
+
+    // Escape via `file`.
+    fs::path repo1 = tmp.path / "repo_escape_file";
+    fs::create_directories(repo1);
+    file_write(tmp.path / "evil.tar.gz", "not really an archive");
+    file_write(repo1 / "index.toml",
+        "[repo]\nname = \"evil\"\n\n"
+        "[[packages]]\nname = \"evil\"\nversion = \"1.0.0\"\n"
+        "file = \"../evil.tar.gz\"\n");
+    ProcResult r1 = run_ezmk("repo add -p \"" + repo1.string() + "\"", proj);
+    INFO("repo1 err: " << r1.err);
+    REQUIRE(r1.exit_code != 0);
+    REQUIRE((r1.out + r1.err).find("escapes the repo directory") != std::string::npos);
+
+    // Escape via the [platform] prefix.
+    fs::path repo2 = tmp.path / "repo_escape_platform";
+    fs::create_directories(repo2);
+    file_write(repo2 / "ok.tar.gz", "archive");
+    file_write(repo2 / "index.toml",
+        "[repo]\nname = \"evil2\"\n\n"
+        "[platform]\n"
+        "windows_x86_64_gcc = \"../../..\"\n"
+        "linux_x86_64_gcc = \"../../..\"\n"
+        "darwin_x86_64_clang = \"../../..\"\n\n"
+        "[[packages]]\nname = \"evil2\"\nversion = \"1.0.0\"\n"
+        "file = \"ok.tar.gz\"\n");
+    ProcResult r2 = run_ezmk("repo add -p \"" + repo2.string() + "\"", proj);
+    INFO("repo2 err: " << r2.err);
+    REQUIRE(r2.exit_code != 0);
+    REQUIRE((r2.out + r2.err).find("escapes the repo directory") != std::string::npos);
+}
+
+// F-27: with 1.0.0-rc.1 listed BEFORE 1.0.0, the release must win — the old
+// core-only comparison treated them as equal and kept the first entry.
+TEST_CASE("integration: repo selection prefers the release over its rc (1.4.2 F-27)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "consproj";
+    fs::create_directories(proj);
+    write_lib_pkg(proj, "consproj", "0.1.0");   // consumer project (provides ezmk.toml)
+
+    fs::path repo_dir = tmp.path / "repo";
+    fs::create_directories(repo_dir);
+    for (const char* ver : {"1.0.0-rc.1", "1.0.0"}) {
+        fs::path pkg = tmp.path / ("src_" + std::string(ver));
+        write_lib_pkg(pkg, "pickme", ver);
+        ProcResult p = run_ezmk("project pack --output \"" + repo_dir.string() + "\"", pkg);
+        INFO("pack " << ver << ": " << p.err);
+        REQUIRE(p.exit_code == 0);
+    }
+    // Pre-release FIRST — index order must not decide the winner.
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"pickrepo\"\n\n"
+        "[[packages]]\nname = \"pickme\"\nversion = \"1.0.0-rc.1\"\n"
+        "file = \"pickme-1.0.0-rc.1.tar.gz\"\n\n"
+        "[[packages]]\nname = \"pickme\"\nversion = \"1.0.0\"\n"
+        "file = \"pickme-1.0.0.tar.gz\"\n");
+
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\"", proj);
+    INFO("repo add err: " << ra.err);
+    REQUIRE(ra.exit_code == 0);
+
+    ProcResult inst = run_ezmk("pkg install pickme -y", proj);
+    INFO("install out:\n" << inst.out << "\ninstall err:\n" << inst.err);
+    REQUIRE(inst.exit_code == 0);
+
+    auto cfg = ezmk::config::parse_config(proj / ".ezmk/pkg/pickme/ezmk.toml");
+    REQUIRE(cfg.project.version == "1.0.0");}
+
+// F-30: a non-existent LOCAL path must not be mistaken for a URL (it used to be
+// turned into https://dist/missing.zip and "downloaded").
+TEST_CASE("integration: missing local archive path is not treated as a URL (1.4.2 F-30)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "urlproj";
+    fs::create_directories(proj);
+    write_lib_pkg(proj, "urlproj", "0.1.0");
+
+    ProcResult r = run_ezmk("pkg install dist/missing-package.zip -y", proj);
+    std::string combined = r.out + "\n" + r.err;
+    INFO("out:\n" << r.out << "\nerr:\n" << r.err);
+    REQUIRE(r.exit_code != 0);
+    // No download attempt: no https:// URL was synthesised from the path.
+    REQUIRE(combined.find("https://") == std::string::npos);
+    REQUIRE(combined.find("dist/missing-package.zip") != std::string::npos);
+}
+
+// F-25: a preinstall hook must run from a directory that EXISTS (the old cwd was
+// the not-yet-created install dir → the hook failed on every fresh install).
+TEST_CASE("integration: preinstall hook runs with a valid cwd (1.4.2 F-25)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path proj = tmp.path / "hookproj";
+    fs::create_directories(proj);
+
+    // Header-only package (no compiler needed) with a CWD-writing preinstall hook.
+    fs::path pkg = tmp.path / "hookpkg";
+    fs::create_directories(pkg / "include");
+    file_write(pkg / "ezmk.toml",
+        "[project]\nname = \"hookpkg\"\ntype = \"static\"\nheader_only = true\n"
+        "version = \"0.1.0\"\nlanguage = \"C++17\"\n");
+    file_write(pkg / "include" / "hookpkg.hpp", "#pragma once\n");
+    fs::create_directories(pkg / "script");   // install hooks live under script/
+#ifdef EZMK_WIN
+    file_write(pkg / "script" / "preinstall.bat", "cd > preinstall_cwd.txt\r\n");
+#else
+    file_write(pkg / "script" / "preinstall.sh", "pwd > preinstall_cwd.txt\n");
+#endif
+
+    ProcResult inst = run_ezmk("pkg install \"" + pkg.string() + "\" -y", proj);
+    INFO("install out:\n" << inst.out << "\ninstall err:\n" << inst.err);
+    REQUIRE(inst.exit_code == 0);
+
+    // The hook wrote the marker into its cwd, which was the staged package root —
+    // that tree is copied into the installed package.
+    fs::path marker = proj / ".ezmk/pkg/hookpkg/preinstall_cwd.txt";
+    REQUIRE(fs::exists(marker));
 }
 

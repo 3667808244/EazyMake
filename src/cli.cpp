@@ -746,6 +746,9 @@ namespace ezmk::cli
             args.cmd = Command::PkgUpdate;
             std::vector<OptionSpec> spec = {
                 {'\0', "all", false},
+                // 1.4.2 F-29: -y/--yes — pkg update used to hardcode
+                // assume_yes=false, so an update could never run unattended.
+                {'y', "yes", false},
             };
             add_scope_specs(spec);
             add_verbose_spec(spec);
@@ -753,6 +756,7 @@ namespace ezmk::cli
 
             QueryOptions opts;
             opts.update_all = p.has("all");
+            opts.assume_yes = p.has("yes");
             std::string pkg_name = optional_positional(
                 p, "ezmk pkg update",
                 ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_name));

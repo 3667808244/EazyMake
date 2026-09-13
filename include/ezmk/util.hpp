@@ -113,6 +113,12 @@ std::string toml_quote(std::string_view s);
 // 造成路径穿越。非法即抛 std::runtime_error。
 void validate_pkg_name(const std::string& name);
 
+// 1.4.2 F-23: does `child` stay inside `parent` after lexical normalization?
+// Relative children are resolved against `parent`; absolute paths, drive-letter
+// and UNC prefixes, and `..` escapes are rejected. Case-insensitive on Windows.
+// Used to constrain repo index.toml `file` / `[platform]` prefixes to the repo.
+bool is_path_within(const fs::path& child, const fs::path& parent);
+
 // Collect files matching extensions in a directory (non-recursive)
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);
@@ -287,6 +293,14 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd);
 // Pre-release tags (-alpha, -beta) and build metadata (+build) are ignored.
 // Missing segments are treated as 0 (e.g. "1.0" == "1.0.0").
 int compare_version(std::string_view a, std::string_view b);
+
+// 1.4.2 F-27: deterministic total order for version SELECTION. compare_version()
+// intentionally ignores pre-release/build metadata, so "1.2.0-rc.1" and "1.2.0"
+// compare equal and the entry picked by a repo index depended on TOML file
+// order. This adds the semver tie-break on top of the core comparison: a release
+// outranks a pre-release of the same core version, and two pre-releases are
+// ordered lexicographically.
+int compare_version_precedence(std::string_view a, std::string_view b);
 
 // ---- Shell safety ----
 // Escape a string for safe use inside double-quoted shell arguments.

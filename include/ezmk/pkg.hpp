@@ -25,12 +25,16 @@ std::vector<fs::path> pkg_search_dirs(const std::vector<cli::Scope>& scopes);
 // no_lock: 1.1.0 — skip lockfile generation.
 // branch: 1.4.1 — explicit ref for git URL sources (--branch <ref>);
 // takes priority over the URL's "#ref" fragment.
-void install(const std::string& pkg_file, cli::Scope scope,
-             std::string_view expected_sha256 = {},
-             bool assume_yes = false,
-             bool locked = false,
-             bool no_lock = false,
-             std::string_view branch = {});
+// 1.4.2 F-29: the returned outcome distinguishes a completed install from a
+// user-cancelled one — `update_all` must not count a cancelled install as
+// updated. Hard failures still surface as ezmk::fatal_error / std::exception.
+enum class InstallOutcome { Ok, Cancelled };
+InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
+                       std::string_view expected_sha256 = {},
+                       bool assume_yes = false,
+                       bool locked = false,
+                       bool no_lock = false,
+                       std::string_view branch = {});
 
 // Remove a package: search scopes in order, delete the first match.
 void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
@@ -46,10 +50,15 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
 void list(const std::vector<cli::Scope>& scopes);
 
 // 0.2.3+: Update an installed package to the latest version from registered repos.
-void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes);
+// 1.4.2 F-29: assume_yes (-y) is threaded through to the install flow.
+void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes,
+            bool assume_yes = false);
 
 // 0.2.4+: Update all installed packages across the given scopes.
-void update_all(const std::vector<cli::Scope>& scopes);
+// 1.4.2 F-29/F-30: cancelled installs are counted separately from updated ones,
+// the package list is snapshotted before iterating (install swaps directories),
+// and any failure makes the command exit non-zero (returns the exit code).
+int update_all(const std::vector<cli::Scope>& scopes, bool assume_yes = false);
 
 // ---- Dependency resolution ----
 // Topologically sort a list of package directories by their [depends].lib order.

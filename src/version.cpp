@@ -56,4 +56,29 @@ int compare_version(std::string_view a, std::string_view b) {
     return 0;
 }
 
+// 1.4.2 F-27: extract the pre-release segment ("1.2.0-rc.1+build" → "rc.1").
+static std::string_view pre_release_part(std::string_view s) {
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '+') return {};  // build metadata first → no pre-release
+        if (s[i] == '-') {
+            auto end = s.find('+', i + 1);
+            return end == std::string_view::npos ? s.substr(i + 1)
+                                                 : s.substr(i + 1, end - i - 1);
+        }
+    }
+    return {};
+}
+
+int compare_version_precedence(std::string_view a, std::string_view b) {
+    const int core = compare_version(a, b);
+    if (core != 0) return core;
+    const std::string_view pa = pre_release_part(a);
+    const std::string_view pb = pre_release_part(b);
+    if (pa.empty() && pb.empty()) return 0;
+    if (pa.empty()) return 1;    // release outranks a pre-release
+    if (pb.empty()) return -1;
+    if (pa == pb) return 0;
+    return pa < pb ? -1 : 1;
+}
+
 } // namespace ezmk::util

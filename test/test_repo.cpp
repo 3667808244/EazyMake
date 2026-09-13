@@ -213,3 +213,35 @@ TEST_CASE("RepoEntry: local repo fields", "[repo][validate]") {
     REQUIRE(e.type == "local");
     REQUIRE(e.url == "E:/packages/my-dev-repo");
 }
+
+// ===================================================================
+// 1.4.2 F-24: repo name validation
+// ===================================================================
+
+TEST_CASE("repo remove/info: reject an unsafe repo name (1.4.2 F-24)", "[repo][1.4.2]") {
+    // `repo remove` deletes cache_dir(name) recursively — a name escaping the
+    // cache tree must be rejected before any filesystem work.
+    REQUIRE_THROWS_AS(ezmk::repo::remove("../evil", {Scope::Project}),
+                      std::runtime_error);
+    REQUIRE_THROWS_AS(ezmk::repo::remove("a/b", {Scope::Project}),
+                      std::runtime_error);
+    REQUIRE_THROWS_AS(ezmk::repo::info("../evil", {Scope::Project}),
+                      std::runtime_error);
+    REQUIRE_THROWS_AS(ezmk::repo::update("../evil", {Scope::Project}),
+                      std::runtime_error);
+}
+
+TEST_CASE("load_repo_list: unsafe names from list.toml are skipped (1.4.2 F-24)", "[repo][1.4.2]") {
+    CwdGuard cwd;  // a hand-editable list.toml lives under the (temp) CWD
+    auto path = list_toml_path(Scope::Project);
+    fs::create_directories(path.parent_path());
+    ezmk::util::file_write(path,
+        "[[repos]]\nname = \"../evil\"\nurl = \"https://example.com/x.git\"\n"
+        "type = \"git\"\nbranch = \"main\"\nlast_update = \"\"\n\n"
+        "[[repos]]\nname = \"good\"\nurl = \"https://example.com/y.git\"\n"
+        "type = \"git\"\nbranch = \"main\"\nlast_update = \"\"\n");
+
+    auto entries = load_repo_list(Scope::Project);
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].name == "good");
+}

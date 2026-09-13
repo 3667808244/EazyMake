@@ -96,6 +96,18 @@ std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
             if (e.type.empty()) e.type = "git";
             if (e.branch.empty()) e.branch = "main";
 
+            // 1.4.2 F-24: a hand-edited list.toml must not smuggle a name that
+            // escapes the cache tree (repo remove does remove_all(cache/name)).
+            if (!e.name.empty()) {
+                try {
+                    util::validate_pkg_name(e.name);
+                } catch (const std::exception& ex) {
+                    util::warn(std::string("ignoring repo list entry with unsafe name '") +
+                               e.name + "': " + ex.what());
+                    continue;
+                }
+            }
+
             if (!e.name.empty() && !e.url.empty()) {
                 entries.push_back(std::move(e));
             }
@@ -185,9 +197,17 @@ static void validate_local_repo(const fs::path& dir) {
             for (size_t i = 0; i < pkgs->size(); ++i) {
                 auto tbl = (*pkgs)[i].as_table();
                 if (!tbl) continue;
-                // Validate file existence
+                // 1.4.2 F-23: the `file` entry must stay INSIDE the repo dir —
+                // a malicious/broken index could otherwise point at any local
+                // path (combined with type="dir" + install hooks that is an
+                // arbitrary-code-execution vector). Rejects .., absolute paths,
+                // drive letters and UNC prefixes.
                 auto file = (*tbl)["file"].value<std::string>();
                 if (file && !file->empty()) {
+                    if (!util::is_path_within(*file, dir)) {
+                        throw std::runtime_error(
+                            "index.toml package file escapes the repo directory: " + *file);
+                    }
                     auto full_path = dir / *file;
                     if (!util::file_exists(full_path)) {
                         throw std::runtime_error(
@@ -217,6 +237,24 @@ static void validate_local_repo(const fs::path& dir) {
                 }
             }
         }
+    // 1.1.0: lockfile verification — a `[platform]` prefix comes from the index
+    // itself, so it must be constrained too (1.4.2 F-23): it is resolved against
+    // the repo dir below, and a prefix like "../../etc" would escape it.
+    {
+        auto platform_tbl = root["platform"].as_table();
+        if (platform_tbl) {
+            for (auto&& [key, value] : *platform_tbl) {
+                auto prefix = value.value<std::string>();
+                if (!prefix || prefix->empty()) continue;
+                if (!util::is_path_within(*prefix, dir)) {
+                    throw std::runtime_error(
+                        "index.toml [platform] prefix escapes the repo directory: " +
+                        std::string(key.str()) + " = " + *prefix);
+                }
+            }
+        }
+    }
+
     } catch (const toml::parse_error& e) {
         throw std::runtime_error(std::string("invalid index.toml: ") + e.what());
     }
@@ -224,37 +262,10 @@ static void validate_local_repo(const fs::path& dir) {
 
 // 1.1.0: Build a platform key string from the current system and toolchain.
 // Format: "{os}_{arch}_{toolchain}" (triple) or "{os}_{arch}" (double, fallback).
-// Toolchain tag: "gcc", "clang", or "msvc".
+// 1.4.2 F-26: the key construction moved to toolchain::platform_key() so the
+// lockfile `platform` field and repo resolution cannot drift apart.
 static std::string build_platform_key(const toolchain::Toolchain& tc, bool triple) {
-    std::string os;
-#ifdef EZMK_WIN
-    os = "windows";
-#elif defined(EZMK_MACOS)
-    os = "darwin";
-#else
-    os = "linux";
-#endif
-
-    std::string arch;
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)
-    arch = "x86_64";
-#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
-    arch = "arm64";
-#elif defined(__i386__) || defined(__i686__) || defined(_M_IX86)
-    arch = "x86";
-#else
-    arch = "unknown";
-#endif
-
-    if (!triple) return os + "_" + arch;
-
-    std::string toolchain_tag;
-    switch (tc.family) {
-    case toolchain::CompilerFamily::Msvc:  toolchain_tag = "msvc";  break;
-    case toolchain::CompilerFamily::Clang: toolchain_tag = "clang"; break;
-    default:                               toolchain_tag = "gcc";   break;
-    }
-    return os + "_" + arch + "_" + toolchain_tag;
+    return toolchain::platform_key(tc, triple);
 }
 
 // 1.1.0: Resolve a platform-specific path prefix from index.toml's [platform] section.
@@ -328,7 +339,10 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
             bool is_dir_pkg = (type && *type == "dir");
 
             std::string ver_str = ver ? *ver : "0.0.0";
-            if (best_file.empty() || util::compare_version(ver_str, best_version) > 0) {
+            // 1.4.2 F-27: deterministic tie-break — a release must win over a
+            // pre-release with the same core version regardless of index order.
+            if (best_file.empty() ||
+                util::compare_version_precedence(ver_str, best_version) > 0) {
                 best_version = ver_str;
                 best_file = *file;
                 if (is_dir_pkg) {
@@ -343,11 +357,19 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
         if (best_file.empty()) return {};
         PkgSearchResult result;
         // 1.1.0: prepend platform prefix to file path
-        if (!platform_prefix.empty()) {
-            result.archive_path = repo_dir / platform_prefix / best_file;
-        } else {
-            result.archive_path = repo_dir / best_file;
+        // 1.4.2 F-23: the resolved path (file AND the index-provided platform
+        // prefix) must stay inside the repo — a trusted-looking index could
+        // otherwise hand the installer any local path.
+        fs::path resolved = platform_prefix.empty()
+            ? repo_dir / best_file
+            : repo_dir / platform_prefix / best_file;
+        if (!util::is_path_within(resolved, repo_dir)) {
+            util::warn(std::string("repo '") + repo_dir.filename().string() +
+                       "': index.toml entry for '" + std::string(pkg_name) +
+                       "' escapes the repo directory — ignoring");
+            return {};
         }
+        result.archive_path = resolved;
         result.sha256 = best_sha256;
         result.version = best_version;
         result.repo_name = repo_dir.filename().string();
@@ -452,6 +474,9 @@ void add(const cli::RepoOptions& opts) {
 // ===================================================================
 
 void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
+    // 1.4.2 F-24: a hand-edited/foreign list.toml name could escape the cache
+    // tree (cache_dir / name is removed recursively) — validate before use.
+    util::validate_pkg_name(std::string(name));
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
         for (auto it = entries.begin(); it != entries.end(); ++it) {
@@ -482,6 +507,8 @@ void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
 
 void update(const std::string& name, const std::vector<cli::Scope>& scopes) {
     bool updated_any = false;
+    // 1.4.2 F-24: validate an explicitly named repo before touching its cache.
+    if (!name.empty()) util::validate_pkg_name(name);
 
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
@@ -505,6 +532,16 @@ void update(const std::string& name, const std::vector<cli::Scope>& scopes) {
                         util::warn("failed to update '" + e.name + "', using cached version");
                         continue;
                     }
+                }
+                // 1.4.2 F-23: the freshly pulled index may have changed — re-run
+                // the repo validation so a pull cannot introduce an index that
+                // points outside the repo directory.
+                try {
+                    validate_local_repo(cd);
+                } catch (const std::exception& ex) {
+                    util::warn(std::string("repo '") + e.name +
+                               "' failed validation after update: " + ex.what());
+                    continue;
                 }
                 e.last_update = util::git_last_commit_time(cd);
             } else {
@@ -588,6 +625,8 @@ void list(const std::vector<cli::Scope>& scopes) {
 // ===================================================================
 
 void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
+    // 1.4.2 F-24: same name validation as remove/update.
+    util::validate_pkg_name(std::string(name));
     for (auto scope : scopes) {
         auto entries = load_repo_list(scope);
         for (auto& e : entries) {

@@ -688,6 +688,29 @@ TEST_CASE("compare_version: edge cases", "[util]") {
     REQUIRE(compare_version("0.0.1", "0.0.0") > 0);
 }
 
+// 1.4.2 F-27: selection order — a release outranks a pre-release of the same
+// core version, so the repo entry picked no longer depends on index order.
+TEST_CASE("compare_version_precedence: release beats pre-release (F-27)", "[util][1.4.2]") {
+    // Core comparison is unchanged.
+    REQUIRE(compare_version_precedence("2.0.0", "1.9.9") > 0);
+    REQUIRE(compare_version_precedence("1.0.0", "2.0.0") < 0);
+    REQUIRE(compare_version_precedence("1.0.0", "1.0.0") == 0);
+
+    // A pre-release sorts BELOW its release, regardless of argument order.
+    REQUIRE(compare_version_precedence("1.0.0-rc.1", "1.0.0") < 0);
+    REQUIRE(compare_version_precedence("1.0.0", "1.0.0-rc.1") > 0);
+    REQUIRE(compare_version_precedence("1.2.0-alpha", "1.2.0") < 0);
+
+    // Two pre-releases of the same core → lexicographic, deterministic.
+    REQUIRE(compare_version_precedence("1.0.0-alpha", "1.0.0-beta") < 0);
+    REQUIRE(compare_version_precedence("1.0.0-beta", "1.0.0-alpha") > 0);
+    REQUIRE(compare_version_precedence("1.0.0-rc.1", "1.0.0-rc.1") == 0);
+
+    // Build metadata never affects the order.
+    REQUIRE(compare_version_precedence("1.0.0+b1", "1.0.0+b2") == 0);
+    REQUIRE(compare_version_precedence("1.0.0-rc+b1", "1.0.0") < 0);
+}
+
 // ===================================================================
 // extract_archive() — 0.9.5.1+: basic coverage
 // ===================================================================
@@ -1319,4 +1342,32 @@ TEST_CASE("utf8_to_wide / wide_to_utf8 round-trip non-ASCII (F-20)", "[util][1.4
     REQUIRE(wide_to_utf8(L"").empty());
 }
 #endif
+
+// ===================================================================
+// 1.4.2 F-23: path containment (repo index.toml guard)
+// ===================================================================
+
+TEST_CASE("is_path_within: containment and escapes (1.4.2 F-23)", "[util][1.4.2]") {
+    fs::path base =
+#ifdef EZMK_WIN
+        "C:/proj/repo";
+#else
+        "/proj/repo";
+#endif
+    // Normal relative + absolute children inside the base.
+    REQUIRE(is_path_within(base / "pkg/a.tar.gz", base));
+    REQUIRE(is_path_within("pkg/a.tar.gz", base));
+    REQUIRE(is_path_within("win-x64/a.zip", base));
+    REQUIRE(is_path_within(base, base));
+
+    // Escapes: `..`, deeper `..`, sibling-prefix confusion, absolute outside.
+    REQUIRE_FALSE(is_path_within("../evil.tar.gz", base));
+    REQUIRE_FALSE(is_path_within("pkg/../../evil.tar.gz", base));
+    REQUIRE_FALSE(is_path_within(base.string() + "_sibling/a.zip", base));
+    REQUIRE_FALSE(is_path_within("", base));
+#ifdef EZMK_WIN
+    REQUIRE_FALSE(is_path_within("C:/Windows/system32/x.dll", base));
+    REQUIRE_FALSE(is_path_within("D:/other/x.zip", base));
+#endif
+}
 

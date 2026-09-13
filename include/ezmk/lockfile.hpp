@@ -29,6 +29,13 @@ std::string artifact_hash(const config::LockedPackage& pkg);
 // archive it is about to install from.
 std::string archive_hash(const config::LockedPackage& pkg);
 
+// 1.4.2 F-28: deterministic content hash of a package's installed payload — the
+// sorted (relative path, file sha256) pairs of <pkg_dir>/include fed through one
+// sha256. Header-only packages have no built archive, so this is what the
+// lockfile pins as their artifact hash (and what verify() re-checks).
+// Returns an empty string when the package has no include/ directory.
+std::string payload_manifest_hash(const fs::path& pkg_dir);
+
 // Compare ezmk.toml [depends] with lockfile packages.
 // Returns true if there are added/removed/modified dependencies.
 bool depends_changed(const config::EzConfig& cfg,

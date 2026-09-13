@@ -41,6 +41,30 @@ struct AutoInstallGuard {
     ~AutoInstallGuard() { g_auto_installing.erase(name); }
 };
 
+// 1.4.2 F-30: transaction record for packages auto-installed during the CURRENT
+// outermost install() call. If that install ultimately fails (or is cancelled),
+// the auto-installed packages are removed again (best-effort) so a failed
+// install does not leave half of its dependency graph behind.
+struct AutoInstallTxn {
+    static std::vector<fs::path>& paths() {
+        static std::vector<fs::path> v;
+        return v;
+    }
+    static int& depth() {
+        static int d = 0;
+        return d;
+    }
+    static void rollback() {
+        for (auto& p : paths()) {
+            util::warn(std::string("rolling back auto-installed dependency: ") +
+                       p.filename().string());
+            std::error_code ec;
+            fs::remove_all(p, ec);  // best-effort
+        }
+        paths().clear();
+    }
+};
+
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.
 bool satisfies_version_constraint(std::string_view version,
@@ -418,7 +442,13 @@ static bool run_install_script(const fs::path& script, const fs::path& cwd,
     }
 
     // Shell script: open in editor for review
-    util::open_in_editor(script);
+    // 1.4.2 F-25: never open an editor when the user asked to skip prompts
+    // (-y / non-interactive) — the old code spawned one unconditionally, which
+    // blocked CI and, with no editor available, silently skipped the review
+    // while still running the script.
+    if (!assume_yes) {
+        util::open_in_editor(script);
+    }
 
     if (!confirm(ezmk::i18n::fmt(ezmk::i18n::I18nKey::exec_question, {{"label", desc}}), assume_yes)) {
         util::info(ezmk::i18n::I18nKey::skipping, {{"label", desc}});
@@ -1100,7 +1130,11 @@ static void process_installed_pkg(const fs::path& pkg_root,
         bool is_lua = (preinstall_script.extension() == ".lua");
         InstallHookContext hook_ctx{pkg_name, pkg_root,
                                     dest_dir / pkg_name, scope_to_string(scope)};
-        if (!run_install_script(preinstall_script, dest_dir / pkg_name,
+        // 1.4.2 F-25: run the preinstall hook from the STAGED package root.
+        // The old cwd was dest_dir/pkg_name, which does not exist yet on a
+        // fresh install → chdir/CreateProcess failed and the hook "always
+        // failed". postinstall keeps install_path (it exists by then).
+        if (!run_install_script(preinstall_script, pkg_root,
                                 assume_yes, "preinstall", is_lua,
                                 hook_ctx)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled_user,
@@ -1193,6 +1227,9 @@ static void process_installed_pkg(const fs::path& pkg_root,
                                 // Install to the same scope, skip lockfile for transitive deps
                                 install(dep.name, scope, search.sha256,
                                         assume_yes, false, true);
+                                // 1.4.2 F-30: remember it for rollback if this
+                                // install later fails.
+                                AutoInstallTxn::paths().push_back(dest_dir / dep.name);
                                 // After install, verify it now exists
                                 if (util::file_exists(dep_path)) {
                                     // 1.2.0-dev.11: re-validate the freshly
@@ -1299,6 +1336,8 @@ static void process_installed_pkg(const fs::path& pkg_root,
                                 try {
                                     install(dep.name, scope, search.sha256,
                                             assume_yes, false, true);
+                                    // 1.4.2 F-30: record for rollback on failure.
+                                    AutoInstallTxn::paths().push_back(dest_dir / dep.name);
                                     if (util::file_exists(dep_path)) {
                                         to_check.push_back(dep.name);
                                         all_pkgs.push_back(dep_path);
@@ -1511,8 +1550,10 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     lp.type = pkg_cfg.project.header_only ? "header-only"
                             : pkg_cfg.project.type;
                     lp.scope = "project";
-                    lp.platform = (tc.family == toolchain::CompilerFamily::Msvc) ? "windows_x86_64_msvc"
-                                : "windows_x86_64_gcc";
+                    // 1.4.2 F-26: real platform key — the old code wrote
+                    // "windows_x86_64_*" unconditionally, so lockfiles produced
+                    // on Linux/macOS claimed to target Windows.
+                    lp.platform = toolchain::platform_key(tc, /*triple=*/true);
                     for (auto& d : pkg_cfg.depends.libs) lp.dependencies.push_back(d.name);
                     for (auto& d : pkg_cfg.depends.want) lp.dependencies.push_back(d.name);
 
@@ -1570,7 +1611,12 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     auto build_dir = entry.path() / "build";
                     auto lib_file = util::find_package_archive(
                         build_dir, pkg_cfg.project.name);
-                    if (!lib_file.empty()) {
+                    if (lp.type == "header-only") {
+                        // 1.4.2 F-28: no archive to hash — pin the include/
+                        // payload manifest so verify() can detect tampering.
+                        lp.lib_sha256 = lockfile::payload_manifest_hash(entry.path());
+                        lp.sha256 = lp.lib_sha256;
+                    } else if (!lib_file.empty()) {
                         // 1.4.2 F-04: artifact hash → lib_sha256, with `sha256`
                         // kept as the legacy alias (pre-1.4.2 readers/writers
                         // only know that field).
@@ -1595,8 +1641,8 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
 // precompiled/header-only). SHA-256 does not apply (no archive) — the caller
 // emits a notice when --sha256 was requested. Shares the full post-validate
 // processing with archive installs.
-static void install_from_directory(const fs::path& dir, cli::Scope scope,
-                                   bool assume_yes, bool no_lock) {
+static InstallOutcome install_from_directory(const fs::path& dir, cli::Scope scope,
+                                             bool assume_yes, bool no_lock) {
     util::info(ezmk::i18n::I18nKey::pkg_install_from_dir, {{"dir", dir.string()}});
 
     auto tc = toolchain::detect_toolchain();
@@ -1606,7 +1652,7 @@ static void install_from_directory(const fs::path& dir, cli::Scope scope,
     if (scope == cli::Scope::Global) {
         if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::global_confirm), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
-            return;
+            return InstallOutcome::Cancelled;
         }
     }
 
@@ -1616,6 +1662,7 @@ static void install_from_directory(const fs::path& dir, cli::Scope scope,
 
     // Lockfile generation (project scope only, unless --no-lock)
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);
+    return InstallOutcome::Ok;
 }
 
 // 1.4.1: pkg install <git-url> — clone a git repository into a unique temp
@@ -1625,11 +1672,11 @@ static void install_from_directory(const fs::path& dir, cli::Scope scope,
 // `expected_commit` (--locked git reinstall): the url+commit come from
 // ezmk.lock — a full clone + detached checkout of that exact commit must land
 // on it, otherwise the source drifted (force-push) → fatal lock_commit_mismatch.
-static void install_git_source(const std::string& source_url,
-                               std::string_view ref,
-                               cli::Scope scope,
-                               bool assume_yes, bool no_lock,
-                               const std::string* expected_commit = nullptr) {
+static InstallOutcome install_git_source(const std::string& source_url,
+                                         std::string_view ref,
+                                         cli::Scope scope,
+                                         bool assume_yes, bool no_lock,
+                                         const std::string* expected_commit = nullptr) {
     // git:// is plaintext (MITM) — warn + confirm, mirroring
     // url_integrity_confirm's http:// branch (1.1.3 S3 pattern).
     std::string lower_url = source_url;
@@ -1638,7 +1685,7 @@ static void install_git_source(const std::string& source_url,
         util::warn(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_git_plain_confirm));
         if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_git_plain_confirm), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
-            return;
+            return InstallOutcome::Cancelled;
         }
     }
 
@@ -1711,20 +1758,36 @@ static void install_git_source(const std::string& source_url,
         // (the lockfile is rebuilt from installed dirs, not kept incrementally).
         util::file_write(clone_dir / ".ezmk-git-source",
                          source_url + "\n" + head + "\n");
-        install_from_directory(clone_dir, scope, assume_yes, no_lock);
+        InstallOutcome outcome = install_from_directory(clone_dir, scope, assume_yes, no_lock);
+        { std::error_code ec; fs::remove_all(clone_dir, ec); }
+        return outcome;
     } catch (...) {
         { std::error_code ec; fs::remove_all(clone_dir, ec); }
         throw;
     }
-    { std::error_code ec; fs::remove_all(clone_dir, ec); }
 }
 
-void install(const std::string& pkg_file, cli::Scope scope,
-             std::string_view expected_sha256,
-             bool assume_yes,
-             bool locked,
-             bool no_lock,
-             std::string_view branch_flag) {
+InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
+                       std::string_view expected_sha256,
+                       bool assume_yes,
+                       bool locked,
+                       bool no_lock,
+                       std::string_view branch_flag) {
+    // 1.4.2 F-30: install runs recursively (dependencies auto-install themselves).
+    // Only the OUTERMOST call owns the transaction: it clears the record on entry
+    // and rolls the auto-installed dependencies back if it does not complete
+    // (exception, or a cancelled install).
+    const bool outermost_txn = (AutoInstallTxn::depth()++ == 0);
+    if (outermost_txn) AutoInstallTxn::paths().clear();
+    struct TxnGuard {
+        bool committed = false;
+        ~TxnGuard() {
+            const bool outermost = (--AutoInstallTxn::depth() == 0);
+            if (outermost && !committed) AutoInstallTxn::rollback();
+        }
+    } txn_guard;
+    (void)outermost_txn;
+
     // 1.1.0: --locked mode — install from lockfile only
     // 1.2.0-dev.7: lockfile + config resolved against the located project root
     // 1.4.0-dev.5: --locked must actually PIN the version (previously it only
@@ -1816,8 +1879,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (!expected_sha256.empty()) {
             util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
         }
-        install_from_directory(input, scope, assume_yes, no_lock);
-        return;
+        return install_from_directory(input, scope, assume_yes, no_lock);
     }
 
     // 1.4.1: --locked git source — the url+commit were resolved from ezmk.lock
@@ -1827,9 +1889,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (!expected_sha256.empty()) {
             util::warn(ezmk::i18n::I18nKey::pkg_git_sha256_skipped);
         }
-        install_git_source(locked_git_url, locked_git_commit, scope,
-                           assume_yes, no_lock, &locked_git_commit);
-        return;
+        return install_git_source(locked_git_url, locked_git_commit, scope,
+                                  assume_yes, no_lock, &locked_git_commit);
     }
 
     // 1.4.1: git repository URL source — clone & install via the directory
@@ -1863,15 +1924,16 @@ void install(const std::string& pkg_file, cli::Scope scope,
         if (base.find("://") == std::string::npos && base.rfind("git@", 0) != 0) {
             base = "https://" + base;
         }
-        install_git_source(base, ref, scope, assume_yes, no_lock);
-        return;
+        return install_git_source(base, ref, scope, assume_yes, no_lock);
     }
 
     // Determine if it's a URL or local file
-    bool is_url = pkg_file.find("://") != std::string::npos
-               || (pkg_file.find('.') != std::string::npos
-                   && pkg_file.find('/') != std::string::npos
-                   && !util::file_exists(fs::path(pkg_file)));
+    // 1.4.2 F-30: only an explicit scheme marks a URL. The old heuristic also
+    // treated ANY non-existent path containing '.' and '/' as a URL, so a typo'd
+    // or missing local archive ("dist/foo.zip") silently became
+    // "https://dist/foo.zip" and the user got a download error instead of the
+    // repo-search / not-found path.
+    bool is_url = pkg_file.find("://") != std::string::npos;
 
     // If no protocol, prepend https://
     std::string url;
@@ -1896,7 +1958,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
         // 1.1.3 S3: URL 完整性前置确认（无 sha256 / 明文 http://），下载前中止
         if (!url_integrity_confirm(url, !expected_sha256.empty(), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
-            return;
+            return InstallOutcome::Cancelled;
         }
         // Download to temp
         fs::path tmp_dir = fs::temp_directory_path();
@@ -1904,7 +1966,15 @@ void install(const std::string& pkg_file, cli::Scope scope,
         std::string fname = url;
         size_t last_slash = fname.rfind('/');
         if (last_slash != std::string::npos) fname = fname.substr(last_slash + 1);
-        if (fname.empty()) fname = "package.tar.gz";
+        if (fname.empty()) {
+            // 1.4.2 F-30: never a constant name — two concurrent downloads (or a
+            // stale file from a previous run) must not collide in the temp dir.
+            static std::atomic<uint64_t> dl_counter{0};
+            fname = "ezmk_download_" +
+                    std::to_string(std::chrono::steady_clock::now()
+                                       .time_since_epoch().count()) +
+                    "_" + std::to_string(dl_counter.fetch_add(1));
+        }
         archive_path = tmp_dir / fname;
 
         util::info(ezmk::i18n::I18nKey::downloading, {{"url", url}});
@@ -1972,8 +2042,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
                 if (!expected_sha256.empty()) {
                     util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
                 }
-                install_from_directory(archive_path, scope, assume_yes, no_lock);
-                return;
+                return install_from_directory(archive_path, scope, assume_yes, no_lock);
             }
         }
     }
@@ -2036,7 +2105,7 @@ void install(const std::string& pkg_file, cli::Scope scope,
     if (scope == cli::Scope::Global) {
         if (!confirm(ezmk::i18n::get(ezmk::i18n::I18nKey::global_confirm), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
-            return;
+            return InstallOutcome::Cancelled;
         }
     }
 
@@ -2108,6 +2177,8 @@ void install(const std::string& pkg_file, cli::Scope scope,
 
     // 1.1.0: generate/update ezmk.lock with resolved dependency snapshot
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);
+    txn_guard.committed = true;   // 1.4.2 F-30: keep auto-installed dependencies
+    return InstallOutcome::Ok;
 }
 
 // ===================================================================
@@ -2408,7 +2479,8 @@ void list(const std::vector<cli::Scope>& scopes) {
 }
 
 // 0.2.3+
-void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
+void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes,
+            bool assume_yes) {
     // Find installed package in specified scopes (first match wins)
     cli::Scope found_scope = cli::Scope::Project;
     fs::path found_pkg_path;
@@ -2445,8 +2517,10 @@ void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
 
     std::string repo_version = search_result.version;
 
-    // Version comparison — semantic numeric comparison
-    if (util::compare_version(repo_version, installed_version) == 0) {
+    // Version comparison — semantic numeric comparison with the F-27 tie-break
+    // (a release outranks a pre-release of the same core version, so a package
+    // installed as 1.2.0-rc.1 is still updated to the 1.2.0 release).
+    if (util::compare_version_precedence(repo_version, installed_version) <= 0) {
         util::info(ezmk::i18n::I18nKey::pkg_update_up_to_date,
                    {{"pkg", pkg_name}, {"version", installed_version}});
         return;
@@ -2463,26 +2537,37 @@ void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
 
     // Call install with the archive path found in the repo
     // Since install() accepts local paths, we pass the archive_path directly
-    install(search_result.archive_path.string(), found_scope, sha256_hint, false);
+    // 1.4.2 F-29: -y is threaded through (the old call hardcoded assume_yes=false).
+    install(search_result.archive_path.string(), found_scope, sha256_hint, assume_yes);
 }
 
 // 0.2.4+
-void update_all(const std::vector<cli::Scope>& scopes) {
+int update_all(const std::vector<cli::Scope>& scopes, bool assume_yes) {
     // Note: users should run 'ezmk repo update' first to refresh repo indices.
     int updated = 0;
     int up_to_date = 0;
     int failed = 0;
+    int cancelled = 0;
 
     for (auto scope : scopes) {
         fs::path dir = pkg_install_dir(scope);
         if (!util::file_exists(dir)) continue;
 
+        // 1.4.2 F-30: snapshot the package names BEFORE iterating — install()
+        // replaces a package directory with a rename swap (old → backup, new →
+        // in place), and iterating the live directory across that swap can skip
+        // entries or double-visit them on Windows.
+        std::vector<std::string> names;
         for (auto& entry : fs::directory_iterator(dir)) {
-            if (!entry.is_directory()) continue;
-            std::string pkg_name = entry.path().filename().string();
+            if (entry.is_directory()) names.push_back(entry.path().filename().string());
+        }
+        std::sort(names.begin(), names.end());
+
+        for (auto& pkg_name : names) {
+            fs::path pkg_path = dir / pkg_name;
 
             // Read installed version
-            auto toml = entry.path() / "ezmk.toml";
+            auto toml = pkg_path / "ezmk.toml";
             if (!util::file_exists(toml)) continue;
 
             std::string installed_version;
@@ -2505,8 +2590,8 @@ void update_all(const std::vector<cli::Scope>& scopes) {
                 continue;
             }
 
-            // Compare versions
-            if (util::compare_version(result.version, installed_version) <= 0) {
+            // Compare versions (1.4.2 F-27: release outranks its pre-releases)
+            if (util::compare_version_precedence(result.version, installed_version) <= 0) {
                 ++up_to_date;
                 continue;
             }
@@ -2521,8 +2606,15 @@ void update_all(const std::vector<cli::Scope>& scopes) {
             if (!result.sha256.empty()) sha256_hint = result.sha256;
 
             try {
-                install(result.archive_path.string(), scope, sha256_hint, false);
-                ++updated;
+                // 1.4.2 F-29: three-state result — a cancelled install is NOT
+                // "updated", and a failure must be counted (and surfaced).
+                InstallOutcome outcome = install(result.archive_path.string(), scope,
+                                                 sha256_hint, assume_yes);
+                if (outcome == InstallOutcome::Ok) {
+                    ++updated;
+                } else {
+                    ++cancelled;
+                }
             } catch (...) {
                 util::warn(std::string("failed to update package: ") + pkg_name);
                 ++failed;
@@ -2531,12 +2623,16 @@ void update_all(const std::vector<cli::Scope>& scopes) {
     }
 
     // Summary
-    if (updated > 0 || up_to_date > 0 || failed > 0) {
+    if (updated > 0 || up_to_date > 0 || failed > 0 || cancelled > 0) {
         std::string summary = std::to_string(updated) + " updated";
         if (up_to_date > 0) summary += ", " + std::to_string(up_to_date) + " already up-to-date";
+        if (cancelled > 0) summary += ", " + std::to_string(cancelled) + " cancelled";
         if (failed > 0) summary += ", " + std::to_string(failed) + " failed";
         util::info(summary);
     }
+
+    // 1.4.2 F-29: a failed update must make the command exit non-zero.
+    return failed > 0 ? 1 : 0;
 }
 
 } // namespace ezmk::pkg
