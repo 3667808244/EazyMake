@@ -25,17 +25,13 @@ class Ezmk < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/3667808244/EazyMake/releases/download/v1.4.2/ezmk-macos-arm64.tar.gz"
-      # TODO(1.4.2): 回填 v1.4.2 Release 资产 ezmk-macos-arm64.tar.gz 的真实 digest
-      # （https://api.github.com/repos/3667808244/EazyMake/releases/tags/v1.4.2 →
-      #   assets[].digest，去 "sha256:" 前缀）。在此之前不要推送到 tap 仓库。
-      sha256 "PENDING_V142_RELEASE_ASSET_DIGEST"
+      sha256 "a6df63ff0b31621a4bad171d82dcba095abb9c85734ff8d0a9f10693a8c1f5b4"
     end
   end
 
   on_linux do
     url "https://github.com/3667808244/EazyMake/releases/download/v1.4.2/ezmk-linux-x64.tar.gz"
-    # TODO(1.4.2): 同上（ezmk-linux-x64.tar.gz）。
-    sha256 "PENDING_V142_RELEASE_ASSET_DIGEST"
+    sha256 "a4cb650614a982ca1fa10b76020063fab0a8774e83fbde44c28cdd86b50ce2df"
   end
 
   def install
