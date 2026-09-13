@@ -1,6 +1,6 @@
 # EazyMake 1.4.2 执行计划
 
-> **状态：✅ 已发布（tag `v1.4.2`，2026-09-13）**——阶段一~阶段八全部落地，全量 **1099 用例 / 6342 断言零失败**（基线 1020/5970），`-Wall -Wextra -Wpedantic -Wshadow -Wformat=2` 下首方代码零告警，i18n 三向 405 键一致，docs / CHANGES.md 已收口；分发阶段（GitHub Release 资产 → Homebrew / winget 真实 digest / pacman 产物）跟进中。1.4.1 发布后的补丁版本，主题：**代码质量审计修复（第二轮）**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
+> **状态：✅ 已发布（tag `v1.4.2`，2026-09-13）**——阶段一~阶段八全部落地，全量 **1099 用例 / 6342 断言零失败**（基线 1020/5970），`-Wall -Wextra -Wpedantic -Wshadow -Wformat=2` 下首方代码零告警，i18n 三向 405 键一致，docs / CHANGES.md 已收口；分发完成（GitHub Release 7 资产 / Homebrew tap 1.4.2 / pacman 产物 / winget PR #434086）——winget 版主审批为发布后跟进项。1.4.1 发布后的补丁版本，主题：**代码质量审计修复（第二轮）**。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
 > 详细设计：[**1.4.2.md**](plans/1.4.x/1.4.2.md)。本计划为 v1.4.1 全量代码六路并行逐行审计 + 独立核查的修复落地（对照 1.4.0-dev.6 / 1.3.6 审计收口先例），P0~P4 共 36 项修复 + 低危随附项。
 >

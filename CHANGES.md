@@ -109,11 +109,13 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ### 发布（2026-09-13，tag `v1.4.2`）
 
-- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.2（dev 阶段保持 1.4.1 的补丁惯例收尾）
-- **tag**：`v1.4.2` 已推送，正式进入分发阶段
-- **GitHub Release**：待发布（`release.yml` 由 `release published` 触发，产出 windows-x64 zip / linux-x64 / macos-arm64 tar.gz + `ezmk.exe`/`ezmk-lua.exe` 独立资产与 `.sha256` 边车；`macos-x64` 仍无资产——`macos-13` runner 在 free tier 不分配，与 1.2.x~1.4.1 相同）
-- **pacman**：`publish/arch/PKGBUILD` 已更新至 v1.4.2（源码 tarball 真实 digest）并在本机 MSYS2 MINGW64 `makepkg -fd` 生成产物验证（`usr/bin/ezmk.exe`/`ezmk-lua.exe`/`usr/share/zsh/site-functions/_ezmk` 落位，`ezmk version` → 1.4.2）
-- **Homebrew / winget**：`publish/homebrew/ezmk.rb` 与 `publish/winget/e/ezmk/1.4.2/`（split manifest）已按 1.4.2 就位，`sha256` 待 Release 资产 digest 出来后回填并本机 `winget validate`；随后更新 tap 仓库与 winget PR（审批为发布后跟进项，不阻塞发布）
+- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.2（dev 阶段保持 1.4.1 的补丁惯例收尾；定稿后复跑 test-all 1099/6342 零失败）
+- **tag / Release**：tag `v1.4.2` 已推送；GitHub Release 已发布，`release.yml` 产出 **7 个资产**——`ezmk-windows-x64.zip` / `ezmk-linux-x64.tar.gz` / `ezmk-macos-arm64.tar.gz` + 独立 `ezmk.exe` / `ezmk-lua.exe` 与各自 `.sha256` 边车（`macos-x64` 仍无资产——`macos-13` runner 在 free tier 长期不分配，与 1.2.x ~ 1.4.1 相同）
+- **资产哈希**（取 `assets[].digest`）：`ezmk-windows-x64.zip` `f44ae1a6596443d9c0ccf203d5550f336dc5bc2c2706bfe75c3cc493c05e71c5`、`ezmk-linux-x64.tar.gz` `a4cb650614a982ca1fa10b76020063fab0a8774e83fbde44c28cdd86b50ce2df`、`ezmk-macos-arm64.tar.gz` `a6df63ff0b31621a4bad171d82dcba095abb9c85734ff8d0a9f10693a8c1f5b4`、`ezmk.exe` `52f9e7b53ad6416277d4142d460a682997d0873d84682fcbb4529541a74b7f2d`、`ezmk-lua.exe` `a31edb3c54b1913d1952654c4df4f8d47d8e8cb96d778bcd0d1d4356e39df893`
+  - 一致性核对：两个 `.sha256` 边车内容与对应资产真实 digest 一致（`install.ps1` 依赖该边车）；`ezmk-macos-arm64.tar.gz` 完整下载后本地 sha256 与 API digest **逐字节一致**
+- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.2（源码 tarball 真实 digest `beeaade01036217cc0e6f26e7feca32394b54b4f54903b0d9692312a9f0560e0`）；本机 MSYS2 MINGW64 `makepkg -fd` 生成 `eazymake-1.4.2-1-x86_64.pkg.tar.zst` 并验证（`usr/bin/ezmk.exe`/`ezmk-lua.exe`/`usr/share/zsh/site-functions/_ezmk` 落位，`ezmk version` → 1.4.2）
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.2（macos-arm64 `a6df63ff…` / linux-x64 `a4cb6506…` 真实 digest；仓库副本 `publish/homebrew/ezmk.rb` 同步，提交 `ezmk 1.4.2 — 代码质量审计修复（第二轮）`）
+- **winget**：split manifests（`InstallerType: zip` + `NestedInstallerType: portable`，`InstallerSha256` = `f44ae1a6…`）已提交 `microsoft/winget-pkgs#434086`；本机 `winget validate` 通过（「清单验证成功」）。CI 校验 + 版主审批为发布后跟进项，不阻塞发布（1.3.3 `#423828` / 1.3.6 `#424481` / 1.4.1 `#428792` 仍在队列）
 
 ---
 
