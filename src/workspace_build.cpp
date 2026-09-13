@@ -172,11 +172,13 @@ bool run_member(const workspace::Member& m, const std::string& action,
                    {{"member", m.name}, {"action", action}});
     }
 
-    std::string cmd = "\"" + ezmk_exe_path().string() + "\" " + action;
+    // 1.4.2 F-15: platform-correct argument quoting (MSVCRT rules on Windows,
+    // where run_command goes straight to CreateProcess with no shell).
+    std::string cmd = util::quote_cli_arg(ezmk_exe_path().string()) + " " + action;
     if (action == "test" && !test_report.empty()) {
         // 1.3.2: forward --report to the member subprocess — each member
         // writes its own report file (default: <member>/.ezmk/test-results/...).
-        cmd += " --report \"" + util::escape_shell_arg(test_report) + "\"";
+        cmd += " --report " + util::quote_cli_arg(test_report);
     }
     if (!extra_flags.empty()) {
         cmd += " " + extra_flags;

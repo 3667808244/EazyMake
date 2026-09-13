@@ -1268,3 +1268,55 @@ TEST_CASE("resolve_relative_path_flags: absolute values are kept verbatim (F-12)
     REQUIRE(out[2] == abs);
 }
 
+// ===================================================================
+// 1.4.2 F-15: Windows argument quoting
+// ===================================================================
+
+TEST_CASE("quote_windows_arg: backslashes stay literal (F-15)", "[util][1.4.2]") {
+    // The POSIX escaper doubled every backslash — fatal for Windows paths.
+    REQUIRE(quote_windows_arg("C:\\proj\\src\\main.cpp") ==
+            "\"C:\\proj\\src\\main.cpp\"");
+    REQUIRE(quote_windows_arg("C:\\dir with space\\a.cpp") ==
+            "\"C:\\dir with space\\a.cpp\"");
+    REQUIRE(quote_windows_arg("") == "\"\"");
+}
+
+TEST_CASE("quote_windows_arg: quotes and trailing backslashes (F-15)", "[util][1.4.2]") {
+    // Embedded quote → escaped with one backslash.
+    REQUIRE(quote_windows_arg("a\"b") == "\"a\\\"b\"");
+    // Backslash run before a quote → 2N+1 backslashes.
+    REQUIRE(quote_windows_arg("a\\\"b") == "\"a\\\\\\\"b\"");
+    // Trailing backslashes → doubled so they cannot escape the closing quote.
+    REQUIRE(quote_windows_arg("C:\\dir\\") == "\"C:\\dir\\\\\"");
+}
+
+TEST_CASE("quote_cli_arg: platform-correct token (F-15)", "[util][1.4.2]") {
+#ifdef EZMK_WIN
+    // CreateProcess parses the raw command line: MSVCRT quoting, no POSIX escapes.
+    REQUIRE(quote_cli_arg("C:\\proj\\a b.cpp") == "\"C:\\proj\\a b.cpp\"");
+#else
+    // sh -c: the established double-quote + backslash escaping.
+    REQUIRE(quote_cli_arg("a b") == "\"a b\"");
+    REQUIRE(quote_cli_arg("a$b") == "\"a\\$b\"");
+#endif
+}
+
+#ifdef EZMK_WIN
+// ===================================================================
+// 1.4.2 F-20: UTF-8 <-> UTF-16 conversion
+// ===================================================================
+
+TEST_CASE("utf8_to_wide / wide_to_utf8 round-trip non-ASCII (F-20)", "[util][1.4.2]") {
+    const std::string zh = "中文路径/工具";           // UTF-8 bytes
+    const std::wstring w = utf8_to_wide(zh);
+    REQUIRE(w.size() == 7);                            // 6 CJK + '/'
+    REQUIRE(wide_to_utf8(w) == zh);
+
+    // ASCII is unchanged, and invalid UTF-8 degrades instead of throwing.
+    REQUIRE(utf8_to_wide("plain-ascii") == L"plain-ascii");
+    REQUIRE(wide_to_utf8(L"plain-ascii") == "plain-ascii");
+    REQUIRE(utf8_to_wide("").empty());
+    REQUIRE(wide_to_utf8(L"").empty());
+}
+#endif
+

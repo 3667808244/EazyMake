@@ -56,9 +56,12 @@ static int run_executable(const std::filesystem::path& exe,
                           bool warn_on_nonzero) {
     ezmk::util::info(ezmk::i18n::I18nKey::running,
                      {{"exe", exe.filename().string()}});
-    std::string cmd = "\"" + exe.string() + "\"";
+    // 1.4.2 F-15: platform-correct argument assembly — the Windows path feeds
+    // CreateProcess directly (no shell), so POSIX backslash escaping corrupted
+    // every path; quote_cli_arg picks MSVCRT quoting there.
+    std::string cmd = ezmk::util::quote_cli_arg(exe.string());
     for (const auto& a : args) {
-        cmd += " \"" + ezmk::util::escape_shell_arg(a) + "\"";
+        cmd += " " + ezmk::util::quote_cli_arg(a);
     }
     auto res = ezmk::util::run_command(cmd);
     if (!res.out.empty()) std::cout << res.out;

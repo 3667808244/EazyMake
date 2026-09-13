@@ -42,10 +42,20 @@ inline fs::path find_repo_root() {
 // Resolve the ezmk binary path.
 // 1. EZMK_TEST_BIN env var (highest priority)
 // 2. build/ezmk[.exe] relative to repo root
+// 1.4.2: on Windows the env value may be an MSYS-style path without the ".exe"
+// suffix; a stale extension-less foreign binary (an ELF left by a Linux build)
+// would then be selected and every spawn would fail with error 193. Prefer the
+// native-suffixed sibling whenever it exists.
 inline fs::path find_ezmk_binary() {
     const char* env = std::getenv("EZMK_TEST_BIN");
-    if (env && fs::exists(env)) {
-        return fs::path(env);
+    if (env && *env) {
+        fs::path p(env);
+#ifdef EZMK_WIN
+        fs::path with_ext = p;
+        if (with_ext.extension() != ".exe") with_ext += ".exe";
+        if (fs::exists(with_ext)) return fs::canonical(with_ext);
+#endif
+        if (fs::exists(p)) return fs::canonical(p);
     }
 
     fs::path repo_root = find_repo_root();

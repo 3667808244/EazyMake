@@ -627,3 +627,72 @@ TEST_CASE("parse_show_includes: drive-letter-only line is parsed", "[toolchain][
     REQUIRE(incs[0] == fs::path("C:\\proj\\include\\only.h"));
 }
 
+// ===================================================================
+// 1.4.2 F-21: MSVC standard mapping
+// ===================================================================
+
+TEST_CASE("translate_compile_flags: MSVC standard set is the legal one (F-21)", "[toolchain][1.4.2]") {
+    using tc::CompilerFamily;
+    auto tr = [](const char* std_flag) {
+        return tc::translate_compile_flags({std_flag}, CompilerFamily::Msvc);
+    };
+
+    REQUIRE(tr("-std=c++14").translated == std::vector<std::string>{"/std:c++14"});
+    REQUIRE(tr("-std=c++17").translated == std::vector<std::string>{"/std:c++17"});
+    REQUIRE(tr("-std=c++20").translated == std::vector<std::string>{"/std:c++20"});
+    REQUIRE(tr("-std=c++23").translated == std::vector<std::string>{"/std:c++latest"});
+    REQUIRE(tr("-std=c++26").translated == std::vector<std::string>{"/std:c++latest"});
+    REQUIRE(tr("-std=c++2a").translated == std::vector<std::string>{"/std:c++latest"});
+    REQUIRE(tr("-std=c++03").translated == std::vector<std::string>{"/std:c++14"});
+
+    // C standards.
+    REQUIRE(tr("-std=c11").translated == std::vector<std::string>{"/std:c11"});
+    REQUIRE(tr("-std=c17").translated == std::vector<std::string>{"/std:c17"});
+    REQUIRE(tr("-std=c99").translated == std::vector<std::string>{"/std:c11"});
+
+    // c++98 / c++11 have NO MSVC equivalent — the switch must not be emitted
+    // (the old table produced the invalid /std:c++98 and /std:c++11).
+    for (const char* bad : {"-std=c++98", "-std=c++11", "-std=c++99"}) {
+        auto r = tr(bad);
+        REQUIRE(r.translated.empty());
+        REQUIRE(r.unrecognized == std::vector<std::string>{bad});
+    }
+}
+
+TEST_CASE("translate_compile_flags: GNU dialects downgrade with a warning (F-21)", "[toolchain][1.4.2]") {
+    using tc::CompilerFamily;
+    auto r = tc::translate_compile_flags(
+        {"-std=gnu++17", "-std=gnu11"}, CompilerFamily::Msvc);
+    REQUIRE(r.translated == std::vector<std::string>{"/std:c++17", "/std:c11"});
+    REQUIRE(r.warnings == std::vector<std::string>{"-std=gnu++17", "-std=gnu11"});
+    REQUIRE(r.unrecognized.empty());
+}
+
+// ===================================================================
+// 1.4.2 F-22: MSVC availability probe
+// ===================================================================
+
+TEST_CASE("msvc_probe_ok: accepts a healthy install, rejects real failures (F-22)", "[toolchain][1.4.2]") {
+    // `cl /Bv` on a healthy install: banner table, exit 0.
+    REQUIRE(tc::msvc_probe_ok(0, "Microsoft (R) C/C++ Optimizing Compiler Version 19.38.33134"));
+    // A bare `cl` (no input) exits non-zero with D8003 on a HEALTHY install —
+    // the pre-1.4.2 probe rejected MSVC because of exactly this.
+    REQUIRE(tc::msvc_probe_ok(2, "Microsoft (R) C/C++ Optimizing Compiler\ncl : Command line error D8003 : missing source filename"));
+    // Banner without the literal D8003 text.
+    REQUIRE(tc::msvc_probe_ok(1, "Microsoft (R) C/C++ Optimizing Compiler Version 19.38"));
+    // A genuinely missing compiler.
+    REQUIRE_FALSE(tc::msvc_probe_ok(1, "'cl' is not recognized as an internal or external command"));
+    REQUIRE_FALSE(tc::msvc_probe_ok(9009, ""));
+}
+
+TEST_CASE("parse_msvc_banner_version: prefers the Version line (F-22)", "[toolchain][1.4.2]") {
+    std::string out =
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.38.33134 for x64\r\n"
+        "Copyright (C) Microsoft Corporation.  All rights reserved.\r\n";
+    REQUIRE(tc::parse_msvc_banner_version(out) ==
+            "Microsoft (R) C/C++ Optimizing Compiler Version 19.38.33134 for x64");
+    // No Version line → first non-empty line, CR stripped.
+    REQUIRE(tc::parse_msvc_banner_version("\r\ncl.exe\r\nmore\r\n") == "cl.exe");
+    REQUIRE(tc::parse_msvc_banner_version("").empty());
+}
+

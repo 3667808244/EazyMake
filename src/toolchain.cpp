@@ -26,19 +26,11 @@ struct FlagMapEntry {
 
 const FlagMapEntry COMPILE_FLAG_MAP[] = {
     // Language standard
-    {"-std=c++98",   "/std:c++98"},
-    {"-std=c++03",   "/std:c++14"},   // MSVC has no c++03; nearest is c++14
-    {"-std=c++11",   "/std:c++11"},
-    {"-std=c++14",   "/std:c++14"},
-    {"-std=c++17",   "/std:c++17"},
-    {"-std=c++20",   "/std:c++20"},
-    {"-std=c++23",   "/std:c++latest"},
-    {"-std=c++26",   "/std:c++latest"},
-    {"-std=c89",     "/std:c11"},      // MSVC has no c89; nearest is c11
-    {"-std=c99",     "/std:c11"},      // MSVC has no c99
-    {"-std=c11",     "/std:c11"},
-    {"-std=c17",     "/std:c17"},
-    {"-std=c23",     "/std:c11"},      // MSVC has no c23 yet
+    // 1.4.2 F-21: -std= is NOT in this table any more — it is normalized by
+    // map_std_value() below, because MSVC only accepts a small set
+    // (/std:c++14|c++17|c++20|c++latest, /std:c11|c17). The old entries mapped
+    // -std=c++98/-std=c++11 to switches that do not exist (/std:c++98,
+    // /std:c++11) and silently dropped every gnu++ / c++2a form.
 
     // Warning levels
     {"-Wall",        "/W4"},
@@ -133,6 +125,26 @@ const PrefixMapEntry LINK_PREFIX_MAP[] = {
     {"-L", "/LIBPATH:"},
 };
 
+// 1.4.2 F-21: normalize the value of a -std= flag to an MSVC switch. Returns an
+// empty string when MSVC has no equivalent (c++98 / c++11 / unknown) — the
+// caller reports those as unrecognized instead of emitting an invalid switch.
+std::string map_std_value(const std::string& v) {
+    // C++ — MSVC accepts c++14/17/20 and (via latest) newer drafts.
+    if (v == "c++14") return "/std:c++14";
+    if (v == "c++17") return "/std:c++17";
+    if (v == "c++20") return "/std:c++20";
+    if (v == "c++2a") return "/std:c++latest";   // draft spelling of C++20
+    if (v == "c++23" || v == "c++2b" || v == "c++26") return "/std:c++latest";
+    if (v == "c++03") return "/std:c++14";       // nearest available
+    // C — MSVC applies /std:c11 to c89/c99 requests.
+    if (v == "c17") return "/std:c17";
+    if (v == "c11" || v == "c99" || v == "c89" || v == "c23" || v == "c2x") {
+        return "/std:c11";
+    }
+    // c++98, c++11 and anything unknown: no MSVC equivalent.
+    return {};
+}
+
 // Map a single GCC compile flag to MSVC. Returns empty string for flags to skip silently.
 std::string map_compile_flag(const std::string& flag) {
     // 1. Exact matches
@@ -204,6 +216,29 @@ FlagTranslation translate_compile_flags(const std::vector<std::string>& gcc_flag
         // Already MSVC-style → pass through directly
         if (is_msvc_style(f)) {
             result.translated.push_back(f);
+            continue;
+        }
+
+        // 1.4.2 F-21: -std= flags — MSVC has a narrow, non-GNU standard set.
+        //   * -std=gnu++17 → /std:c++17 + a warning (GNU extensions unavailable)
+        //   * -std=c++98 / -std=c++11 → no switch at all (MSVC's floor is c++14);
+        //     warn instead of emitting the invalid /std:c++98 or /std:c++11.
+        if (f.rfind("-std=", 0) == 0) {
+            std::string val = f.substr(5);
+            bool gnu = val.rfind("gnu", 0) == 0;
+            if (gnu) {
+                // gnu++17 → ++17 (the 'c' lived in the "c++" spelling),
+                // gnu11 → 11. Re-attach the 'c' so map_std_value sees c++17/c11.
+                val = val.substr(3);
+                if (!val.empty() && val[0] != 'c') val = "c" + val;
+            }
+            std::string mapped = map_std_value(val);
+            if (!mapped.empty()) result.translated.push_back(std::move(mapped));
+            if (gnu) {
+                result.warnings.push_back(f);
+            } else if (mapped.empty()) {
+                result.unrecognized.push_back(f);
+            }
             continue;
         }
 
@@ -661,10 +696,13 @@ Toolchain detect_toolchain() {
             // availability probe and the version capture — previously the
             // probe ran twice (sourcing vcvars twice) and the load_msvc_env
             // result was never used (dead code).
+            // 1.4.2 F-22: probe with `cl /Bv` (banner + version table, exit 0).
+            // A bare `cl` exits non-zero with D8003 even on a healthy install,
+            // which made the old exit==0 judgement reject installed MSVC.
             std::ostringstream test_cmd;
-            test_cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars.string()) << "\\\" > NUL && cl 2>&1\"";
+            test_cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars.string()) << "\\\" > NUL && cl /Bv 2>&1\"";
             auto cl_res = util::run_command(test_cmd.str());
-            if (cl_res.exit_code == 0) {
+            if (msvc_probe_ok(cl_res.exit_code, cl_res.out)) {
                 // MSVC is available
                 Toolchain tc;
                 tc.family = CompilerFamily::Msvc;
@@ -673,14 +711,8 @@ Toolchain detect_toolchain() {
                 tc.linker = fs::path("link.exe");
                 tc.archiver = fs::path("lib.exe");
                 tc.vcvars_path = vcvars;
-                // 1.1.0: capture MSVC version from cl output
-                if (!cl_res.out.empty()) {
-                    auto nl = cl_res.out.find('\n');
-                    tc.version = (nl != std::string::npos)
-                        ? cl_res.out.substr(0, nl) : cl_res.out;
-                    if (!tc.version.empty() && tc.version.back() == '\r')
-                        tc.version.pop_back();
-                }
+                // 1.1.0: capture MSVC version from the cl banner
+                tc.version = parse_msvc_banner_version(cl_res.out);
                 cached = tc;
                 cached_valid = true;
                 util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);
@@ -751,6 +783,36 @@ Toolchain detect_toolchain() {
 #endif
 
     return {}; // unreachable
+}
+
+// ===================================================================
+// 1.4.2 F-22: MSVC availability probe
+// ===================================================================
+
+bool msvc_probe_ok(int exit_code, const std::string& output) {
+    if (exit_code == 0) return true;
+    // Some environments still surface the D8003 exit code even for an installed
+    // compiler — cl exists, it was simply invoked without an input file.
+    if (output.find("D8003") != std::string::npos) return true;
+    // A recognizable MSVC banner also proves the compiler is there.
+    if (output.find("Microsoft (R)") != std::string::npos &&
+        output.find("Compiler") != std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+std::string parse_msvc_banner_version(const std::string& output) {
+    std::istringstream stream(output);
+    std::string line;
+    std::string first;
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) continue;
+        if (first.empty()) first = line;
+        if (line.find("Version") != std::string::npos) return line;
+    }
+    return first;
 }
 
 // ===================================================================

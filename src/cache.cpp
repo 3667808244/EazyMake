@@ -472,6 +472,11 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
                 util::warn(std::string("unrecognized GCC flag in MSVC mode: ") + f);
             }
         }
+        // 1.4.2 F-21: downgraded-but-translated flags (e.g. GNU dialects).
+        for (auto& f : flag_trans.warnings) {
+            util::warn(std::string("MSVC has no GNU dialect — using the closest "
+                                   "standard switch for: ") + f);
+        }
         for (auto& f : effective_msvc_flags) args.push_back(f);
         args.push_back("/utf-8");
         args.push_back("/MD");

@@ -159,6 +159,15 @@ std::string detect_platform_tag();
 fs::path get_home_dir();
 fs::path get_exe_dir();
 
+#ifdef EZMK_WIN
+// 1.4.2 F-20: UTF-8 <-> UTF-16 (CP_UTF8) conversion for every Windows API that
+// has no UTF-8 form (CreateProcessW, GetModuleFileNameW, CreateFileW, ...).
+// Without it, non-ASCII (e.g. Chinese) paths are read as cp936 bytes and get
+// mangled. Invalid sequences degrade to an empty result rather than throwing.
+std::wstring utf8_to_wide(std::string_view s);
+std::string wide_to_utf8(std::wstring_view s);
+#endif
+
 // ---- Archive extraction & creation ----
 // Wraps miniz for zip; wraps miniz+gzip + custom tar parser for .tar.gz
 void extract_zip(const fs::path& archive, const fs::path& dest);
@@ -289,6 +298,20 @@ std::string escape_shell_arg(std::string_view s);
 // set (& | < > ^ % ") differs from POSIX sh — escape_shell_arg does not cover
 // it, so any cmd /c "..." concatenation must use this instead.
 std::string escape_cmd_arg(std::string_view s);
+
+// 1.4.2 F-15: quote ONE argv element for a Windows command line. run_command's
+// Windows path goes straight to CreateProcess (no shell), so the string is
+// parsed by the MSVCRT rules: only embedded quotes and runs of backslashes
+// directly before a quote or the end need doubling. Backslashes elsewhere are
+// literal — applying POSIX escaping (escape_shell_arg) would double them and
+// corrupt every Windows path. Returns the fully quoted argument.
+std::string quote_windows_arg(std::string_view s);
+
+// 1.4.2 F-15: platform-correct single-argument quoting — Windows MSVCRT
+// quoting on Windows, POSIX double-quote escaping elsewhere. Returns the
+// complete token (quotes included), so call sites read uniformly:
+//   cmd = quote_cli_arg(exe) + " " + quote_cli_arg(arg);
+std::string quote_cli_arg(std::string_view s);
 
 // 1.1.3 S5: 构造「打开文件的编辑器」命令串。editor 与 file 都经 escape_shell_arg +
 // 双引号包裹，防止 POSIX shell 注入（EDITOR="vim; evil"）与含空格路径拆分。

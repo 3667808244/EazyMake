@@ -258,8 +258,16 @@ if $BUILD_TEST; then
 
     # ── Run tests ──────────────────────────────────────────────────────────
     if $RUN_TEST; then
-        # Set ezmk binary path so integration tests can find it
+        # Set ezmk binary path so integration tests can find it.
+        # 1.4.2: MinGW on Windows appends ".exe" to `-o build/ezmk`, but a
+        # stale extension-less file (e.g. a Linux binary left by an earlier
+        # cross-build) can also exist in build/ — a bare path would hand the
+        # tests a foreign executable (CreateProcess fails with error 193).
+        # Prefer the native-suffixed file whenever both exist.
         EZMK_TEST_BIN="$(pwd)/$OUTPUT"
+        if [ -f "$EZMK_TEST_BIN.exe" ]; then
+            EZMK_TEST_BIN="$EZMK_TEST_BIN.exe"
+        fi
         export EZMK_TEST_BIN
 
         echo ""

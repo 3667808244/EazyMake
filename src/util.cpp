@@ -466,9 +466,11 @@ fs::path get_home_dir() {
 
 fs::path get_exe_dir() {
 #ifdef EZMK_WIN
-    char buf[MAX_PATH];
-    DWORD len = GetModuleFileNameA(nullptr, buf, sizeof(buf));
-    if (len > 0) return fs::path(std::string(buf, len)).parent_path();
+    // 1.4.2 F-20: wide API — a non-ASCII install path (e.g. C:\工具\ezmk)
+    // came back mangled through GetModuleFileNameA.
+    wchar_t buf[32768];
+    DWORD len = GetModuleFileNameW(nullptr, buf, static_cast<DWORD>(std::size(buf)));
+    if (len > 0) return fs::path(wide_to_utf8(std::wstring_view(buf, len))).parent_path();
     return fs::current_path();
 #elif defined(EZMK_MACOS)
     char buf[4096];
@@ -485,8 +487,55 @@ fs::path get_exe_dir() {
 }
 
 // ===================================================================
+// 1.4.2 F-20: UTF-8 <-> UTF-16 conversion (Windows)
+// ===================================================================
+#ifdef EZMK_WIN
+std::wstring utf8_to_wide(std::string_view s) {
+    if (s.empty()) return {};
+    const int n = MultiByteToWideChar(CP_UTF8, 0, s.data(),
+                                      static_cast<int>(s.size()), nullptr, 0);
+    if (n <= 0) return {};
+    std::wstring out(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                        out.data(), n);
+    return out;
+}
+
+std::string wide_to_utf8(std::wstring_view s) {
+    if (s.empty()) return {};
+    const int n = WideCharToMultiByte(CP_UTF8, 0, s.data(),
+                                      static_cast<int>(s.size()),
+                                      nullptr, 0, nullptr, nullptr);
+    if (n <= 0) return {};
+    std::string out(static_cast<size_t>(n), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                        out.data(), n, nullptr, nullptr);
+    return out;
+}
+#endif
+
+// ===================================================================
 // Archive creation (1.1.0-dev.2)
 // ===================================================================
+
+// 1.4.2 F-20: fopen by UTF-8 path — the wide CRT on Windows (non-ASCII paths),
+// plain fopen elsewhere. Used wherever miniz needs a stream of our own.
+static FILE* fopen_utf8(const fs::path& p, const char* mode) {
+#ifdef EZMK_WIN
+    std::wstring wmode(mode, mode + std::strlen(mode));
+    return _wfopen(utf8_to_wide(p.generic_string()).c_str(), wmode.c_str());
+#else
+    return std::fopen(p.string().c_str(), mode);
+#endif
+}
+
+// 1.4.2 F-20: miniz extraction callback writing into a FILE* we opened (kept
+// separate from miniz's narrow-path *_to_file helper).
+static size_t zip_write_cb(void* opaque, mz_uint64 /*file_ofs*/,
+                           const void* buf, size_t n) {
+    FILE* f = static_cast<FILE*>(opaque);
+    return std::fwrite(buf, 1, n, f);
+}
 
 // 1.3.6: the single staging traversal shared by create_targz and create_zip —
 // recursive walk → relative names → forward slashes → dirs trailing '/' →
@@ -689,8 +738,15 @@ void create_zip(const fs::path& source_dir, const fs::path& output_file) {
     };
 
     // --- Step 2: write the zip via miniz ---
+    // 1.4.2 F-20: open the output ourselves (wide CRT on Windows) and use the
+    // miniz cfile writer — its *_file variant takes a narrow path.
+    FILE* out_file = fopen_utf8(output_file, "wb");
+    if (!out_file) {
+        throw std::runtime_error("failed to create ZIP: " + output_file.string());
+    }
     mz_zip_archive zip{};
-    if (!mz_zip_writer_init_file(&zip, output_file.string().c_str(), 0)) {
+    if (!mz_zip_writer_init_cfile(&zip, out_file, 0)) {
+        std::fclose(out_file);
         throw std::runtime_error("failed to create ZIP: " + output_file.string());
     }
     bool ok = true;
@@ -707,7 +763,8 @@ void create_zip(const fs::path& source_dir, const fs::path& output_file) {
         if (!ok) break;
     }
     if (ok) ok = mz_zip_writer_finalize_archive(&zip);
-    mz_zip_writer_end(&zip);  // always: closes the file and frees allocations
+    mz_zip_writer_end(&zip);   // frees allocations (the FILE* is ours to close)
+    std::fclose(out_file);
     if (!ok) {
         std::error_code rm_ec;
         fs::remove(output_file, rm_ec);  // best-effort cleanup of a partial archive
@@ -792,8 +849,16 @@ static fs::path safe_extract_path(const fs::path& dest, std::string_view entry) 
 }
 
 void extract_zip(const fs::path& archive, const fs::path& dest) {
+    // 1.4.2 F-20: open the archive ourselves (UTF-8 path → FILE* with the wide
+    // CRT on Windows) and hand the stream to miniz — miniz's *_file APIs take a
+    // narrow filename, so non-ASCII archive paths never opened.
+    FILE* archive_file = fopen_utf8(archive, "rb");
+    if (!archive_file) {
+        throw std::runtime_error("failed to open ZIP: " + archive.string());
+    }
     mz_zip_archive zip{};
-    if (!mz_zip_reader_init_file(&zip, archive.string().c_str(), 0)) {
+    if (!mz_zip_reader_init_cfile(&zip, archive_file, 0, 0)) {
+        std::fclose(archive_file);
         throw std::runtime_error("failed to open ZIP: " + archive.string());
     }
     mz_uint num = mz_zip_reader_get_num_files(&zip);
@@ -822,17 +887,27 @@ void extract_zip(const fs::path& archive, const fs::path& dest) {
                 }
                 total += stat.m_uncomp_size;
                 fs::create_directories(out.parent_path());
-                if (!mz_zip_reader_extract_to_file(&zip, i, out.string().c_str(), 0)) {
+                // 1.4.2 F-20: write through our own（宽路径）FILE* — miniz's
+                // *_to_file helper takes a narrow name and fails on non-ASCII.
+                FILE* out_file = fopen_utf8(out, "wb");
+                if (!out_file ||
+                    !mz_zip_reader_extract_to_callback(&zip, i, zip_write_cb,
+                                                       out_file, 0)) {
+                    if (out_file) std::fclose(out_file);
                     mz_zip_reader_end(&zip);
+                    std::fclose(archive_file);
                     throw std::runtime_error("failed to extract: " + std::string(stat.m_filename));
                 }
+                std::fclose(out_file);
             }
         }
     } catch (...) {
         mz_zip_reader_end(&zip);
+        std::fclose(archive_file);
         throw;
     }
     mz_zip_reader_end(&zip);
+    std::fclose(archive_file);
 }
 
 // Gzip header parsing: returns offset to start of deflate data
@@ -1198,29 +1273,31 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
 // current process environment with `extra` applied (keys added or replaced).
 // Returns an empty vector when extra is empty → caller passes nullptr (inherit).
 // The child gets a private environment, so no parent-global mutation / race.
-static std::vector<char> build_env_block(const std::map<std::string, std::string>& extra) {
-    std::vector<char> block;
+// 1.4.2 F-20: WIDE block (GetEnvironmentStringsW) — the ANSI variant mangled
+// non-ASCII values and could not be passed to CreateProcessW.
+static std::vector<wchar_t> build_env_block(const std::map<std::string, std::string>& extra) {
+    std::vector<wchar_t> block;
     if (extra.empty()) return block;
-    char* env = GetEnvironmentStringsA();
+    wchar_t* env = GetEnvironmentStringsW();
     if (env) {
-        for (char* p = env; *p; p += strlen(p) + 1) {
-            std::string entry(p);
+        for (wchar_t* p = env; *p; p += wcslen(p) + 1) {
+            std::string entry = wide_to_utf8(p);
             auto eq = entry.find('=');
             std::string key = (eq == std::string::npos) ? entry : entry.substr(0, eq);
             if (extra.find(key) == extra.end()) {
-                block.insert(block.end(), entry.begin(), entry.end());
-                block.push_back('\0');
+                block.insert(block.end(), p, p + wcslen(p));
+                block.push_back(L'\0');
             }
             // else: replaced by `extra` below
         }
-        FreeEnvironmentStringsA(env);
+        FreeEnvironmentStringsW(env);
     }
     for (auto& [k, v] : extra) {
-        std::string entry = k + "=" + v;
+        std::wstring entry = utf8_to_wide(k + "=" + v);
         block.insert(block.end(), entry.begin(), entry.end());
-        block.push_back('\0');
+        block.push_back(L'\0');
     }
-    block.push_back('\0');
+    block.push_back(L'\0');
     return block;
 }
 #endif
@@ -1236,24 +1313,34 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     CreatePipe(&hReadErr, &hWriteErr, &sa, 0);
     SetHandleInformation(hReadErr, HANDLE_FLAG_INHERIT, 0);
 
-    STARTUPINFOA si{};
-    si.cb = sizeof(STARTUPINFOA);
+    STARTUPINFOW si{};
+    si.cb = sizeof(STARTUPINFOW);
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = hWriteOut;
     si.hStdError  = hWriteErr;
 
     PROCESS_INFORMATION pi{};
-    std::vector<char> cmdBuf(cmd.begin(), cmd.end());
-    cmdBuf.push_back('\0');
+    // 1.4.2 F-20: the command line is UTF-8 throughout ezmk — convert it (and
+    // cwd/env) to UTF-16 and spawn with CreateProcessW, so non-ASCII paths and
+    // arguments survive instead of being reinterpreted as cp936 bytes.
+    std::wstring wcmd = utf8_to_wide(cmd);
+    std::vector<wchar_t> cmdBuf(wcmd.begin(), wcmd.end());
+    cmdBuf.push_back(L'\0');
 
     // 1.1.2: optional working directory + private environment block
-    std::string cwd_str = opts.cwd.empty() ? std::string() : opts.cwd.string();
-    LPCSTR cwd_ptr = cwd_str.empty() ? nullptr : cwd_str.c_str();
-    std::vector<char> env_block = build_env_block(opts.env);
+    std::wstring cwd_str = opts.cwd.empty() ? std::wstring()
+                                            : utf8_to_wide(opts.cwd.string());
+    LPCWSTR cwd_ptr = cwd_str.empty() ? nullptr : cwd_str.c_str();
+    std::vector<wchar_t> env_block = build_env_block(opts.env);
     LPVOID env_ptr = env_block.empty() ? nullptr : env_block.data();
 
-    if (CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
-                       0, env_ptr, cwd_ptr, &si, &pi)) {
+    // 1.4.2 F-20: a Unicode environment block MUST be paired with
+    // CREATE_UNICODE_ENVIRONMENT — without the flag CreateProcessW interprets
+    // the block as ANSI and fails with ERROR_INVALID_PARAMETER (87).
+    DWORD creation_flags = env_block.empty() ? 0 : CREATE_UNICODE_ENVIRONMENT;
+
+    if (CreateProcessW(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
+                       creation_flags, env_ptr, cwd_ptr, &si, &pi)) {
         CloseHandle(hWriteOut);
         CloseHandle(hWriteErr);
 
@@ -1616,6 +1703,49 @@ std::string escape_cmd_arg(std::string_view s) {
         r += c;
     }
     return r;
+}
+
+// 1.4.2 F-15: MSVCRT command-line quoting for CreateProcess (no shell involved).
+// The rules the C runtime's argv splitter implements:
+//   * the argument is wrapped in double quotes;
+//   * a run of N backslashes before a quote → 2N+1 backslashes + quote;
+//   * a run of N backslashes before the closing quote → 2N backslashes.
+// Backslashes NOT adjacent to a quote stay literal — that is why POSIX escaping
+// (which doubles every backslash) corrupts Windows paths.
+std::string quote_windows_arg(std::string_view s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    out.push_back('"');
+    size_t backslashes = 0;
+    for (char c : s) {
+        if (c == '\\') {
+            ++backslashes;
+            continue;
+        }
+        if (c == '"') {
+            out.append(backslashes * 2 + 1, '\\');
+            out.push_back('"');
+            backslashes = 0;
+            continue;
+        }
+        out.append(backslashes, '\\');
+        backslashes = 0;
+        out.push_back(c);
+    }
+    // Trailing backslashes must be doubled so they do not escape the closing quote.
+    out.append(backslashes * 2, '\\');
+    out.push_back('"');
+    return out;
+}
+
+std::string quote_cli_arg(std::string_view s) {
+#ifdef EZMK_WIN
+    // CreateProcess parses the raw command line — MSVCRT quoting only.
+    return quote_windows_arg(s);
+#else
+    // /bin/sh -c: keep the established double-quote + backslash escaping.
+    return "\"" + escape_shell_arg(s) + "\"";
+#endif
 }
 
 // ===================================================================

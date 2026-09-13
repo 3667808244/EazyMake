@@ -3012,3 +3012,75 @@ TEST_CASE("integration: watch failure prints watching text, not success (1.4.2 F
     REQUIRE(content.find("Build succeeded") == std::string::npos);  // no false success
 }
 
+// ==============================================================
+// 1.4.2 phase 5: wide API / non-ASCII paths (F-20)
+// ==============================================================
+namespace {
+
+// Run ezmk with RunOptions.cwd instead of `cmd /c cd ...`: cmd.exe would decode
+// the command line as ANSI, so a non-ASCII cwd never reaches ezmk intact. Going
+// straight to CreateProcessW keeps the path UTF-8/wide end-to-end.
+ProcResult run_ezmk_at(const std::string& args, const fs::path& cwd) {
+    RunOptions ro;
+    ro.cwd = cwd;
+    std::string cmd = quote_cli_arg(find_ezmk_binary().string()) + " " + args;
+    return run_command(cmd, ro);
+}
+
+} // anonymous namespace
+
+// F-20: a non-ASCII (Chinese) project path must work for EazyMake's OWN file
+// paths — ZIP creation (miniz narrow API → wide FILE*), ZIP extraction and the
+// header-only install path. The compile step is toolchain-dependent: MSYS2
+// GCC's `as`/`cc1plus` cannot create files under a non-ASCII directory at all
+// (reproducible with a plain `g++ -c` from any launcher), so it is skipped for
+// GCC and exercised only with MSVC, which uses UTF-16 paths natively.
+TEST_CASE("integration: non-ASCII project path packs and installs a package (1.4.2 F-20)", "[integration][1.4.2]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+    fs::path zh_dir = tmp.path / "中文项目";
+    fs::create_directories(zh_dir / "include");
+
+    // Header-only package (no compiler involved) living under the non-ASCII dir.
+    file_write(zh_dir / "ezmk.toml",
+        "[project]\nname = \"zhhdr\"\ntype = \"static\"\nheader_only = true\n"
+        "version = \"0.1.0\"\nlanguage = \"C++17\"\n");
+    file_write(zh_dir / "include" / "zhhdr.hpp", "#pragma once\nint zh_answer();\n");
+
+    // 1) ZIP creation into the non-ASCII directory (F-20 wide writer path).
+    ProcResult p = run_ezmk_at("project pack --format zip", zh_dir);
+    INFO("ezmk binary: " << find_ezmk_binary().string()
+         << "\ncwd: " << zh_dir.string()
+         << "\npack out:\n" << p.out << "\npack err:\n" << p.err);
+    REQUIRE(p.exit_code == 0);
+    fs::path zip;
+    for (auto& e : fs::directory_iterator(zh_dir)) {
+        if (e.path().extension() == ".zip") { zip = e.path(); break; }
+    }
+    REQUIRE_FALSE(zip.empty());
+
+    // 2) Install it (relative ASCII argument, resolved against the non-ASCII
+    //    cwd) — extraction opens/writes through the wide CRT.
+    ProcResult i = run_ezmk_at("pkg install " + quote_cli_arg(zip.filename().string()) + " -y",
+                               zh_dir);
+    INFO("install out:\n" << i.out << "\ninstall err:\n" << i.err);
+    REQUIRE(i.exit_code == 0);
+    REQUIRE(fs::exists(zh_dir / ".ezmk" / "pkg" / "zhhdr" / "include" / "zhhdr.hpp"));
+
+    // 3) A full compile inside the non-ASCII path: only meaningful where the
+    //    toolchain supports it (MSVC). MSYS2 GCC/`as` cannot — SKIP there.
+    auto tc = ezmk::toolchain::detect_toolchain();
+    if (tc.family != ezmk::toolchain::CompilerFamily::Msvc) {
+        SKIP("MSYS2 GCC cannot create objects under a non-ASCII path — "
+             "compile step verified on MSVC only");
+    }
+    fs::create_directories(zh_dir / "src");
+    file_write(zh_dir / "src" / "main.cpp", "int main() { return 0; }\n");
+    ProcResult b = run_ezmk_at("build", zh_dir);
+    INFO("build out:\n" << b.out << "\nbuild err:\n" << b.err);
+    REQUIRE(b.exit_code == 0);
+}
+

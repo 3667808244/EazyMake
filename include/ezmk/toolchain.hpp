@@ -62,6 +62,9 @@ std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path);
 struct FlagTranslation {
     std::vector<std::string> translated;
     std::vector<std::string> unrecognized;  // warn about these
+    // 1.4.2 F-21: flags that WERE translated but with a semantic downgrade
+    // (e.g. -std=gnu++17 → /std:c++17 drops the GNU extensions). Callers warn.
+    std::vector<std::string> warnings;
 };
 
 // Translate GCC-style compile flags to the target compiler family.
@@ -82,5 +85,16 @@ std::vector<std::string> get_stdlib_flags(const std::string& stdlib,
 // Parse the output of cl.exe /showIncludes into a list of header paths.
 // Format: "Note: including file:  C:\path\to\header.h"
 std::vector<fs::path> parse_show_includes(const std::string& compiler_output);
+
+// ---- 1.4.2 F-22: MSVC availability probe ----
+// A bare `cl` with no input exits non-zero (D8003: missing source filename), so
+// the old "exit == 0" judgement rejected a perfectly good installation. The
+// probe now runs `cl /Bv`, which prints the banner/version table and exits 0.
+// Both helpers are pure and exposed for unit testing (the real probe needs an
+// installed toolchain).
+bool msvc_probe_ok(int exit_code, const std::string& output);
+// Version line from a cl banner ("... Optimizing Compiler Version 19.38 ..."),
+// falling back to the first non-empty line.
+std::string parse_msvc_banner_version(const std::string& output);
 
 } // namespace ezmk::toolchain

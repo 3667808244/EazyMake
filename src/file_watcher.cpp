@@ -266,10 +266,10 @@ bool FileWatcher::win32_add_watch(const fs::path& dir) {
     }
 
     // Open directory handle for overlapped I/O
-    // NOTE: 1.4.2 F-20 (阶段五) replaces this narrow→wide byte copy with the
-    // shared CP_UTF8 conversion layer; kept as-is here.
+    // 1.4.2 F-20: CP_UTF8 → UTF-16 conversion (the old byte-by-byte cast mangled
+    // every non-ASCII directory name, e.g. 中文 paths).
     std::string dir_str = dir.string();
-    std::wstring wdir(dir_str.begin(), dir_str.end());
+    std::wstring wdir = util::utf8_to_wide(dir_str);
 
     HANDLE hDir = CreateFileW(
         wdir.c_str(),
@@ -378,9 +378,10 @@ void FileWatcher::win32_worker() {
 
         auto* info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(w.buffer.data());
         while (true) {
-            // Convert wide-char filename to UTF-8 path
+            // Convert wide-char filename to UTF-8 path (1.4.2 F-20: real CP_UTF8
+            // conversion instead of a byte-cast that mangled non-ASCII names).
             std::wstring wfname(info->FileName, info->FileNameLength / sizeof(WCHAR));
-            std::string fname(wfname.begin(), wfname.end());
+            std::string fname = util::wide_to_utf8(wfname);
             note_event(fs::path(w.dir_path) / fname);
 
             if (info->NextEntryOffset == 0) break;
@@ -419,7 +420,7 @@ void FileWatcher::win32_repair_watches() {
             w.dir_handle = nullptr;
         }
 
-        std::wstring wdir(w.dir_path.begin(), w.dir_path.end());
+        std::wstring wdir = util::utf8_to_wide(w.dir_path);
         HANDLE hDir = CreateFileW(
             wdir.c_str(),
             FILE_LIST_DIRECTORY,
