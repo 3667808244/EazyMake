@@ -24,6 +24,92 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.2 (开发中) — 代码质量审计修复（第二轮）
+
+1.4.1 发布后对 v1.4.1 全量代码的**六路并行逐行审计 + 独立核查**的修复落地（对照 1.4.0-dev.6 / 1.3.6 审计收口先例）。审计覆盖 `src/` 全部首方模块，结论：无 zip-slip / SHA 绕过 / 可利用内存破坏（除 F-01 一处 Lua UB），但发现 5 项 P0（崩溃 / 缓存正确性失效）、10 项 P1、7 项 P2、8 项 P3、6 项 P4 与一批低危健壮性问题（F-37 组）。本版把 P0~P4 全部落地，低危项择优随附、余者明确延后。**零功能新增、公共 API 无破坏性变更**（纯缺陷修复 + 内部签名调整；破坏性变更仍仅归 2.0.0）。
+
+### 崩溃 / 正确性（P0）
+
+- **Lua 报错对象 UB（F-01，src/lua_api.cpp）**：`lua_tostring` 对非字符串错误对象返回 `NULL`（`error({...})` / `assert(false, {...})` / `error(42)`），11 处报错路径直接 `std::string(lua_tostring(L,-1))` → 崩溃。统一走安全的 `error_message()` 提取：数字保留文案、其余降级为 `unknown Lua error`，栈形态与 pop 次数不变。另修 `init()` 预扩 Lua 栈（4096 槽）——json ↔ Lua 递归期间 Lua 栈重分配会堆损坏（≥36 层嵌套必崩，基线预存缺陷）
+- **`workspace watch` 成员饿死（F-02，src/workspace_build.cpp）**：`run_watch` 原用固定 `jobs` 大小的线程池投递全部成员，成员数 > jobs 时后续成员永不启动，Ctrl+C 后还会从队列拉起新 watcher。改为**每选中成员一个 `std::thread`**（层序仅定启动次序）
+- **MSVC 依赖跟踪失效（F-03，src/cache.cpp）**：`/showIncludes` 注解改从 `res.out` 解析（原先读 stderr → MSVC 依赖集恒空、头文件改动永不失效）；`parse_show_includes` 本地化无关化（en / zh-CN 半/全角前缀 + 「冒号后为路径形态」兜底，普通诊断行不误吞）。**首次修复后 MSVC 缓存全量重编一次属预期**
+- **`--locked` 哈希语义冲突（F-04，src/lockfile.cpp / pkg.cpp）**：`LockedPackage` 拆分 `archive_sha256`（安装源归档，`--locked` 重装校验）与 `lib_sha256`（产物哈希，verify 用），`sha256` 保留为 `lib_sha256` 的旧别名；安装时写 `.ezmk-archive-source` 标记（url/local/repo + 归档哈希）。此前两侧共用一个字段，编译型包的 `--locked` **必然失败**；旧 lockfile 无新字段仍可解析（lockfile `version` 保持 1）
+- **watcher 静默死亡（F-05，src/file_watcher.cpp / main.cpp）**：新增 worker 错误通道（`worker_error_` + 消息），`run()` 观测到 worker 死亡即告警返回；`ezmk watch` 等待循环改为等「SIGINT 或 watcher 自行结束」，异常结束打印 `file watcher stopped unexpectedly; leaving watch mode` 并 **exit 1**（此前界面看似在监视、实际无任何监视）
+
+### 语义 / CLI / 导入（P1）
+
+- **`[test].framework` 缺省（F-06，src/config.cpp）**：缺省值未归一化，与分发处的大写比较不一致 → 省略该键的 `ezmk test` 必然 fatal。`parse_test` 与分发处统一 `normalize_lang`
+- **`import` 的 `add_library`（F-07，src/import.cpp）**：关键字感知收集源码（跳过 `STATIC`/`SHARED`/`INTERFACE`/`MODULE`/`EXCLUDE_FROM_ALL`/`ALIAS`/`IMPORTED` 等），无关键字默认 `static`（原为 executable），`INTERFACE` → header-only，`MODULE` → shared + TODO
+- **`import` 未求值条件反转（F-08）**：`else`/`elseif` 对 `nullopt`（条件不可求值）帧保持跳过并加 TODO——原先 `value_or(false)` 取反会把未知分支当作真而采纳
+- **`--disable-cache` 未真正全停（F-09，src/build.cpp）**：既不写缓存对象也不合并 record 条目，并保存**空** record（逃离坏增量状态）；此前会静默写回缓存，反而为下一次构建重新武装缓存
+- **C++17 标准性（F-10）**：`TestRunContext` 去 C++20 designated initializers（改逐成员赋值），`-std=c++17 -Wpedantic` 下不再依赖 GCC 扩展
+- **`ezmk test` 链接缺依赖包（F-11）**：抽出 `collect_package_archives` 供 build/test 复用，`run_tests` 链接纳入依赖包归档 + link flags/dirs/system targets（复用 `prepare_build_state` 解析）
+- **子目录调用相对路径（F-12，src/util.cpp）**：新增 `resolve_relative_paths`/`resolve_relative_path_flags` 与 `cwd_is`；`link_dirs` 及 `-I`/`-L`/`-include`/`-isystem`（MSVC `/I`、`/LIBPATH:`）按项目根绝对化——子目录调用安全，项目根调用命令行保持字节不变
+- **`clean -w` spec 错位（F-13，src/cli.cpp）**：重定向首轮解析对齐 `workspace_cmd_spec()`（工作区专属 flag 复活专用拒绝分支，不再是 `unknown option`）
+- **位置参数（F-14）**：`project install/pack/test` 补 `reject_positionals`
+- **Windows 参数装配（F-15，src/util.cpp / main.cpp）**：新增 `quote_windows_arg`（MSVCRT 规则）/`quote_cli_arg`（平台分派），`run_executable` 与 workspace `run_member` 的 `--report` 值改用——原先 POSIX `escape_shell_arg` 会把 Windows 路径反斜杠翻倍并保留 `$`/反引号
+- **`ezmk example` 解析（F-16）**：从 index 2 起按 spec 解析（唯一单层命令组）：`-h/--help` 打印用法 + 示例列表、`-o/--output <dir>`、名称作唯一 positional、`list` 拒多余参数、`output_dir` 缺省 `"."`
+- **watch 失败文案（F-17）**：新增 i18n 键 `watch_watching`（en/zh/zh-TW），watch 构建失败路径不再打印 `Build succeeded.`
+
+### pkg / repo / lockfile（P3）
+
+- **repo 路径信任边界（F-23，src/repo.cpp）**：新增 `util::is_path_within`，`index.toml` 的 `file` 与 `[platform]` 前缀必须位于 repo 目录内（add 与 `read_pkg_from_index` 双侧），`repo update` 拉取后重跑校验
+- **repo 名字校验（F-24）**：`repo remove/update/info` 入口 `validate_pkg_name`；`load_repo_list` 跳过名字不安全的条目（手改 `list.toml` 不能借 `cache_dir/name` 逃逸后 `remove_all`）
+- **preinstall 钩子 cwd（F-25，src/pkg.cpp）**：改到存在的暂存包根（原用尚未创建的 `dest_dir/pkg_name` → 全新安装必然失败）；`-y`/非交互下不再打开编辑器
+- **lockfile `platform` 字段（F-26）**：新增 `toolchain::platform_key`（三元 + 二元），lockfile 按真实 `os_arch_toolchain` 写入（原恒写 `windows_x86_64_*`）
+- **预发布平局 tie-break（F-27）**：新增 `compare_version_precedence`（核心版本相等时 release 优先，预发布之间字典序），repo 选择与 update 的 up-to-date 判定均改用——消除 `index.toml` 条目顺序依赖（`1.0.0-rc.1` 不再遮蔽 `1.0.0`）
+- **lockfile verify 盲点（F-28）**：header-only 校验 `include/` 清单哈希（新增 `payload_manifest_hash`，写入侧同步 pin）、git 源校验 `.ezmk-git-source` 与 commit 一致、无哈希条目告警而非误判
+- **`pkg update` 流程（F-29）**：`-y/--yes` 透传；`install` 返回三态 `InstallOutcome{Ok,Cancelled}`，`update_all` 分别计数（取消不计 updated）并在失败时 **exit 1**
+- **`update_all` 回滚（F-30）**：迭代前快照包名（install 会重命名交换目录）；自动安装的依赖纳入事务记录，最外层失败/取消时 best-effort 回滚；`is_url` 仅在存在明确 scheme 时判定为 URL（不存在的本地路径不再被拼成 `https://`）；URL 下载临时名改为唯一名
+
+### Windows / 路径 / 编码（P2）
+
+- **窄 API 非 ASCII 乱码（F-20）**：统一 UTF-8 ↔ UTF-16（CP_UTF8）转换层 `utf8_to_wide`/`wide_to_utf8`；`run_command` 改 `CreateProcessW` + 宽 cwd/环境块（配 `CREATE_UNICODE_ENVIRONMENT`，缺它会报 `ERROR_INVALID_PARAMETER 87`）；`get_exe_dir` 改 `GetModuleFileNameW`；file_watcher 的 `CreateFileW`/事件名改真转换（原为逐字节强转）；miniz zip 改自开宽路径 `FILE*` + `*_cfile` API
+- **MSVC 标准映射（F-21，src/toolchain.cpp）**：`-std=` 移出映射表改由 `map_std_value` 归一化——不再输出非法的 `/std:c++98`、`/std:c++11`，`c++03`→`c++14`，`c++23`/`c++26`/`c++2a`→`latest`，`gnu*` 剥前缀 + 新增 `FlagTranslation::warnings`（告警「MSVC 无 GNU 方言」）
+- **MSVC 工具链探测（F-22）**：改 `cl /Bv`（exit 0 + banner 版本解析），弃「裸 cl exit==0」判据（无输入时 cl 按 D8003 非零退出，已装 MSVC 会被判为不可用）
+
+### watcher / workspace 文件层（P4）
+
+- **目录消失补挂（F-31，src/file_watcher.cpp）**：运行中目录消失 → 每 2 秒修复轮询（Windows 重开句柄重挂 IOCP 读 / Linux 清理 `IN_IGNORED` 的 wd 映射后重 `add_watch` / macOS 标记 lost 后重开 fd 重注册），每次丢失仅一次告警、恢复后 info 提示
+- **自触发重建（F-32）**：flush 前真实 `fs::exists` 过滤（删除事件不再触发重建）+ `add_ignore_prefix`/`add_ignore_suffix` API（事件侧与 flush 双重过滤）；`main.cpp` 注册忽略 `build/`、`.ezmk/` 前缀与 `.o`/`.d`/`.tmp` 后缀
+- **members 数组拼接（F-33，src/workspace.cpp）**：改为 TOML 感知定位数组结尾（跟踪字符串/转义/`#` 注释/括号深度）——多行数组、注释内 `]`、成员名内 `]` 不再截断文件；数组后同行尾注释保留（CRLF 下剔除尾 `\r`，不拼出 `\r\r\n`）
+- **符号链接环（F-34）**：`scan_dir` 维护已访问 canonical 目录集合，自指/祖先符号链接环终止并计入 skipped（新增键 `workspace_scan_skip_loop`）
+- **校验顺序依赖（F-35）**：`validate_ws_deps` 失效传播迭代至不动点；`topo_layers` 的 unresolved 分支改为可解释的成员错误（`workspace_err_dep_invalid`/`workspace_err_dep_unknown`），不再是 `internal error`
+- **macOS kevent 槽（F-36）**：注册/事件数组按监视数动态分配（去固定 32 槽截断/溢出）
+
+### 低危随附（F-37 组，择优）
+
+- **时间戳线程安全**：新增 `util::iso_time_now` / `local_time_string`（`localtime_r`/`localtime_s`），替换 cache/repo/import/pkg 四处重复的 `std::localtime`——共享静态 `std::tm` 在 `-jN` 下可被并发格式化而撕裂；越界 `time_t` 返回空串而非解引用空指针
+- **POSIX `run_command` 双 `close`（src/util.cpp）**：父进程原先在 fork 后与函数末尾各 `close` 一次同一对 fd（`-jN` 下第二次可能关掉被其它线程复用的描述符），改为只在 fork 后关闭一次
+- **超时杀进程组**：带超时的命令在子进程 `setpgid` 自成进程组，超时改 `kill(-pid, SIGKILL)`（回退单杀）——此前只杀 `sh`，`sh -c "a | b"` 的孙进程存活并继续持有输出临时文件
+- **`get_home_dir` 策略**：Windows 仅接受**原生** `HOME`（MSYS2 导出的 `HOME=/home/<user>` 会让用户级安装落到「当前盘符:\home\<user>\.local\ezmk」——静默写错目录），POSIX 风格 HOME 回退 `USERPROFILE`；POSIX 侧 HOME 缺失时改用 `getpwuid` 而非 `/tmp`
+- **cache record 版本校验**：`record.json` 的 `version` 高于本版本支持（2）时整份忽略并告警（`cache_record_newer`，en/zh）——降级后只信任部分字段可能跳过必要重建
+- **`pack --precompiled` 标记拼接（src/build.cpp）**：新抽出可单测的 `inject_precompiled_marker`——按文件自身行尾插入整行（CRLF 项目不再混行尾、`[project]` 为末节时保留分隔换行）；项目已声明 `precompiled = true` 时不再重复注入（重复键会使安装侧 TOML 解析失败）
+- **scaffold 写失败检查（src/project.cpp）**：`ezmk project new` 的 5 处 `file_write` 结果原先被忽略，磁盘满/只读目标会留下残缺骨架并照样打印「项目已创建」；现统一 `util::fatal`
+- **打包体积上限（src/util.cpp）**：`collect_stage_entries` 按 `file_size` 预检 + 累计校验 1 GiB（与解压侧上限一致），超出给出明确错误——否则 `ezmk pack` 会产出 ezmk 自己都装不上的包
+- **进度序号（src/build.cpp）**：并行编译的 `[n/total]` 序号改在**完成**时取号（原先在任务启动时取号，源文件数 > 并行度时序号倒跳，像是丢失/重复了工作）
+
+### 测试
+
+- 全量回归：**1099 用例 / 6342 断言零失败**（1.4.1 发布态基线 1020/5970，**+79 用例 / +372 断言**；5 跳过为既有环境限制——符号链接不可用与 MSYS2 GCC 无法在非 ASCII 路径创建目标文件）
+- 每阶段独立 commit + 阶段间全量回归（阶段一 1028/5990 → 二 1034/6006 → 三 1048/6068 → 四 1062/6133 → 五 1071/6177 → 六 1084/6239 → 七 1089/6279 → 八 1099/6342）
+- 每个修复均配单测/集成锁定（防「单测锁死错误行为」重演）；F-20 非 ASCII 目录集成测试在 MSYS2 GCC 下显式 SKIP 编译段（已用直接 `g++` 复现确认与 EazyMake 无关）
+- 告警门：`-Wall -Wextra -Wpedantic -Wshadow -Wformat=2` 下**首方代码零告警**（`src/*.cpp`、`include/ezmk/`）；剩余告警全部来自第三方 vendor（Lua 的 `-Wpedantic` computed goto 与 `-Wformat-nonliteral`），vendor 不修改
+- i18n 三向一致：`scripts/check_i18n.py` 通过（键数 402 → **405**：`watch_watching` / `workspace_scan_skip_loop` / `cache_record_newer`；zh-TW 继承 zh）
+
+### 已知限制 / 跟进项
+
+- **明确不做**（见设计 §3.9）：Linux/macOS 文件监视**真递归**（`recursive` 参数在非 Windows 平台不生效——`include/ezmk/file_watcher.hpp` 已文档化；inotify 子目录发现 / FSEvents 另立版本）、`pkg update` 对 git 源的自动刷新（保持 1.4.1 语义）、破坏性 API 变更（归 2.0.0）
+- **F-37 组中未随附者**：watcher Linux/macOS 补挂深度策略、`parse_show_includes` 彻底本地化（改宽松解析）、编译命令响应文件跨盘符细节、全面 i18n 文案收口（归 1.5.x 前评估）
+- **行为修正需注意**（非破坏性，但用户可见）：`--locked` 从「必失败」变可校验重装；`--disable-cache` 语义收严（不再回写缓存）；MSVC 构建首次获得正确头文件失效（一次全量重编）；Windows 上 POSIX 风格 `HOME` 不再被采信（用户级安装目录可能变化）；`[test].framework` 缺省从 fatal 变正常执行
+
+### 发布门槛
+
+- ⛔ ① 计划清单全部完成：`plan.md` 阶段一~阶段八全部落地（低危项择优随附、余者明确延后）② 公共 API **无破坏性变更**（新增仅内部 helper 与 i18n 键）③ 全量测试**零回归**（1099/6342 零失败，基线 1020/5970）
+- 待办（workflow 正式发布阶段）：bump 二进制版本号至 1.4.2 → tag `v1.4.2` → 三渠道分发（GitHub Release / Homebrew / winget / pacman）
+
+---
+
 ## 1.4.1 (2026-09-03) — pkg install 支持 git 仓库 URL
 
 1.4.0 正式发布后的**首个补丁版本**（单主题：`ezmk pkg install` 支持 git 仓库 URL）。主题来自 1.4.0 发布后收集到的用户需求：`git@github.com:user/repo.git` / `https://github.com/user/repo.git` 此前无法作为包来源安装。本版把「git 仓库作为包来源」落地为完整链路：识别 → 克隆 → ref 定位 → 复用目录安装链路 → lockfile 记录。**公共 API 无破坏性变更**（纯增量：新来源 + 新可选 flag `--branch` + 新可选 lockfile 字段）。

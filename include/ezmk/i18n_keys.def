@@ -46,6 +46,7 @@ EZMK_I18N_KEY(main_missing)
 EZMK_I18N_KEY(no_source_files)
 EZMK_I18N_KEY(src_dir_missing)
 EZMK_I18N_KEY(cache_summary)
+EZMK_I18N_KEY(cache_record_newer)       // 1.4.2 F-37: record.json written by a newer ezmk
 EZMK_I18N_KEY(parallel_jobs_info)       // 0.2.3+
 EZMK_I18N_KEY(profile_not_found)        // 0.2.3+
 EZMK_I18N_KEY(pre_build_hook)           // 0.2.3+

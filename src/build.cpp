@@ -1094,11 +1094,16 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
         int total = static_cast<int>(cin.sources.size());
         for (size_t i = 0; i < cin.sources.size(); ++i) {
             futures.push_back(pool.submit([&cin, &record, &task_index, total, i, use_inplace, &compile_times]() {
-                auto idx = task_index.fetch_add(1) + 1;
                 auto t0 = std::chrono::steady_clock::now();
                 auto result = cache::compile_one_source(cin.sources[i], cin, record);
                 compile_times[i] = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - t0).count();
+                // 1.4.2 F-37: the sequence number is taken at COMPLETION, not at
+                // task start. With more sources than workers the old numbering
+                // followed start order, so the printed "[n/total]" counter ran
+                // backwards (e.g. [7/100] then [5/100]) and looked like lost or
+                // duplicated work in the progress display.
+                auto idx = task_index.fetch_add(1) + 1;
                 // 0.9.6+: Always show progress in parallel mode
                 std::string msg = std::string("[") + std::to_string(idx) +
                     "/" + std::to_string(total) + "] " + result.rel_src;
@@ -1676,6 +1681,26 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to) {
     }
 }
 
+std::string inject_precompiled_marker(const std::string& toml) {
+    // 1.4.2 F-37: see build.hpp. The old splice inserted a bare "\n"-prefixed
+    // fragment at the index of the next "\n[", which turned a CRLF project into
+    // a mixed-EOL file and, when [project] was the last section, appended the
+    // key without first ensuring a separating line ending.
+    std::string out = toml;
+    const std::string eol = toml.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    const std::string marker =
+        "precompiled = true  # added by ezmk project pack --precompiled — archive ships include/ + lib/ only";
+    auto next_section = toml.find("\n[", 1);  // header after [project]
+    if (next_section == std::string::npos) {
+        if (!out.empty() && out.back() != '\n') out += eol;
+        out += marker + eol;
+    } else {
+        // Insert at the start of that header's own line ("\n" at idx, so idx+1).
+        out.insert(next_section + 1, marker + eol);
+    }
+    return out;
+}
+
 // 1.1.0-dev.2: pack_project — create a distributable .tar.gz from a project.
 // 1.2.5: default output is a SOURCE package (src/ + include/ + ezmk.toml,
 // platform-independent, compiled on the consumer side); --precompiled keeps
@@ -1755,13 +1780,25 @@ void pack_project(const config::EzConfig& cfg,
         // ezmk.toml — the packed artifact ships include/ + lib/ only (no src/),
         // so it IS a precompiled package. Mark it precompiled so install
         // validation accepts it (validate_pkg's "missing src/" check).
-        {
-            std::string toml = util::file_read(proj_root / "ezmk.toml");
-            const char* ins = "\nprecompiled = true  # added by ezmk project pack --precompiled — archive ships include/ + lib/ only\n";
-            auto proj_end = toml.find("\n[", 1);  // next section header after [project]
-            if (proj_end == std::string::npos) toml += ins;
-            else toml.insert(proj_end, ins);
-            util::file_write(stage_dir / "ezmk.toml", toml);
+        //
+        // 1.4.2 F-37: only inject the marker when the project does not already
+        // declare it (a second `precompiled` key is a TOML duplicate-key error
+        // on install). See inject_precompiled_marker() for the splice details.
+        if (!cfg.project.precompiled) {
+            std::string toml = inject_precompiled_marker(
+                util::file_read(proj_root / "ezmk.toml"));
+            if (!util::file_write(stage_dir / "ezmk.toml", toml)) {
+                util::fatal("failed to write " +
+                            (stage_dir / "ezmk.toml").string());
+            }
+        } else {
+            std::error_code ec;
+            fs::copy_file(proj_root / "ezmk.toml", stage_dir / "ezmk.toml",
+                          fs::copy_options::overwrite_existing, ec);
+            if (ec) {
+                throw std::runtime_error("failed to copy ezmk.toml into package (" +
+                                         ec.message() + ")");
+            }
         }
     } else {
         // ---- 1.2.5: source package (default) — src_dirs + include/ + ezmk.toml ----

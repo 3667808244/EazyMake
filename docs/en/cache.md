@@ -58,7 +58,7 @@ For each source file:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "compile_options_signature": "sha256_of_flags_include_dirs_std_flag_and_env",  // Global compilation options fingerprint (includes msvc_flags, std_flag, include_dirs)
   "files": {
     "src/main.cpp": {
@@ -79,10 +79,14 @@ For each source file:
 
 > **Why a `version` field in the record?** The format evolves between ezmk
 > releases; the version lets a different ezmk tell a newer on-disk format apart
-> from its own and rebuild the cache instead of misreading it.
+> from its own and rebuild the cache instead of misreading it. Since 1.4.2 this
+> is enforced: a record whose `version` is **higher** than the running ezmk
+> supports (2) is discarded as a whole — every source is then a cache miss, a
+> single full rebuild — instead of being partially trusted after a downgrade.
+> A *lower* version still loads, with the newer fields defaulted.
 
 ### Field Descriptions
-- `version`: Used for cache format evolution.
+- `version`: Used for cache format evolution; `2` is the current format (1.1.0 added `compiler_version` + `deterministic`). Records with a higher version are ignored entirely (see above).
 - `compile_options_signature`: SHA-256 fingerprint of global compilation options, covering `[compile] flags`, `msvc_flags`, `include_dirs`, `std_flag`, `extra_includes`, etc. Any change invalidates the cache for all source files. Can be combined with per-entry `compile_opts` for finer granularity.
 - `object_file` relative path.
 - System header files (e.g., `/usr/include/iostream`) hashes must also be recorded, since system header upgrades may change compilation results.
@@ -113,11 +117,15 @@ The dependent header hash comparison mechanism naturally guarantees: modifying a
 
 `ezmk build --disable-cache`:
 - Ignores `record.json`, recompiles all source files.
-- After compilation completes, **overwrites** and updates the cache (so the cache can benefit the next time it is enabled). Alternatively, the cache could be left untouched, but updating is more sensible.
+- Writes **no** cache entries for this build, and the on-disk record is left
+  empty (1.4.2). Before 1.4.2 the freshly compiled entries were merged into the
+  record, so the "disabled" build silently re-armed the cache for the *next*
+  build — the opposite of what the flag promises.
 
-> **Why still update the cache afterwards?** `--disable-cache` is an escape hatch
-> for one clean rebuild, not a permanent cold mode — updating the cache anyway means
-> the very next build is fast again.
+> **Why is the record emptied instead of left untouched?** Leaving the old
+> entries in place would let the next normal build hit entries that describe a
+> build this one deliberately bypassed. Emptying it means the following build
+> starts from a clean, consistent incremental state.
 
 ## Cache Debugging (`--verbose`)
 

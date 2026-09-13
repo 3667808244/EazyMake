@@ -72,6 +72,14 @@ void pack_project(const config::EzConfig& cfg,
                   const cli::ProjectPackOptions& opts,
                   const fs::path& proj_root);
 
+// 1.4.2 F-37: add `precompiled = true` to the [project] section of a packed
+// ezmk.toml. The marker is inserted as a whole line just before the next
+// section header (or appended when [project] is last), using the file's own
+// line ending, so CRLF projects stay uniformly CRLF. Callers must only call
+// this when the project does not already declare precompiled (a second key
+// would be a TOML duplicate-key error). Exposed for unit tests.
+std::string inject_precompiled_marker(const std::string& toml);
+
 // 1.1.0-dev.6: Run project tests (ezmk project test).
 // Builds the project if needed, then compiles and runs tests according to
 // the [test] configuration section. Supports Catch2 and ezmk built-in frameworks.

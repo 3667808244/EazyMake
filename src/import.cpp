@@ -327,12 +327,9 @@ std::string join(const std::vector<std::string>& v, const char* sep = " ") {
 }
 
 // ISO 8601 时间戳（与 repo.cpp::now_iso 同格式，%Y-%m-%dT%H:%M:%SZ）。
+// 1.4.2 F-37: 线程安全（localtime_r/localtime_s，见 util::iso_time_now）。
 std::string now_iso() {
-    auto t = std::time(nullptr);
-    auto* tm = std::localtime(&t);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-    return buf;
+    return util::iso_time_now();
 }
 
 // ===================================================================

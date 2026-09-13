@@ -19,6 +19,11 @@ constexpr const char* kObjExtMsvc    = ".obj";    // MSVC
 constexpr const char* kTempObjSuffix     = ".tmp.o";   // GCC/Clang 中间对象
 constexpr const char* kTempObjSuffixMsvc = ".tmp.obj"; // MSVC 中间对象
 
+// 1.4.2 F-37: highest record.json schema version this build understands
+// (v2 = 1.1.0 added compiler_version + deterministic). Newer records are
+// rejected wholesale in load_record() instead of being partially trusted.
+constexpr int kCacheRecordVersion = 2;
+
 // ===================================================================
 // Helpers
 // ===================================================================
@@ -33,11 +38,9 @@ bool same_dependency_paths(const std::vector<DepEntry>& old_deps,
 }
 
 std::string iso_time() {
-    auto t = std::time(nullptr);
-    auto* tm = std::localtime(&t);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-    return buf;
+    // 1.4.2 F-37: thread-safe (was std::localtime + std::strftime on the shared
+    // static std::tm; -jN cache writes could race on it).
+    return util::iso_time_now();
 }
 
 // 1.4.0-pre.1: fs::relative 在跨盘符（Windows，如绝对 src_dir 在 D:\、项目根在
@@ -341,6 +344,23 @@ CacheRecord load_record(const fs::path& json_path) {
     if (json.empty()) return CacheRecord{};
 
     try {
+        // 1.4.2 F-37: record version gate. A record written by a NEWER ezmk can
+        // carry fields this build does not know how to invalidate on (e.g. a new
+        // dependency class), so reading it partially could skip a rebuild.
+        // Downgrades are exactly when that happens, and silently trusting the
+        // old fields is worse than one full rebuild.
+        {
+            auto j = nlohmann::json::parse(json);
+            if (j.is_object()) {
+                int ver = j.value("version", 1);
+                if (ver > kCacheRecordVersion) {
+                    util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cache_record_newer,
+                                               {{"version", std::to_string(ver)},
+                                                {"supported", std::to_string(kCacheRecordVersion)}}));
+                    return CacheRecord{};
+                }
+            }
+        }
         return json_to_record(json);
     } catch (const std::exception& e) {
         util::warn(std::string("cache corrupted, rebuilding: ") + e.what());

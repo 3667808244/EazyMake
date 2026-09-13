@@ -135,13 +135,13 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 
 | 标志 | 用途 |
 |---|---|
-| `--disable-cache` | 强制重新编译（之后仍会更新缓存） |
+| `--disable-cache` | 强制重新编译；不写入缓存条目并清空记录（1.4.2） |
 | `--verbose` / `-v` | 显示完整编译命令和缓存命中情况 |
 | `-j <N>` / `--jobs <N>` | 并行编译任务数；`0` = 自动（`hardware_concurrency`），默认值 |
 | `--profile <name>` | 应用 `[compile.profile.<name>]` / `[link.profile.<name>]` 中的构建配置 |
 | `--auto-update` | 构建前运行 `ezmk repo update --pug`（默认关闭） |
 
-> **为什么 `-j 0` 是默认值？** 自动并行（`hardware_concurrency`）无需任何配置就能获得不错的加速。注意 `--disable-cache` 之后仍会**更新**缓存——它只强制一次干净重编译，而不是让缓存永久失效，所以下一次构建依然很快。
+> **为什么 `-j 0` 是默认值？** 自动并行（`hardware_concurrency`）无需任何配置就能获得不错的加速。注意自 1.4.2 起 `--disable-cache` **不再**写入任何缓存条目，并会把 `record.json` 清空——它是一次性回到干净增量状态的逃生门，而不是缓存永久失效模式；下一次构建同样从零开始。
 
 > **构建耗时明细（1.2.0+）：** `ezmk build -v` 始终按耗时降序打印每个源文件的编译耗时明细。不带 `-v` 时，若构建总耗时超过 5 秒，则自动打印最慢的 10 个编译单元。无需配置、无新增标志——仅列出实际编译（非缓存命中）的文件，单线程路径只显示总耗时。
 
@@ -174,6 +174,12 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 **`watch --run`（1.3.4+）：** 每次成功重建后在 watcher 线程上**阻塞运行**新产物——程序运行期间天然暂停变更检测，退出后自动恢复（零进程管理）。非零退出只**警告**（watch 是持续循环）。仅适用于 `executable` 项目（`static`/`shared`/`utils` + `--run` → 启动报错）。**初始构建不运行**——首次运行发生在第一次变更之后。无 `--run` 时行为完全不变。Ctrl+C 与子进程同前台进程组一起终止（用户意图"全停"）。长驻程序（服务器/GUI）会暂停监听直到退出——按 Ctrl+C 停止。
 
 **`watch --run -- <args>`（1.4.0-dev.5+）：** `--` 之后的参数在**每次**运行时透传给被监视的产物——`ezmk watch --run -- --verbose input.txt` 等价于 `./exe --verbose input.txt`。不带 `--` 时产物无参数运行（行为不变）。`--` 先终止 flag 解析（GNU 约定），因此参数本身可以 `-` 开头。
+
+**watch 的健壮性语义（1.4.2）：**
+- **失败不再"假死"**：底层监视线程因硬错误退出（或所有被监视目录都打不开）时，`ezmk watch` 会打印 `file watcher stopped unexpectedly; leaving watch mode` 并以 **exit 1** 退出，而不是继续空转（此前界面看起来仍在监视，实际已无任何监视）。成功停止（Ctrl+C）仍为 exit 0。
+- **目录消失后可恢复**：运行期间被监视的目录被删除/重命名时，对应的内核监视会失效并**每 2 秒重试补挂**，目录恢复后自动重新生效（每个目录只警告一次）。
+- **不因自己的产物触发重建**：`build/`、`.ezmk/` 以及 `.o` / `.d` / `.tmp` 产物被忽略，因此构建输出不会反过来触发新一轮构建。
+- **非递归平台**：Linux/macOS 只监视被监视目录**自身**（新增子目录不会被真递归发现）——该已知限制见 `include/ezmk/file_watcher.hpp`；Windows 走 `ReadDirectoryChangesW` 子树监视，为真递归。
 
 **`install` 专属标志：**
 

@@ -797,3 +797,71 @@ TEST_CASE("junit emitter: filenames escaped in attributes", "[build][1.3.2]") {
     REQUIRE(s.find("a&amp;b&lt;c&gt;d_test.cpp") != std::string::npos);
     REQUIRE(s.find("<testsuite name=\"a&b") == std::string::npos);
 }
+
+// ===================================================================
+// 1.4.2 F-37: pack --precompiled ezmk.toml marker splice
+// ===================================================================
+
+TEST_CASE("inject_precompiled_marker: LF project", "[build][1.4.2][pack]") {
+    std::string toml = "[project]\nname = \"foo\"\ntype = \"static\"\n\n[compile]\nflags = []\n";
+    auto out = inject_precompiled_marker(toml);
+
+    // Exactly one marker, on its own line, inside [project] (before [compile]).
+    auto first = out.find("precompiled = true");
+    REQUIRE(first != std::string::npos);
+    REQUIRE(out.find("precompiled = true", first + 1) == std::string::npos);
+    REQUIRE(out.find("precompiled = true") < out.find("[compile]"));
+    REQUIRE(out.find("precompiled = true") > out.find("[project]"));
+    // Pure LF output — the old splice produced a mixed-EOL file.
+    REQUIRE(out.find('\r') == std::string::npos);
+    REQUIRE(out.back() == '\n');
+}
+
+TEST_CASE("inject_precompiled_marker: CRLF project keeps CRLF", "[build][1.4.2][pack]") {
+    std::string toml = "[project]\r\nname = \"foo\"\r\ntype = \"static\"\r\n\r\n[compile]\r\nflags = []\r\n";
+    auto out = inject_precompiled_marker(toml);
+
+    // The injected line must use CRLF and must not create a lone LF or CR CR LF.
+    REQUIRE(out.find("precompiled = true  # added") != std::string::npos);
+    REQUIRE(out.find("only\r\n") != std::string::npos);
+    REQUIRE(out.find("\r\r") == std::string::npos);
+    REQUIRE(out.find("\r\n[compile]") != std::string::npos);
+    REQUIRE(out.find("precompiled = true") < out.find("[compile]"));
+    // Every LF is preceded by CR — no mixed line endings anywhere.
+    for (size_t i = 0; i < out.size(); ++i) {
+        if (out[i] == '\n') {
+            REQUIRE(i > 0);
+            REQUIRE(out[i - 1] == '\r');
+        }
+    }
+}
+
+TEST_CASE("inject_precompiled_marker: [project] is the last section", "[build][1.4.2][pack]") {
+    SECTION("file ends with a newline") {
+        std::string toml = "[project]\nname = \"foo\"\n";
+        auto out = inject_precompiled_marker(toml);
+        REQUIRE(out.find("name = \"foo\"\nprecompiled = true") != std::string::npos);
+        REQUIRE(out.back() == '\n');
+    }
+    SECTION("file has no trailing newline") {
+        std::string toml = "[project]\nname = \"foo\"";
+        auto out = inject_precompiled_marker(toml);
+        REQUIRE(out.find("name = \"foo\"\nprecompiled = true") != std::string::npos);
+        REQUIRE(out.back() == '\n');
+    }
+}
+
+TEST_CASE("inject_precompiled_marker: result parses and sets precompiled",
+          "[build][1.4.2][pack]") {
+    TempDir tmp;
+    std::string toml = "[project]\nname = \"foo\"\ntype = \"static\"\nversion = \"0.1.0\"\n"
+                       "language = \"C++17\"\n\n[compile]\nflags = []\ninclude_dirs = []\n"
+                       "\n[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n";
+    auto path = tmp.path / "ezmk.toml";
+    std::ofstream(path) << inject_precompiled_marker(toml);
+
+    auto cfg = ezmk::config::parse_config(path);
+    REQUIRE(cfg.project.precompiled);
+    REQUIRE(cfg.project.name == "foo");
+    REQUIRE(cfg.project.type == "static");
+}

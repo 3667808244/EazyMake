@@ -2,6 +2,7 @@
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
 #include "ezmk/util.hpp"
+#include "test_helpers.hpp"
 
 // miniz C API — used only to build malicious/valid archive fixtures for the
 // extraction security tests (1.1.2 S1). Same extern "C" wrapping as util.cpp.
@@ -9,13 +10,16 @@ extern "C" {
 #include "miniz.h"
 }
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -241,6 +245,79 @@ TEST_CASE("get_home_dir: returns non-empty path", "[util]") {
     REQUIRE_FALSE(home.empty());
     // Should be an existing directory
     REQUIRE(file_exists(home));
+}
+
+// 1.4.2 F-37: HOME priority policy. On Windows a POSIX-style HOME (MSYS2
+// exports HOME=/home/<user>) used to be taken verbatim, so user-scope installs
+// landed under <current-drive>:\home\<user>\.local\ezmk — silently the wrong
+// directory. Native HOMEs keep priority (Git Bash exports C:/Users/...).
+TEST_CASE("get_home_dir: HOME policy (1.4.2 F-37)", "[util][1.4.2]") {
+#ifdef EZMK_WIN
+    SECTION("POSIX-style HOME is ignored → falls back to a native absolute path") {
+        EnvGuard g("HOME", "/home/msys-user-does-not-exist");
+        auto home = get_home_dir();
+        REQUIRE(home != fs::path("/home/msys-user-does-not-exist"));
+        REQUIRE(home.is_absolute());
+    }
+    SECTION("native HOME keeps priority") {
+        EnvGuard g("HOME", "C:/ezmk-home-probe");
+        REQUIRE(get_home_dir() == fs::path("C:/ezmk-home-probe"));
+    }
+    SECTION("UNC HOME is accepted") {
+        EnvGuard g("HOME", "//server/share");
+        REQUIRE(get_home_dir() == fs::path("//server/share"));
+    }
+#else
+    SECTION("HOME is used verbatim") {
+        EnvGuard g("HOME", "/tmp/ezmk-home-probe");
+        REQUIRE(get_home_dir() == fs::path("/tmp/ezmk-home-probe"));
+    }
+#endif
+}
+
+TEST_CASE("iso_time_now: format check (1.4.2 F-37)", "[util][1.4.2]") {
+    auto s = iso_time_now();
+    REQUIRE(s.size() == 20);
+    REQUIRE(s[4] == '-');
+    REQUIRE(s[7] == '-');
+    REQUIRE(s[10] == 'T');
+    REQUIRE(s[13] == ':');
+    REQUIRE(s[16] == ':');
+    REQUIRE(s[19] == 'Z');
+}
+
+TEST_CASE("local_time_string: out-of-range time is handled, not dereferenced",
+          "[util][1.4.2]") {
+    // localtime_r/localtime_s fail on an unrepresentable time_t (the old code
+    // formatted through a possibly-null std::tm*).
+    REQUIRE(local_time_string(std::numeric_limits<std::time_t>::max()).empty());
+}
+
+TEST_CASE("local_time_string: format check", "[util][1.4.2]") {
+    auto s = local_time_string(std::time(nullptr));
+    REQUIRE(s.size() == 19);
+    REQUIRE(s[4] == '-');
+    REQUIRE(s[10] == ' ');
+    REQUIRE(s[13] == ':');
+    REQUIRE(s[16] == ':');
+}
+
+TEST_CASE("iso_time_now: concurrent formatting stays well-formed (1.4.2 F-37)",
+          "[util][1.4.2]") {
+    std::atomic<bool> bad{false};
+    std::vector<std::thread> workers;
+    for (int t = 0; t < 8; ++t) {
+        workers.emplace_back([&bad] {
+            for (int i = 0; i < 500; ++i) {
+                auto s = iso_time_now();
+                if (s.size() != 20 || s[4] != '-' || s[10] != 'T' || s[19] != 'Z') {
+                    bad = true;
+                }
+            }
+        });
+    }
+    for (auto& w : workers) w.join();
+    REQUIRE_FALSE(bad.load());
 }
 
 TEST_CASE("get_exe_dir: returns non-empty path", "[util]") {

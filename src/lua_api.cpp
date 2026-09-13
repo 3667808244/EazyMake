@@ -1475,14 +1475,17 @@ int run_hook_script(lua_State* L, const fs::path& script_path,
         }
     }
 
-    return run_lua_script_with_ctx(L, script_path, project_root, [&](lua_State* L) {
-        lua_createtable(L, 0, 3);
-        lua_pushstring(L, output.string().c_str());
-        lua_setfield(L, -2, "output");
-        lua_pushstring(L, project_root.string().c_str());
-        lua_setfield(L, -2, "project_root");
-        lua_pushstring(L, profile.c_str());
-        lua_setfield(L, -2, "profile");
+    // 1.4.2: the lambda parameter is `Lctx` — naming it `L` shadowed the
+    // enclosing lua_State* parameter (both are the same state, but -Wshadow
+    // made the indirection easy to misread).
+    return run_lua_script_with_ctx(L, script_path, project_root, [&](lua_State* Lctx) {
+        lua_createtable(Lctx, 0, 3);
+        lua_pushstring(Lctx, output.string().c_str());
+        lua_setfield(Lctx, -2, "output");
+        lua_pushstring(Lctx, project_root.string().c_str());
+        lua_setfield(Lctx, -2, "project_root");
+        lua_pushstring(Lctx, profile.c_str());
+        lua_setfield(Lctx, -2, "profile");
     });  // build hooks: project's own code — legacy (unrestricted) model
 }
 
@@ -1510,20 +1513,21 @@ int run_install_hook_script(lua_State* L, const fs::path& script_path,
         }
     }
 
-    return run_lua_script_with_ctx(L, script_path, pkg_root, [&](lua_State* L) {
-        lua_createtable(L, 0, 6);
-        lua_pushstring(L, pkg_name.c_str());
-        lua_setfield(L, -2, "pkg_name");
-        lua_pushstring(L, pkg_root.string().c_str());
-        lua_setfield(L, -2, "pkg_root");
-        lua_pushstring(L, install_path.string().c_str());
-        lua_setfield(L, -2, "install_path");
-        lua_pushstring(L, scope.c_str());
-        lua_setfield(L, -2, "scope");
-        lua_pushstring(L, pkg_version.c_str());
-        lua_setfield(L, -2, "pkg_version");
-        lua_pushstring(L, pkg_type.c_str());
-        lua_setfield(L, -2, "pkg_type");
+    // 1.4.2: `Lctx` — see the note in run_build_hook_script.
+    return run_lua_script_with_ctx(L, script_path, pkg_root, [&](lua_State* Lctx) {
+        lua_createtable(Lctx, 0, 6);
+        lua_pushstring(Lctx, pkg_name.c_str());
+        lua_setfield(Lctx, -2, "pkg_name");
+        lua_pushstring(Lctx, pkg_root.string().c_str());
+        lua_setfield(Lctx, -2, "pkg_root");
+        lua_pushstring(Lctx, install_path.string().c_str());
+        lua_setfield(Lctx, -2, "install_path");
+        lua_pushstring(Lctx, scope.c_str());
+        lua_setfield(Lctx, -2, "scope");
+        lua_pushstring(Lctx, pkg_version.c_str());
+        lua_setfield(Lctx, -2, "pkg_version");
+        lua_pushstring(Lctx, pkg_type.c_str());
+        lua_setfield(Lctx, -2, "pkg_type");
     },
     /*enforce_utils_permissions=*/true);  // install hooks: package code, gated like utils scripts
 }

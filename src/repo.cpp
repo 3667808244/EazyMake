@@ -386,12 +386,9 @@ static PkgSearchResult read_pkg_from_index(const fs::path& repo_dir,
 }
 
 // Current time as ISO 8601 string (simple version).
+// 1.4.2 F-37: thread-safe via util::iso_time_now (localtime_r/localtime_s).
 static std::string now_iso() {
-    auto t = std::time(nullptr);
-    auto* tm = std::localtime(&t);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-    return buf;
+    return util::iso_time_now();
 }
 
 // ===================================================================
@@ -700,8 +697,8 @@ void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
                     } else {
                         util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages) + ": 0");
                     }
-                } catch (const std::exception& e) {
-                    util::info_line(std::string("  (parse error: ") + e.what() + ")");
+                } catch (const std::exception& parse_ex) {
+                    util::info_line(std::string("  (parse error: ") + parse_ex.what() + ")");
                 }
             } else {
                 util::info_line(ezmk::i18n::get(ezmk::i18n::I18nKey::repo_info_packages)

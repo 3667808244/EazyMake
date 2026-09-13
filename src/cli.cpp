@@ -316,9 +316,11 @@ namespace ezmk::cli
                 // to member watchers); --no-build-on-start is project-watch-only
                 // and rejected here (workspace-foreign).
                 args.cmd = Command::WorkspaceWatch;
-                auto spec = workspace_cmd_spec();
-                spec.push_back({'r', "run", false});   // forwarded to members
-                auto wp = parse_options(argc, argv, 3, spec,
+                // 1.4.2: named ws_watch_spec — a plain `spec` shadowed the
+                // project-watch spec declared earlier in this function.
+                auto ws_watch_spec = workspace_cmd_spec();
+                ws_watch_spec.push_back({'r', "run", false});   // forwarded to members
+                auto wp = parse_options(argc, argv, 3, ws_watch_spec,
                                         "ezmk workspace watch");
                 WorkspaceOptions w = parse_workspace_opts(wp);
                 fill_members(wp, w);

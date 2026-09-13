@@ -33,6 +33,7 @@
     "pack_sha256": "SHA-256: {sha256}",
     "pack_success": "包已创建: {file}",
     "cache_summary": "  {cached} 个缓存命中, {compiled} 个已编译",
+    "cache_record_newer": "  缓存记录版本 {version} 高于当前 ezmk 支持的版本（{supported}）——忽略缓存并重新构建",
     "build_failed_summary": "  构建失败 ({summary})",
     "build_elapsed_time": "  构建完成，耗时 {time}",
     "build_time_header": "  最慢的编译单元（{compiled} 个已编译，{time}）:",

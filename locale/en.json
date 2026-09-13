@@ -33,6 +33,7 @@
     "pack_sha256": "SHA-256: {sha256}",
     "pack_success": "Package created: {file}",
     "cache_summary": "  {cached} cached, {compiled} compiled",
+    "cache_record_newer": "  cache record version {version} is newer than this ezmk supports ({supported}) — ignoring the cache and rebuilding",
     "build_failed_summary": "  Build failed ({summary})",
     "build_elapsed_time": "  Build completed in {time}",
     "build_time_header": "  slowest compile units ({compiled} compiled, {time}):",

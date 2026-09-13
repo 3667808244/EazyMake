@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ctime>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -164,6 +165,16 @@ std::string detect_platform_tag();
 // Platform-specific paths
 fs::path get_home_dir();
 fs::path get_exe_dir();
+
+// 1.4.2 F-37: thread-safe local time. std::localtime returns a pointer to a
+// shared static std::tm — -jN workers (build cache writes, package metadata)
+// racing on it can format a torn timestamp. Both helpers below use
+// localtime_r / localtime_s and never return null; an unrepresentable time_t
+// yields an empty string instead of a crash. The "%Y-%m-%dT%H:%M:%SZ" string
+// is historically local time carrying a trailing Z — kept verbatim for
+// compatibility with existing record/lockfile files.
+std::string iso_time_now();                       // "%Y-%m-%dT%H:%M:%SZ"
+std::string local_time_string(std::time_t t);     // "%Y-%m-%d %H:%M:%S"
 
 #ifdef EZMK_WIN
 // 1.4.2 F-20: UTF-8 <-> UTF-16 (CP_UTF8) conversion for every Windows API that

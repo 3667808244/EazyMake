@@ -162,16 +162,17 @@ has no CMake equivalent and is not exported. See the `hooks` section in
 
 | Flag | Purpose |
 |---|---|
-| `--disable-cache` | Force recompilation (cache is still updated afterward) |
+| `--disable-cache` | Force recompilation; writes no cache entries and empties the record (1.4.2) |
 | `--verbose` / `-v` | Show full compile commands and cache hits |
 | `-j <N>` / `--jobs <N>` | Parallel compile jobs; `0` = auto (`hardware_concurrency`), the default |
 | `--profile <name>` | Apply a build profile from `[compile.profile.<name>]` / `[link.profile.<name>]` |
 | `--auto-update` | Run `ezmk repo update --pug` before building (default off) |
 
 > **Why `-j 0` is the default?** Auto-parallelism (`hardware_concurrency`) gives a
-> good speedup with zero configuration. Note also that `--disable-cache` still
-> *updates* the cache afterward — it forces one clean recompile, not a permanently
-> cold cache, so the next build is fast again.
+> good speedup with zero configuration. Note also that since 1.4.2
+> `--disable-cache` writes **no** cache entries and leaves `record.json` empty —
+> it is a one-shot escape hatch to a clean incremental state, not a cold-cache
+> mode; the following build simply starts from scratch again.
 
 > **Build timing detail (1.2.0+):** `ezmk build -v` always prints a per-file
 > compile-time breakdown, slowest first. Without `-v`, a build that takes over
@@ -221,6 +222,24 @@ deliberately not shown).
 **`watch --run` (1.3.4+):** after every successful rebuild the freshly built executable runs **blockingly** on the watcher thread — change detection is naturally paused while the program runs and resumes when it exits (zero process management). Non-zero exits only **warn** (watch keeps looping). Only valid for `executable` projects (`static`/`shared`/`utils` + `--run` → startup error). The **initial** build does not run — the first run happens after the first change. Behavior without `--run` is unchanged. Ctrl+C terminates the child and watch together (same foreground process group). A long-running program (server/GUI) pauses watching until it exits — press Ctrl+C to stop.
 
 **`watch --run -- <args>` (1.4.0-dev.5+):** arguments after `--` are passed to the watched executable on **every** run — `ezmk watch --run -- --verbose input.txt` runs the rebuilt program as `./exe --verbose input.txt`. Without `--`, the program runs with no arguments (behavior unchanged). `--` terminates flag parsing first (GNU convention), so the args may themselves start with `-`.
+
+**Watch robustness semantics (1.4.2):**
+- **A failure is no longer a silent hang.** If the platform watch thread dies on a
+  hard error (or no watched directory can be opened at all), `ezmk watch` prints
+  `file watcher stopped unexpectedly; leaving watch mode` and exits with **status
+  1** instead of spinning as if it were still watching. A clean Ctrl+C stop still
+  exits 0.
+- **Disappearing directories recover.** A watched directory that is deleted or
+  renamed at runtime loses its kernel watch; a repair pass retries every **2
+  seconds** and re-arms it once the directory is back (one warning per
+  directory).
+- **The watcher never rebuilds because of its own output.** `build/`, `.ezmk/`
+  and `.o` / `.d` / `.tmp` artifacts are ignored, so a build cannot trigger the
+  next build.
+- **Non-recursive platforms.** Linux/macOS watch only the watched directory
+  **itself** (newly created subdirectories are not discovered recursively) — the
+  known limitation documented in `include/ezmk/file_watcher.hpp`; Windows uses
+  `ReadDirectoryChangesW` subtree watching and is genuinely recursive.
 
 **`install`-only flags:**
 

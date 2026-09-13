@@ -281,12 +281,27 @@ direct_deps = ["fmt", "spdlog@^1.14.0"]
 [[packages]]
 name = "spdlog"
 version = "1.14.1"
-sha256 = "..."
+sha256 = "..."                      # legacy alias of lib_sha256 (pre-1.4.2 files)
+archive_sha256 = "..."              # SHA-256 of the ARCHIVE this package was installed from (1.4.2)
+lib_sha256 = "..."                  # SHA-256 of the installed artifact (1.4.2)
 type = "static"
 scope = "user"
-platform = "windows_x86_64_msvc"
+platform = "windows_x86_64_msvc"    # real os_arch_toolchain of the installing toolchain (1.4.2)
+source = "official"                 # repo name, "git" for git-URL installs, or "url"/"path"
+source_url = ""                     # original URL for git/url installs
+commit = ""                         # pinned commit SHA for git sources (1.4.1+, optional)
 dependencies = []
 ```
+
+**Two hashes, two meanings (1.4.2):** `archive_sha256` identifies the archive the
+package was *downloaded from* and is what `--locked` re-verifies when it
+reinstalls; `lib_sha256` identifies the *installed artifact* and is what
+`ezmk build`'s lockfile verification compares. Before 1.4.2 both checks read the
+same single `sha256` field, so `--locked` could never match a compiled package
+(archive ≠ built library) and failed unconditionally; the loader still accepts a
+legacy `sha256` as the artifact hash. `platform` is likewise now the real
+`os_arch_toolchain` triplet of the toolchain that installed the package instead
+of a fixed placeholder.
 
 ---
 

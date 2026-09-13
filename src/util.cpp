@@ -23,10 +23,12 @@
 #elif defined(EZMK_MACOS)
   #include <csignal>
   #include <mach-o/dyld.h>
+  #include <pwd.h>
   #include <unistd.h>
   #include <sys/wait.h>
 #else
   #include <csignal>
+  #include <pwd.h>
   #include <unistd.h>
   #include <sys/wait.h>
 #endif
@@ -448,20 +450,71 @@ std::string detect_platform_tag() {
 
 fs::path get_home_dir() {
 #ifdef EZMK_WIN
-    // 0.2.3+: Check HOME first for Git Bash / MSYS2 compatibility
+    // 0.2.3+: Check HOME first for Git Bash / MSYS2 compatibility.
+    // 1.4.2 F-37: but only when HOME is a *native* Windows path. A shell that
+    // exports a POSIX-style HOME (MSYS2: HOME=/home/user) made every "user
+    // scope" path resolve against the current drive (E:\home\user\.local\ezmk)
+    // — silently the wrong directory. Native HOMEs (Git Bash: C:/Users/x) keep
+    // their priority; a POSIX-looking one falls through to USERPROFILE.
     const char* home = std::getenv("HOME");
-    if (home) return fs::path(home);
+    if (home && *home) {
+        std::string h(home);
+        bool native = h.size() >= 2 && std::isalpha(static_cast<unsigned char>(h[0]))
+                      && h[1] == ':';
+        if (!native && (h.rfind("//", 0) == 0 || h.rfind("\\\\", 0) == 0)) {
+            native = true; // UNC \\server\share (also accepted as //server/share)
+        }
+        if (native) return fs::path(h);
+    }
     home = std::getenv("USERPROFILE");
-    if (home) return fs::path(home);
+    if (home && *home) return fs::path(home);
     const char* homeDrive = std::getenv("HOMEDRIVE");
     const char* homePath  = std::getenv("HOMEPATH");
     if (homeDrive && homePath) return fs::path(std::string(homeDrive) + homePath);
     return fs::path("C:/Users");
 #else
     const char* home = std::getenv("HOME");
-    if (home) return fs::path(home);
+    if (home && *home) return fs::path(home);
+    // 1.4.2 F-37: HOME unset — ask the password database instead of silently
+    // dropping user-scope installs into /tmp (world-writable, cleared on boot).
+    if (auto* pw = getpwuid(getuid()); pw && pw->pw_dir && *pw->pw_dir) {
+        return fs::path(pw->pw_dir);
+    }
     return fs::path("/tmp");
 #endif
+}
+
+// 1.4.2 F-37: thread-safe replacement for the four duplicated
+// `std::localtime` call sites (cache record timestamps, lockfile generated_at,
+// repo index updated_at, install manifest). std::localtime hands back a pointer
+// to one shared static std::tm; two -jN worker threads formatting a timestamp
+// concurrently could observe a torn value. An out-of-range time_t (localtime_r
+// returns null / localtime_s fails) yields an empty string instead of
+// dereferencing null.
+static bool local_tm(std::time_t t, std::tm& out) {
+#ifdef EZMK_WIN
+    return localtime_s(&out, &t) == 0;
+#else
+    return localtime_r(&t, &out) != nullptr;
+#endif
+}
+
+// Two fixed-format formatters: the format string is a literal at each call, so
+// -Wformat-nonliteral stays quiet under the warning gate.
+std::string iso_time_now() {
+    std::tm tm_buf{};
+    if (!local_tm(std::time(nullptr), tm_buf)) return {};
+    char buf[64];
+    if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm_buf) == 0) return {};
+    return buf;
+}
+
+std::string local_time_string(std::time_t t) {
+    std::tm tm_buf{};
+    if (!local_tm(t, tm_buf)) return {};
+    char buf[64];
+    if (std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_buf) == 0) return {};
+    return buf;
 }
 
 fs::path get_exe_dir() {
@@ -541,8 +594,18 @@ static size_t zip_write_cb(void* opaque, mz_uint64 /*file_ofs*/,
 // recursive walk → relative names → forward slashes → dirs trailing '/' →
 // sorted. Both archive formats consume this, so their internal layout stays
 // identical (the 1.3.5 tar.gz/zip equivalence test locks this).
+//
+// 1.4.2 F-37: pack-side size limit. The extractor refuses any archive whose
+// entry (or total uncompressed size) exceeds kMaxDecompressedSize, and both
+// packers build the whole archive in memory — so without this check `ezmk pack`
+// could produce a package that ezmk itself can never install. Failing here is
+// honest and cheap; file_size() is consulted first so an oversized file is
+// never read into memory just to be rejected.
+constexpr size_t kMaxStageBytes = size_t(1) << 30; // 1 GiB (mirrors the extract limit)
+
 std::vector<StageEntry> collect_stage_entries(const fs::path& source_dir) {
     std::vector<StageEntry> entries;
+    size_t staged_bytes = 0;
     for (auto& e : fs::recursive_directory_iterator(source_dir)) {
         StageEntry te;
         auto rel = fs::relative(e.path(), source_dir);
@@ -553,7 +616,19 @@ std::vector<StageEntry> collect_stage_entries(const fs::path& source_dir) {
             te.is_dir = true;
             if (!te.name.empty() && te.name.back() != '/') te.name += '/';
         } else {
+            std::error_code szec;
+            auto sz = fs::file_size(e.path(), szec);
+            if (!szec && sz > kMaxStageBytes) {
+                throw std::runtime_error("file too large to pack (limit 1 GiB): " +
+                                         e.path().string());
+            }
             std::string raw = file_read(e.path());
+            if (raw.size() > kMaxStageBytes - staged_bytes) {
+                throw std::runtime_error(
+                    "staged content exceeds the 1 GiB archive limit: " +
+                    e.path().string());
+            }
+            staged_bytes += raw.size();
             te.content.assign(raw.begin(), raw.end());
         }
         entries.push_back(std::move(te));
@@ -1459,6 +1534,14 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
         // these only affect the child, so no parent-global mutation / race.
         // (1.1.2 C4/C7: this is how run_script cwd and SOURCE_DATE_EPOCH reach
         // the child without process-global setenv in a multi-threaded build.)
+        //
+        // 1.4.2 F-37: for timed commands, put the child in its own process
+        // group so the timeout can kill the whole subtree (`sh -c "a | b"` left
+        // grandchildren running when only the shell was signalled, and those
+        // grandchildren kept the output temp files open). Only done when a
+        // timeout is set — otherwise the child stays in ezmk's group and a
+        // terminal Ctrl+C still reaches it directly, exactly as before.
+        if (opts.timeout_sec > 0) setpgid(0, 0);
         if (!opts.cwd.empty() && chdir(opts.cwd.string().c_str()) != 0) {
             _exit(126); // chdir failed
         }
@@ -1473,8 +1556,17 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
         execl("/bin/sh", "sh", "-c", cmd2.c_str(), (char*)nullptr);
         _exit(127); // exec failed
     } else if (pid > 0) {
+        // 1.4.2 F-37: parent closes its copies of the write ends exactly once
+        // (the old code closed them here AND at the end — a double close() that
+        // could hit an unrelated fd reused by another -jN thread in between).
         close(out_fd);
         close(err_fd);
+
+        // 1.4.2 F-37: race-free group setup — both sides call setpgid so the
+        // group exists no matter which one runs first (the child may already
+        // have exec'd before we get here, which makes the parent's call fail
+        // with EACCES; that is expected and harmless).
+        if (opts.timeout_sec > 0) setpgid(pid, pid);
 
         int status = 0;
         if (opts.timeout_sec > 0) {
@@ -1487,7 +1579,9 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
                 if (r == pid) break;               // reaped normally
                 if (r < 0) break;                  // waitpid error
                 if (std::chrono::steady_clock::now() >= deadline) {
-                    kill(pid, SIGKILL);
+                    // 1.4.2 F-37: kill the whole process group (falls back to
+                    // the shell itself if the group is already gone).
+                    if (kill(-pid, SIGKILL) != 0) kill(pid, SIGKILL);
                     waitpid(pid, &status, 0);      // reap the zombie
                     result.exit_code = 1;
                     result.timed_out = true;
@@ -1532,8 +1626,9 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
         }
     }
 
-    close(out_fd);
-    close(err_fd);
+    // 1.4.2 F-37: no close() here — the parent closed both fds right after the
+    // fork (see above) and the child closed its copies after dup2. A second
+    // close() on a reused descriptor is a real bug under -jN.
     unlink(out_tmpl.c_str());
     unlink(err_tmpl.c_str());
 #endif

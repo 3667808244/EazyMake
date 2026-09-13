@@ -235,12 +235,23 @@ direct_deps = ["fmt", "spdlog@^1.14.0"]
 [[packages]]
 name = "spdlog"
 version = "1.14.1"
-sha256 = "..."
+sha256 = "..."                      # 旧字段：lib_sha256 的兼容别名（1.4.2 之前的文件）
+archive_sha256 = "..."              # 安装所用**归档**的 SHA-256（1.4.2）
+lib_sha256 = "..."                  # 已安装**产物**的 SHA-256（1.4.2）
 type = "static"
 scope = "user"
-platform = "windows_x86_64_msvc"
+platform = "windows_x86_64_msvc"    # 安装时工具链的真实 os_arch_toolchain（1.4.2）
+source = "official"                 # 仓库名；git URL 安装为 "git"；或 "url"/"path"
+source_url = ""                     # git/url 安装的原始 URL
+commit = ""                         # git 源锁定的 commit SHA（1.4.1+，可选）
 dependencies = []
 ```
+
+**两个哈希，两种含义（1.4.2）：** `archive_sha256` 标识包**下载来源的归档**，`--locked`
+重装时校验的就是它；`lib_sha256` 标识**已安装产物**，`ezmk build` 的 lockfile 校验比较的是它。
+1.4.2 之前两项校验读同一个 `sha256` 字段，导致编译型包的 `--locked` 永远无法匹配（归档 ≠ 编译产物）
+而必然失败；加载器仍接受旧字段 `sha256` 作为产物哈希。`platform` 同样改为安装时工具链的真实
+`os_arch_toolchain`，不再是固定占位值。
 
 ---
 

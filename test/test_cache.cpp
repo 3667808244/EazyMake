@@ -122,6 +122,63 @@ TEST_CASE("iso_time: format check", "[cache]") {
     REQUIRE(t.back() == 'Z');
 }
 
+// 1.4.2 F-37: the record version gate.
+TEST_CASE("load_record: version gate (1.4.2 F-37)", "[cache][1.4.2]") {
+    TempDir tmp;
+    auto rec_path = tmp.path / "record.json";
+
+    SECTION("a record from a newer ezmk is ignored instead of partially read") {
+        std::ofstream(rec_path) << R"({
+  "version": 3,
+  "compiler": "g++",
+  "files": {
+    "src/main.cpp": {
+      "source_hash": "abc",
+      "object_file": "build/main.o",
+      "compiler": "g++",
+      "compile_opts": [],
+      "dependencies": []
+    }
+  }
+})";
+        auto rec = load_record(rec_path);
+        // Empty record ⇒ every source is a cache miss (a full, correct rebuild).
+        REQUIRE(rec.files.empty());
+        REQUIRE(rec.compiler.empty());
+    }
+
+    SECTION("the current version still loads") {
+        std::ofstream(rec_path) << R"({
+  "version": 2,
+  "compiler": "g++",
+  "files": {
+    "src/main.cpp": {
+      "source_hash": "abc",
+      "object_file": "build/main.o",
+      "compiler": "g++",
+      "compile_opts": [],
+      "dependencies": []
+    }
+  }
+})";
+        auto rec = load_record(rec_path);
+        REQUIRE(rec.version == 2);
+        REQUIRE(rec.compiler == "g++");
+        REQUIRE(rec.files.count("src/main.cpp") == 1);
+    }
+
+    SECTION("a legacy v1 record (no compiler_version) still loads") {
+        std::ofstream(rec_path) << R"({
+  "version": 1,
+  "compiler": "g++",
+  "files": {}
+})";
+        auto rec = load_record(rec_path);
+        REQUIRE(rec.version == 1);
+        REQUIRE(rec.compiler == "g++");
+    }
+}
+
 // ===================================================================
 // same_dependency_paths()
 // ===================================================================

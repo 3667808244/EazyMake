@@ -7,6 +7,18 @@
 
 namespace ezmk::project {
 
+namespace {
+// 1.4.2 F-37: every scaffold write is checked. These writes used to be
+// ignored, so a full disk / read-only target produced a half-created project
+// skeleton plus a cheerful "project created" message.
+void must_write(const fs::path& p, std::string_view content) {
+    if (!util::file_write(p, content)) {
+        util::fatal("failed to write " + p.string() +
+                    " — the project directory is incomplete");
+    }
+}
+} // namespace
+
 // 1.2.1: '-', '.', ' ' → '_' so the project name is a valid C++ namespace
 // identifier. File names keep the original name (filesystem allows these
 // characters); only the C++ identifier needs sanitizing.
@@ -67,8 +79,8 @@ void create_project(const std::string& name, const std::string& project_type,
                           "\n"
                           "} // namespace " + ns + "\n";
 
-        util::file_write(root / "include" / (name + ".hpp"), hpp);
-        util::file_write(root / "src" / (name + ".cpp"), cpp);
+        must_write(root / "include" / (name + ".hpp"), hpp);
+        must_write(root / "src" / (name + ".cpp"), cpp);
     } else if (project_type != "utils") {
         // executable (default) and any other non-utils type: Hello world entry.
         std::string main_cpp = R"(#include <iostream>
@@ -78,7 +90,7 @@ int main(int argc, char **argv){
     return 0;
 }
 )";
-        util::file_write(root / "src/main.cpp", main_cpp);
+        must_write(root / "src/main.cpp", main_cpp);
     }
     // utils: no C++ code — only the utils/ directory created below.
 
@@ -91,7 +103,7 @@ int main(int argc, char **argv){
     config::write_default_config(root / "ezmk.toml", name, project_type);
 
     // README.md (empty)
-    util::file_write(root / "README.md", "");
+    must_write(root / "README.md", "");
 
     // .gitignore (can be disabled)
     if (!disable_gitignore) {
@@ -103,7 +115,7 @@ build/
 *.tmp.o
 *.tmp.obj
 )";
-        util::file_write(root / ".gitignore", gitignore);
+        must_write(root / ".gitignore", gitignore);
     }
 
     // git init (can be disabled, only runs if git is available)

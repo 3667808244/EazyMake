@@ -1512,11 +1512,8 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
         auto proj_root = util::locate_project_root(fs::current_path())
                             .value_or(fs::current_path());
         auto now_iso = []() -> std::string {
-            auto t = std::time(nullptr);
-            auto* tm = std::localtime(&t);
-            char buf[32];
-            std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-            return buf;
+            // 1.4.2 F-37: thread-safe (localtime_r/localtime_s).
+            return util::iso_time_now();
         };
 
         config::Lockfile lf;
@@ -2248,10 +2245,9 @@ namespace {
                     + std::chrono::system_clock::now())));
 #endif
         auto tt = std::chrono::system_clock::to_time_t(sctp);
-        auto* tm = std::localtime(&tt);
-        char buf[32];
-        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm);
-        return buf;
+        // 1.4.2 F-37: thread-safe local time (was std::localtime + strftime).
+        auto formatted = util::local_time_string(tt);
+        return formatted.empty() ? std::string("(unknown)") : formatted;
     }
 }
 
