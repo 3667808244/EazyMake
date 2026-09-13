@@ -19,19 +19,23 @@
 class Ezmk < Formula
   desc "A simple C/C++ build tool (GCC/Clang/MSVC)"
   homepage "https://github.com/3667808244/EazyMake"
-  version "1.4.1"
+  version "1.4.2"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/3667808244/EazyMake/releases/download/v1.4.1/ezmk-macos-arm64.tar.gz"
-      sha256 "e7c2ca8734b31c2526487fd77f9090879b9b6c03fb2eb1be8bb93c858b59b962"
+      url "https://github.com/3667808244/EazyMake/releases/download/v1.4.2/ezmk-macos-arm64.tar.gz"
+      # TODO(1.4.2): 回填 v1.4.2 Release 资产 ezmk-macos-arm64.tar.gz 的真实 digest
+      # （https://api.github.com/repos/3667808244/EazyMake/releases/tags/v1.4.2 →
+      #   assets[].digest，去 "sha256:" 前缀）。在此之前不要推送到 tap 仓库。
+      sha256 "PENDING_V142_RELEASE_ASSET_DIGEST"
     end
   end
 
   on_linux do
-    url "https://github.com/3667808244/EazyMake/releases/download/v1.4.1/ezmk-linux-x64.tar.gz"
-    sha256 "debcc1f32e1a0f38b2c0dbe4498f0a3387184be8ce4d62754d5ac00b29c81cfc"
+    url "https://github.com/3667808244/EazyMake/releases/download/v1.4.2/ezmk-linux-x64.tar.gz"
+    # TODO(1.4.2): 同上（ezmk-linux-x64.tar.gz）。
+    sha256 "PENDING_V142_RELEASE_ASSET_DIGEST"
   end
 
   def install
