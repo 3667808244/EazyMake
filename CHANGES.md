@@ -24,7 +24,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.4.2 (开发中) — 代码质量审计修复（第二轮）
+## 1.4.2 (2026-09-13) — 代码质量审计修复（第二轮）
 
 1.4.1 发布后对 v1.4.1 全量代码的**六路并行逐行审计 + 独立核查**的修复落地（对照 1.4.0-dev.6 / 1.3.6 审计收口先例）。审计覆盖 `src/` 全部首方模块，结论：无 zip-slip / SHA 绕过 / 可利用内存破坏（除 F-01 一处 Lua UB），但发现 5 项 P0（崩溃 / 缓存正确性失效）、10 项 P1、7 项 P2、8 项 P3、6 项 P4 与一批低危健壮性问题（F-37 组）。本版把 P0~P4 全部落地，低危项择优随附、余者明确延后。**零功能新增、公共 API 无破坏性变更**（纯缺陷修复 + 内部签名调整；破坏性变更仍仅归 2.0.0）。
 
@@ -106,7 +106,14 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 ### 发布门槛
 
 - ⛔ ① 计划清单全部完成：`plan.md` 阶段一~阶段八全部落地（低危项择优随附、余者明确延后）② 公共 API **无破坏性变更**（新增仅内部 helper 与 i18n 键）③ 全量测试**零回归**（1099/6342 零失败，基线 1020/5970）
-- 待办（workflow 正式发布阶段）：bump 二进制版本号至 1.4.2 → tag `v1.4.2` → 三渠道分发（GitHub Release / Homebrew / winget / pacman）
+
+### 发布（2026-09-13，tag `v1.4.2`）
+
+- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.2（dev 阶段保持 1.4.1 的补丁惯例收尾）
+- **tag**：`v1.4.2` 已推送，正式进入分发阶段
+- **GitHub Release**：待发布（`release.yml` 由 `release published` 触发，产出 windows-x64 zip / linux-x64 / macos-arm64 tar.gz + `ezmk.exe`/`ezmk-lua.exe` 独立资产与 `.sha256` 边车；`macos-x64` 仍无资产——`macos-13` runner 在 free tier 不分配，与 1.2.x~1.4.1 相同）
+- **pacman**：`publish/arch/PKGBUILD` 已更新至 v1.4.2（源码 tarball 真实 digest）并在本机 MSYS2 MINGW64 `makepkg -fd` 生成产物验证（`usr/bin/ezmk.exe`/`ezmk-lua.exe`/`usr/share/zsh/site-functions/_ezmk` 落位，`ezmk version` → 1.4.2）
+- **Homebrew / winget**：`publish/homebrew/ezmk.rb` 与 `publish/winget/e/ezmk/1.4.2/`（split manifest）已按 1.4.2 就位，`sha256` 待 Release 资产 digest 出来后回填并本机 `winget validate`；随后更新 tap 仓库与 winget PR（审批为发布后跟进项，不阻塞发布）
 
 ---
 
