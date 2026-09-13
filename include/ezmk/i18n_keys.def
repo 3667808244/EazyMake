@@ -444,6 +444,7 @@ EZMK_I18N_KEY(workspace_scan_aborted)          // merge cancelled
 EZMK_I18N_KEY(workspace_scan_skip)             // one skipped entry
 EZMK_I18N_KEY(workspace_scan_skip_nested)      // skip reason: nested workspace
 EZMK_I18N_KEY(workspace_scan_skip_escape)      // skip reason: symlink escape
+EZMK_I18N_KEY(workspace_scan_skip_loop)        // 1.4.2 F-34: symlink loop / already visited
 EZMK_I18N_KEY(workspace_err_scan_dir)          // scan directory invalid
 
 // ---- help: workspace (1.3.0-dev.2) ----

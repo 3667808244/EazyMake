@@ -395,6 +395,7 @@
     "workspace_scan_skip": "  skipped {path} ({reason})",
     "workspace_scan_skip_nested": "nested workspace root",
     "workspace_scan_skip_escape": "resolves outside the workspace root",
+    "workspace_scan_skip_loop": "already visited (symlink loop)",
     "workspace_err_scan_dir": "scan directory '{dir}' does not exist or is not a directory",
     "help_workspace_list": "List workspace members",
     "help_workspace_build": "Build all members (topological, parallel)",

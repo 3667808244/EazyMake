@@ -341,25 +341,38 @@ void validate_ws_deps(Workspace& ws) {
     }
 
     // 2) Resolve references into an index graph; unknown/ambiguous refs throw.
+    //    1.4.2 F-35: invalidity propagates TRANSITIVELY (A → B → invalid C), so
+    //    the marking must run to a fixed point. The old single pass processed
+    //    members in [workspace].members order, so with the wrong order A stayed
+    //    "valid" while its dependency B was later marked invalid — the same
+    //    config produced either an "internal error" from topo_layers or silently
+    //    skipped members depending on the order.
     std::vector<std::vector<size_t>> edges(ws.members.size());
-    for (size_t i = 0; i < ws.members.size(); ++i) {
-        const auto& m = ws.members[i];
-        if (!m.valid) continue;  // no readable config — no deps to resolve
-        edges[i].reserve(m.ws_deps.size());
-        for (const auto& ref : m.ws_deps) {
-            size_t dep = resolve_dep_ref(ws, i, ref);
-            // 3) Referencing an invalid member marks the referencer invalid
-            //    (e.g. the dependency has no ezmk.toml).
-            if (!ws.members[dep].valid) {
-                ws.members[i].valid = false;
-                ws.members[i].error =
-                    i18n::fmt(I18nKey::workspace_err_dep_invalid,
-                              {{"member", m.name},
-                               {"dep", ws.members[dep].name},
-                               {"reason", ws.members[dep].error}});
-                continue;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t i = 0; i < ws.members.size(); ++i) {
+            auto& m = ws.members[i];
+            if (!m.valid) continue;  // no readable config — no deps to resolve
+            edges[i].clear();
+            edges[i].reserve(m.ws_deps.size());
+            for (const auto& ref : m.ws_deps) {
+                size_t dep = resolve_dep_ref(ws, i, ref);
+                // 3) Referencing an invalid member marks the referencer invalid
+                //    (e.g. the dependency has no ezmk.toml).
+                if (!ws.members[dep].valid) {
+                    m.valid = false;
+                    m.error =
+                        i18n::fmt(I18nKey::workspace_err_dep_invalid,
+                                  {{"member", m.name},
+                                   {"dep", ws.members[dep].name},
+                                   {"reason", ws.members[dep].error}});
+                    edges[i].clear();
+                    changed = true;   // propagate to referencers of THIS member
+                    break;
+                }
+                edges[i].push_back(dep);
             }
-            edges[i].push_back(dep);
         }
     }
 
@@ -436,9 +449,20 @@ std::vector<std::vector<size_t>> topo_layers(const Workspace& ws) {
         for (const auto& ref : m.ws_deps) {
             auto dep = resolve_member_ref(ws, ref);
             if (!dep || !ws.members[*dep].valid) {
+                // 1.4.2 F-35: explainable member error instead of an "internal
+                // error" — validate_ws_deps now propagates invalidity to a fixed
+                // point, so this is defensive, but it must still tell the user
+                // which member/dependency is broken.
+                const std::string dep_name =
+                    dep ? ws.members[*dep].name : std::string("<unresolved>");
+                const std::string reason =
+                    dep ? ws.members[*dep].error
+                        : i18n::get(I18nKey::workspace_err_dep_unknown);
                 throw std::runtime_error(
-                    "workspace: internal error: unresolved dependency '" + ref +
-                    "' for member '" + m.name + "'");
+                    i18n::fmt(I18nKey::workspace_err_dep_invalid,
+                              {{"member", m.name},
+                               {"dep", dep_name},
+                               {"reason", reason}}));
             }
             edges[*dep].push_back(i);
             ++indeg[i];
@@ -531,13 +555,58 @@ bool is_members_key(std::string_view t) {
     return c == ' ' || c == '\t' || c == '='; // "members =", "members=..."
 }
 
+// 1.4.2 F-33: locate the end of the `members` array with a TOML-aware scan.
+// The old forward line search stopped at the first line containing ']' — a
+// comment ("# [done]") or a member string containing ']' inside the array
+// truncated the scan, leaving a dangling ']' behind and corrupting the file.
+// This walks the text tracking basic/literal strings, escapes and comments, and
+// returns the offset just past the array's matching ']' (npos when the array is
+// not terminated — the caller then falls back to a single-line replacement).
+static size_t find_members_array_end(const std::string& text, size_t key_pos) {
+    const size_t n = text.size();
+    size_t i = key_pos;
+    // Find the opening '[' (the key may be followed by spaces and '=').
+    while (i < n && text[i] != '[' && text[i] != '\n') ++i;
+    if (i >= n || text[i] != '[') return std::string::npos;
+
+    int depth = 0;
+    bool in_basic = false;    // "..."
+    bool in_literal = false;  // '...'
+    bool in_comment = false;
+    for (; i < n; ++i) {
+        char c = text[i];
+        if (in_comment) {
+            if (c == '\n') in_comment = false;
+            continue;
+        }
+        if (in_basic) {
+            if (c == '\\') { ++i; continue; }   // escaped char
+            if (c == '"') in_basic = false;
+            continue;
+        }
+        if (in_literal) {
+            if (c == '\'') in_literal = false;
+            continue;
+        }
+        if (c == '#') { in_comment = true; continue; }
+        if (c == '"') { in_basic = true; continue; }
+        if (c == '\'') { in_literal = true; continue; }
+        if (c == '[') { ++depth; continue; }
+        if (c == ']') {
+            if (--depth == 0) return i + 1;   // just past the matching ']'
+        }
+    }
+    return std::string::npos;
+}
+
 // Replace the `members` array of the [workspace] table in the source text of
 // an existing workspace file. Everything else (name, [workspace.options],
 // comments, formatting) is preserved byte-for-byte — toml++ v3.4 does NOT
 // store comments in its AST, so a formatter round-trip would silently drop
 // them; this text-level splice is the only way to keep them.
-// Multi-line member arrays collapse to a single line. Throws when the file
-// has no [workspace] section (degenerate — never silently rewritten).
+// Multi-line member arrays collapse to a single line (a trailing comment after
+// the array is kept). Throws when the file has no [workspace] section
+// (degenerate — never silently rewritten).
 std::string replace_members_in_text(const std::string& text,
                                     const std::string& file_str,
                                     const std::vector<std::string>& members) {
@@ -560,6 +629,15 @@ std::string replace_members_in_text(const std::string& text,
 
     std::string section;
     int ws_header = -1;  // line index of the [workspace] header
+    // Character offset of each line's first char (for the F-33 text scan).
+    std::vector<size_t> line_offset(lines.size(), 0);
+    {
+        size_t off = 0;
+        for (size_t i = 0; i < lines.size(); ++i) {
+            line_offset[i] = off;
+            off += lines[i].size();
+        }
+    }
     for (size_t i = 0; i < lines.size(); ++i) {
         std::string_view t = ltrim(std::string_view(lines[i]));
         if (!t.empty() && t.back() == '\r') t.remove_suffix(1);  // CRLF
@@ -580,19 +658,34 @@ std::string replace_members_in_text(const std::string& text,
             continue;
         }
         if (section == "workspace" && is_members_key(t)) {
-            size_t last = i;
-            if (t.find(']') == std::string_view::npos) {
-                // Multi-line array: scan forward to the line containing ']'.
-                for (size_t j = i + 1; j < lines.size(); ++j) {
-                    if (lines[j].find(']') != std::string::npos) {
-                        last = j;
-                        break;
-                    }
+            // 1.4.2 F-33: splice the exact array range (quote/comment aware)
+            // instead of chopping whole lines up to the first ']'.
+            size_t key_pos = line_offset[i] + (std::string_view(lines[i]).size() - t.size());
+            size_t array_end = find_members_array_end(text, key_pos);
+            if (array_end != std::string::npos) {
+                // Keep whatever follows the array on its line (a trailing
+                // comment), and drop the remaining lines of a multi-line array.
+                size_t tail_end = text.find('\n', array_end);
+                std::string tail;
+                if (tail_end != std::string::npos) {
+                    tail = text.substr(array_end, tail_end - array_end);
+                    // Drop the line terminator's CR (text mode writes CRLF on
+                    // Windows) — the eol appended below supplies it again.
+                    if (!tail.empty() && tail.back() == '\r') tail.pop_back();
+                    size_t first = tail.find_first_not_of(" \t");
+                    tail = (first == std::string::npos) ? std::string()
+                                                        : tail.substr(first);
+                    if (!tail.empty() && tail[0] != '#') tail.clear();
                 }
+                std::string out = text.substr(0, line_offset[i]);
+                out += render_members_line(members) + tail + eol;
+                if (tail_end != std::string::npos) out += text.substr(tail_end + 1);
+                if (out.empty() || out.back() != '\n') out += eol;
+                return out;
             }
+            // Malformed / unterminated array → fall back to replacing just this
+            // line (previous behavior) so a hand-broken file is still writable.
             lines[i] = new_line;
-            lines.erase(lines.begin() + static_cast<long>(i) + 1,
-                        lines.begin() + static_cast<long>(last) + 1);
             std::string out;
             for (const auto& l : lines) out += l;
             if (out.empty() || out.back() != '\n') out += eol;
@@ -614,8 +707,11 @@ std::string replace_members_in_text(const std::string& text,
 
 // Recursive scan of `dir` (rel = its path relative to `root`). Appends member
 // candidates and skipped entries into `result`. See scan_projects() doc.
+// `visited` holds the canonical path of every directory already entered — a
+// symlink pointing at the directory itself or at an ancestor is "within the
+// root", so the escape check alone recursed forever (1.4.2 F-34).
 void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
-              ScanResult& result) {
+              ScanResult& result, std::set<std::string>& visited) {
     std::error_code ec;
     auto it = fs::directory_iterator(
         dir, fs::directory_options::skip_permission_denied, ec);
@@ -639,9 +735,16 @@ void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
             continue;
         }
         // Symlink escape — canonical path leaves the root.
-        if (!is_within(canonicalize(sub), canonicalize(root))) {
+        std::string canon = canonicalize(sub).generic_string();
+        if (!is_within(canon, canonicalize(root))) {
             result.skipped.emplace_back(
                 rel_str, i18n::get(I18nKey::workspace_scan_skip_escape));
+            continue;
+        }
+        // 1.4.2 F-34: already visited (symlink loop / repeated path) → skip.
+        if (!visited.insert(canon).second) {
+            result.skipped.emplace_back(
+                rel_str, i18n::get(I18nKey::workspace_scan_skip_loop));
             continue;
         }
         // Candidate member.
@@ -650,7 +753,7 @@ void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
         }
         // Keep descending — nested projects are allowed (e.g. a project that
         // itself contains another project directory).
-        scan_dir(root, sub_rel, sub, result);
+        scan_dir(root, sub_rel, sub, result, visited);
     }
 }
 
@@ -658,7 +761,9 @@ void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
 
 ScanResult scan_projects(const fs::path& root) {
     ScanResult result;
-    scan_dir(root, fs::path(), root, result);
+    std::set<std::string> visited;
+    visited.insert(canonicalize(root).generic_string());  // seed: the root itself
+    scan_dir(root, fs::path(), root, result, visited);
     std::sort(result.members.begin(), result.members.end());
     return result;
 }

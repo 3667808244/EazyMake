@@ -395,6 +395,7 @@
     "workspace_scan_skip": "  已跳过 {path}（{reason}）",
     "workspace_scan_skip_nested": "嵌套 workspace 根",
     "workspace_scan_skip_escape": "解析后位于 workspace 根之外",
+    "workspace_scan_skip_loop": "已访问过（符号链接环）",
     "workspace_err_scan_dir": "扫描目录 '{dir}' 不存在或不是目录",
     "help_workspace_list": "列出 workspace 成员",
     "help_workspace_build": "构建全部成员（拓扑排序 + 并行）",

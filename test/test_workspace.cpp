@@ -648,3 +648,145 @@ TEST_CASE("workspace scan: update preserves name/options/comments, merges member
     }
     REQUIRE(text.find("# my workspace") != std::string::npos);  // comment kept
 }
+
+// ===================================================================
+// 1.4.2 F-33 / F-34 / F-35: workspace file layer
+// ===================================================================
+
+// F-33: the members array end must be found with a quote/comment-aware scan —
+// a comment containing ']' used to truncate the array and corrupt the file.
+TEST_CASE("workspace update: multi-line members with ']' inside comments (1.4.2 F-33)", "[workspace][1.4.2]") {
+    TempDir tmp;
+    write_member(tmp.path, "a");
+    write_member(tmp.path, "b");
+    {
+        std::ofstream of(tmp.path / "ezmk-workspace.toml");
+        of << "# header comment\n"
+           << "[workspace]\n"
+           << "name = \"ws\"\n"
+           << "members = [\n"
+           << "  \"a\",   # keep [a] for now\n"
+           << "  \"b\",   # the real close ] comes later\n"
+           << "]\n\n"
+           << "[workspace.options]\n"
+           << "default_jobs = 2\n";
+    }
+
+    ezmk::workspace::update_workspace_file(tmp.path, {"a", "b"});
+
+    // The file must still be valid TOML with both members and the options kept.
+    auto table = toml::parse_file((tmp.path / "ezmk-workspace.toml").string());
+    REQUIRE(table["workspace"]["name"].value<std::string>().value() == "ws");
+    auto members = table["workspace"]["members"].as_array();
+    REQUIRE(members->size() == 2);
+    REQUIRE(members->get(0)->value<std::string>().value() == "a");
+    REQUIRE(members->get(1)->value<std::string>().value() == "b");
+    REQUIRE(table["workspace"]["options"]["default_jobs"].value<int64_t>().value() == 2);
+}
+
+// F-33: a member STRING containing ']' must not be mistaken for the array end.
+TEST_CASE("workspace update: member string containing ']' (1.4.2 F-33)", "[workspace][1.4.2]") {
+    TempDir tmp;
+    write_member(tmp.path, "a]b");
+    write_member(tmp.path, "c");
+    {
+        std::ofstream of(tmp.path / "ezmk-workspace.toml");
+        of << "[workspace]\n"
+           << "members = [\n"
+           << "  \"a]b\",\n"
+           << "  \"c\",\n"
+           << "]\n";
+    }
+
+    ezmk::workspace::update_workspace_file(tmp.path, {"a]b", "c"});
+
+    auto table = toml::parse_file((tmp.path / "ezmk-workspace.toml").string());
+    auto members = table["workspace"]["members"].as_array();
+    REQUIRE(members->size() == 2);
+    REQUIRE(members->get(0)->value<std::string>().value() == "a]b");
+    REQUIRE(members->get(1)->value<std::string>().value() == "c");
+}
+
+// F-33: a trailing comment after the array is preserved by the splice.
+TEST_CASE("workspace update: trailing comment after the array is kept (1.4.2 F-33)", "[workspace][1.4.2]") {
+    TempDir tmp;
+    write_member(tmp.path, "a");
+    write_member(tmp.path, "b");
+    {
+        std::ofstream of(tmp.path / "ezmk-workspace.toml");
+        of << "[workspace]\n"
+           << "members = [\"a\"]  # keep this note\n";
+    }
+
+    ezmk::workspace::update_workspace_file(tmp.path, {"a", "b"});
+
+    std::string text;
+    {
+        std::ifstream ifs(tmp.path / "ezmk-workspace.toml");
+        text.assign(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+    }
+    REQUIRE(text.find("# keep this note") != std::string::npos);
+    auto table = toml::parse_file((tmp.path / "ezmk-workspace.toml").string());
+    REQUIRE(table["workspace"]["members"].as_array()->size() == 2);
+}
+
+// F-34: a symlink pointing back at an ancestor is "within the root", so the
+// escape check alone recursed forever — the visited set must terminate it.
+TEST_CASE("workspace scan: symlink loop terminates (1.4.2 F-34)", "[workspace][1.4.2]") {
+    TempDir tmp;
+    write_member(tmp.path, "a");
+    std::error_code ec;
+    fs::create_directory_symlink(tmp.path, tmp.path / "a" / "loop", ec);
+    if (ec) {
+        SKIP("directory symlinks unsupported in this environment");
+    }
+
+    auto res = ezmk::workspace::scan_projects(tmp.path);
+    REQUIRE(res.members == std::vector<std::string>({"a"}));
+    bool saw_loop = false;
+    for (const auto& s : res.skipped) {
+        if (s.first.find("loop") != std::string::npos) saw_loop = true;
+    }
+    REQUIRE(saw_loop);
+}
+
+// F-35: invalid-member propagation is TRANSITIVE — the result must not depend
+// on the order of [workspace].members (A → B → invalid C).
+TEST_CASE("workspace deps: invalidity propagation is order-independent (1.4.2 F-35)", "[workspace][1.4.2]") {
+    const std::vector<std::vector<std::string>> orders = {
+        {"A", "B", "C"},
+        {"C", "B", "A"},
+        {"B", "A", "C"},
+    };
+    for (const auto& order : orders) {
+        TempDir tmp;
+        write_member(tmp.path, "A", "executable", {"B"});
+        write_member(tmp.path, "B", "executable", {"C"});
+        // C has no ezmk.toml → invalid member.
+        ezmk::util::create_directories(tmp.path / "C");
+        ezmk::workspace::write_workspace_file(tmp.path, order);
+
+        auto ws = load_from(tmp.path);
+        REQUIRE(ws.has_value());
+
+        // Every order must produce the SAME verdict: A and B invalid because
+        // they (transitively) depend on the invalid C.
+        const Member* a = find_member(*ws, "A");
+        const Member* b = find_member(*ws, "B");
+        REQUIRE(a != nullptr);
+        REQUIRE(b != nullptr);
+        INFO("order: " << order[0] << "," << order[1] << "," << order[2]
+                       << " — A.error: " << a->error << " B.error: " << b->error);
+        REQUIRE_FALSE(a->valid);
+        REQUIRE_FALSE(b->valid);
+        // The message names the broken dependency, never an "internal error".
+        REQUIRE(a->error.find("internal error") == std::string::npos);
+        REQUIRE(b->error.find("internal error") == std::string::npos);
+
+        // topo_layers only layers valid members and must not throw.
+        auto layers = ezmk::workspace::topo_layers(*ws);
+        size_t layered = 0;
+        for (const auto& l : layers) layered += l.size();
+        REQUIRE(layered == 0);   // only C remains, and it is invalid
+    }
+}
