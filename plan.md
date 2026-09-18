@@ -33,7 +33,7 @@
 
 ### 阶段一：Lua 运行时健壮性（F-01/F-18/F-19，对应设计 §3.1/4.1）
 
-- [x] `lua_tostring` NULL 判空（`luaL_tolstring`），10 处报错路径（lua_api.cpp 1106/1124/1150/1183/1294/1306/1327/1456/1464/1491）；单测 `error()`/`error({...})`/`assert(false,{})` 不崩
+- [x] `lua_tostring` NULL 判空（`luaL_tolstring`），11 处报错路径（设计时的 10 处行号：1106/1124/1150/1183/1294/1306/1327/1456/1464/1491；实现后共 11 个 `error_message()` 调用点，见 `src/lua_api.cpp`）；单测 `error()`/`error({...})`/`assert(false,{})` 不崩
 - [x] `file_exists`/`list_sources` 走 `check_read_permission`（deny → false/空，不弹 ask）；`run_script` 重注册基准对齐 `run_lua_script_with_ctx`
 - [x] 沙箱执行预算：`lua_sethook` 指令上限（约 1e8）+ `ezmk.run`/`run_capture` 超时 + `lua_to_json` 深度上限（200）；钩子用完 restore
 
@@ -61,7 +61,7 @@
 - [x] `clean -w` 首轮 spec 对齐 `workspace_cmd_spec()`（复活 stop-on-error/多余参数拒绝）
 - [x] `project install/pack/test` 补 `reject_positionals`
 - [x] `ezmk example` 参数解析重写（index 2 起按 spec；`-h`/`-o <dir>`/名称 positional/`list` 拒多余参数；output_dir 缺省 "."）
-- [x] watch 失败路径改打新 i18n key `watch_watching`（en/zh/zh-TW + `check_i18n.py`；键数 402 → 403）
+- [x] watch 失败路径改打新 i18n key `watch_watching`（en/zh/zh-TW + `check_i18n.py`；键数 402 → 403，此为阶段四时的快照，最终 **405 键**，见 `plan.md:3`）
 
 ### 阶段五：Windows/路径/进程（F-15/F-20/F-21/F-22，对应设计 §3.5/4.5）
 
