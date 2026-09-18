@@ -30,8 +30,8 @@ Where a package installs is controlled by a scope flag:
 | Flag | Scope | Path |
 |---|---|---|
 | `-p` | Project (default) | `.ezmk/pkg/` |
-| `-u` | User | `~/.local/ezmk/pkg/` |
-| `-g` | Global | `<install_dir>/pkg/` (asks for confirmation) |
+| `-u` | User | `~/.local/ezmk/pkg/` (`%LOCALAPPDATA%\ezmk\pkg\` on Windows) |
+| `-g` | Global | `pkg/` next to `ezmk.exe` (asks for confirmation) |
 
 ```bash
 $ ezmk pkg install -u fmt      # install for the current user
@@ -47,12 +47,16 @@ lib  = ["fmt"]      # required
 want = ["spdlog"]   # optional (used only if installed)
 ```
 
-Now build — `ezmk` resolves the dependency chain, compiles each package to a static
-library, and links it in:
+Install it first — `ezmk build` does **not** auto-install or compile missing
+packages. A missing hard dependency (`lib`) is a fatal error that tells you to run
+`ezmk pkg install`:
 
 ```bash
+$ ezmk pkg install fmt
 $ ezmk build
 ```
+
+A missing `want` dependency is only a warning — the build continues without it.
 
 Use it in code:
 
@@ -70,7 +74,7 @@ $ ezmk pkg update --all        # update everything
 $ ezmk pkg remove fmt          # uninstall
 ```
 
-> Build with `--auto-update` to run `ezmk repo update --pug` first, so names resolve
+> Build with `--auto-update` to run `ezmk repo update -pug` first, so names resolve
 > against the freshest index.
 
 See [`docs/en/pkg.md`](../../../docs/en/pkg.md) and [`docs/en/repo.md`](../../../docs/en/repo.md) for details.

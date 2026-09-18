@@ -30,6 +30,7 @@ Write `ezmk-workspace.toml` at the root:
 
 ```toml
 [workspace]
+name = "my-ws"                                         # optional
 members = ["apps/tool-a", "apps/tool-b", "libs/strutil"]
 ```
 
@@ -106,7 +107,7 @@ You don't have to hand-write `ezmk-workspace.toml`. When you already have a dire
 ```bash
 $ cd ws
 $ ezmk workspace scan        # or the shorthand: ezmk ws
-found 3 member(s) — created ezmk-workspace.toml
+[ezmk] created /path/to/ws/ezmk-workspace.toml (3 member(s))
 ```
 
 `scan` recursively collects every subdirectory containing `ezmk.toml` into `members` (sorted, `/`-separated). Rules:

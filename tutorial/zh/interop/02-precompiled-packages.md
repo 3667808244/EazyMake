@@ -20,6 +20,8 @@ precompiled = true
 
 `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`（1.2.0-dev.10+）
 
+`<name>` 与 `[project].name` 是**大小写敏感**匹配的：名为 `sdl2` 的包必须提供 `libsdl2.*` 而不是 `libSDL2.*`——否则任何产物都选不中，安装会以"has no build for platform"失败。
+
 | OS | Arch | 标识 |
 |----|------|------|
 | Windows | x86_64 | `win-x64` |
@@ -39,10 +41,10 @@ sdl2/
 ├── ezmk.toml
 ├── include/       # 头文件（跨平台共用）
 └── lib/           # 预编译静态库
-    ├── libSDL2.win-x64-msvc143.a
-    ├── libSDL2.linux-x64-gcc13-abi11.a
-    ├── libSDL2.mac-arm64-clang15.a
-    └── libSDL2.win-x64.a          # 无工具链标签（旧式，可降级匹配）
+    ├── libsdl2.win-x64-msvc143.a
+    ├── libsdl2.linux-x64-gcc13-abi11.a
+    ├── libsdl2.mac-arm64-clang15.a
+    └── libsdl2.win-x64.a          # 无工具链标签（旧式，可降级匹配）
 ```
 
 ## 选择优先级：ABI 安全的 4 级匹配
@@ -72,4 +74,4 @@ sdl2/
 
 - **MSVC 运行时**：静态库的 CRT 绑定（`/MD` vs `/MT`）需与消费者一致——文档已注明；dev.10 暂不做运行时维度标签。
 - **Apple Clang / clang-cl**：Apple Clang 版本号与 LLVM 不对齐（同一 major 内也可能 ABI 变）；clang-cl 不生成 `msvc1xx` 标签——需 MSVC ABI 时用真 MSVC 构建。
-- **旧 ABI 消费端**：消费端显式 `-D_GLIBCXX_USE_CXX11_ABI=0` 构建时 ezmk 不做自动探测——包作者可为该场景单独命名 `abi8` 产物，默认按 `abi11` 匹配。
+- **旧 ABI 消费端**：消费端显式 `-D_GLIBCXX_USE_CXX11_ABI=0` 构建时 ezmk 不做自动探测；而产物只在 ABI 段**完全匹配**时才会被选中——因此单独命名的 `abi8` 产物**目前永远不会被选中**（只会出现在 `available:` 诊断列表里）。需要时请等待后续支持，或另行调整 ABI 标签。

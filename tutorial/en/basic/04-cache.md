@@ -54,9 +54,13 @@ corrupts the cache.
 ## Forcing a rebuild
 
 ```bash
-$ ezmk build --disable-cache   # recompile everything (cache still updated after)
+$ ezmk build --disable-cache   # recompile everything and empty the cache record (the next build recompiles again)
 $ ezmk clean                   # delete .ezmk/cache and temp files
 ```
+
+`--disable-cache` escapes the incremental state entirely: it writes no cache entries
+(they are not merged into the record) and saves an empty `record.json`, so the build
+that bypassed the cache cannot leave stale entries behind for the next one to trust.
 
 Changing compile flags (e.g. editing `[compile].flags`) invalidates the cache
 automatically — the flags are part of the fingerprint.

@@ -43,7 +43,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 可用参数自定义：
 
 ```powershell
-.\install.ps1 -Version "1.3.6"           # 安装指定版本（缺省 latest 自动安装最新版）
+.\install.ps1 -Version "v1.3.6"          # 安装指定版本标签（缺省 latest 自动安装最新版）
 .\install.ps1 -InstallDir "D:\tools\ezmk" # 自定义安装目录
 .\install.ps1 -DryRun                     # 预览操作，不做实际更改
 .\install.ps1 -NoPath                     # 跳过 PATH 配置
@@ -53,11 +53,16 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 ## 环境要求
 
-安装脚本会替你检查以下各项：
+从源码安装的脚本（`install.sh`）会替你检查以下各项：
 
 - `git`、`bash`
 - C++17 编译器（`g++` 或 `clang++`）
 - `python3`（仅构建时需要；如果缺失，界面语言会回退到英文 —— 构建仍然可以完成）
+
+Windows 安装器（`install.ps1`）的前置条件不同：它只检查 PowerShell 5.1+ 与 TLS 1.2
+—— 安装预编译的 `ezmk.exe` 无需编译器或 git。它会在随后的 `ezmk repo add` /
+`ezmk pkg install -g` 步骤中依赖 `git`，用于注册官方仓库并预装官方工具包；
+如果缺少 `git`，这些预装步骤会**降级为警告**，可以稍后手动执行。
 
 ## 验证
 

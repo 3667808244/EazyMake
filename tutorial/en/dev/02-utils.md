@@ -3,16 +3,20 @@
 `ezmk utils <name>` runs Lua-based tools. Some are built in; others come from installed
 `type = "utils"` packages.
 
-## Built-in: `ezmk utils cc`
+## Built-in: `ezmk project cc`
 
 Generates a `compile_commands.json` so editors and language servers (clangd) understand
 your build:
 
 ```bash
-$ ezmk utils cc
-generated compile_commands.json
-$ ezmk utils cc -o build/compile_commands.json   # custom output path
+$ ezmk project cc
+$ ezmk project cc -o build/compile_commands.json   # custom output path
 ```
+
+> The older spelling `ezmk utils cc` still works but is **deprecated since 1.2.0**
+> (it prints a hint pointing at `ezmk project cc`) and is removed in 2.0.0. The command
+> writes the file silently — no success line is printed (only a warning when no sources
+> are found).
 
 Point clangd at it (usually automatic if the file is in the project root) and you get
 accurate completion, go-to-definition, and diagnostics matching your `ezmk.toml` flags

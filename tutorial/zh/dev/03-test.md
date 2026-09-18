@@ -9,10 +9,14 @@
 
 ```toml
 [test]
-dirs = ["test"]        # 测试源码目录
-framework = "catch2"   # "catch2"（默认）或 "ezmk"
-flags = []             # 测试构建的额外编译参数
+dirs = ["test"]                 # 测试源码目录
+framework = "catch2"            # "catch2"（默认）或 "ezmk"
+default_profile = "debug"       # 测试构建使用的 profile
+include_dirs = ["test/helpers"] # 测试专属 -I
+link_targets = ["pthread"]      # 测试专属 -l
 ```
+
+（`[test] flags` 自 1.2.0-dev.12 起已弃用、2.0.0 移除——仍可用，但会打印弃用警告。）
 
 有两种框架。两者都遵循"零配置"哲学——把文件交给 `ezmk test`，其余由它处理。
 
@@ -38,7 +42,7 @@ Running tests (Catch2)...
 All tests passed (1 assertion in 1 test case)
 ```
 
-用 `--filter` 按测试名过滤，用 `-V` 详细输出（包括通过的用例）：
+用 `--filter` 按测试名过滤；`-V` 会打印测试构建的编译/链接命令以及各个测试的 stdout（**不会**给 Catch2 传 `-s`，因此通过的断言仍不会逐条列出）：
 
 ```bash
 $ ezmk test --filter "add works"
@@ -78,7 +82,7 @@ Running tests (ezmk)...
 | `ezmk test` | 构建 + 运行测试（默认 Catch2） |
 | `ezmk test -f ezmk` | 使用内置框架运行 |
 | `ezmk test --filter <name>` | 只运行匹配 `<name>` 的测试 |
-| `ezmk test -V` | 详细输出——显示每个测试，包括通过的 |
+| `ezmk test -V` | 详细输出——打印测试构建命令与各测试 stdout |
 
 如果项目尚未构建，`ezmk test` 会先构建。测试套件失败时返回非零退出码，可直接接入你的 CI。
 

@@ -74,7 +74,7 @@ $ ezmk run -- --name world
 
 ## 命令简写
 
-每个命令都有两字母的别名：
+除 `example` 外，每个命令都有两字母的别名：
 
 ```bash
 $ ezmk pn hello     # project new

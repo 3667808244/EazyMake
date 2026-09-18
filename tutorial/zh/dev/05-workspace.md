@@ -30,6 +30,7 @@ ws/
 
 ```toml
 [workspace]
+name = "my-ws"                                         # 可选
 members = ["apps/tool-a", "apps/tool-b", "libs/strutil"]
 ```
 
@@ -106,7 +107,7 @@ $ ezmk workspace clean            # 按依赖逆序清理成员（清缓存/临�
 ```bash
 $ cd ws
 $ ezmk workspace scan        # 或用简写：ezmk ws
-found 3 member(s) — created ezmk-workspace.toml
+[ezmk] 已创建 /path/to/ws/ezmk-workspace.toml（3 个成员）
 ```
 
 `scan` 递归收集所有含 `ezmk.toml` 的子目录到 `members`（排序、`/` 分隔）。规则：

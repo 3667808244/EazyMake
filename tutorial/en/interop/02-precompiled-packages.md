@@ -20,6 +20,8 @@ precompiled = true
 
 `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>` (1.2.0-dev.10+)
 
+`<name>` is matched **case-sensitively** against `[project].name`: a package named `sdl2` must ship `libsdl2.*`, not `libSDL2.*` — otherwise no artifact matches and installation fails with "has no build for platform".
+
 | OS | Arch | Tag |
 |----|------|-----|
 | Windows | x86_64 | `win-x64` |
@@ -39,10 +41,10 @@ sdl2/
 ├── ezmk.toml
 ├── include/       # headers (shared across platforms)
 └── lib/           # prebuilt static libraries
-    ├── libSDL2.win-x64-msvc143.a
-    ├── libSDL2.linux-x64-gcc13-abi11.a
-    ├── libSDL2.mac-arm64-clang15.a
-    └── libSDL2.win-x64.a          # no toolchain tag (legacy, fallback match)
+    ├── libsdl2.win-x64-msvc143.a
+    ├── libsdl2.linux-x64-gcc13-abi11.a
+    ├── libsdl2.mac-arm64-clang15.a
+    └── libsdl2.win-x64.a          # no toolchain tag (legacy, fallback match)
 ```
 
 ## Selection priority: ABI-safe 4-level matching
@@ -72,4 +74,4 @@ The cause: libstdc++'s CXX11 ABI (`_GLIBCXX_USE_CXX11_ABI`) — `abi11` (new) / 
 
 - **MSVC runtime**: a static library's CRT binding (`/MD` vs `/MT`) must match the consumer — noted in the docs; dev.10 does not add a runtime-dimension tag yet.
 - **Apple Clang / clang-cl**: Apple Clang version numbers don't align with LLVM (ABI can change within the same major); clang-cl doesn't emit `msvc1xx` tags — use real MSVC builds when you need the MSVC ABI.
-- **Legacy-ABI consumers**: when a consumer builds with explicit `-D_GLIBCXX_USE_CXX11_ABI=0`, ezmk does not auto-detect — authors can name a separate `abi8` artifact for that scenario; matching defaults to `abi11`.
+- **Legacy-ABI consumers**: when a consumer builds with explicit `-D_GLIBCXX_USE_CXX11_ABI=0`, ezmk does not auto-detect, and an artifact is only selected when its ABI segment **matches exactly** — so a dedicated `abi8` artifact is **never picked today** (it only shows up in the `available:` diagnostic list). Treat it as reserved for future support, or adjust your ABI tag if you need to ship it now.

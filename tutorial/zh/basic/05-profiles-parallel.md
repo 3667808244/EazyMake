@@ -40,7 +40,8 @@ $ ezmk run   --profile release
 
 规则：
 
-- 构建配置**不会**自动应用——你必须手动传入 `--profile`。
+- 显式传入的 `--profile` 优先；未传入时应用 `[compile].default_profile`
+  （生成的模板将其默认设为 `debug`）。
 - 构建配置的 `flags` **追加在**基础标志之后，因此冲突时后者覆盖前者
   （与 GCC/Clang "最后的标志生效" 行为一致）。
 - 构建配置的 `macros` **合并进**基础宏中；键冲突时以构建配置为准。

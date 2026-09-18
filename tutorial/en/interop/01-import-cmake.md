@@ -63,7 +63,7 @@ directly, don't go back to editing `CMakeLists.txt`.
 | `project`, `add_executable`, `add_library`, `target_sources`, `target_include_directories`, `target_compile_definitions`, `target_compile_options`, `target_link_libraries` | Mapped to `ezmk.toml` |
 | `set(...)` + `${VAR}` (top-level, constant) | Expanded once; leftovers become `# TODO: 未解析的参数` |
 | `find_package(Boost 1.82)` | Written as a **commented** `# lib = ["boost@1.82"]` under `[depends]` |
-| `if(WIN32)` / `if(UNIX)` … | Branch for the **current platform** is taken |
+| `if(WIN32)` / `if(UNIX)` … | Evaluated with **Windows-host semantics** — `WIN32` is hard-coded true and `UNIX` false; only `CMAKE_SYSTEM_NAME` comparisons follow the running platform |
 | `add_custom_command`, `function()`, `$<...>` generator expressions, `pkg_check_modules` | **Import aborts** (nothing written) |
 
 For rejected projects, see

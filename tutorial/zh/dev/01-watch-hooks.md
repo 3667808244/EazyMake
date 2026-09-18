@@ -6,8 +6,8 @@
 
 ```bash
 $ ezmk watch
-=== Build successful: build/hello ===
-watching for changes... (Ctrl-C to stop)
+[ezmk] Build successful: build/hello
+[ezmk] Build succeeded. Watching for changes... (Ctrl+C to stop)
 ```
 
 - 监视 `src_dirs`、`include_dirs` 和 `ezmk.toml`。

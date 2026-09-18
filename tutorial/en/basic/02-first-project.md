@@ -76,7 +76,7 @@ Anything after `--` goes straight to your binary, not to `ezmk`.
 
 ## Shorthands
 
-Every command has a two-letter alias:
+Every command has a two-letter alias — except `example`, which has none:
 
 ```bash
 $ ezmk pn hello     # project new

@@ -53,9 +53,13 @@ $ ezmk build --verbose
 ## 强制重新构建
 
 ```bash
-$ ezmk build --disable-cache   # 全部重新编译（之后缓存仍会更新）
+$ ezmk build --disable-cache   # 全部重新编译，并清空缓存记录（下一次构建仍需全量重编）
 $ ezmk clean                   # 删除 .ezmk/cache 及临时文件
 ```
+
+`--disable-cache` 完全脱离增量状态：它不写入任何缓存条目（不会合并进 record），
+并保存一份空的 `record.json`，因此跳过缓存的这次构建不会给下一次构建留下可信任的
+陈旧条目。
 
 修改编译标志（例如编辑 `[compile].flags`）会自动使缓存失效——因为标志是
 指纹的一部分。

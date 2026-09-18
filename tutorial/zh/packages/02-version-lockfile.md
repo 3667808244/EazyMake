@@ -1,6 +1,6 @@
 # 12. 语义化版本约束与确定性构建
 
-`ezmk pkg install` 默认安装可用版本中的最高版本。当项目需要长期维护、团队协作、CI 可复现时，需要两件工具：**版本约束**（声明接受哪些版本）和 **`ezmk.lock`**（把实际安装的精确版本钉死）。
+`ezmk pkg install <name>` 默认安装可用版本中的最高版本。当项目需要长期维护、团队协作、CI 可复现时，需要两件工具：**版本约束**（声明接受哪些版本）和 **`ezmk.lock`**（把实际安装的精确版本钉死）。
 
 ## 给依赖加版本约束
 
@@ -31,19 +31,19 @@ want = [
 写好后安装：
 
 ```bash
-$ ezmk pkg install
+$ ezmk pkg install <name>
 ```
 
 > 约束无法满足时安装失败，并列出所有可用版本。
 
 ## ezmk.lock：钉死实际安装
 
-`ezmk pkg install` 在项目根目录写入 `ezmk.lock`（TOML 格式），记录每个已安装包的**精确版本**、`sha256`、平台与依赖图：
+`ezmk pkg install <name>` 在项目根目录写入 `ezmk.lock`（TOML 格式），记录每个已安装包的**精确版本**、`sha256`、平台与依赖图：
 
 ```toml
 [metadata]
 version = 1
-generated_by = "ezmk 1.1.0"
+generated_by = "ezmk 1.4.2"
 toolchain = "gcc"
 direct_deps = ["fmt", "spdlog@^1.14.0"]
 
@@ -51,24 +51,28 @@ direct_deps = ["fmt", "spdlog@^1.14.0"]
 name = "spdlog"
 version = "1.14.1"
 sha256 = "..."
+lib_sha256 = "..."
+archive_sha256 = "..."
 type = "static"
-scope = "user"
-platform = "windows_x86_64_msvc"
+scope = "project"
+platform = "windows_x86_64_gcc"
 dependencies = []
 ```
 
-- **生成**：每次 `ezmk pkg install` 自动写入/更新。
+- **生成**：每次 `ezmk pkg install <name>` 自动写入/更新。
 - **`--locked`**：只按现有 `ezmk.lock` 安装，不一致则**报错**——CI 用它保证"锁里没有的绝不装"。
 - **`--no-lock`**：跳过 lockfile 生成。
 - **请勿手改**：`ezmk.lock` 是自动生成文件；要变更依赖，编辑 `ezmk.toml` 后重新安装。
+- **`platform`** 是**检测到的工具链三元组**（MSYS2/g++ 下为 `windows_x86_64_gcc`，MSVC 下为 `windows_x86_64_msvc`，还有 `linux_x86_64_gcc`、`darwin_arm64_clang` 等）——它描述的是生成该 lockfile 的机器。
+- **`lib_sha256` / `archive_sha256`**（1.4.2+）：`lib_sha256` 是**已安装产物**的哈希（header-only 包为 `include/` 清单哈希），由 `verify` 校验；`archive_sha256` 是安装所用**归档**的哈希，`--locked` 重装时校验。`sha256` 保留为 `lib_sha256` 的旧别名。
 
 ```bash
-$ ezmk pkg install --locked
+$ ezmk pkg install --locked <name>
 ```
 
 ## deterministic：把校验变成硬性要求
 
-默认情况下 lockfile 缺失或内容不一致只是**警告**。`[compile] deterministic = true` 把它变成构建期的硬性检查：
+lockfile **内容不一致**（哈希/依赖变化）时只是**警告**，**缺失**时静默忽略——除非设置 `[compile] deterministic = true`，它把两者都变成构建期的硬性检查：
 
 ```toml
 [compile]
@@ -85,7 +89,7 @@ $ ezmk build
 ## 易错点
 
 - **`ezmk.lock` 应随项目提交**（不要加进 `.gitignore`）——它是可复现构建的一部分，团队和 CI 都依赖它。
-- **约束在安装时解析**：lockfile 生成后，日常 `install`/`build` 遵循锁定的版本；重新解析发生在 `pkg update` 时。
+- **约束在构建期校验，而非在安装时解析**：只有 `--locked` 会读取 `ezmk.lock` 并钉住版本；普通的 `ezmk pkg install <name>`（及其背后的仓库查找）取可用**最高**版本，`pkg update` 也会更新到最新。`[depends]` 中的版本约束在 `ezmk build` 期间校验（`lib` 不满足**致命**，`want` 不满足仅警告），且 `ezmk build` 从不写 lockfile。
 - **不带运算符的条目保持"取最新"**：`"fmt"` 与 `"fmt@10.2.1"` 语义不同——前者在 `pkg update` 时可能跳到新版本。
 
 > 💡 想直接跑完整示例？运行 `ezmk example with-packages` 生成带 `fmt^10.0` 约束 + lockfile 的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。

@@ -59,7 +59,7 @@ hi
 | `project`、`add_executable`、`add_library`、`target_sources`、`target_include_directories`、`target_compile_definitions`、`target_compile_options`、`target_link_libraries` | 映射到 `ezmk.toml` |
 | `set(...)` + `${VAR}`（顶层、常量） | 单层展开；未解析的留 `# TODO: 未解析的参数` |
 | `find_package(Boost 1.82)` | 写成 `[depends]` 下**注释掉的** `# lib = ["boost@1.82"]` |
-| `if(WIN32)` / `if(UNIX)` … | 取**当前平台**对应的分支 |
+| `if(WIN32)` / `if(UNIX)` … | 按 **Windows 主机语义**求值——`WIN32` 硬编码为真、`UNIX` 为假；只有 `CMAKE_SYSTEM_NAME` 比较才随运行平台变化 |
 | `add_custom_command`、`function()`、`$<...>` 生成器表达式、`pkg_check_modules` | **导入中止**（不产出任何文件） |
 
 被拒绝的项目，手动迁移步骤见

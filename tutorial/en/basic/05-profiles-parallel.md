@@ -40,7 +40,8 @@ $ ezmk run   --profile release
 
 Rules:
 
-- Profiles **do not** apply automatically — you must pass `--profile`.
+- An explicit `--profile` wins; when it is omitted, `[compile].default_profile`
+  applies (the generated template sets it to `debug`).
 - Profile `flags` are **appended after** base flags, so they override on conflict
   (matching GCC/Clang "last flag wins").
 - Profile `macros` **merge into** base macros; the profile wins on key conflicts.

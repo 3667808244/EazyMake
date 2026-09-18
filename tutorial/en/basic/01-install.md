@@ -44,7 +44,7 @@ installs to `%LOCALAPPDATA%\ezmk\bin`, and configures your user `PATH`.
 Customize with parameters:
 
 ```powershell
-.\install.ps1 -Version "1.3.6"           # Install a specific version (default: latest)
+.\install.ps1 -Version "v1.3.6"          # Install a specific version tag (default: latest)
 .\install.ps1 -InstallDir "D:\tools\ezmk" # Custom install directory
 .\install.ps1 -DryRun                     # Preview without making changes
 .\install.ps1 -NoPath                     # Skip PATH configuration
@@ -54,11 +54,18 @@ Customize with parameters:
 
 ## Requirements
 
-The installer checks these for you:
+The source-install script (`install.sh`) checks these for you:
 
 - `git`, `bash`
 - A C++17 compiler (`g++` or `clang++`)
 - `python3` (build-only; if missing, the UI falls back to English — the build still works)
+
+The Windows installer (`install.ps1`) has different prerequisites: it only checks
+PowerShell 5.1+ with TLS 1.2 — no compiler or git is needed to install the prebuilt
+`ezmk.exe`. It does rely on `git` later, for the `ezmk repo add` / `ezmk pkg install -g`
+steps that register the official repository and pre-install the official utils package;
+if `git` is missing, those pre-install steps **degrade to warnings** and you can run
+them manually later.
 
 ## Verify
 

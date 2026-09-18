@@ -28,8 +28,8 @@ $ ezmk pkg install https://.../fmt.tar.gz --sha256 <hash>   # 验证完整性
 | 标志 | 作用域 | 路径 |
 |---|---|---|
 | `-p` | 项目（默认） | `.ezmk/pkg/` |
-| `-u` | 用户 | `~/.local/ezmk/pkg/` |
-| `-g` | 全局 | `<install_dir>/pkg/`（需要确认） |
+| `-u` | 用户 | `~/.local/ezmk/pkg/`（Windows 下为 `%LOCALAPPDATA%\ezmk\pkg\`） |
+| `-g` | 全局 | `ezmk.exe` 所在目录下的 `pkg/`（需要确认） |
 
 ```bash
 $ ezmk pkg install -u fmt      # 为当前用户安装
@@ -45,11 +45,14 @@ lib  = ["fmt"]      # 必需依赖
 want = ["spdlog"]   # 可选依赖（仅当已安装时才使用）
 ```
 
-现在构建——`ezmk` 会解析依赖链，将每个包编译为静态库并链接进来：
+先安装——`ezmk build` **不会**自动安装或编译缺失的包。缺失硬性依赖（`lib`）会直接致命报错，并提示你运行 `ezmk pkg install`：
 
 ```bash
+$ ezmk pkg install fmt
 $ ezmk build
 ```
+
+缺失 `want` 依赖只会警告——构建会继续。
 
 在代码中使用：
 
@@ -67,7 +70,7 @@ $ ezmk pkg update --all        # 更新全部
 $ ezmk pkg remove fmt          # 卸载
 ```
 
-> 构建时加上 `--auto-update` 会先执行 `ezmk repo update --pug`，确保包名解析基于最新的索引。
+> 构建时加上 `--auto-update` 会先执行 `ezmk repo update -pug`，确保包名解析基于最新的索引。
 
 详见 [`docs/zh/pkg.md`](../../../docs/zh/pkg.md) 和 [`docs/zh/repo.md`](../../../docs/zh/repo.md)。
 

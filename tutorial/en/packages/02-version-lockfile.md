@@ -1,6 +1,6 @@
 # 12. Semantic version constraints & deterministic builds
 
-`ezmk pkg install` installs the highest available version by default. For long-lived projects, team collaboration, and reproducible CI, you need two tools: **version constraints** (which versions you accept) and **`ezmk.lock`** (which exact versions got installed).
+`ezmk pkg install <name>` installs the highest available version by default. For long-lived projects, team collaboration, and reproducible CI, you need two tools: **version constraints** (which versions you accept) and **`ezmk.lock`** (which exact versions got installed).
 
 ## Constraining dependency versions
 
@@ -31,19 +31,19 @@ want = [
 Then install:
 
 ```bash
-$ ezmk pkg install
+$ ezmk pkg install <name>
 ```
 
 > If no version satisfies the constraints, installation fails and lists all available versions.
 
 ## ezmk.lock: pinning what was actually installed
 
-`ezmk pkg install` writes `ezmk.lock` (TOML) into the project root, recording each installed package's **exact version**, `sha256`, platform, and dependency graph:
+`ezmk pkg install <name>` writes `ezmk.lock` (TOML) into the project root, recording each installed package's **exact version**, `sha256`, platform, and dependency graph:
 
 ```toml
 [metadata]
 version = 1
-generated_by = "ezmk 1.1.0"
+generated_by = "ezmk 1.4.2"
 toolchain = "gcc"
 direct_deps = ["fmt", "spdlog@^1.14.0"]
 
@@ -51,24 +51,28 @@ direct_deps = ["fmt", "spdlog@^1.14.0"]
 name = "spdlog"
 version = "1.14.1"
 sha256 = "..."
+lib_sha256 = "..."
+archive_sha256 = "..."
 type = "static"
-scope = "user"
-platform = "windows_x86_64_msvc"
+scope = "project"
+platform = "windows_x86_64_gcc"
 dependencies = []
 ```
 
-- **Generated** automatically on every `ezmk pkg install`.
+- **Generated** automatically on every `ezmk pkg install <name>`.
 - **`--locked`**: install only according to the existing `ezmk.lock`; anything inconsistent is an **error** — CI uses it to guarantee "never install what isn't locked".
 - **`--no-lock`**: skip lockfile generation.
 - **Don't hand-edit**: `ezmk.lock` is auto-generated; to change dependencies, edit `ezmk.toml` and reinstall.
+- **`platform`** is the **detected toolchain triple** (`windows_x86_64_gcc` under MSYS2/g++, `windows_x86_64_msvc` under MSVC, `linux_x86_64_gcc`, `darwin_arm64_clang`, …) — it describes the machine the lockfile was generated on.
+- **`lib_sha256` / `archive_sha256`** (1.4.2+): `lib_sha256` hashes the **installed artifact** (for header-only packages, a manifest hash of `include/`) and is what `verify` checks; `archive_sha256` hashes the **archive the install came from** and is what `--locked` re-verifies. `sha256` is kept as the legacy alias of `lib_sha256`.
 
 ```bash
-$ ezmk pkg install --locked
+$ ezmk pkg install --locked <name>
 ```
 
 ## deterministic: making the check a hard requirement
 
-By default a missing or inconsistent lockfile is only a **warning**. `[compile] deterministic = true` turns it into a hard build-time check:
+An **inconsistent** lockfile (hash or dependency changes) is only a **warning**, and a **missing** lockfile is silently ignored — unless `[compile] deterministic = true`, which turns both into a hard build-time check:
 
 ```toml
 [compile]
@@ -85,7 +89,7 @@ $ ezmk build
 ## Pitfalls
 
 - **Commit `ezmk.lock`** (don't add it to `.gitignore`) — it's part of reproducible builds; your team and CI rely on it.
-- **Constraints are resolved at install time**: after the lockfile exists, daily `install`/`build` follow the locked versions; re-resolution happens on `pkg update`.
+- **Constraints are validated at build time, not resolved at install time**: only `--locked` reads `ezmk.lock` and pins versions; a plain `ezmk pkg install <name>` (and the repo lookup behind it) takes the **highest** available version, and `pkg update` also moves to the latest. The `[depends]` version constraints are checked during `ezmk build` (`lib` mismatch is **fatal**, `want` mismatch only warns), and `ezmk build` never writes a lockfile.
 - **Bare entries keep "latest" semantics**: `"fmt"` and `"fmt@10.2.1"` differ — the former may jump to a new version on `pkg update`.
 
 > 💡 Want a complete runnable example? Run `ezmk example with-packages` to scaffold a

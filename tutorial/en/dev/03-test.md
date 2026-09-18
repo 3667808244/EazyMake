@@ -10,10 +10,14 @@ Tests live in a source directory (default `test/`) and are configured in `[test]
 
 ```toml
 [test]
-dirs = ["test"]        # test source directories
-framework = "catch2"   # "catch2" (default) or "ezmk"
-flags = []             # extra flags for the test build
+dirs = ["test"]                 # test source directories
+framework = "catch2"            # "catch2" (default) or "ezmk"
+default_profile = "debug"       # profile used for the test build
+include_dirs = ["test/helpers"] # test-only -I
+link_targets = ["pthread"]      # test-only -l
 ```
+
+(`[test] flags` — deprecated since 1.2.0-dev.12, removed in 2.0.0 — still works but prints a deprecation warning.)
 
 There are two frameworks. Both follow the same "zero-config" philosophy — you
 point `ezmk test` at your files and it figures out the rest.
@@ -42,8 +46,9 @@ Running tests (Catch2)...
 All tests passed (1 assertion in 1 test case)
 ```
 
-Filter by test name with `--filter`, run everything (even passing cases) verbosely
-with `-V`:
+Filter by test name with `--filter`; `-V` prints the compile/link commands of the
+test build and each test's stdout (it does **not** pass `-s` to Catch2, so passing
+assertions are still not listed):
 
 ```bash
 $ ezmk test --filter "add works"
@@ -86,7 +91,7 @@ Running tests (ezmk)...
 | `ezmk test` | Build + run tests (Catch2 by default) |
 | `ezmk test -f ezmk` | Run with the built-in framework |
 | `ezmk test --filter <name>` | Only tests matching `<name>` |
-| `ezmk test -V` | Verbose — show every test, even passing ones |
+| `ezmk test -V` | Verbose — print test-build commands and each test's stdout |
 
 If the project isn't built yet, `ezmk test` builds it first. A failing test suite
 exits non-zero, ready to wire into your CI.

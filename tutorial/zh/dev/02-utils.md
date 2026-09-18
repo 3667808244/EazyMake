@@ -2,15 +2,17 @@
 
 `ezmk utils <name>` 运行基于 Lua 的工具。有些是内置的，有些来自已安装的 `type = "utils"` 包。
 
-## 内置工具：`ezmk utils cc`
+## 内置工具：`ezmk project cc`
 
 生成 `compile_commands.json`，让编辑器和语言服务器（clangd）理解你的构建配置：
 
 ```bash
-$ ezmk utils cc
-generated compile_commands.json
-$ ezmk utils cc -o build/compile_commands.json   # 自定义输出路径
+$ ezmk project cc
+$ ezmk project cc -o build/compile_commands.json   # 自定义输出路径
 ```
+
+> 旧写法 `ezmk utils cc` 仍可用，但**自 1.2.0 起已弃用**（会打印提示改用 `ezmk project cc`），
+> 2.0.0 移除。该命令静默写文件——**不会**打印成功信息（仅在找不到源文件时给警告）。
 
 将 clangd 指向该文件（如果文件在项目根目录下，通常会自动识别），你就能获得与 `ezmk.toml` 中标志和 include 目录匹配的准确补全、跳转定义和诊断信息。
 
