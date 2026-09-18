@@ -30,6 +30,7 @@ See [`pkg.md`](pkg.md) for details.
 - `git pull` failure → warn and continue using the existing cache (does not block the build).
 - Global repository **registration** does not require secondary confirmation (clone is not equivalent to install); however, **installing packages** from a global repository still triggers the global install confirmation above.
 - Local repository (`type = "local"`) validation: `index.toml` must be parseable, `file` paths must exist, `sha256` format must be valid (0.2.5+).
+- Path containment (1.4.2 F-23): the `file` entries in `index.toml` and every `[platform]` prefix must stay inside the repository directory, otherwise validation throws `… escapes the repo directory`. The rule is re-checked after `repo add`, after a `repo update` pull, and again when resolving a package.
 
 See [`repo.md`](repo.md) for details.
 
@@ -62,7 +63,8 @@ See [`cache.md`](cache.md) for details.
 > `ezmk.run()`, which ezmk can audit and gate with permissions.
 
 > **Why no editor review for Lua install hooks?** Shell hooks can run arbitrary
-> commands, so reviewing the script is the only safeguard. A Lua hook is already
+> commands, so the editor review (skipped only when `-y` is used, 1.4.2 F-25) is
+> the only safeguard. A Lua hook is already
 > confined by the sandbox (no `os`/`io`, out-of-bounds `file_write` hard limit),
 > and install hooks are additionally gated by `[utils.permissions]`
 > (1.2.0-dev.11+), so the `[y/N]` confirmation is sufficient.
@@ -104,9 +106,10 @@ See [`utils.md` Permission Management](utils.md#permission-management-version--0
 | Global repository registration | No confirmation needed (clone ≠ install) |
 | `git clone` failure | Clear cache, then error |
 | `git pull` failure | Warn and continue using cache |
+| `index.toml` path containment | Rejected (hard limit) |
 | Cache writes | `.tmp` + `rename` atomic write |
 | Lua `os`/`io` | Removed at compile time |
 | Lua `file_write` out-of-bounds | Deny (hard limit) |
 | Utils controlled access | deny > allow > ask |
 | Lua install hook execution | Sandbox + `[utils.permissions]` gating + confirmation prompt (no editor review, 0.9.9+; gating 1.2.0-dev.11+) |
-| Shell install hook execution | Open editor for review + confirmation prompt (legacy) |
+| Shell install hook execution | Editor review when `-y` is not used + confirmation prompt (legacy) |

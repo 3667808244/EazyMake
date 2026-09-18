@@ -62,6 +62,10 @@ lib = []
 
 > **为什么是这些默认值？** 生成的配置与脚手架布局一一对应——`type = "executable"` 对应 `src/main.cpp` 入口，C++17 是现代的基线标准，`-Wall -Wextra` 让新项目尽早看到警告；优化归 profile（`debug` 默认，`release` 需显式 `--profile release`）。文件末尾的 `# [test]` 是**注释掉的示例节**（1.2.1+）：取消注释并填写后即可 `ezmk test`，纯注释对解析零影响，字段与 `[test]` 配置一致（刻意不展示已弃用的 `flags`）。
 
+> **`type` 跟随 `--type`（1.2.1+）：** 生成的 `type = "..."` 就是请求的 `--type`
+> （`static` / `shared` / `utils`）——上面的示例是默认的 `executable` 情形。使用
+> `--type utils` 时，文件末尾还会追加 `[utils]` 节与 `tools = []`。
+
 ---
 
 ## `<project_dir>/.gitignore`
@@ -123,3 +127,5 @@ build/
 ```
 
 > **为什么是这种布局？** `src/` 和 `include/` 是 ezmk 默认扫描的约定输入目录，`build/` 集中存放所有产物，`.ezmk/` 则把 EazyMake 的内部状态（已安装包、临时文件、缓存）放在一处——因此 `build/` 和 `.ezmk/` 可随时安全地重建、清理或删除。
+
+> **按类型差异（1.2.1+）：** 上面的目录树是 `executable` 布局。使用 `--type utils` 时会改为创建空的 `utils/` 目录，并且**不生成** `src/main.cpp`。

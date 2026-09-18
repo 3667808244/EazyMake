@@ -166,7 +166,8 @@ has no CMake equivalent and is not exported. See the `hooks` section in
 | `--verbose` / `-v` | Show full compile commands and cache hits |
 | `-j <N>` / `--jobs <N>` | Parallel compile jobs; `0` = auto (`hardware_concurrency`), the default |
 | `--profile <name>` | Apply a build profile from `[compile.profile.<name>]` / `[link.profile.<name>]` |
-| `--auto-update` | Run `ezmk repo update --pug` before building (default off) |
+| `--auto-update` | Run `ezmk repo update -pug` before building (default off) |
+| `--compile-commands` | **1.1.1+** Write `compile_commands.json` after a successful link for this invocation only (same as `[compile].compile_commands = true`) |
 
 > **Why `-j 0` is the default?** Auto-parallelism (`hardware_concurrency`) gives a
 > good speedup with zero configuration. Note also that since 1.4.2
@@ -177,8 +178,9 @@ has no CMake equivalent and is not exported. See the `hooks` section in
 > **Build timing detail (1.2.0+):** `ezmk build -v` always prints a per-file
 > compile-time breakdown, slowest first. Without `-v`, a build that takes over
 > 5s automatically prints the 10 slowest units. No config, no extra flags — only
-> actually-compiled (non-cached) files are listed, and the single-threaded path
-> shows just the total time.
+> actually-compiled (non-cached) files are listed. Both the breakdown and the
+> total-time line require the parallel path (more than one job **and** more than
+> one source); with `-j 1` or a single-source build, no timing output is printed.
 
 **`new`-only flags:**
 
@@ -248,13 +250,14 @@ deliberately not shown).
 | `--prefix <path>` | Override `[install].prefix` |
 | `--dry-run` | Show what would be installed without copying |
 | `--no-headers` | Skip header installation |
-| `--no-data` | Skip data file installation |
+| `--no-data` | Accepted but currently a **no-op** — data-file installation is not implemented; only binary, libraries and headers are installed |
 
 **`pack`-only flags:**
 
 | Flag | Purpose |
 |---|---|
-| `--output <dir>` | Output directory (default `.`). Only valid for `type = "static"` projects |
+| `--output <dir>` | Output directory (default `.`); usable by every project type |
+| `--precompiled` | **1.2.5+** Produce a prebuilt archive (`include/` + `lib/` + marker) instead of the default platform-independent source package — **`type = "static"` only** |
 | `--format <tar.gz\|tgz\|zip>` | **1.3.5+** Archive format (default `tar.gz`, unchanged; `zip` uses the vendored miniz writer). **1.4.0-dev.5+** `tgz` is a case-insensitive alias for `tar.gz` (normalized at parse time; the archive name stays `name-version.tar.gz`). All formats contain the same files (identical stage contents) and ship a `<archive>.sha256` sidecar |
 
 > **`pack` writes a `.sha256` sidecar (1.3.5+):** every successful pack writes `<archive>.sha256` (`<hash>  <filename>`) — same format for `tar.gz` and `zip`; a pure add-on that does not affect existing consumers. `.deb` / `.rpm` are deliberately out of scope (use `fpm` + `ezmk project install --prefix <staging>`).
@@ -264,9 +267,9 @@ deliberately not shown).
 | Flag | Purpose |
 |---|---|
 | `--framework` / `-f <catch2\|ezmk>` | Temporarily override `test.framework` |
-| `--filter <pattern>` | Filter test names (Catch2: test name; ezmk: filename glob) |
+| `--filter <pattern>` | Filter test names (Catch2: test name; ezmk: plain **filename substring** — no glob/wildcards) |
 | `--profile <name>` | **1.2.0-dev.12+** Temporarily override `test.default_profile` (symmetric with `ezmk build --profile`) |
-| `--verbose` / `-V` | Show detailed output for every test (even passing ones) |
+| `--verbose` / `-V` | Print the test build's compile/link commands and each test's own stdout. Catch2 is deliberately **not** given `-s`, so passing cases are never listed individually |
 | `--report <fmt>[:<path>]` | **1.3.2+** Write a machine-readable test report. Format `junit` (default path `<proj_root>/.ezmk/test-results/junit.xml`); a custom relative `<path>` resolves against the project root. **Catch2** additionally accepts any Catch2 reporter name (`json`, `xml`, `sonarqube`…) — forwarded as `-r <fmt>::out=<file>`, with the console summary untouched. The **EZMK** built-in framework supports only `junit` (other formats error with a hint to use Catch2). The report is an add-on: it never changes the test exit code. `--filter` and `--report` compose (the report covers only the filtered cases). `ezmk workspace test --report ...` forwards the flag to every member, each writing its own report file |
 
 `ezmk run` (and its full form `ezmk project run`) passes everything after `--` to the built program.
@@ -317,7 +320,7 @@ Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at con
 
 **`--stop-on-error` (`build` / `test`):** after the first failure the scheduler **stops dispatching new tasks** — not-yet-started members of the current layer and all later layers are marked `skipped`; members already running **finish naturally, never killed**. The summary reports succeeded / failed / skipped; any failure gives a non-zero exit. Without the flag, all members run and failures are summarized. `clean` does **not** support the flag (no dependency semantics).
 
-**`workspace watch` (1.4.0-dev.5+):** runs `ezmk watch` in **every selected member** concurrently (member-level watch — each member keeps its own project semantics, incremental cache and output). Member output is aggregated with a `[member]` prefix. All selected members' watchers run simultaneously within the `-j` limit and stop together on Ctrl+C (each member watch handles its own SIGINT). `--member <name>` selects the member + its dependency closure; `--run`/`-r` is forwarded to **executable** members only (`static` members watch without `--run` — the flag has no meaning for a library). **Concurrency caveat:** a dependent member reads the depended-upon member's `build/` artifacts during its own rebuilds — while the depended-upon member is rebuilding, a dependent may briefly see a half-written sibling artifact (the next rebuild self-heals). Members are started in topological order (dependencies first) to minimize the window; if this causes link flakiness, watch only the needed subset with `--member`.
+**`workspace watch` (1.4.0-dev.5+):** runs `ezmk watch` in **every selected member** concurrently (member-level watch — each member keeps its own project semantics, incremental cache and output). Member output is aggregated with a `[member]` prefix. All selected members' watchers start together and stop together on Ctrl+C (each member watch handles its own SIGINT) — since 1.4.2 `-j` is **accepted but does not limit watch concurrency** (watch tasks are long-lived, so one thread per member is started; `-j` only still appears in the start message). `--member <name>` selects the member + its dependency closure; `--run`/`-r` is forwarded to **executable** members only (`static` members watch without `--run` — the flag has no meaning for a library). **Concurrency caveat:** a dependent member reads the depended-upon member's `build/` artifacts during its own rebuilds — while the depended-upon member is rebuilding, a dependent may briefly see a half-written sibling artifact (the next rebuild self-heals). Members are started in topological order (dependencies first) to minimize the window; if this causes link flakiness, watch only the needed subset with `--member`.
 
 **`-j N` / `--jobs N`:** intra-layer parallelism; precedence `-j` > `[workspace.options].default_jobs` > hardware concurrency.
 
@@ -350,15 +353,19 @@ Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at con
 | `ezmk pkg update [scope] <name>` | Update a package from repos (0.2.3+) |
 | `ezmk pkg update [scope] --all` | Update all installed packages (0.2.4+) |
 
-**`install`-only options:**
+**`install` options** (`-y` is also accepted by `pkg update`, 1.4.2+; `--sha256`, `--locked`, `--no-lock`, `--branch` remain install-only):
 
 | Flag | Purpose |
 |---|---|
 | `--sha256 <hash>` | Verify archive integrity before installing |
-| `-y` / `--yes` | Skip confirmation prompts (non-interactive) |
+| `-y` / `--yes` | Skip confirmation prompts (non-interactive) — also accepted by `pkg update` |
 | `--locked` | Install only against the existing `ezmk.lock` — error on mismatch (1.1.0+) |
 | `--no-lock` | Skip `ezmk.lock` generation (1.1.0+) |
 | `--branch <ref>` | Git URL sources: clone this branch/tag/commit (1.4.1+) — beats the URL's `#<ref>` fragment |
+
+> **`pkg update` (1.4.2+):** accepts `-y` / `--yes` for unattended updates, and exits
+> **non-zero** when any update failed; `--all` counts each package as updated /
+> cancelled / failed (a cancelled package is not counted as updated).
 
 **`install` source argument** can be a local file/archive, a local directory, a
 download URL, a registered-repo **name**, or a **git repository URL** (1.4.1+):
@@ -429,9 +436,11 @@ Six examples ship inside the binary (hello / greeter / with-packages / with-test
 with-hooks / cmake-interop), one-to-one with the tutorial chapters, embedded at
 build time from the repo's `examples/` source dir — **offline-ready** and versioned
 with the binary. Each scaffold is a complete buildable project:
-`cd <name> && ezmk build` (with-packages installs its dependency on first build —
-network required; with-tests uses the built-in framework, zero deps). An existing
-target directory or an unknown name is an error that lists the available examples.
+`cd <name> && ezmk build`. Two of them declare a package dependency —
+`with-packages` (`fmt`) and `with-tests` (`catch2`) — so their first build installs
+it and needs network access; `hello`, `greeter`, `with-hooks` and `cmake-interop`
+have no dependencies. An **unknown name** is an error that lists the available
+examples; an **existing target directory** is an error that reports that path.
 Index: `examples/README.md` in the repo.
 
 ### Official tools (`ezmk-official-utils` package, 1.1.0+)
@@ -491,8 +500,10 @@ See [`utils.md`](utils.md) for the plugin API.
 | `-u` | User | `~/.local/ezmk/pkg/` (Unix) · `%LOCALAPPDATA%\ezmk\pkg\` (Windows) |
 | `-g` | Global | `<ezmk_install_dir>/pkg/` |
 
-`pkg install` and `repo add` accept **only one** scope flag. Other commands accept
-combined flags like `-pug` (equivalent to `-p -u -g`).
+`pkg install` and `repo add` accept **only one** scope flag, and default to
+**project** scope when none is given. Every other scoped command accepts combined
+flags like `-pug` (equivalent to `-p -u -g`) and defaults to **all three scopes** —
+`ezmk pkg list` with no flag lists project + user + global.
 
 > **Why only one scope for `install`/`add`?** These write to a concrete location
 > (project / user / global) — the target must be unambiguous. Query commands
@@ -576,6 +587,8 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `NO_COLOR` | runtime | Disable colored output (honored only by `--color=auto`) (`src/util.cpp`) |
 | `CXX` / `CC` | runtime + build | Override compiler detection (0.1.8+) |
 | `CXXFLAGS` | build | Extra compiler flags, passed through by `build.sh` |
+| `SOURCE_DATE_EPOCH` | build | Deterministic-build timestamp for `[compile] deterministic = true`. Resolution order: `[compile].source_date_epoch` → this variable → git HEAD commit time → `ezmk.toml` mtime (`src/cache.cpp`) |
+| `EDITOR` / `VISUAL` | runtime | Editor opened to review legacy **shell** install hooks (`[utils.permissions]`-gated Lua hooks are never opened; `-y` skips the editor entirely) |
 | `EZMK_VERSION` | build | Version string baked into the binary (`build.sh`) |
 | `PREFIX` | install | Install prefix; binary goes to `$PREFIX/bin` (default `$HOME/.local`) (`install.sh`) |
 | `EZMK_REF` | install | git tag/branch/commit to build (`install.sh`) |

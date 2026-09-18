@@ -102,11 +102,13 @@ end
 
 | Priority | Path | Description |
 |---|---|---|
-| 1 (project-level) | `<project>/.ezmk/pkg/*/utils/<name>.lua` | Scans all installed packages in project scope |
-| 2 (user-level) | `~/.local/ezmk/pkg/*/utils/<name>.lua` | Scans all installed packages in user scope |
+| 1 (project-level) | `<current_dir>/.ezmk/pkg/*/utils/<name>.lua` | Scans all installed packages in project scope (`<current_dir>` = the process working directory) |
+| 2 (user-level) | `~/.local/ezmk/pkg/*/utils/<name>.lua` (Unix) · `%LOCALAPPDATA%\ezmk\pkg\*\utils\<name>.lua` (Windows) | Scans all installed packages in user scope |
 | 3 (global-level) | `<ezmk_install_dir>/pkg/*/utils/<name>.lua` | Scans all installed packages in global scope |
+| 4 (dev fallback) | `<current_dir>/pkg/*/utils/<name>.lua` | Development fallback for tools kept in a local `pkg/` directory |
 
-- Within each scope, packages are scanned in alphabetical order by package name; stops at the first match within the same scope
+- Project scope is resolved against the **process working directory**, while installation writes to the project root located by searching upward (`<project>/.ezmk/pkg/`): run `ezmk utils <name>` from the project root — from a subdirectory the project-scoped tool is not found
+- Within each scope, the first matching `utils/<name>.lua` returned by the filesystem wins (no name ordering is applied); provide the same tool name in only one package per scope
 - The lookup is filesystem-based: directly checks whether `utils/<name>.lua` exists (does not rely on `[utils].tools` in `ezmk.toml`; the toml declaration is only used for `pkg info` display)
 
 ---
@@ -319,7 +321,9 @@ Return values of controlled APIs when denied:
 
 - `ezmk.file_read()` → `nil, "permission denied: read access to <path>"`
 - `ezmk.file_write()` → `false, "permission denied: write access to <path>"`
-- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}`; `run_capture()` throws an error
+- `ezmk.file_exists()` → `false` when denied (**no ask prompt**); if the target is neither allowed nor denied, the real existence result is still returned and content access stays gated at `file_read` (1.4.2 F-18)
+- `ezmk.list_sources()` → paths that match deny are **silently filtered out** (no ask prompt; 1.4.2 F-18)
+- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}` where `<cmd>` is only the **first token** of the command (the executable), not the whole command line; `run_capture()` throws an error
 
 ---
 

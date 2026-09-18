@@ -20,7 +20,7 @@
 
 ### Q: `install.sh` 报错 "Permission denied"
 
-**原因**: 对安装目录没有写入权限（默认：Windows 上为 `~/ezmk/`，Linux/macOS 上为 `/usr/local/bin/`）。
+**原因**: 对安装目录没有写入权限（默认：Windows 上为 `%LOCALAPPDATA%\ezmk\bin`，Linux/macOS 上为 `$HOME/.local/bin`）。
 
 **解决**:
 1. 用户级安装，指定可写目录：`PREFIX=~/.local bash install.sh`
@@ -121,7 +121,7 @@
 **解决**:
 1. 基础标志在 `[compile]` → `flags` 中；profile 特定标志在 `[compile.profile.<名称>]` → `flags` 中
 2. Profile 标志**追加**到基础标志（不会替换）
-3. 确认你在命令行中传递了 `--profile <名称>` — profile 不会自动应用
+3. 确认你在命令行中传递了 `--profile <名称>` — 未显式传 `--profile` 时会应用 `ezmk.toml` 中的 `[compile].default_profile`（生成的模板默认 `debug`）；两者都没有才不应用 profile
 4. 使用 `--verbose` 查看实际执行的编译命令
 
 ---
@@ -150,7 +150,7 @@ src_dirs = ["src", "lib", "vendor"]
 2. 如果未注册任何仓库，添加默认仓库：`ezmk repo add https://github.com/3667808244/ezmk-repo.git`
 3. 更新仓库索引：`ezmk repo update`
 4. 搜索正确的包名：`ezmk pkg search <关键词>`
-5. 离线/手动安装：下载归档文件后使用 `ezmk pkg install ./<文件>.tar.gz --type file`
+5. 离线/手动安装：下载归档文件后使用 `ezmk pkg install ./<文件>.tar.gz`（路径本身即类型判据 — 本地归档会被自动识别）
 
 ---
 
@@ -162,7 +162,7 @@ src_dirs = ["src", "lib", "vendor"]
 1. 清除下载缓存并重试：先 `ezmk repo update`，再重试安装
 2. 如果使用了 `--sha256 <hash>`，仔细核对哈希值
 3. 如果包最近在仓库中更新过，索引可能过期 — 运行 `ezmk repo update`
-4. 最后的办法：删除仓库缓存并重新克隆
+4. 最后的办法：删除对应作用域缓存下的仓库目录，再 `ezmk repo remove <名称>` 后重新 `ezmk repo add <url>` — 对已注册的名字直接再 `add` 会报 `already registered`；也可以直接运行 `ezmk repo update`
 
 ---
 
@@ -182,7 +182,7 @@ src_dirs = ["src", "lib", "vendor"]
 **原因**: 全局安装目录需要提升的权限。
 
 **解决**:
-1. 改用用户作用域安装：`ezmk pkg install -u <名称>`（安装到 `~/.local/ezmk/pkg/`）
+1. 改用用户作用域安装：`ezmk pkg install -u <名称>`（Linux/macOS 安装到 `~/.local/ezmk/pkg/`，Windows 安装到 `%LOCALAPPDATA%\ezmk\pkg\`）
 2. 改用项目作用域安装：`ezmk pkg install -p <名称>`（安装到 `.ezmk/pkg/`）
 3. Linux/macOS 上如果必须全局安装，使用 `sudo`
 
@@ -199,7 +199,7 @@ src_dirs = ["src", "lib", "vendor"]
 **解决**:
 1. 确认包已在项目 `ezmk.toml` 的 `[depends]` → `lib` 中列出
 2. 安装后重新构建 — ezmk 会自动发现依赖包的头文件
-3. 检查包的作用域是否匹配：如果用了 `-u`（用户作用域）安装，确认构建能访问用户作用域的包
+3. 检查包的作用域是否匹配：构建只扫描**项目作用域**（`./.ezmk/pkg`），用 `-u`（用户作用域）或 `-g`（全局作用域）安装的包不会被自动发现 — 请改用 `-p` 安装到项目作用域，或手工把该包的 include/lib 路径加进 `ezmk.toml`
 
 ---
 
@@ -221,7 +221,7 @@ src_dirs = ["src", "lib", "vendor"]
 **原因**: TOML 语法严格 — 常见错误包括引号类型错误、缺少等号、表嵌套无效等。
 
 **解决**:
-1. 字符串值使用双引号：`name = "my-project"`，而非 `name = 'my-project'`
+1. 字符串值推荐使用双引号：`name = "my-project"`，而非 `name = 'my-project'`（单引号是合法的 TOML **字面字符串**，但推荐统一用双引号）
 2. 节头使用方括号：`[compile]`，而非 `(compile)`
 3. 内联表使用等号：`{key = value}`，而非冒号
 4. 布尔值小写：`true` / `false`
@@ -256,7 +256,7 @@ src_dirs = ["src", "lib", "vendor"]
 
 ### Q: Profile 未生效
 
-**原因**: Profile 不会自动应用 — 必须显式传递 `--profile <名称>`。
+**原因**: 未显式传 `--profile` 时会应用 `ezmk.toml` 中的 `[compile].default_profile`（生成的模板默认 `debug`）；两者都没有才不应用 profile。
 
 **解决**:
 ```bash
@@ -310,10 +310,11 @@ ezmk run --profile release
 **解决**:
 如果你在 Linux/macOS 上从源码构建 ezmk 本身，使用不带 `-lwinhttp` 的手动构建命令：
 ```bash
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
     -I include/ -I include/vendor/ -I include/vendor/lua/ \
     -DLUA_COMPAT_5_3 -o build/ezmk -static
 ```
+`ezmk_lua_main.cpp` 也定义了 `main()`（供独立的 `ezmk-lua` 二进制使用），必须排除，否则链接会因 `main` 重复而失败。此外需先生成生成源文件：`src/locale_data.cpp`、`src/example_data.cpp` 和 `include/ezmk/logo.gen.h` 已被 `.gitignore` 忽略，需分别由 `scripts/embed_locale.py`、`scripts/embed_examples.py`、`scripts/embed_logo.py` 生成。
 
 ---
 
@@ -329,14 +330,14 @@ g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
 git clone https://github.com/3667808244/ezmk-repo.git /path/to/ezmk-repo
 
 # 复制到离线机器，然后注册为本地仓库
-ezmk repo add /path/to/ezmk-repo --type local
+ezmk repo add /path/to/ezmk-repo
 ```
 
 **2. 手动下载包归档并安装**
 ```bash
 # 在有网络的机器上从 GitHub Releases 下载 .tar.gz 归档
 # 传输到离线机器后：
-ezmk pkg install ./<包名>-<版本>.tar.gz --type file
+ezmk pkg install ./<包名>-<版本>.tar.gz
 ```
 
 **3. USB / 内网共享的预置镜像**
@@ -345,7 +346,7 @@ ezmk pkg install ./<包名>-<版本>.tar.gz --type file
 git clone https://github.com/3667808244/ezmk-repo.git /mnt/usb/ezmk-repo
 
 # 在每台离线机器上
-ezmk repo add /mnt/usb/ezmk-repo --type local
+ezmk repo add /mnt/usb/ezmk-repo
 ```
 
 ### Q: 如何离线安装 ezmk 本身？
@@ -357,8 +358,8 @@ ezmk repo add /mnt/usb/ezmk-repo --type local
 4. 对于包，使用上述离线包方案之一
 
 > **为什么支持完全离线使用？** 并非所有环境都能访问 GitHub——CI 沙箱、
-> 受限制的企业网络和隔离机器。本地仓库（`--type local`）和文件安装
-> （`--type file`）让 ezmk 在这些环境中也可用。
+> 受限制的企业网络和隔离机器。本地仓库路径（本地仓库由路径参数自动识别）
+> 和文件安装（本地归档路径）让 ezmk 在这些环境中也可用。
 
 ---
 

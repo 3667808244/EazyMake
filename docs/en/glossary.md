@@ -16,7 +16,7 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | cache | Content-hash-based incremental build cache stored in `.ezmk/cache/`. |
 | hook | A Lua script executed at build lifecycle points: `pre_build`, `post_build`, `on_failure`. |
 | toolchain | Compiler/linker abstraction layer supporting GCC, Clang, and MSVC. |
-| profile | A named set of compile/link flag overrides in `ezmk.toml`, activated via `--profile <name>`. |
+| profile | A named set of compile/link flag overrides in `ezmk.toml`, activated via `--profile <name>` or, when that flag is omitted, via `[compile].default_profile`. |
 
 ## Package & Repository Terms
 
@@ -52,7 +52,7 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | sandbox | The restricted Lua environment: `os` and `io` removed at compile time; file writes restricted to project root. |
 | permission | Fine-grained allowlist/denylist for `file_read`/`file_write`/`run` in `[utils.permissions]`. |
 | entry script | The `utils/<name>.lua` file that implements a tool's `run(args)` and optional `help()` functions. |
-| built-in tool | A tool compiled directly into the ezmk binary (currently only `ezmk-cc`). |
+| built-in tool | A tool compiled directly into the ezmk binary (currently only `cc`, invoked as `ezmk utils cc` and shipped by the official `ezmk-cc` package). |
 
 > **Why do utils run in a sandbox?** A utils package is third-party code that
 > could otherwise read or write anywhere on disk. The sandbox removes `os`/`io`

@@ -17,7 +17,9 @@
 ├── src/              # 源文件（header-only 包可选）
 │   └── mylib.cpp
 └── script/           # 安装钩子（可选）
-    ├── preinstall.sh   # 或 .ps1 / .bat（Windows）
+    ├── preinstall.lua   # 推荐：跨平台、沙箱执行
+    ├── preinstall.sh    # 或 .ps1 / .bat（Windows）
+    ├── postinstall.lua
     └── postinstall.sh
 ```
 
@@ -193,13 +195,15 @@ sdl2/
 ├── ezmk.toml
 ├── include/       # 头文件（跨平台共用）
 └── lib/           # 预编译静态库
-    ├── libSDL2.win-x64-msvc143.a
-    ├── libSDL2.linux-x64-gcc13-abi11.a
-    ├── libSDL2.mac-arm64-clang15.a
-    └── libSDL2.win-x64.a          # 无工具链标签（旧式，可降级匹配）
+    ├── libsdl2.win-x64-msvc143.a
+    ├── libsdl2.linux-x64-gcc13-abi11.a
+    ├── libsdl2.mac-arm64-clang15.a
+    └── libsdl2.win-x64.a          # 无工具链标签（旧式，可降级匹配）
 ```
 
 **命名约定**（1.2.0-dev.10+）：`lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`
+
+> `<name>` 与 `[project].name` 是**大小写敏感**匹配的：名为 `sdl2` 的包必须提供 `libsdl2.*`——命名为 `libSDL2.*` 的产物任何一级都匹配不上，安装会以 "has no build for platform" 失败。
 
 | OS | Arch | 标识 |
 |----|------|------|
@@ -275,16 +279,17 @@ run = ["git"]
 
 ## 4. 安装钩子（0.2.1+）
 
-在 `script/` 中放置平台特定脚本，在安装前后执行：
+在 `script/` 中放置安装钩子脚本，在安装前后执行（推荐 `.lua`）：
 
 | 钩子 | 文件 | 时机 |
 |------|------|------|
-| Preinstall | `script/preinstall.{sh,ps1,bat}` | 文件复制前 |
-| Postinstall | `script/postinstall.{sh,ps1,bat}` | 安装完成后 |
+| Preinstall | `script/preinstall.{lua,sh,ps1,bat}` —— `.lua` 跨平台、沙箱执行，且优先于所有 shell 变体 | 文件复制前 |
+| Postinstall | `script/postinstall.{lua,sh,ps1,bat}` | 安装完成后 |
 
+- **跨平台：** `.lua` 脚本在沙箱中执行，优先于所有 shell 变体
 - **Linux/macOS：** `.sh` 脚本
 - **Windows：** `.ps1`（优先），其次 `.bat`
-- 脚本会在用户编辑器中打开供审查
+- shell 脚本会在用户编辑器中打开供审查（仅未使用 `-y` 时）
 - 用户可跳过脚本执行（安装继续）
 - 脚本失败可被覆盖（用户选择继续）
 
@@ -377,7 +382,7 @@ file = "packages/mypkg-1.1.0.tar.gz"
 sha256 = "c3d4..."
 ```
 
-`ezmk pkg install` 默认选择最高版本；用户可指定约束。
+`ezmk pkg install` 默认选择最高版本。版本约束写在 `[depends]` 中（如 `zlib@^1.3`）；CLI 本身只接受裸包名、URL 或归档路径——`ezmk pkg install foo@1.2` 会按字面名 `foo@1.2` 搜索并失败。
 
 ---
 

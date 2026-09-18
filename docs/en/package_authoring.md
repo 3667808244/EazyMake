@@ -17,7 +17,9 @@ A standard library package has the following layout:
 ├── src/              # Source files (optional for header-only packages)
 │   └── mylib.cpp
 └── script/           # Install hooks (optional)
-    ├── preinstall.sh   # or .ps1 / .bat (Windows)
+    ├── preinstall.lua   # preferred: cross-platform, sandboxed
+    ├── preinstall.sh    # or .ps1 / .bat (Windows)
+    ├── postinstall.lua
     └── postinstall.sh
 ```
 
@@ -226,13 +228,15 @@ sdl2/
 ├── ezmk.toml
 ├── include/       # Headers (cross-platform)
 └── lib/           # Pre-built static libraries
-    ├── libSDL2.win-x64-msvc143.a
-    ├── libSDL2.linux-x64-gcc13-abi11.a
-    ├── libSDL2.mac-arm64-clang15.a
-    └── libSDL2.win-x64.a          # untagged (legacy — degraded match)
+    ├── libsdl2.win-x64-msvc143.a
+    ├── libsdl2.linux-x64-gcc13-abi11.a
+    ├── libsdl2.mac-arm64-clang15.a
+    └── libsdl2.win-x64.a          # untagged (legacy — degraded match)
 ```
 
 **Naming convention** (1.2.0-dev.10+): `lib<name>.<os>-<arch>[-<compiler>][-<abi>].<ext>`
+
+> `<name>` is matched **case-sensitively** against `[project].name`: a package named `sdl2` must ship `libsdl2.*` — artifacts named `libSDL2.*` match no level and installation fails with "has no build for platform".
 
 | OS | Arch | Tag |
 |----|------|-----|
@@ -308,16 +312,17 @@ run = ["git"]
 
 ## 4. Install Hooks (0.2.1+)
 
-Place platform-specific scripts in `script/` to run before/after installation:
+Place install-hook scripts in `script/` to run before/after installation (`.lua` is preferred):
 
 | Hook | File | When |
 |------|------|------|
-| Preinstall | `script/preinstall.{sh,ps1,bat}` | Before files are copied |
-| Postinstall | `script/postinstall.{sh,ps1,bat}` | After installation completes |
+| Preinstall | `script/preinstall.{lua,sh,ps1,bat}` — `.lua` is cross-platform and sandboxed, and takes priority over all shell variants | Before files are copied |
+| Postinstall | `script/postinstall.{lua,sh,ps1,bat}` | After installation completes |
 
+- **Cross-platform:** `.lua` scripts run in a sandbox and win over every shell variant
 - **Linux/macOS:** `.sh` scripts
 - **Windows:** `.ps1` (preferred) then `.bat`
-- Scripts are opened in the user's editor for review before execution
+- Shell scripts are opened in the user's editor for review before execution (only when `-y` is not used)
 - Users can skip script execution (install continues)
 - Script failure can be overridden (user chooses to continue)
 
@@ -415,7 +420,7 @@ file = "packages/mypkg-1.1.0.tar.gz"
 sha256 = "c3d4..."
 ```
 
-`ezmk pkg install` picks the highest version by default; users can specify constraints.
+`ezmk pkg install` picks the highest version by default. Version constraints are declared in `[depends]` (e.g. `zlib@^1.3`); the CLI itself accepts only a bare package name, a URL, or an archive path — `ezmk pkg install foo@1.2` searches for the literal name `foo@1.2` and fails.
 
 ---
 

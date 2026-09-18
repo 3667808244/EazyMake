@@ -44,6 +44,7 @@ ezmk run                  # 构建 + 运行
 ```bash
 ezmk pkg install fmt      # 按名称安装 — 官方仓库已预注册
 ezmk pkg install ./mylib  # 从源目录安装（1.2.0+，免打包）
+ezmk pkg install https://github.com/user/mylib.git  # 从 git 仓库安装（1.4.1+）
 ```
 
 ## 安装
@@ -84,7 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 ```
 
-可通过 `PREFIX`、`EZMK_REF`、`EZMK_NO_DEFAULT_REPO` 自定义。详见[安装选项](#安装选项)。
+可通过 `PREFIX`、`EZMK_REF`、`EZMK_VERSION`、`EZMK_NO_DEFAULT_REPO`、`EZMK_NO_COMPLETIONS` 自定义。详见[安装选项](#安装选项)。
 
 ### 安装选项
 
@@ -92,9 +93,12 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 |-------------|------|--------|
 | `PREFIX` | 安装前缀（二进制 → `$PREFIX/bin`） | `$HOME/.local` |
 | `EZMK_REF` | 要构建的 git tag/分支/提交 | 默认分支 |
+| `EZMK_VERSION` | 编译进二进制的版本号 | 检出目录的 `git describe --tags` |
 | `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （注册） |
-| `-Version`（PS） | 要安装的版本标签 | `"latest"` |
-| `-InstallDir`（PS） | 安装根目录 | `$env:LOCALAPPDATA\ezmk` |
+| `EZMK_NO_COMPLETIONS` | 设为 `1` 跳过 zsh 补全安装 | （有 zsh 时安装） |
+| `-Version`（PS） | 要安装的版本标签——**必须带 `v` 前缀**，如 `"v1.4.2"` | `"latest"` |
+| `-InstallDir`（PS） | 安装根目录（二进制 → `<InstallDir>\bin`） | `$env:LOCALAPPDATA\ezmk` |
+| `-NoPath`（PS） | 不修改用户 `PATH` | （配置 PATH） |
 | `-DryRun`（PS） | 预览操作，不做实际更改 | （关闭） |
 
 ## 与 CMake 对比
@@ -151,7 +155,7 @@ ezmk project import [flags]     # 导入 CMake 项目为 ezmk.toml（实验性�
 ezmk pkg install <pkg>          # 安装包
 ezmk pkg search <pkg>           # 搜索已注册仓库
 ezmk pkg list                   # 列出已安装的包
-ezmk pkg update [<pkg>]         # 更新到最新版本
+ezmk pkg update <pkg>           # 更新到最新版本（全部已安装包用 --all）
 
 # 仓库
 ezmk repo add <url>             # 注册仓库

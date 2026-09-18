@@ -72,7 +72,7 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 | 安装模式 | 路径                       |
 | -------- | -------------------------- |
 | 全局     | `<ezmk_install_dir>/pkg/`  |
-| 用户     | `~/.local/ezmk/pkg/`       |
+| 用户     | `~/.local/ezmk/pkg/`（Unix）· `%LOCALAPPDATA%\ezmk\pkg\`（Windows） |
 | 项目     | `<project_dir>/.ezmk/pkg/` |
 
 缓存一律保存到`<project_dir>/.ezmk/cache/`,区分编译标志和文件内容
@@ -126,7 +126,7 @@ utils 工具包（`type = "utils"`，详见 [`utils.md`](utils.md)）：
 1. 解压包到临时目录
 2. 检测并执行 `preinstall` 脚本（若存在）：
    - **Lua 脚本**（0.9.9+）：询问确认 → 在沙箱中执行（无需编辑器审查，API 受沙箱限制）
-   - **Shell 脚本**（旧版）：打开编辑器供用户审查 → 询问确认 → 执行
+   - **Shell 脚本**（旧版）：打开编辑器供用户审查（使用 `-y` 时跳过，1.4.2）→ 询问确认 → 执行
 3. 检查已有安装 → 若覆盖则二次确认
 4. 编译依赖 + 复制文件到安装目录
 5. 检测并执行 `postinstall` 脚本（若存在）→ 流程同步骤 2
@@ -243,17 +243,16 @@ ezmk pkg install -p file:///tmp/mylib.git          # 本地仓库
 
 ```bash
 ezmk pkg install -p https://example.com/packages/foo-0.1.0.zip
-ezmk pkg install -g example.com/packages/bar-1.2.0.tar.gz   # 省略协议头,默认 https://
 ```
 
 URL 格式说明:
 - 完整 URL: `https://<host>/<path>/<pkg>.zip` 或 `.tar.gz`
-- 省略协议: `<host>/<path>/<pkg>.zip` → 自动补全为 `https://`
+- **必须带协议头（scheme）**：只有显式包含 `://` 的参数才视为 URL
 - 支持协议: `https://`、`http://`
-- URL 自动识别：若参数包含 `://`，或同时包含 `.` 和 `/` 且并非本地已存在文件，则视为 URL
-- 下载到 `.ezmk/temp/` 后解压安装，安装完成删除临时文件
+- 不带协议头的参数按**包名**或本地路径处理，绝不会当作 URL：裸 `example.com/packages/x.tar.gz` 会当作包名去已注册仓库中搜索并失败
+- 下载到**系统临时目录**（Windows 为 `%TEMP%`），文件名为唯一名，解压安装后删除临时文件
 
-> **为什么自动识别 URL？** 启发式规则（含 `://`，或同时含 `.` 与 `/` 且不是本地已存在文件）让 `pkg install` 能区分 URL 与文件路径，从而可以省略协议头——`example.com/path/pkg.zip` 默认按 `https://` 处理——同时不会把真实存在的本地归档误判为 URL。
+> **为什么要显式协议头？** 不带协议头的参数语义明确：要么是包名，要么是本地路径。因此拼错或不存在的本地归档（`dist/foo.zip`）会走仓库查找 / not found 路径，而不会被静默改写成 `https://dist/foo.zip` 后报下载错误。
 
 ### 仓库查找（0.1.3+）
 
@@ -293,7 +292,7 @@ ezmk pkg install -p foo          # 自动在已注册仓库中搜索 "foo"
 git clone https://github.com/3667808244/ezmk-repo.git /path/to/ezmk-repo
 
 # 复制到离线机器后：
-ezmk repo add /path/to/ezmk-repo --type local
+ezmk repo add /path/to/ezmk-repo
 ezmk pkg install <名称>
 ```
 
@@ -302,7 +301,7 @@ ezmk pkg install <名称>
 从 GitHub Releases（或任何来源）下载 `.tar.gz` / `.zip` 归档，传输到离线机器，然后从文件安装：
 
 ```bash
-ezmk pkg install ./<包名>-<版本>.tar.gz --type file
+ezmk pkg install ./<包名>-<版本>.tar.gz
 ```
 
 ### 方案三：USB / 内网共享上的预置镜像
@@ -314,7 +313,7 @@ ezmk pkg install ./<包名>-<版本>.tar.gz --type file
 git clone https://github.com/3667808244/ezmk-repo.git /mnt/usb/ezmk-repo
 
 # 在每台离线机器上
-ezmk repo add /mnt/usb/ezmk-repo --type local
+ezmk repo add /mnt/usb/ezmk-repo
 ```
 
 > 更多离线场景参见 [常见问题](faq.md)。

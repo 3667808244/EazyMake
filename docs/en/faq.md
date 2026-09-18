@@ -20,7 +20,7 @@ This page collects common problems and their solutions across installation, buil
 
 ### Q: `install.sh` fails with "Permission denied"
 
-**Cause**: You don't have write permission to the install directory (default: `~/ezmk/` on Windows, `/usr/local/bin/` on Linux/macOS).
+**Cause**: You don't have write permission to the install directory (default: `%LOCALAPPDATA%\ezmk\bin` on Windows, `$HOME/.local/bin` on Linux/macOS).
 
 **Solution**:
 1. For a user-local install, pass a writable prefix: `PREFIX=~/.local bash install.sh`
@@ -121,7 +121,7 @@ This page collects common problems and their solutions across installation, buil
 **Solution**:
 1. Base flags go in `[compile]` → `flags`; profile-specific flags go in `[compile.profile.<name>]` → `flags`
 2. Profile flags **append** to base flags (they don't replace)
-3. Make sure you're passing `--profile <name>` on the command line — profiles don't auto-apply
+3. Make sure you're passing `--profile <name>` on the command line — when `--profile` is omitted, `[compile].default_profile` from `ezmk.toml` is applied instead (the generated template defaults it to `debug`); a profile stays unapplied only when neither is set
 4. Use `--verbose` to see the actual compile commands being run
 
 ---
@@ -150,7 +150,7 @@ src_dirs = ["src", "lib", "vendor"]
 2. If no repos are registered, add the default: `ezmk repo add https://github.com/3667808244/ezmk-repo.git`
 3. Update repo indices: `ezmk repo update`
 4. Search for the correct package name: `ezmk pkg search <keyword>`
-5. For offline/manual install, download the archive and use `ezmk pkg install ./<file>.tar.gz --type file`
+5. For offline/manual install, download the archive and use `ezmk pkg install ./<file>.tar.gz` (the path argument itself is the type criterion — local archives are auto-detected)
 
 ---
 
@@ -162,7 +162,7 @@ src_dirs = ["src", "lib", "vendor"]
 1. Clear the download cache and retry: `ezmk repo update` then retry install
 2. If using `--sha256 <hash>`, double-check the hash value
 3. If the package was recently updated in the repo, the index may be stale — run `ezmk repo update`
-4. As a last resort, delete the repo cache and re-clone: delete the repo directory under the relevant scope's cache, then `ezmk repo add` again
+4. As a last resort, delete the repo cache and re-register: delete the repo directory under the relevant scope's cache, then `ezmk repo remove <name>` followed by `ezmk repo add <url>` again — re-adding an already registered name fails with `already registered`; alternatively just run `ezmk repo update`
 
 ---
 
@@ -182,7 +182,7 @@ src_dirs = ["src", "lib", "vendor"]
 **Cause**: The global install directory requires elevated privileges.
 
 **Solution**:
-1. Use user-scope install instead: `ezmk pkg install -u <name>` (installs to `~/.local/ezmk/pkg/`)
+1. Use user-scope install instead: `ezmk pkg install -u <name>` (installs to `~/.local/ezmk/pkg/` on Linux/macOS, `%LOCALAPPDATA%\ezmk\pkg\` on Windows)
 2. Use project-scope install: `ezmk pkg install -p <name>` (installs to `.ezmk/pkg/`)
 3. On Linux/macOS, run with `sudo` for global install if you must
 
@@ -199,7 +199,7 @@ src_dirs = ["src", "lib", "vendor"]
 **Solution**:
 1. Make sure the package is listed in `[depends]` → `lib` in your project's `ezmk.toml`
 2. After installing, rebuild your project — ezmk automatically discovers includes from dependencies
-3. Check that the package scope matches: if you installed with `-u` (user), make sure the build can find user-scope packages
+3. Check that the package scope matches: the build only scans the **project scope** (`./.ezmk/pkg`), so packages installed with `-u` (user) or `-g` (global) are not discovered automatically — install with `-p` instead, or add the package's include/lib paths manually in `ezmk.toml`
 
 ---
 
@@ -221,7 +221,7 @@ src_dirs = ["src", "lib", "vendor"]
 **Cause**: TOML is strict about syntax — common mistakes include wrong quote types, missing equals signs, or invalid table nesting.
 
 **Solution**:
-1. Use double quotes for string values: `name = "my-project"`, not `name = 'my-project'`
+1. Prefer double quotes for string values: `name = "my-project"` rather than `name = 'my-project'` (single quotes are valid TOML *literal strings*, but double quotes are the recommended style)
 2. Section headers use `[brackets]`: `[compile]`, not `(compile)`
 3. Inline tables use `{key = value}` with equals signs, not colons
 4. Boolean values are lowercase: `true` / `false`
@@ -259,7 +259,7 @@ compilation always uses the min). Invalid range forms (e.g. `"C++17..C++11"`,
 
 ### Q: Profile is not being applied
 
-**Cause**: Profiles don't auto-apply — you must pass `--profile <name>` explicitly.
+**Cause**: When `--profile` is omitted, `[compile].default_profile` from `ezmk.toml` is applied instead (the generated template defaults it to `debug`); a profile stays unapplied only when neither is set.
 
 **Solution**:
 ```bash
@@ -313,10 +313,11 @@ Valid macro names match `[A-Za-z_][A-Za-z0-9_]*`. Examples:
 **Solution**:
 If you're building ezmk itself from source on Linux/macOS, use the manual build command without `-lwinhttp`:
 ```bash
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
     -I include/ -I include/vendor/ -I include/vendor/lua/ \
     -DLUA_COMPAT_5_3 -o build/ezmk -static
 ```
+`ezmk_lua_main.cpp` also defines a `main()` (for the standalone `ezmk-lua` binary), so it must be excluded or the link fails with duplicate symbols. Also make sure the generated sources exist first: `src/locale_data.cpp`, `src/example_data.cpp`, and `include/ezmk/logo.gen.h` are `.gitignore`d and produced by `scripts/embed_locale.py`, `scripts/embed_examples.py`, and `scripts/embed_logo.py`.
 
 ---
 
@@ -332,14 +333,14 @@ g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
 git clone https://github.com/3667808244/ezmk-repo.git /path/to/ezmk-repo
 
 # Copy to the offline machine, then register as a local repo
-ezmk repo add /path/to/ezmk-repo --type local
+ezmk repo add /path/to/ezmk-repo
 ```
 
 **2. Manual package download and install**
 ```bash
 # Download the .tar.gz archive from GitHub Releases on a connected machine
 # Transfer to the offline machine, then:
-ezmk pkg install ./<pkg>-<version>.tar.gz --type file
+ezmk pkg install ./<pkg>-<version>.tar.gz
 ```
 
 **3. Pre-staged mirror on USB / network share**
@@ -348,7 +349,7 @@ ezmk pkg install ./<pkg>-<version>.tar.gz --type file
 git clone https://github.com/3667808244/ezmk-repo.git /mnt/usb/ezmk-repo
 
 # On each offline machine
-ezmk repo add /mnt/usb/ezmk-repo --type local
+ezmk repo add /mnt/usb/ezmk-repo
 ```
 
 ### Q: How do I install ezmk itself offline?
@@ -361,7 +362,8 @@ ezmk repo add /mnt/usb/ezmk-repo --type local
 
 > **Why support fully offline usage?** Not every environment can reach GitHub —
 > CI sandboxes, restricted corporate networks, and air-gapped machines. Local
-> repos (`--type local`) and file installs (`--type file`) keep ezmk usable there.
+> repo paths (local repos are auto-detected from the path argument) and file
+> installs (a local archive path) keep ezmk usable there.
 
 ---
 

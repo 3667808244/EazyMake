@@ -83,7 +83,7 @@ When a requirement hits one of these, the recommended move is to grow into CMake
 
 - **What**: visualizing per-source-file compile times as a flame graph / stacked timeline (interactive HTML/SVG, hover, zoom).
 - **Why not**:
-  - **Structural complexity** — EazyMake already has the **data**: per-file compile timing (1.2.0-dev.6: full sorted detail with `-v`, automatic top-N on slow builds; `src/build.cpp:991,1103-1120`). But a flame graph needs a **structured trace export + an interactive rendering layer** (HTML/JS/SVG assets plus hover/zoom interactions) — a whole new subsystem, not an increment to the existing stats.
+  - **Structural complexity** — EazyMake already has the **data**: per-file compile timing (1.2.0-dev.6: full sorted detail with `-v`, automatic top-N on slow builds; see the `compile_phase` timing logic in `src/build.cpp`). But a flame graph needs a **structured trace export + an interactive rendering layer** (HTML/JS/SVG assets plus hover/zoom interactions) — a whole new subsystem, not an increment to the existing stats.
   - **What another tool already does well** — flame graphs are a standard artifact of the profiling ecosystem: `perf` / `ninja -t trace` (Chrome trace format) rendered by speedscope / `flamegraph.pl` out of the box; building our own duplicates what the ecosystem already does.
   - **Costs that don't serve small projects** — the automatic top-N text on slow builds already covers small projects; a flame graph is a need that appears once builds grow to minute scale.
 - **Instead**:

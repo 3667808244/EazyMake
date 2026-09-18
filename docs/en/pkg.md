@@ -76,7 +76,7 @@ The `type` field supports the following values:
 | Install Mode | Path                       |
 | ------------ | -------------------------- |
 | Global       | `<ezmk_install_dir>/pkg/`  |
-| User         | `~/.local/ezmk/pkg/`       |
+| User         | `~/.local/ezmk/pkg/` (Unix) · `%LOCALAPPDATA%\ezmk\pkg\` (Windows) |
 | Project      | `<project_dir>/.ezmk/pkg/` |
 
 Cache is always stored in `<project_dir>/.ezmk/cache/`, keyed by compile flags and file content.
@@ -132,7 +132,7 @@ A `script/` directory may be placed at the package root, containing install life
 1. Extract package to temporary directory
 2. Detect and execute `preinstall` script (if present):
    - **Lua scripts** (0.9.9+): ask for confirmation → execute in sandbox (no editor review needed, API is sandbox-limited)
-   - **Shell scripts** (legacy): open editor for user review → ask for confirmation → execute
+   - **Shell scripts** (legacy): open editor for user review (skipped when `-y` is given, 1.4.2) → ask for confirmation → execute
 3. Check existing installation → secondary confirmation if overwriting
 4. Compile dependencies + copy files to install directory
 5. Detect and execute `postinstall` script (if present) → same flow as step 2
@@ -274,20 +274,20 @@ ezmk pkg install -p file:///tmp/mylib.git          # local repo
 
 ```bash
 ezmk pkg install -p https://example.com/packages/foo-0.1.0.zip
-ezmk pkg install -g example.com/packages/bar-1.2.0.tar.gz   # protocol omitted, defaults to https://
 ```
 
 URL format notes:
 - Full URL: `https://<host>/<path>/<pkg>.zip` or `.tar.gz`
-- Omitted protocol: `<host>/<path>/<pkg>.zip` → auto-prepended with `https://`
+- A scheme is **required**: only an argument containing an explicit `://` is treated as a URL
 - Supported protocols: `https://`, `http://`
-- URL auto-detection: if the argument contains `://`, or contains both `.` and `/` and is not a locally existing file, it is treated as a URL
-- Downloaded to `.ezmk/temp/`, extracted and installed; temp files deleted after install
+- An argument without a scheme is handled as a **package name** or a local path, never as a URL: a bare `example.com/packages/x.tar.gz` is searched as a package name in the registered repos and fails
+- Downloaded to the **system temp directory** (`%TEMP%` on Windows) under a unique file name, extracted and installed; temp files deleted after install
 
-> **Why auto-detect URLs?** The heuristic (contains `://`, or has both `.` and `/`
-> and is not a local file) lets `pkg install` tell a URL apart from a file path, so
-> the protocol can be omitted — `example.com/path/pkg.zip` defaults to `https://` —
-> without a real local archive ever being mistaken for a URL.
+> **Why require an explicit scheme?** A scheme-less argument is unambiguous: it is
+> either a package name or a local path. A typo'd or missing local archive
+> (`dist/foo.zip`) therefore goes down the repo-search / not-found path instead of
+> being silently rewritten to `https://dist/foo.zip` and failing with a download
+> error.
 
 ### Repository Search (0.1.3+)
 
@@ -331,7 +331,7 @@ Clone the repository on a connected machine and register it as a local repo on t
 git clone https://github.com/3667808244/ezmk-repo.git /path/to/ezmk-repo
 
 # Copy to the offline machine, then:
-ezmk repo add /path/to/ezmk-repo --type local
+ezmk repo add /path/to/ezmk-repo
 ezmk pkg install <name>
 ```
 
@@ -340,7 +340,7 @@ ezmk pkg install <name>
 Download the `.tar.gz` or `.zip` archive from GitHub Releases (or any source), transfer to the offline machine, then install from the file:
 
 ```bash
-ezmk pkg install ./<pkg>-<version>.tar.gz --type file
+ezmk pkg install ./<pkg>-<version>.tar.gz
 ```
 
 ### Option 3: Pre-staged mirror on USB / network share
@@ -352,7 +352,7 @@ Prepare a full repo mirror on portable media or a network share:
 git clone https://github.com/3667808244/ezmk-repo.git /mnt/usb/ezmk-repo
 
 # On each offline machine
-ezmk repo add /mnt/usb/ezmk-repo --type local
+ezmk repo add /mnt/usb/ezmk-repo
 ```
 
 > For more offline scenarios, see the [FAQ](faq.md).

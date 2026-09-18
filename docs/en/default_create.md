@@ -74,6 +74,11 @@ lib = []
 > `ezmk test`; pure comments have zero parse impact, the fields match the `[test]`
 > config exactly (the deprecated `flags` is deliberately not shown).
 
+> **`type` follows `--type` (1.2.1+):** the generated `type = "..."` is exactly the
+> requested `--type` (`static` / `shared` / `utils`) — the block above shows the
+> default `executable` case. For `--type utils` the file additionally ends with a
+> `[utils]` section containing `tools = []`.
+
 ---
 
 ## `<project_dir>/.gitignore`
@@ -147,3 +152,7 @@ After creating the project, `git init` is automatically executed (if git is avai
 > ezmk scans by default, `build/` collects all outputs, and `.ezmk/` keeps
 > EazyMake's internal state (installed packages, temp files, cache) in one place —
 > so `build/` and `.ezmk/` can be safely rebuilt, cleaned, or deleted at any time.
+
+> **Per-type tree (1.2.1+):** the tree above is the `executable` layout. With
+> `--type utils` an empty `utils/` directory is created instead and no
+> `src/main.cpp` is written at all.

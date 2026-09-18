@@ -15,11 +15,11 @@
 2. **读取缓存记录** `record.json` 中该源文件的条目。
 3. **比较基本条件**：
    - 源文件哈希与上次记录相同？
-   - 编译命令（如 `[compile] flags`）与上次记录相同？  
-     （编译选项影响输出，必须作为 key 的一部分）
+   - **全局编译选项签名**（`compile_options_signature`，由 `[compile] flags`、`msvc_flags`、`include_dirs`、std 标志、stdlib 与 PIC 推导）与记录相同？  
+     （编译选项影响输出，必须作为 key 的一部分——但这是**全局**比较而非逐条目比较：条目里的 `compile_opts` 数组仅供诊断，代码从不比较它。）
 4. **检查所有依赖的头文件**：
    - 遍历上次记录的每个头文件路径，计算当前该头文件的哈希，与上次记录的哈希比较。
-   - 若任一哈希改变或头文件路径集合发生变化（增/删），则失效。
+   - 若任一已记录头文件的哈希改变，则失效。记录中的路径**集合**不参与比较：新增/删除的头文件只有在源文件重新编译后才会写进记录，因此「集合变化」本身不会被判定为失效。
 5. **判定结果**：
    - 若全部匹配 → **命中缓存**，直接使用已有的 `.o` 文件，不重新编译。
    - 否则 → **缓存失效**，重新编译源文件，并更新 `record.json` 和 `.o` 文件。
@@ -29,18 +29,18 @@
 ```
 对每个源文件:
     cur_source_hash = hash(file)
-    cur_compile_opts = get_current_flags()
+    cur_sig = compile_options_signature(...)
     从 record.json 读取 last_entry
     if last_entry 存在 
         && last_entry.source_hash == cur_source_hash
-        && last_entry.compile_opts == cur_compile_opts:
+        && record.compile_options_signature == cur_sig:
         # 检查头文件
         all_header_match = true
         for each (hdr, last_hash) in last_entry.headers:
             cur_hash = hash(hdr)
             if cur_hash != last_hash:
                 all_header_match = false; break
-        if all_header_match && header_set_size_equal:
+        if all_header_match:
             # 命中缓存
             continue
     # 未命中：重新编译
@@ -57,7 +57,10 @@
 ```json
 {
   "version": 2,
+  "compiler": "g++",
+  "compiler_version": "g++ (GCC) 14.2.0",             // 检测到的编译器版本串；此处变化会使整份缓存失效
   "compile_options_signature": "sha256_of_flags_include_dirs_std_flag_and_env",  // 全局编译选项指纹（含 msvc_flags、std_flag、include_dirs）
+  "deterministic": false,
   "files": {
     "src/main.cpp": {
       "source_hash": "a3f5c9...",
@@ -66,7 +69,7 @@
       "compile_opts": ["-Wall", "-O2"],   // 可与全局指纹冗余，便于调试
       "dependencies": [
         {"path": "include/foo.h", "hash": "b4e8d2..."},
-        {"path": "/usr/include/iostream", "hash": "c6a0b1..."}
+        {"path": "/usr/include/iostream", "hash": "c6a0b1..."}   // 仅在 MSVC 路径下出现——GCC/Clang 的 `-MMD` 不含系统头
       ],
       "last_build_time": "2025-03-01T12:34:56Z"
     },
@@ -81,13 +84,16 @@
 > 即一次全量重建——避免降级后只信任部分字段；版本**更低**的记录仍可加载，较新字段取默认值。
 
 ### 字段说明
-- `version`：用于缓存格式演进；当前格式为 `2`（1.1.0 新增 `compiler_version` + `deterministic`）。版本高于当前支持的记录会被整份忽略（见上）。
-- `compile_options_signature`：全局编译选项的 SHA-256 指纹，涵盖 `[compile] flags`、`msvc_flags`、`include_dirs`、`std_flag`、`extra_includes` 等。任一变化导致所有源文件缓存失效。较细粒度可与每个条目的 `compile_opts` 结合。
+- `version`：用于缓存格式演进；当前格式为 `2`（1.1.0 新增 `compiler`、`compiler_version` + `deterministic`）。版本高于当前支持的记录会被整份忽略（见上）。
+- `compiler` / `compiler_version`：写入记录的编译器名称与检测到的版本串。真正使缓存失效的是**版本串**：与当前检测到的编译器版本不一致时，构建前会丢弃全部条目。`compiler` 名称仅用于诊断，判断命中时不参与比较（见下）。
+- `deterministic`：写入记录时是否启用了确定性构建；切换该开关会使缓存失效。
+- `compile_options_signature`：全局编译选项的 SHA-256 指纹，涵盖 `[compile] flags`、`msvc_flags`、`include_dirs`、`std_flag`、`extra_includes` 等。任一变化导致所有源文件缓存失效。该签名是**唯一**与选项相关的 key：条目里的 `compile_opts` 只用于诊断，从不参与比较。
 - `object_file` 相对路径。
-- 系统头文件（如 `/usr/include/iostream`）的哈希也需记录，因为系统头文件升级可能改变编译结果。
+- `dependencies` 里最终有哪些头文件取决于工具链。GCC/Clang 走 `-MMD`，按定义只把**用户**头文件写进依赖文件，因此系统头（如 `/usr/include/iostream`）**不会**被记录；MSVC 没有依赖文件，改为解析 `/showIncludes` 输出，其中**包含**系统头。
 
-> **为什么记录 `compiler`？** 缓存条目按工具链隔离，这样一个编译器（如 `g++`）构建的产物
-> 不会被另一个编译器（如 MSVC）复用——`.o`/`.obj` 格式互不兼容，复用等于静默误编译。
+> **跨工具链时靠什么失效？** 失效依据是检测到的编译器**版本串**（`compiler_version`）：
+> 它一变，构建前所有缓存条目都会被丢弃。记录中的 `compiler` 字段只写不读，
+> 目前不参与命中判断。
 
 ## 缓存一致性维护
 
@@ -120,14 +126,13 @@
 `ezmk build --verbose` / `ezmk build -v` 会打印每个源文件的缓存判断详情：
 
 - **命中时**：输出 `[cached]` + 匹配的源文件哈希和头文件数量
-- **未命中时**：输出具体原因（源码哈希变化 / 编译选项签名变化 / 某个头文件哈希变化 / 依赖路径集合变化 / 缓存记录缺失）
+- **未命中时**：输出具体原因（源码哈希变化 / 编译选项签名变化 / 某个头文件哈希变化 / 缓存记录缺失）
 
 示例输出：
 ```
-[ezmk]   [cached] src/utils.cpp
-[ezmk]     cache hit: source hash matches, all 5 headers unchanged
-[ezmk]   Compiling src/main.cpp
-[ezmk]     cache miss: header hash changed — include/foo.h
+[ezmk]   [cached] src/utils.cpp  (source hash matches, 5 headers unchanged)
+[ezmk]   cache miss: header hash changed — include/foo.h
+[ezmk]   Compiling src/main.cpp...
 [ezmk]     cmd: g++ -std=c++17 -c "src/main.cpp" -o ".ezmk/temp/main.o" ...
 ```
 

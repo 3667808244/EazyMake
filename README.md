@@ -2,7 +2,7 @@
 
 [中文](README_ZH.md) · English
 
-**写 C++，但不需要写 CMake。**
+**Write C++ — without writing CMake.**
 
 A simple C/C++ build tool — `ezmk`. Supports GCC, Clang, and MSVC.
 
@@ -86,7 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 ```
 
-Customize with `PREFIX`, `EZMK_REF`, `EZMK_NO_DEFAULT_REPO`. See [install options](#install-options).
+Customize with `PREFIX`, `EZMK_REF`, `EZMK_VERSION`, `EZMK_NO_DEFAULT_REPO`, `EZMK_NO_COMPLETIONS`. See [install options](#install-options).
 
 ### Install options
 
@@ -94,9 +94,12 @@ Customize with `PREFIX`, `EZMK_REF`, `EZMK_NO_DEFAULT_REPO`. See [install option
 |-----------------|---------|---------|
 | `PREFIX` | Install prefix (binary → `$PREFIX/bin`) | `$HOME/.local` |
 | `EZMK_REF` | git tag/branch/commit to build | default branch |
+| `EZMK_VERSION` | Version string baked into the binary | `git describe --tags` of the checkout |
 | `EZMK_NO_DEFAULT_REPO` | Set to `1` to skip official repo registration | (registers) |
-| `-Version` (PS) | Version tag to install | `"latest"` |
-| `-InstallDir` (PS) | Root install directory | `$env:LOCALAPPDATA\ezmk` |
+| `EZMK_NO_COMPLETIONS` | Set to `1` to skip zsh completion install | (installs when zsh is present) |
+| `-Version` (PS) | Version tag to install — **`v`-prefixed**, e.g. `"v1.4.2"` | `"latest"` |
+| `-InstallDir` (PS) | Root install directory (binary → `<InstallDir>\bin`) | `$env:LOCALAPPDATA\ezmk` |
+| `-NoPath` (PS) | Do not modify the user `PATH` | (PATH is configured) |
 | `-DryRun` (PS) | Preview without making changes | (off) |
 
 ## vs CMake
@@ -146,14 +149,14 @@ ezmk pack [flags]               # create distributable archive (full: ezmk proje
 # Project
 ezmk project new <name>         # scaffold new project
 ezmk project cc [flags]         # generate compile_commands.json for clangd
-ezmk project export <cmake|vscode> [flags]  # generate CMakeLists.txt / .vscode/ debug trio from ezmk.toml
+ezmk project export <cmake|vscode> [flags]  # generate CMakeLists.txt / .vscode/ debug trio from ezmk.toml (vscode: 1.4.0-dev.1+)
 ezmk project import [flags]     # import a CMake project into ezmk.toml (experimental)
 
 # Packages
 ezmk pkg install <pkg>          # install a package
 ezmk pkg search <pkg>           # search registered repos
 ezmk pkg list                   # list installed packages
-ezmk pkg update [<pkg>]         # update to latest
+ezmk pkg update <pkg>           # update to latest (or --all for every installed package)
 
 # Repos
 ezmk repo add <url>             # register a repo

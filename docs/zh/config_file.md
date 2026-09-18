@@ -6,7 +6,7 @@
 
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `name` | string | 是 | — | 项目名称 |
+| `name` | string | 否 | — | 项目名称。当前未被强制校验（仅 `version` 必填） |
 | `type` | string | 否 | `"executable"` | 项目类型：`"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | 是 | — | 项目版本，建议 SemVer 格式（如 `"0.1.0"`） |
 | `language` | string | 否 | `"C++17"` | 语言标准，如 `"C++17"`、`"C11"`、`"GNUCPP17"`。大小写不敏感，`C++`/`CXX`/`CPP` 统一。**1.3.1+** 区间语法：`">=C++11"`（最低要求）/ `"C++11..C++17"`（min..max） |
@@ -85,13 +85,19 @@
 |------|------|------|--------|------|
 | `flags` | string[] | 否 | `[]` | 编译时添加的标志（如 `-Wall`、`-O2`）。GCC/Clang 格式，MSVC 下自动翻译 |
 | `msvc_flags` | string[] | 否 | `[]` | **0.2.1+** MSVC 专用编译标志（不翻译，仅 MSVC 工具链时追加） |
-| `include_dirs` | string[] | 否 | `["include"]` | 编译时 `-I` 搜索路径，相对于项目根目录；对包同样生效（1.2.0-dev.9+，相对包根解析，与默认 `include/` 保序去重） |
+| `include_dirs` | string[] | 否 | `["include"]` | 编译时 `-I` 搜索路径，相对于项目根目录；对包同样生效（1.2.0-dev.9+，相对包根解析，与默认 `include/` 保序去重）。`<proj_root>/include` 只要存在就恒被加入 `-I`（与 `include_dirs` 是否包含它无关）；显式 `include_dirs = []` 会静默回落为 `["include"]`（与 `src_dirs = []` 报错的行为不对称） |
 | `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错；对包同样生效（1.2.0-dev.9+，包编译按此收集源文件，缺失目录 warn+跳过） |
 | `ezmk_macros` | bool | 否 | `true` | **0.2.2+** 是否自动注入 `EZMK_*` 标准预处理器宏（`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`） |
 | `compile_commands` | bool | 否 | `false` | **1.1.1+** 构建成功后自动生成 `compile_commands.json`（clangd 索引） |
 | `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
+| `deterministic` | bool | 否 | `false` | **1.1.0+** 确定性构建：注入 `-ffile-prefix-map` / `-frandom-seed`（GCC/Clang）或 `/Brepro`（MSVC），并让 `ezmk.lock` 缺失/哈希不匹配成为**致命错误** |
+| `source_date_epoch` | 整数 | 否 | `0` | **1.1.0+** 确定性构建时间戳（`0` = 自动解析；负值报错） |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
+
+> **`source_date_epoch` 解析优先级（仅当 `deterministic = true` 时）：**
+> `[compile].source_date_epoch` → 环境变量 `SOURCE_DATE_EPOCH` → git HEAD 提交时间
+> → `ezmk.toml` 的 mtime。
 
 > **`compile_commands`（1.1.1+）：** 为 `true` 时，`ezmk build` 链接成功后写入 `compile_commands.json`。索引由与构建相同的命令构造（单一事实源）生成，因此不会与真实编译参数漂移——`-D` 宏、include 目录、`@link:` 解析结果与当前 profile 都会反映在内。对标 CMake 的 `CMAKE_EXPORT_COMPILE_COMMANDS`。`ezmk utils cc` 可随时按需生成；`--compile-commands` 构建 flag 可在不改配置的情况下单次启用。
 
@@ -119,7 +125,7 @@
 | 宏名 | 类型 | 示例值 | 说明 |
 |------|------|--------|------|
 | `EZMK` | 整数 | `1` | 始终定义为 `1`，标识构建系统为 EazyMake |
-| `EZMK_VERSION` | 字符串 | `"1.3.6"` | EazyMake 自身版本号 |
+| `EZMK_VERSION` | 字符串 | `"1.4.2"` | EazyMake 自身版本号 |
 | `EZMK_PROJECT_NAME` | 字符串 | `"myapp"` | `[project].name` |
 | `EZMK_PROJECT_VERSION` | 字符串 | `"1.0.0"` | `[project].version` |
 | `EZMK_PROJECT_TYPE` | 字符串 | `"executable"` | `[project].type` |
@@ -228,21 +234,21 @@ want = [
 ```toml
 [metadata]
 version = 1
-generated_by = "ezmk 1.1.0"
+generated_by = "ezmk 1.4.2"
 toolchain = "gcc"
 direct_deps = ["fmt", "spdlog@^1.14.0"]
 
 [[packages]]
 name = "spdlog"
 version = "1.14.1"
-sha256 = "..."                      # 旧字段：lib_sha256 的兼容别名（1.4.2 之前的文件）
+sha256 = "..."                      # 旧字段：lib_sha256 的兼容别名（1.4.2 仍会写出）
 archive_sha256 = "..."              # 安装所用**归档**的 SHA-256（1.4.2）
 lib_sha256 = "..."                  # 已安装**产物**的 SHA-256（1.4.2）
 type = "static"
-scope = "user"
-platform = "windows_x86_64_msvc"    # 安装时工具链的真实 os_arch_toolchain（1.4.2）
-source = "official"                 # 仓库名；git URL 安装为 "git"；或 "url"/"path"
-source_url = ""                     # git/url 安装的原始 URL
+scope = "project"                   # lockfile 只在项目作用域生成
+platform = "windows_x86_64_msvc"    # 安装时工具链的真实 os_arch_toolchain（1.4.2；MSYS2/g++ 下为 windows_x86_64_gcc）
+source = "repo"                     # 来源**类型**："repo" / "url" / "local"（无来源标记时为 "archive"）
+source_url = "..."                  # 具体来源：URL / 绝对路径 / 仓库名
 commit = ""                         # git 源锁定的 commit SHA（1.4.1+，可选）
 dependencies = []
 ```
@@ -252,6 +258,13 @@ dependencies = []
 1.4.2 之前两项校验读同一个 `sha256` 字段，导致编译型包的 `--locked` 永远无法匹配（归档 ≠ 编译产物）
 而必然失败；加载器仍接受旧字段 `sha256` 作为产物哈希。`platform` 同样改为安装时工具链的真实
 `os_arch_toolchain`，不再是固定占位值。
+
+**`source` 与 `source_url`：** `source` 记录来源**类型**——`"repo"` / `"url"` / `"local"`
+（无来源标记时为 `"archive"`）；具体来源（URL、绝对路径或仓库名）写在 `source_url`。
+
+**header-only 包：** `lib_sha256`（及旧别名 `sha256`）是 `include/` **清单哈希**——
+排序后的 `relpath\n文件哈希\n` 拼接再整体哈希，不是单文件摘要。注意 1.4.2 写出的新
+lockfile **仍会**包含 `sha256` 别名，并非"仅 pre-1.4.2 文件"才有的字段。
 
 ---
 
@@ -300,6 +313,8 @@ Profile 默认**不会**自动应用——没有 `default_profile` 时，用户�
 
 与 `compile.profile` 对应的链接阶段配置，通过同一个 `--profile <name>` 激活。
 
+**前置条件：** profile 名**必须**已存在于 `[compile.profile.<name>]`——只定义 `[link.profile.X]` 会在构建时致命报错 `unknown profile`，因为 profile 查找只查询 `[compile.profile.*]`。
+
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `flags` | string[] | 否 | `[]` | 追加到 `[link].flags` 之后的链接标志 |
@@ -317,6 +332,9 @@ flags = []
 flags = ["-flto"]
 ```
 
+> **提示：** 只写 `[link.profile.<name>]` 是不够的——同名 profile 还必须在
+> `[compile.profile.<name>]` 中定义，否则构建会以 `unknown profile` 致命失败。
+
 ---
 
 ## `hooks` 节（0.2.3+）
@@ -329,7 +347,7 @@ flags = ["-flto"]
 |------|------|------|--------|------|
 | `pre_build` | string | 否 | `""` | 编译开始前执行的 Lua 脚本路径（相对于项目根目录） |
 | `post_build` | string | 否 | `""` | 链接成功后执行的 Lua 脚本路径 |
-| `on_failure` | string | 否 | `""` | 编译或链接失败时执行的 Lua 脚本路径 |
+| `on_failure` | string | 否 | `""` | **链接**失败时执行的 Lua 脚本路径（编译失败不会触发该钩子） |
 
 示例：
 
@@ -356,7 +374,7 @@ on_failure = "scripts/fail.lua"
 | `bindir` | string | 否 | `"bin"` | 可执行文件子目录（相对于 `prefix`） |
 | `libdir` | string | 否 | `"lib"` | 静态/动态库子目录 |
 | `includedir` | string | 否 | `"include"` | 头文件子目录 |
-| `sharedir` | string | 否 | `"share"` | 数据文件子目录 |
+| `sharedir` | string | 否 | `"share"` | **保留字段/尚未实现**——代码只解析其值（默认 `"share"`），安装流程只安装二进制/库/头文件，不安装任何数据文件 |
 
 安装布局：
 - `executable` → `<bindir>/`
@@ -415,7 +433,7 @@ link_targets = ["pthread"]         # 1.2.0-dev.12+：测试专属链接库
 
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `tools` | string[] | 是 | — | 本包提供的工具名列表，每个对应 `utils/<name>.lua` |
+| `tools` | string[] | 否 | `[]` | 本包提供的工具名列表，每个对应 `utils/<name>.lua`。代码只读取、不校验，空数组可接受 |
 
 示例：
 

@@ -16,7 +16,7 @@ EazyMake 文档的标准化中文术语。维护者和翻译者应参考此术�
 | 缓存 | cache | 基于内容哈希的增量构建缓存，存储在 `.ezmk/cache/` |
 | 钩子 | hook | 在构建生命周期节点执行的 Lua 脚本：`pre_build`、`post_build`、`on_failure` |
 | 工具链 | toolchain | 编译器/链接器抽象层，支持 GCC、Clang 和 MSVC |
-| 构建配置 | profile | `ezmk.toml` 中一组命名的编译/链接标志覆盖，通过 `--profile <name>` 激活 |
+| 构建配置 | profile | `ezmk.toml` 中一组命名的编译/链接标志覆盖，通过 `--profile <name>` 激活；未传该参数时回落到 `[compile].default_profile` |
 
 ## 包与仓库术语
 
@@ -52,7 +52,7 @@ EazyMake 文档的标准化中文术语。维护者和翻译者应参考此术�
 | 沙箱 | sandbox | 受限的 Lua 环境：编译期移除 `os` 和 `io`；文件写入限制在项目根目录内 |
 | 权限 | permission | `[utils.permissions]` 中对 `file_read`/`file_write`/`run` 的细粒度白名单/黑名单 |
 | 入口脚本 | entry script | `utils/<name>.lua` 文件，实现工具的 `run(args)` 和可选的 `help()` 函数 |
-| 内置工具 | built-in tool | 直接编译进 ezmk 二进制的工具（目前仅 `ezmk-cc`） |
+| 内置工具 | built-in tool | 直接编译进 ezmk 二进制的工具（目前仅 `cc`，通过 `ezmk utils cc` 调用，由官方包 `ezmk-cc` 分发） |
 
 > **为什么 utils 要在沙箱中运行？** utils 包是第三方代码，不加限制的话它可能
 > 读写磁盘上的任意位置。沙箱移除 `os`/`io`，并将写入限制在项目根目录内

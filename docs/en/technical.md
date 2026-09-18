@@ -14,7 +14,7 @@ All dependencies below, except for the compiler and MSYS2, are embedded and do n
 | nlohmann/json                          | header-only      | **Embedded**        | JSON support (`include/vendor/nlohmann_json.hpp`) |
 | toml++                                 | header-only      | **Embedded**        | TOML parsing (`include/vendor/toml.hpp`)          |
 | Catch2                                 | v3               | **Test only**       | Unit test framework                               |
-| miniz                                  | v3.0.2           | **Embedded**        | ZIP extraction (`src/vendor/miniz/*`)             |
+| miniz                                  | embedded (vendor version string 2.2.0 / `MZ_VERSION` 10.2.0) | **Embedded**        | ZIP extraction (`src/vendor/miniz*.c` + `include/vendor/miniz*.h`) |
 | Python                                 | ≥ 3.6            | **Build only**      | Locale data embedding (`scripts/embed_locale.py`) |
 | MSYS2 (Windows)                        | —                | **Build & runtime** | Provides g++ and bash environment                 |
 
@@ -30,20 +30,29 @@ All dependencies below, except for the compiler and MSYS2, are embedded and do n
 bash build.sh
 
 # Or manually — MSYS2 / Windows
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+# `src/*.cpp` also matches both entry points (`main.cpp` + `ezmk_lua_main.cpp`),
+# and linking two `main()` definitions fails — exclude the Lua one.
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static
 
 # Linux
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk -static
 
 # macOS
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk
 ```
+
+> **Run the generators first.** These recipes assume the generated sources
+> already exist; a fresh clone does not have three of them (they are
+> `.gitignore`d). Run the scripts to produce them: `scripts/embed_locale.py` →
+> `src/locale_data.cpp`, `scripts/embed_examples.py` → `src/example_data.cpp`,
+> `scripts/embed_logo.py` → `include/ezmk/logo.gen.h`, and `build.sh` →
+> `include/ezmk/version.hpp`.
 
 > **Why a bash script for building?** All first-class build environments — Linux,
 > macOS, and MSYS2 — ship a POSIX shell, so a `build.sh` that orchestrates locale
@@ -66,8 +75,8 @@ bash build.sh integration
 bash build.sh test -v
 ```
 
-- **Unit tests** (`test/test_*.cpp`): 546 test cases covering all modules
-- **Integration tests** (`test/test_integration.cpp`): 8 end-to-end scenarios tagged `[integration]` (`test-all` = 556 cases / 2666 assertions)
+- **Unit tests** (`test/test_*.cpp`): ~987 test cases covering all modules
+- **Integration tests** (`test/test_integration*.cpp`): ~112 end-to-end scenarios tagged `[integration]`, spread over `test_integration.cpp`, `test_integration_workspace.cpp`, `test_integration_report.cpp`, and `test_integration_git.cpp` (`test-all` = 1099 cases / 6342 assertions; 1094 passed, 5 skipped)
 - Tests use [Catch2](https://github.com/catchorg/Catch2) v3
 - Set `EZMK_TEST_BIN` to override the ezmk binary path for integration tests
 
@@ -110,11 +119,13 @@ EazyMake translates common GCC flags to MSVC equivalents automatically (e.g. `-W
 
 ### Cross-compiler builds
 
-The same project builds with GCC and MSVC without changes — cache records are isolated by compiler, so switching compilers does not cause cache conflicts.
+The same project builds with GCC and MSVC without changes — switching compilers does not reuse stale objects: the record stores the detected compiler's **version string** (`compiler_version`), and a change in it invalidates the cache as a whole. The `compiler` name field in the record is written for diagnostics and is not compared.
 
-> **Why isolate the cache per compiler?** Objects compiled by different toolchains
-> are binary-incompatible; keying the cache by compiler prevents a stale GCC object
-> from being silently reused in an MSVC build (and vice versa).
+> **Why key the cache on the compiler version?** Objects compiled by different
+> toolchains are binary-incompatible; if a compiler switch (or an upgrade) did not
+> invalidate the cache, a stale GCC object would be silently reused in an MSVC
+> build (and vice versa). The version string is the field that actually triggers
+> that invalidation.
 
 ## Project Structure
 

@@ -118,7 +118,7 @@ Storage paths for the registered repository list:
 | Scope   | Path                                 |
 | ------- | ------------------------------------ |
 | Global  | `<ezmk_install_dir>/repo/list.toml`  |
-| User    | `~/.local/ezmk/repo/list.toml`       |
+| User    | `~/.local/ezmk/repo/list.toml` (Unix) · `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows) |
 | Project | `<project_dir>/.ezmk/repo/list.toml` |
 
 Format:
@@ -151,7 +151,7 @@ last_update = "2026-06-19T10:00:00Z"
 | `url`         | git clone URL (`type = "git"`) or local directory path (`type = "local"`) |
 | `type`        | `"git"` or `"local"`                                                 |
 | `branch`      | Tracked branch, valid when `type = "git"`, default `main`            |
-| `last_update` | Timestamp of the last `update`                                       |
+| `last_update` | For `type = "git"`, the commit time of the tracked branch's latest commit (`git log -1 --format=%cI`); for `type = "local"`, the wall-clock time of the last `update`. A pull that brings no new commits leaves the value unchanged |
 
 ### Local Cache Paths
 
@@ -160,7 +160,7 @@ Destination directories for `git clone`:
 | Scope   | Cache Path                                      |
 | ------- | ----------------------------------------------- |
 | Global  | `<ezmk_install_dir>/repo/.cache/<repo_name>/`   |
-| User    | `~/.local/ezmk/repo/.cache/<repo_name>/`        |
+| User    | `~/.local/ezmk/repo/.cache/<repo_name>/` (Unix) · `%LOCALAPPDATA%\ezmk\repo\.cache\<repo_name>\` (Windows) |
 | Project | `<project_dir>/.ezmk/repo/.cache/<repo_name>/`  |
 
 For `type = "local"` repositories, there is no `.cache/` directory — the local path pointed to by `url` is used directly.
@@ -333,7 +333,7 @@ When the argument to `pkg install` is neither a local file path nor a URL contai
 ### Caveats
 
 - Ensure `ezmk repo update` has been run before the first `pkg install foo`, otherwise an outdated `index.toml` may be used
-- It is recommended to automatically run `ezmk repo update --pug` before `ezmk project build` (optional, may be added in a future version)
+- It is recommended to automatically run `ezmk repo update -pug` before `ezmk project build` (optional, may be added in a future version)
 - If a package in a repository has a `sha256`, it must be verified during installation
 
 > **Why run `repo update` before the first install?** Name-search reads the cached
@@ -405,8 +405,8 @@ Repository-related security policies (no confirmation required for global regist
 | ---------------------------------------- | ---------------------------- |
 | `<ezmk_install_dir>/repo/list.toml`      | Global repo registry         |
 | `<ezmk_install_dir>/repo/.cache/<name>/` | Global repo clone cache      |
-| `~/.local/ezmk/repo/list.toml`           | User repo registry           |
-| `~/.local/ezmk/repo/.cache/<name>/`      | User repo clone cache        |
+| `~/.local/ezmk/repo/list.toml` (Unix) · `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows) | User repo registry |
+| `~/.local/ezmk/repo/.cache/<name>/` (Unix) · `%LOCALAPPDATA%\ezmk\repo\.cache\<name>\` (Windows) | User repo clone cache |
 | `.ezmk/repo/list.toml`                   | Project repo registry        |
 | `.ezmk/repo/.cache/<name>/`              | Project repo clone cache     |
 

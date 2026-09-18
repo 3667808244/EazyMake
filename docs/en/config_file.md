@@ -6,7 +6,7 @@
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `name` | string | Yes | — | Project name |
+| `name` | string | No | — | Project name. Not currently enforced — only `version` is required |
 | `type` | string | No | `"executable"` | Project type: `"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | Yes | — | Project version; SemVer format recommended (e.g. `"0.1.0"`) |
 | `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified. **1.3.1+** range syntax: `">=C++11"` (minimum) / `"C++11..C++17"` (min..max) |
@@ -112,13 +112,19 @@ code supports a baseline standard (optionally up to a documented upper bound):
 |-------|------|----------|---------|-------------|
 | `flags` | string[] | No | `[]` | Compile flags (e.g. `-Wall`, `-O2`). GCC/Clang format, auto-translated under MSVC |
 | `msvc_flags` | string[] | No | `[]` | **0.2.1+** MSVC-specific compile flags (not translated, only appended when using MSVC toolchain) |
-| `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root; also honored for packages (1.2.0-dev.9+, resolved relative to the package root, order-preserving dedup against the default `include/`) |
+| `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root; also honored for packages (1.2.0-dev.9+, resolved relative to the package root, order-preserving dedup against the default `include/`). `<proj_root>/include` is always added to `-I` whenever it exists, whether or not `include_dirs` lists it; an explicit `include_dirs = []` silently falls back to `["include"]` (asymmetric with `src_dirs = []`, which errors) |
 | `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error; also honored for packages (1.2.0-dev.9+, package sources are collected from these directories, missing dirs warn + skip) |
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
 | `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
+| `deterministic` | bool | No | `false` | **1.1.0+** Deterministic (reproducible) builds: injects `-ffile-prefix-map` / `-frandom-seed` (GCC/Clang) or `/Brepro` (MSVC), and makes a missing or hash-mismatched `ezmk.lock` a **fatal error** |
+| `source_date_epoch` | integer | No | `0` | **1.1.0+** Deterministic build timestamp (`0` = resolve automatically; negative values are rejected) |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
+
+> **`source_date_epoch` resolution priority (only when `deterministic = true`):**
+> `[compile].source_date_epoch` → environment variable `SOURCE_DATE_EPOCH` →
+> git HEAD commit time → `ezmk.toml` mtime.
 
 > **`compile_commands` (1.1.1+):** When `true`, `ezmk build` writes `compile_commands.json`
 > after a successful link. The index is produced from the same command construction as
@@ -157,7 +163,7 @@ A standalone subsection that defines preprocessor macros. More semantic than usi
 | Macro name | Type | Example value | Description |
 |------------|------|---------------|-------------|
 | `EZMK` | integer | `1` | Always defined as `1`; identifies the build system as EazyMake |
-| `EZMK_VERSION` | string | `"1.3.6"` | EazyMake's own version number |
+| `EZMK_VERSION` | string | `"1.4.2"` | EazyMake's own version number |
 | `EZMK_PROJECT_NAME` | string | `"myapp"` | `[project].name` |
 | `EZMK_PROJECT_VERSION` | string | `"1.0.0"` | `[project].version` |
 | `EZMK_PROJECT_TYPE` | string | `"executable"` | `[project].type` |
@@ -274,21 +280,21 @@ Conversion rules from `want` package name to macro name:
 ```toml
 [metadata]
 version = 1
-generated_by = "ezmk 1.1.0"
+generated_by = "ezmk 1.4.2"
 toolchain = "gcc"
 direct_deps = ["fmt", "spdlog@^1.14.0"]
 
 [[packages]]
 name = "spdlog"
 version = "1.14.1"
-sha256 = "..."                      # legacy alias of lib_sha256 (pre-1.4.2 files)
+sha256 = "..."                      # legacy alias of lib_sha256 — still written by 1.4.2
 archive_sha256 = "..."              # SHA-256 of the ARCHIVE this package was installed from (1.4.2)
 lib_sha256 = "..."                  # SHA-256 of the installed artifact (1.4.2)
 type = "static"
-scope = "user"
-platform = "windows_x86_64_msvc"    # real os_arch_toolchain of the installing toolchain (1.4.2)
-source = "official"                 # repo name, "git" for git-URL installs, or "url"/"path"
-source_url = ""                     # original URL for git/url installs
+scope = "project"                   # lockfiles are generated in project scope only
+platform = "windows_x86_64_msvc"    # real os_arch_toolchain of the installing toolchain (1.4.2; MSYS2/g++ writes windows_x86_64_gcc)
+source = "repo"                     # source TYPE: "repo" / "url" / "local" ("archive" when no provenance marker)
+source_url = "..."                  # the concrete source: URL, absolute path, or repo name
 commit = ""                         # pinned commit SHA for git sources (1.4.1+, optional)
 dependencies = []
 ```
@@ -302,6 +308,16 @@ same single `sha256` field, so `--locked` could never match a compiled package
 legacy `sha256` as the artifact hash. `platform` is likewise now the real
 `os_arch_toolchain` triplet of the toolchain that installed the package instead
 of a fixed placeholder.
+
+**`source` vs `source_url`:** `source` records the provenance *type* — `"repo"`,
+`"url"` or `"local"` (`"archive"` when no provenance marker is present) — while
+the concrete origin (URL, absolute path, or repository name) is written to
+`source_url`.
+
+**Header-only packages:** `lib_sha256` (and its legacy alias `sha256`) is the hash
+of the `include/` **manifest** — the sorted `relpath\n<file hash>\n` concatenation
+hashed as a whole, not a single-file digest. Note that 1.4.2 still writes the
+`sha256` alias into newly generated lockfiles, so it is not a pre-1.4.2-only field.
 
 ---
 
@@ -354,6 +370,8 @@ Profiles do **not** auto-apply by default — without a `default_profile`, the u
 
 Link-phase configuration corresponding to `compile.profile`, activated by the same `--profile <name>`.
 
+**Prerequisite:** the profile name **must** exist in `[compile.profile.<name>]` — defining only `[link.profile.X]` fails the build with a fatal `unknown profile` error, because profile lookup only consults `[compile.profile.*]`.
+
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `flags` | string[] | No | `[]` | Link flags appended after `[link].flags` |
@@ -371,6 +389,10 @@ flags = []
 flags = ["-flto"]
 ```
 
+> **Note:** a `[link.profile.<name>]` entry alone is not enough — the same name must
+> also be defined under `[compile.profile.<name>]`, otherwise the build fails with
+> `unknown profile`.
+
 ---
 
 ## `hooks` Section (0.2.3+)
@@ -385,7 +407,7 @@ Build lifecycle hooks — execute Lua scripts at key points of compilation/linki
 |-------|------|----------|---------|-------------|
 | `pre_build` | string | No | `""` | Path to Lua script executed before compilation begins (relative to project root) |
 | `post_build` | string | No | `""` | Path to Lua script executed after successful linking |
-| `on_failure` | string | No | `""` | Path to Lua script executed on compile or link failure |
+| `on_failure` | string | No | `""` | Path to Lua script executed on **link** failure (a compile failure does not trigger it) |
 
 Example:
 
@@ -421,7 +443,7 @@ Controls where `ezmk install` copies build artifacts. Per-invocation override: `
 | `bindir` | string | No | `"bin"` | Subdirectory for executables (relative to `prefix`) |
 | `libdir` | string | No | `"lib"` | Subdirectory for static/shared libraries |
 | `includedir` | string | No | `"include"` | Subdirectory for headers |
-| `sharedir` | string | No | `"share"` | Subdirectory for data files |
+| `sharedir` | string | No | `"share"` | **Reserved / not yet implemented** — the value is parsed (default `"share"`) but never used: install only copies executables, libraries, and headers, never data files |
 
 Install layout:
 - `executable` → `<bindir>/`
@@ -482,7 +504,7 @@ Only valid when `[project].type = "utils"`.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `tools` | string[] | Yes | — | List of tool names provided by this package; each corresponds to `utils/<name>.lua` |
+| `tools` | string[] | No | `[]` | List of tool names provided by this package; each corresponds to `utils/<name>.lua`. Read but not validated — an empty array is accepted |
 
 Example:
 

@@ -29,13 +29,14 @@ ezmk project import --overwrite     # 覆盖已存在的 ezmk.toml
 | CMake 命令 | 映射到 |
 |---|---|
 | `project(name VERSION x.y.z LANGUAGES CXX/C)` | `[project]` `name` / `version` / `language` |
-| `add_executable(t ...)` | `[project]` `type = "executable"`，`name = t` |
-| `add_library(t STATIC/SHARED ...)` | `type = "static"` / `"shared"` |
+| `add_executable(t ...)` | `[project]` `type = "executable"`（只设置 `main_target` / `type`；`name` 来自 `project()`，缺省用目录名） |
+| `add_library(t [STATIC\|SHARED\|MODULE\|INTERFACE] ...)` | `type = "static"` / `"shared"` — 无关键字或 `STATIC` → `static`；`INTERFACE` → `type = "static"` + `header_only = true`；`MODULE` → `type = "shared"`（留 `# TODO:`） |
+| `set_target_properties(t PROPERTIES CXX_STANDARD <N>)`、`C_STANDARD`、`target_compile_features(t PRIVATE cxx_std_<N>)` | `[project]` `language = ">=CPP<N>"` / `">=C<N>"` |
 | `target_sources(t PRIVATE <src...>)` | `[compile].src_dirs`（源文件所在目录） |
 | `target_include_directories(t PRIVATE <dir...>)` | `[compile].include_dirs` |
 | `target_compile_definitions(t PRIVATE <NAME=VAL...>)` | `[compile.macros]` |
 | `target_compile_options(t PRIVATE <flag...>)` | `[compile].flags` |
-| `target_link_libraries(t PRIVATE <lib...>)` | `[link].system_targets`（无法识别的库） |
+| `target_link_libraries(t PRIVATE <lib...>)` | `[link].system_target`（无法识别的库） |
 
 **多 target 项目**：仅导入第一个/主 target，其余忽略。多 target 建议拆分为多个
 EazyMake 项目。
@@ -54,8 +55,9 @@ EazyMake 项目。
   # lib = ["boost@1.82"]
   ```
 
-- **条件块**（`if(WIN32)`、`if(UNIX)`、`if(APPLE)`、`if(MSVC)` 等）—— 取**当前平台**
-  对应的分支。无法求值的条件（自定义变量、`$ENV{...}`、复杂表达式）会跳过并标记
+- **条件块**（`if(WIN32)`、`if(UNIX)`、`if(APPLE)`、`if(MSVC)` 等）—— 按 **Windows 主机**
+  语义求值取分支：`WIN32` 恒为真，`UNIX` / `APPLE` / `MSVC` 恒为假（硬编码，只有
+  `CMAKE_SYSTEM_NAME` 按平台判断）。无法求值的条件（自定义变量、`$ENV{...}`、复杂表达式）会跳过并标记
   `# TODO: 未求值的条件块`。
 
 ## 明确拒绝的写法（中止，不产出）
@@ -78,13 +80,13 @@ post_build = "scripts/strip_symbols.lua" # 链接后执行
 ```
 
 钩子示例见 `docs/zh/config_file.md`（`[hooks]` 节）与 `tutorial/zh/dev/01-watch-hooks.md`。
-`execute_process` 式逻辑对应 Lua API 的 `ezmk.run_command()` / `ezmk.file_write()`；
+`execute_process` 式逻辑对应 Lua API 的 `ezmk.run()` / `ezmk.run_capture()` / `ezmk.file_write()`；
 `pkg_check_modules` 对应 `ezmk pkg install <name>`（或上面的 `[depends]` 注释条目）。
 
 ## 导入后检查清单
 
 1. 逐条审阅生成的 `ezmk.toml` 里的 `# TODO:` 注释。
 2. 取消注释并修正 `[depends]` 条目，执行 `ezmk pkg install <name>`。
-3. 核对 `[compile.macros]`（尤其平台宏）与 `[link].system_targets`。
+3. 核对 `[compile.macros]`（尤其平台宏）与 `[link].system_target`。
 4. 运行 `ezmk build` 再 `ezmk run`。用 `ezmk project cc` 重新生成
    `compile_commands.json`（clangd/LSP）。

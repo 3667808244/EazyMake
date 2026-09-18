@@ -139,11 +139,12 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `--verbose` / `-v` | 显示完整编译命令和缓存命中情况 |
 | `-j <N>` / `--jobs <N>` | 并行编译任务数；`0` = 自动（`hardware_concurrency`），默认值 |
 | `--profile <name>` | 应用 `[compile.profile.<name>]` / `[link.profile.<name>]` 中的构建配置 |
-| `--auto-update` | 构建前运行 `ezmk repo update --pug`（默认关闭） |
+| `--auto-update` | 构建前运行 `ezmk repo update -pug`（默认关闭） |
+| `--compile-commands` | **1.1.1+** 链接成功后为本次调用写出 `compile_commands.json`（等价于 `[compile].compile_commands = true`） |
 
 > **为什么 `-j 0` 是默认值？** 自动并行（`hardware_concurrency`）无需任何配置就能获得不错的加速。注意自 1.4.2 起 `--disable-cache` **不再**写入任何缓存条目，并会把 `record.json` 清空——它是一次性回到干净增量状态的逃生门，而不是缓存永久失效模式；下一次构建同样从零开始。
 
-> **构建耗时明细（1.2.0+）：** `ezmk build -v` 始终按耗时降序打印每个源文件的编译耗时明细。不带 `-v` 时，若构建总耗时超过 5 秒，则自动打印最慢的 10 个编译单元。无需配置、无新增标志——仅列出实际编译（非缓存命中）的文件，单线程路径只显示总耗时。
+> **构建耗时明细（1.2.0+）：** `ezmk build -v` 始终按耗时降序打印每个源文件的编译耗时明细。不带 `-v` 时，若构建总耗时超过 5 秒，则自动打印最慢的 10 个编译单元。无需配置、无新增标志——仅列出实际编译（非缓存命中）的文件。明细与总耗时两行都要求并行路径（job 数 **且** 源文件数都 > 1）；`-j 1` 或单源构建时**不打印任何耗时输出**。
 
 **`new` 专属标志：**
 
@@ -188,13 +189,14 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `--prefix <path>` | 覆盖 `[install].prefix` |
 | `--dry-run` | 仅显示将要安装的内容，不实际复制 |
 | `--no-headers` | 跳过头文件安装 |
-| `--no-data` | 跳过数据文件安装 |
+| `--no-data` | 接受但当前**无任何效果**——数据文件安装尚未实现；实际只安装二进制、库与头文件 |
 
 **`pack` 专属标志：**
 
 | 标志 | 用途 |
 |---|---|
-| `--output <dir>` | 输出目录（默认 `.`）。仅适用于 `type = "static"` 的项目 |
+| `--output <dir>` | 输出目录（默认 `.`）；任何项目类型都可用 |
+| `--precompiled` | **1.2.5+** 产出预编译包（`include/` + `lib/` + 标记）而非默认的平台无关源码包——**仅 `type = "static"`** |
 | `--format <tar.gz\|tgz\|zip>` | **1.3.5+** 归档格式（默认 `tar.gz`，行为不变；`zip` 走 vendored miniz）。**1.4.0-dev.5+** `tgz` 是 `tar.gz` 的大小写不敏感别名（解析时归一化，归档名仍为 `name-version.tar.gz`）。各格式内容逐文件等价（同一 stage 流程），均产出 `<archive>.sha256` 边车 |
 
 > **`pack` 产出 `.sha256` 边车（1.3.5+）：** 每次成功打包写 `<archive>.sha256`（`<hash>  <filename>`，tar.gz 与 zip 统一）——纯新增文件，不影响既有消费。`.deb` / `.rpm` 明确不做（用 `fpm` + `ezmk project install --prefix <staging>` 配方）。
@@ -204,9 +206,9 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | 标志 | 用途 |
 |---|---|
 | `--framework` / `-f <catch2\|ezmk>` | 临时覆盖 `test.framework` |
-| `--filter <pattern>` | 过滤测试名称（Catch2: 测试名；ezmk: 文件名 glob） |
+| `--filter <pattern>` | 过滤测试名称（Catch2: 测试名；ezmk: **文件名子串**匹配，不支持通配符） |
 | `--profile <name>` | **1.2.0-dev.12+** 临时覆盖 `test.default_profile`（与 `ezmk build --profile` 对称） |
-| `--verbose` / `-V` | 展示每个测试的详细输出（即使通过） |
+| `--verbose` / `-V` | 打印测试构建的编译/链接命令与每个测试自身的 stdout。**不会**给 Catch2 传 `-s`，因此通过用例不会逐条列出 |
 | `--report <格式>[:<路径>]` | **1.3.2+** 生成机器可读测试报告。格式 `junit`（缺省路径 `<项目根>/.ezmk/test-results/junit.xml`）；自定义相对 `<路径>` 按项目根解析。**Catch2** 额外接受任意 Catch2 reporter 名（`json`、`xml`、`sonarqube`…）——透传为 `-r <格式>::out=<文件>`，控制台摘要不受影响。**EZMK** 内置框架仅支持 `junit`（其他格式报错并提示改用 Catch2）。报告是附加产物，不改变测试退出码。`--filter` 与 `--report` 可组合（报告只含过滤后的用例）。`ezmk workspace test --report ...` 将标志透传给每个成员，各写各的报告文件 |
 
 `ezmk run`（及其完整形式 `ezmk project run`）将 `--` 之后的所有内容传递给构建后的程序。
@@ -257,7 +259,7 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 
 **`--stop-on-error`（`build` / `test`）：** 首个失败发生后**停止派发新任务**——本层未启动的成员与所有后续层标记 `skipped`；已在运行的成员**自然结束、不 kill**。摘要含 succeeded / failed / skipped；任一失败退出码非零。不设该标志 → 全部成员跑完再汇总。`clean` **不支持**该标志（无依赖语义）。
 
-**`workspace watch`（1.4.0-dev.5+）：** 在每个**选定成员**里并行跑 `ezmk watch`（成员级 watch——各成员保持自己的项目语义、增量缓存与输出），成员输出带 `[member]` 前缀聚合。选定成员的 watcher 在 `-j` 限制内同时运行，Ctrl+C 一起停止（每个成员 watch 自行处理 SIGINT）。`--member <name>` 选择目标成员 + 依赖闭包；`--run`/`-r` 只透传给 **executable** 成员（`static` 成员不带 `--run` watch——库无此语义）。**并发注意：** 依赖者重建时会读取被依赖成员的 `build/` 产物——被依赖成员重建期间，依赖者可能短暂读到半成品兄弟产物（下次重建自愈）。成员按拓扑序启动（依赖先）以缩小窗口；若因此偶发链接抖动，用 `--member` 只监视所需子集。
+**`workspace watch`（1.4.0-dev.5+）：** 在每个**选定成员**里并行跑 `ezmk watch`（成员级 watch——各成员保持自己的项目语义、增量缓存与输出），成员输出带 `[member]` 前缀聚合。选定成员的 watcher 同时启动、Ctrl+C 一起停止（每个成员 watch 自行处理 SIGINT）——自 1.4.2 起 `-j` **被接受但不限制 watch 并发**（watch 任务长驻，按成员各起一个线程；`-j` 仅仍出现在启动信息里）。`--member <name>` 选择目标成员 + 依赖闭包；`--run`/`-r` 只透传给 **executable** 成员（`static` 成员不带 `--run` watch——库无此语义）。**并发注意：** 依赖者重建时会读取被依赖成员的 `build/` 产物——被依赖成员重建期间，依赖者可能短暂读到半成品兄弟产物（下次重建自愈）。成员按拓扑序启动（依赖先）以缩小窗口；若因此偶发链接抖动，用 `--member` 只监视所需子集。
 
 **`-j N` / `--jobs N`：** 层内并行任务数；优先级 `-j` > `[workspace.options].default_jobs` > 硬件并发。
 
@@ -290,15 +292,17 @@ workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径�
 | `ezmk pkg update [scope] <name>` | 从仓库更新包（0.2.3+） |
 | `ezmk pkg update [scope] --all` | 更新所有已安装的包（0.2.4+） |
 
-**`install` 专属选项：**
+**`install` 选项**（`-y` 自 1.4.2 起也被 `pkg update` 接受；`--sha256`、`--locked`、`--no-lock`、`--branch` 仍为 install 专属）：
 
 | 标志 | 用途 |
 |---|---|
 | `--sha256 <hash>` | 安装前校验归档文件完整性 |
-| `-y` / `--yes` | 跳过确认提示（非交互模式） |
+| `-y` / `--yes` | 跳过确认提示（非交互模式）——`pkg update` 同样接受 |
 | `--locked` | 仅按现有 `ezmk.lock` 安装，不一致则报错（1.1.0+） |
 | `--no-lock` | 跳过 `ezmk.lock` 生成（1.1.0+） |
 | `--branch <ref>` | Git URL 源：克隆该分支/标签/提交（1.4.1+）——优先级高于 URL 的 `#<ref>` 片段 |
+
+> **`pkg update`（1.4.2+）：** 接受 `-y` / `--yes` 以便无人值守更新；任一条目更新失败时退出码**非零**；`--all` 分别统计 已更新 / 已取消 / 失败（取消不计入已更新）。
 
 **`install` 的源参数** 可以是本地文件/归档、本地目录、下载 URL、已注册仓库的**名称**，或 **git 仓库 URL**（1.4.1+）：`git@host:user/repo.git`、`git://host/repo.git`、`file:///path/repo.git`，或任意 `…repo.git` URL——可带 `#<ref>` 片段选择分支/标签/提交。git 源以 commit SHA 为指纹，`ezmk.lock` 记录 `source = "git"`（详见 [`pkg.md`](pkg.md)）。
 
@@ -357,9 +361,10 @@ ezmk repo update -u official
 
 内置 6 个示例（hello / greeter / with-packages / with-tests / with-hooks / cmake-interop），
 与教程章节一一对应，内容随二进制同版本（构建期从仓库 `examples/` 源目录嵌入）——
-**离线可用**。示例生成后即为完整可构建项目：`cd <name> && ezmk build`（with-packages
-首次构建需联网安装依赖；with-tests 用内置框架，零依赖）。目标目录已存在或示例名
-未知会报错并列出可用项。示例索引见仓库 `examples/README.md`。
+**离线可用**。示例生成后即为完整可构建项目：`cd <name> && ezmk build`。其中两个示例声明了
+包依赖——`with-packages`（`fmt`）与 `with-tests`（`catch2`）——首次构建会安装依赖、需要联网；
+`hello`、`greeter`、`with-hooks`、`cmake-interop` 无依赖。示例名**未知**会报错并列出可用项；
+目标目录**已存在**会报错并给出该路径。示例索引见仓库 `examples/README.md`。
 
 ### 官方工具（`ezmk-official-utils` 包，1.1.0+）
 
@@ -411,7 +416,7 @@ include_dirs = ["include", "@link:shared/include"]
 | `-u` | 用户 | `~/.local/ezmk/pkg/`（Unix）· `%LOCALAPPDATA%\ezmk\pkg\`（Windows） |
 | `-g` | 全局 | `<ezmk_install_dir>/pkg/` |
 
-`pkg install` 和 `repo add` 只接受**一个**作用域标志。其他命令接受组合标志，如 `-pug`（等价于 `-p -u -g`）。
+`pkg install` 和 `repo add` 只接受**一个**作用域标志，未指定时缺省为**项目作用域**。其他命令接受组合标志，如 `-pug`（等价于 `-p -u -g`），未指定时缺省为**三个作用域全选**——`ezmk pkg list` 不带标志会列出 项目 + 用户 + 全局。
 
 > **为什么 `install`/`add` 只接受一个作用域？** 它们会把包/仓库写入某个具体位置（project / user / global），目标必须唯一明确。而 `list` / `info` / `search` 是只读查询，可以跨作用域聚合，所以允许 `-pug` 组合。
 
@@ -478,6 +483,8 @@ include_dirs = ["include", "@link:shared/include"]
 | `NO_COLOR` | 运行时 | 禁用彩色输出（仅 `--color=auto` 时遵守）（`src/util.cpp`） |
 | `CXX` / `CC` | 运行时 + 构建 | 覆盖编译器检测（0.1.8+） |
 | `CXXFLAGS` | 构建 | 额外编译器标志，由 `build.sh` 透传 |
+| `SOURCE_DATE_EPOCH` | 构建 | `[compile] deterministic = true` 时的确定性构建时间戳。优先级：`[compile].source_date_epoch` → 本变量 → git HEAD 提交时间 → `ezmk.toml` mtime（`src/cache.cpp`） |
+| `EDITOR` / `VISUAL` | 运行时 | 审查**旧式 shell** 安装钩子时打开的编辑器（受 `[utils.permissions]` 门控的 Lua 钩子从不打开；`-y` 完全跳过编辑器） |
 | `EZMK_VERSION` | 构建 | 编译进二进制的版本字符串（`build.sh`） |
 | `PREFIX` | 安装 | 安装前缀；二进制安装至 `$PREFIX/bin`（默认 `$HOME/.local`）（`install.sh`） |
 | `EZMK_REF` | 安装 | 要构建的 git tag/分支/提交（`install.sh`） |

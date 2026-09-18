@@ -98,11 +98,13 @@ end
 
 | 优先级 | 路径 | 说明 |
 |---|---|---|
-| 1（项目级） | `<project>/.ezmk/pkg/*/utils/<name>.lua` | 扫描项目作用域所有已安装包 |
-| 2（用户级） | `~/.local/ezmk/pkg/*/utils/<name>.lua` | 扫描用户作用域所有已安装包 |
+| 1（项目级） | `<current_dir>/.ezmk/pkg/*/utils/<name>.lua` | 扫描项目作用域所有已安装包（`<current_dir>` = 进程当前目录） |
+| 2（用户级） | `~/.local/ezmk/pkg/*/utils/<name>.lua`（Unix）· `%LOCALAPPDATA%\ezmk\pkg\*\utils\<name>.lua`（Windows） | 扫描用户作用域所有已安装包 |
 | 3（全局级） | `<ezmk_install_dir>/pkg/*/utils/<name>.lua` | 扫描全局作用域所有已安装包 |
+| 4（开发回退） | `<current_dir>/pkg/*/utils/<name>.lua` | 开发回退：工具放在本地 `pkg/` 目录时的查找路径 |
 
-- 每个作用域内按包名字典序扫描；同一作用域找到第一个匹配即停止
+- 项目级基于**进程当前目录**解析，而安装时写入的是向上定位到的项目根（`<project>/.ezmk/pkg/`）：请从项目根运行 `ezmk utils <name>`——在子目录中运行会找不到项目作用域的工具
+- 每个作用域内取文件系统返回的第一个匹配（不排序）；同名工具请只在一个包中提供
 - 查找基于文件系统：直接检测 `utils/<name>.lua` 是否存在（不依赖 `ezmk.toml` 中的 `[utils].tools`，toml 声明仅用于 `pkg info` 展示）
 
 ---
@@ -307,7 +309,9 @@ deprecation warning。一旦声明该节，三类权限即全部进入 deny/allo
 
 - `ezmk.file_read()` → `nil, "permission denied: read access to <path>"`
 - `ezmk.file_write()` → `false, "permission denied: write access to <path>"`
-- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}`；`run_capture()` 抛 error
+- `ezmk.file_exists()` → 命中 deny 时返回 `false`（**不弹询问**）；既非 allow 也非 deny 时仍返回真实存在性，内容访问仍由 `file_read` 把关（1.4.2 F-18）
+- `ezmk.list_sources()` → 命中 deny 的路径被**静默过滤**（不弹询问；1.4.2 F-18）
+- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}`，其中 `<cmd>` 仅为命令的**首个 token**（可执行文件），而非整条命令；`run_capture()` 抛 error
 
 ---
 

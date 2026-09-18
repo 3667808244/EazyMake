@@ -1290,7 +1290,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **`ezmk project export cmake`**：命令挂在 `project` 命名空间下，`<target>` 参数区分导出格式（首个 `cmake`，为未来 `make`/`meson` 预留）
   - **项目级映射**：`project()` / `add_executable` / `add_library(STATIC|SHARED)`；`utils` 类型跳过 + `message(WARNING)`；`header_only` → `INTERFACE`；`precompiled` → `IMPORTED`
   - **编译映射**：`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 源收集（`--no-glob` 显式列表）；`include_dirs` 项目内 `${CMAKE_CURRENT_SOURCE_DIR}/` 前缀、`@link:` 外部路径绝对+注释；宏与 `ezmk build` 注入一致（复用 `generate_ezmk_macros()`）；`-std` → `CXX_STANDARD`/`CXX_EXTENSIONS`；flags 拆 `-I`/`-D`；`msvc_flags`/stdlib genex
-  - **链接映射**：`link_dirs` → `target_link_directories`；`system_targets` 与 `-l` → `target_link_libraries`；`link.flags` 去 `-L`/`-l` → `target_link_options`；`link.msvc_flags` genex
+  - **链接映射**：`link_dirs` → `target_link_directories`；`system_target` 与 `-l` → `target_link_libraries`；`link.flags` 去 `-L`/`-l` → `target_link_options`；`link.msvc_flags` genex
   - **覆盖安全**：目标已存在且无 `--overwrite` → 拒绝（exit 1）；文件头标注生成来源
   - **依赖映射（P1 best-effort）**：内置常见包别名表 + `find_package` 便携模式（`if(TARGET)` + `message(STATUS)` 提示）；`--resolve` 输出已安装依赖具体路径（不可移植）
   - **`[hooks]` 不映射**：`pre_build`/`post_build`/`on_failure` 是 EazyMake 沙箱 Lua（`ezmk.*` API），CMake 无等价运行时——生成注释块 + `message(WARNING)`，避免 CMake 构建静默丢失钩子后处理
@@ -1571,7 +1571,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **`ezmk project test`**：一键编译 → 构建测试 → 运行 → 汇总
 - **`ezmk pt`**：简写别名
 - **`--framework` / `-f`**：临时覆盖测试框架（不修改 `ezmk.toml`）
-- **`--filter`**：过滤测试名称（Catch2 传入测试名；ezmk 做文件名 glob）
+- **`--filter`**：过滤测试名称（Catch2 传入测试名；ezmk 做文件名子串匹配）
 - **`--verbose` / `-V`**：展示每个测试的详细输出
 
 ### Catch2 模式

@@ -15,11 +15,11 @@ When executing `ezmk build`, for each source file `src/foo.cpp`:
 2. **Read the cache record** entry for this source file from `record.json`.
 3. **Compare basic conditions**:
    - Is the source file hash identical to the last recorded hash?
-   - Are the compilation commands (e.g., `[compile] flags`) identical to the last recorded ones?  
-     (Compilation options affect output and must be part of the key)
+   - Is the **global compile-options signature** (`compile_options_signature`, derived from `[compile] flags`, `msvc_flags`, `include_dirs`, the std flag, stdlib and PIC) identical to the recorded one?  
+     (Compilation options affect the output, so they are part of the key — but the comparison is global, not per entry: the per-entry `compile_opts` array is stored for diagnostics only and is never compared.)
 4. **Check all dependent header files**:
    - Iterate over each header file path recorded last time, compute the current hash of that header, and compare it with the last recorded hash.
-   - If any hash changes or the set of header file paths changes (added/removed), it is a miss.
+   - If any recorded header's hash changed, it is a miss. The *set* of recorded paths is not compared: a header that is added or removed from the include graph is only reflected in the record after the source has been rebuilt, so a change in the set alone is not detected as a miss.
 5. **Determine result**:
    - If all match → **cache hit**, directly reuse the existing `.o` file, do not recompile.
    - Otherwise → **cache miss**, recompile the source file, and update `record.json` and the `.o` file.
@@ -29,18 +29,18 @@ When executing `ezmk build`, for each source file `src/foo.cpp`:
 ```
 For each source file:
     cur_source_hash = hash(file)
-    cur_compile_opts = get_current_flags()
+    cur_sig = compile_options_signature(...)
     Read last_entry from record.json
     if last_entry exists 
         && last_entry.source_hash == cur_source_hash
-        && last_entry.compile_opts == cur_compile_opts:
+        && record.compile_options_signature == cur_sig:
         # Check header files
         all_header_match = true
         for each (hdr, last_hash) in last_entry.headers:
             cur_hash = hash(hdr)
             if cur_hash != last_hash:
                 all_header_match = false; break
-        if all_header_match && header_set_size_equal:
+        if all_header_match:
             # Cache hit
             continue
     # Miss: recompile
@@ -59,7 +59,10 @@ For each source file:
 ```json
 {
   "version": 2,
+  "compiler": "g++",
+  "compiler_version": "g++ (GCC) 14.2.0",             // Detected compiler version string; a change here drops the whole cache
   "compile_options_signature": "sha256_of_flags_include_dirs_std_flag_and_env",  // Global compilation options fingerprint (includes msvc_flags, std_flag, include_dirs)
+  "deterministic": false,
   "files": {
     "src/main.cpp": {
       "source_hash": "a3f5c9...",
@@ -68,7 +71,7 @@ For each source file:
       "compile_opts": ["-Wall", "-O2"],   // May be redundant with the global fingerprint, useful for debugging
       "dependencies": [
         {"path": "include/foo.h", "hash": "b4e8d2..."},
-        {"path": "/usr/include/iostream", "hash": "c6a0b1..."}
+        {"path": "/usr/include/iostream", "hash": "c6a0b1..."}   // MSVC path only — GCC/Clang `-MMD` omits system headers
       ],
       "last_build_time": "2025-03-01T12:34:56Z"
     },
@@ -86,15 +89,18 @@ For each source file:
 > A *lower* version still loads, with the newer fields defaulted.
 
 ### Field Descriptions
-- `version`: Used for cache format evolution; `2` is the current format (1.1.0 added `compiler_version` + `deterministic`). Records with a higher version are ignored entirely (see above).
-- `compile_options_signature`: SHA-256 fingerprint of global compilation options, covering `[compile] flags`, `msvc_flags`, `include_dirs`, `std_flag`, `extra_includes`, etc. Any change invalidates the cache for all source files. Can be combined with per-entry `compile_opts` for finer granularity.
+- `version`: Used for cache format evolution; `2` is the current format (1.1.0 added `compiler`, `compiler_version` + `deterministic`). Records with a higher version are ignored entirely (see above).
+- `compiler` / `compiler_version`: Name and detected version string of the compiler that wrote the record. The **version string** is what invalidates the cache: if it differs from the currently detected compiler's version, every entry is dropped before the build. The `compiler` name is recorded for diagnostics only and is not compared when deciding a hit (see below).
+- `deterministic`: Whether deterministic-build mode was active when the record was written; toggling it invalidates the cache.
+- `compile_options_signature`: SHA-256 fingerprint of global compilation options, covering `[compile] flags`, `msvc_flags`, `include_dirs`, `std_flag`, `extra_includes`, etc. Any change invalidates the cache for all source files. This signature is the only option-based key: the per-entry `compile_opts` array is written for diagnostics and is never compared.
 - `object_file` relative path.
-- System header files (e.g., `/usr/include/iostream`) hashes must also be recorded, since system header upgrades may change compilation results.
+- Which headers land in `dependencies` depends on the toolchain. GCC/Clang are driven with `-MMD`, which by definition emits only **user** headers into the depfile, so system headers (e.g. `/usr/include/iostream`) are **not** recorded. MSVC has no depfile; its `/showIncludes` output is parsed instead, and that list **does** include system headers.
 
-> **Why record the `compiler`?** Cache entries are scoped per toolchain so objects
-> built by one compiler (e.g. `g++`) are never reused by another (e.g. MSVC) — the
-> `.o`/`.obj` formats are incompatible, and reusing them would be a silent
-> miscompile.
+> **How is the cache invalidated across toolchains?** The invalidation key is the
+> detected compiler's **version string** (`compiler_version`): when it changes,
+> every cached entry is discarded before the build. The `compiler` field in the
+> record is written but not compared, so it currently takes no part in the
+> hit/miss decision.
 
 ## Cache Consistency Maintenance
 
@@ -132,14 +138,13 @@ The dependent header hash comparison mechanism naturally guarantees: modifying a
 `ezmk build --verbose` / `ezmk build -v` prints cache determination details for each source file:
 
 - **On hit**: outputs `[cached]` + matching source file hash and number of header files
-- **On miss**: outputs the specific reason (source hash changed / compilation option signature changed / a certain header hash changed / dependency path set changed / cache record missing)
+- **On miss**: outputs the specific reason (source hash changed / compilation option signature changed / a certain header hash changed / cache record missing)
 
 Example output:
 ```
-[ezmk]   [cached] src/utils.cpp
-[ezmk]     cache hit: source hash matches, all 5 headers unchanged
-[ezmk]   Compiling src/main.cpp
-[ezmk]     cache miss: header hash changed — include/foo.h
+[ezmk]   [cached] src/utils.cpp  (source hash matches, 5 headers unchanged)
+[ezmk]   cache miss: header hash changed — include/foo.h
+[ezmk]   Compiling src/main.cpp...
 [ezmk]     cmd: g++ -std=c++17 -c "src/main.cpp" -o ".ezmk/temp/main.o" ...
 ```
 

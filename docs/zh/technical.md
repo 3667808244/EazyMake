@@ -14,7 +14,7 @@
 | nlohmann/json                           | 仅头文件         | **内嵌**             | JSON 支持（`include/vendor/nlohmann_json.hpp`）              |
 | toml++                                  | 仅头文件         | **内嵌**             | TOML 解析（`include/vendor/toml.hpp`）                      |
 | Catch2                                  | v3               | **仅测试**           | 单元测试框架                                                |
-| miniz                                   | v3.0.2           | **内嵌**             | ZIP 解压（`src/vendor/miniz/*`）                            |
+| miniz                                   | 内嵌（vendor 内版本串 2.2.0 / `MZ_VERSION` 10.2.0） | **内嵌**             | ZIP 解压（`src/vendor/miniz*.c` + `include/vendor/miniz*.h`） |
 | Python                                  | ≥ 3.6            | **仅构建**           | locale 数据嵌入（`scripts/embed_locale.py`）                |
 | MSYS2（Windows）                        | —                | **构建与运行时**     | 提供 g++ 与 bash 环境                                       |
 
@@ -29,20 +29,27 @@
 bash build.sh
 
 # 或手动编译 — MSYS2 / Windows
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+# `src/*.cpp` 也会匹配两个入口（`main.cpp` + `ezmk_lua_main.cpp`），
+# 同时链接两个 `main()` 定义必然失败——需排除 Lua 那个。
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk -lwinhttp -static
 
 # Linux
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk -static
 
 # macOS
-g++ -std=c++17 src/*.cpp src/vendor/*.c src/vendor/lua/*.c \
+g++ -std=c++17 $(ls src/*.cpp | grep -v ezmk_lua_main.cpp) src/vendor/*.c src/vendor/lua/*.c \
   -I include/ -I include/vendor/ -I include/vendor/lua/ \
   -DLUA_COMPAT_5_3 -o build/ezmk
 ```
+
+> **先跑生成脚本。** 这些命令假设生成文件已存在；新克隆里没有其中三个（被 `.gitignore` 忽略）。
+> 用脚本生成它们：`scripts/embed_locale.py` → `src/locale_data.cpp`、
+> `scripts/embed_examples.py` → `src/example_data.cpp`、`scripts/embed_logo.py` →
+> `include/ezmk/logo.gen.h`，以及 `build.sh` → `include/ezmk/version.hpp`。
 
 > **为什么用 bash 脚本来构建？** 所有一等构建环境——Linux、macOS、MSYS2——都自带 POSIX shell，
 > 因此一个 `build.sh` 就能编排 locale 数据嵌入、版本头生成与编译，无需额外构建系统，处处行为一致。
@@ -63,8 +70,8 @@ bash build.sh integration
 bash build.sh test -v
 ```
 
-- **单元测试**（`test/test_*.cpp`）：546 个用例，覆盖全部模块
-- **集成测试**（`test/test_integration.cpp`）：8 个端到端场景，标记为 `[integration]`（`test-all` = 556 用例 / 2666 断言）
+- **单元测试**（`test/test_*.cpp`）：约 987 个用例，覆盖全部模块
+- **集成测试**（`test/test_integration*.cpp`）：约 112 个端到端场景，标记为 `[integration]`，分布在 `test_integration.cpp`、`test_integration_workspace.cpp`、`test_integration_report.cpp`、`test_integration_git.cpp`（`test-all` = 1099 用例 / 6342 断言；1094 通过、5 跳过）
 - 测试使用 [Catch2](https://github.com/catchorg/Catch2) v3
 - 设置 `EZMK_TEST_BIN` 可覆盖集成测试使用的 ezmk 二进制路径
 
@@ -105,10 +112,11 @@ EazyMake 会自动将常见 GCC 标志翻译为 MSVC 等价形式（如 `-Wall` 
 
 ### 跨编译器构建
 
-同一项目无需修改即可在 GCC 和 MSVC 下构建——缓存记录按编译器隔离，切换编译器不会导致缓存冲突。
+同一项目无需修改即可在 GCC 和 MSVC 下构建——切换编译器不会复用陈旧产物：记录里保存检测到的编译器**版本串**（`compiler_version`），它一变就会使整份缓存失效。记录中的 `compiler` 名称字段仅用于诊断，不参与比较。
 
-> **为什么缓存要按编译器隔离？** 不同工具链编译出的目标文件二进制不兼容；缓存按编译器做键，
-> 可以防止过时的 GCC 目标文件在 MSVC 构建中被静默复用（反之亦然）。
+> **为什么缓存的失效依据是编译器版本？** 不同工具链编译出的目标文件二进制不兼容；
+> 如果切换编译器（或升级编译器）不使缓存失效，过时的 GCC 目标文件就会在 MSVC 构建中被
+> 静默复用（反之亦然）。版本串正是真正触发这次失效的字段。
 
 ## 项目结构
 

@@ -30,13 +30,14 @@ These standard commands are mapped to `ezmk.toml`:
 | CMake command | Mapped to |
 |---|---|
 | `project(name VERSION x.y.z LANGUAGES CXX/C)` | `[project]` `name` / `version` / `language` |
-| `add_executable(t ...)` | `[project]` `type = "executable"`, `name = t` |
-| `add_library(t STATIC/SHARED ...)` | `type = "static"` / `"shared"` |
+| `add_executable(t ...)` | `[project]` `type = "executable"` (only `main_target` / `type`; `name` comes from `project()`, falling back to the directory name) |
+| `add_library(t [STATIC\|SHARED\|MODULE\|INTERFACE] ...)` | `type = "static"` / `"shared"` — no keyword or `STATIC` → `static`; `INTERFACE` → `type = "static"` + `header_only = true`; `MODULE` → `type = "shared"` (flagged with `# TODO:`) |
+| `set_target_properties(t PROPERTIES CXX_STANDARD <N>)`, `C_STANDARD`, `target_compile_features(t PRIVATE cxx_std_<N>)` | `[project]` `language = ">=CPP<N>"` / `">=C<N>"` |
 | `target_sources(t PRIVATE <src...>)` | `[compile].src_dirs` (dirs of the source files) |
 | `target_include_directories(t PRIVATE <dir...>)` | `[compile].include_dirs` |
 | `target_compile_definitions(t PRIVATE <NAME=VAL...>)` | `[compile.macros]` |
 | `target_compile_options(t PRIVATE <flag...>)` | `[compile].flags` |
-| `target_link_libraries(t PRIVATE <lib...>)` | `[link].system_targets` (unrecognized libs) |
+| `target_link_libraries(t PRIVATE <lib...>)` | `[link].system_target` (unrecognized libs) |
 
 **Multiple targets**: only the first / main target is imported; others are left
 out. Split multi-target projects into separate EazyMake projects.
@@ -59,7 +60,9 @@ out. Split multi-target projects into separate EazyMake projects.
   ```
 
 - **Conditional blocks** (`if(WIN32)`, `if(UNIX)`, `if(APPLE)`, `if(MSVC)`, …) —
-  the branch matching the **current platform** is taken. Conditions that cannot
+  the branch matching the **Windows-host** semantics is taken: `WIN32` evaluates
+  to true and `UNIX` / `APPLE` / `MSVC` to false, hardcoded (only
+  `CMAKE_SYSTEM_NAME` is judged per platform). Conditions that cannot
   be evaluated (custom variables, `$ENV{...}`, complex expressions) are skipped
   and marked `# TODO: 未求值的条件块`.
 
@@ -86,13 +89,13 @@ post_build = "scripts/strip_symbols.lua" # runs after linking
 
 See `docs/en/config_file.md` (§ `[hooks]`) and `tutorial/en/dev/01-watch-hooks.md`
 for hook examples. `execute_process`-style logic maps to
-`ezmk.run_command()` / `ezmk.file_write()` in the Lua API; `pkg_check_modules`
+`ezmk.run()` / `ezmk.run_capture()` / `ezmk.file_write()` in the Lua API; `pkg_check_modules`
 maps to `ezmk pkg install <name>` (or the commented `[depends]` entries above).
 
 ## After-import checklist
 
 1. Review every `# TODO:` comment in the generated `ezmk.toml`.
 2. Uncomment and fix the `[depends]` entries; run `ezmk pkg install <name>`.
-3. Verify `[compile.macros]` (especially platform macros) and `[link].system_targets`.
+3. Verify `[compile.macros]` (especially platform macros) and `[link].system_target`.
 4. Run `ezmk build` then `ezmk run`. Use `ezmk project cc` to regenerate
    `compile_commands.json` for clangd/LSP.

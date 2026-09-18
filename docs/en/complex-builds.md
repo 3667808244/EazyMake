@@ -22,15 +22,15 @@ If your project is one library, one CLI tool, or one small service, EazyMake is 
 
 ## What counts as "complex" — the four signatures
 
-These are the four shapes that push a build out of EazyMake's scope. Hitting any one of them is the signal to use CMake instead.
+These are the four shapes that push a build out of EazyMake's scope — the fourth only in part, since workspaces (1.3.0) cover its common shape. Hitting the unsupported part of any of them is the signal to use CMake instead.
 
 ### 1. Multiple build targets
 
 A single project that must produce several artifacts — executables and/or libraries with an **inter-target dependency graph**.
 
 - **Example**: one codebase builds `server`, `client`, and a shared `libcore`, where both `server` and `client` link `libcore`.
-- **Why it's out of scope**: EazyMake's model is one artifact per `ezmk.toml`. Real multi-target support needs `--target` selection, per-target config, and a dependency graph — the structural complexity the tool exists to avoid.
-- **What to do instead**: split into one project per artifact, or use CMake's `add_executable` / `add_library` graph. (`utils` packages *can* ship several tools via `[utils].tools`, and build variants of one artifact use `[compile.profile.*]` — those are not multi-target.)
+- **Why it's out of scope**: EazyMake's model is one artifact per `ezmk.toml` — there is no `--target` to pick one artifact out of several, and no per-target configuration. A one-directional, acyclic dependency graph across *separate projects* is supported by workspaces (signature 4 below); what stays out of scope is several artifacts inside one project, per-target config, and cyclic graphs.
+- **What to do instead**: split into one project per artifact and connect them with a workspace when the graph is one-way and acyclic, or use CMake's `add_executable` / `add_library` graph for cycles. (`utils` packages *can* ship several tools via `[utils].tools`, and build variants of one artifact use `[compile.profile.*]` — those are not multi-target.)
 
 ### 2. Cross-compilation
 
@@ -55,8 +55,9 @@ A build that needs custom rules, code generation, or graph logic expressed in co
 One "workspace" where several projects reference and build each other directly.
 
 - **Example**: a monorepo where `app/` includes headers straight from `lib/` and expects `lib/` to build first.
-- **Why it's out of scope**: the config model has no workspace or sub-project concept. Cross-project reuse goes through packages (`[depends]` + `ezmk pkg install`), not project references.
-- **What to do instead**: independent projects that share packages, or CMake's multi-target model for an interlocked monorepo.
+- **Already supported since 1.3.0 (the common monorepo shape)**: `ezmk-workspace.toml` defines the member set (`[workspace] members`), and a member may declare **one-directional, acyclic** dependencies on other members via `[depends] workspace = [...]`. `ezmk workspace list / build / test / watch / clean / scan` drives the whole set; builds are topologically ordered, and a `static` member's artifact is reused automatically (`-I <ws>/<m>/include` + `-L <ws>/<m>/build -l<m>` are injected for you). See [non-goals.md](non-goals.md) for the exact boundary.
+- **What still counts as complex**: per-target configuration and selecting one artifact out of several (`--target`), dependency **cycles**, depending on a member whose type is not `static`, dependency **version constraints** / snapshot semantics (those go through packages), and expressing the build as a **programmable graph**.
+- **What to do instead**: one project per artifact, connected by a workspace whose member graph is one-directional and acyclic; independent projects sharing packages when reuse must be versioned; CMake when you need cycles, per-target selection, or a programmable build graph.
 
 ## Deciding: a quick checklist
 
@@ -70,8 +71,8 @@ Start from your project and answer in order:
 | | No (needs rules/generation) | → CMake |
 | Am I building **for the host** platform? | Yes | EazyMake ✓ |
 | | No (cross-compiling) | → CMake |
-| Are my projects **independent** (shared via packages)? | Yes | EazyMake ✓ |
-| | No (direct references) | → CMake |
+| Do my projects depend on each other **one-way and without cycles**? | Yes (workspace `[depends] workspace`) | EazyMake ✓ |
+| | No (cyclic graph, or several targets per project) | → CMake |
 
 If you pass all four "Yes" rows, EazyMake is the right tool. If you hit a single "No", you're in complex-build territory — CMake is the smoother path.
 
@@ -82,7 +83,7 @@ These are the symptoms that usually appear *just before* a project tips over:
 - You find yourself wishing for `--target` to build one artifact out of several.
 - You want to write conditionals or loops in `ezmk.toml` to generate config.
 - Your `[hooks]` scripts are increasingly re-implementing `add_custom_command`.
-- You want one project to include sources or link artifacts from another project directly.
+- You need one project to link a member's **shared** library or executable (only `static` members can be depended on), to build several artifacts from one project, or to have members depend on each other **cyclically**.
 - You need a toolchain file or a sysroot.
 
 None of these are bugs — they're the boundary showing through. When they pile up, it's time to grow into CMake.

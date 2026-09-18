@@ -107,7 +107,7 @@ file = "packages/mylib/"
 | 作用域 | 路径                                 |
 | ------ | ------------------------------------ |
 | 全局   | `<ezmk_install_dir>/repo/list.toml`  |
-| 用户   | `~/.local/ezmk/repo/list.toml`       |
+| 用户   | `~/.local/ezmk/repo/list.toml`（Unix）· `%LOCALAPPDATA%\ezmk\repo\list.toml`（Windows） |
 | 项目   | `<project_dir>/.ezmk/repo/list.toml` |
 
 格式：
@@ -140,7 +140,7 @@ last_update = "2026-06-19T10:00:00Z"
 | `url`         | git clone URL（`type = "git"`）或本地目录路径（`type = "local"`） |
 | `type`        | `"git"` 或 `"local"`                                              |
 | `branch`      | 跟踪的分支，`type = "git"` 时有效，默认 `main`                    |
-| `last_update` | 最后一次 `update` 的时间                                          |
+| `last_update` | `type = "git"` 时为被跟踪分支最新 commit 的时间（`git log -1 --format=%cI`）；`type = "local"` 时为最后一次 `update` 的墙钟时间。pull 未带来新提交时该值不变 |
 
 ### 本地缓存路径
 
@@ -149,7 +149,7 @@ last_update = "2026-06-19T10:00:00Z"
 | 作用域 | 缓存路径                                       |
 | ------ | ---------------------------------------------- |
 | 全局   | `<ezmk_install_dir>/repo/.cache/<repo_name>/`  |
-| 用户   | `~/.local/ezmk/repo/.cache/<repo_name>/`       |
+| 用户   | `~/.local/ezmk/repo/.cache/<repo_name>/`（Unix）· `%LOCALAPPDATA%\ezmk\repo\.cache\<repo_name>\`（Windows） |
 | 项目   | `<project_dir>/.ezmk/repo/.cache/<repo_name>/` |
 
 对于 `type = "local"` 的仓库，没有 `.cache/` 目录——直接使用 `url` 指向的本地路径。
@@ -318,7 +318,7 @@ ezmk pkg install -p foo
 ### 注意事项
 
 - 首次 `pkg install foo` 前确保已执行 `ezmk repo update`，否则可能使用旧的 `index.toml`
-- 推荐在 `ezmk project build` 前自动执行 `ezmk repo update --pug`（可选，可在后续版本加入）
+- 推荐在 `ezmk project build` 前自动执行 `ezmk repo update -pug`（可选，可在后续版本加入）
 - 仓库中的包如果有 `sha256`，安装时必须校验
 
 > **为什么首次安装前要先 `repo update`？** 按名搜索读取的是缓存中的 `index.toml`——即上次 clone 或 update 时的快照。`repo update`（`git pull`）会刷新它，否则索引可能过期。
@@ -388,8 +388,8 @@ ezmk repo add -p ./vendor/ezmk-repo --name internal
 | ---------------------------------------- | ------------------- |
 | `<ezmk_install_dir>/repo/list.toml`      | 全局仓库注册表      |
 | `<ezmk_install_dir>/repo/.cache/<name>/` | 全局仓库 clone 缓存 |
-| `~/.local/ezmk/repo/list.toml`           | 用户仓库注册表      |
-| `~/.local/ezmk/repo/.cache/<name>/`      | 用户仓库 clone 缓存 |
+| `~/.local/ezmk/repo/list.toml`（Unix）· `%LOCALAPPDATA%\ezmk\repo\list.toml`（Windows） | 用户仓库注册表      |
+| `~/.local/ezmk/repo/.cache/<name>/`（Unix）· `%LOCALAPPDATA%\ezmk\repo\.cache\<name>\`（Windows） | 用户仓库 clone 缓存 |
 | `.ezmk/repo/list.toml`                   | 项目仓库注册表      |
 | `.ezmk/repo/.cache/<name>/`              | 项目仓库 clone 缓存 |
 
