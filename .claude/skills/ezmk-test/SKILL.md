@@ -71,6 +71,7 @@ test/
 ├── test_file_watcher.cpp          # File watcher tests
 ├── test_thread_pool.cpp           # ThreadPool tests
 ├── test_integration.cpp           # End-to-end integration tests
+├── test_integration_git.cpp       # git-source install E2E
 ├── test_integration_workspace.cpp # Workspace end-to-end tests
 ├── test_integration_report.cpp    # Report/watch/pack end-to-end tests
 └── test_integration_helpers.hpp   # Integration-test helpers
@@ -80,7 +81,7 @@ test/
 
 ## Current baseline
 
-- **988 test cases** / **5770 assertions** — full suite via `bash build.sh test-all` (measured after 1.4.0-dev.7, zero regressions)
+- **1099 test cases** / **6342 assertions** — full suite via `bash build.sh test-all` (baseline at 1.4.1: 1020/5970; source `build/phase-release-testall.log`, zero regressions)
 - Covers: CLI, argparse, config, build, cache, compile_db, export/import, workspace, workspace_build, example, pkg, repo, toolchain, project, i18n, Lua, hooks, util, utils perms, version, crypto, lockfile, file watcher, thread pool
 - Integration tests: `test_integration*.cpp` scenarios tagged `[integration]` (skipped by `bash build.sh test`, included by `test-all`)
 
@@ -89,7 +90,7 @@ test/
 ### Basic structure
 
 ```cpp
-#include "ezmk/ezmk.hpp"  // or specific headers
+#include "ezmk/build.hpp"  // or other specific headers
 #include <catch2/catch.hpp>  // actually: include/vendor/catch2.hpp
 
 TEST_CASE("Module: brief description", "[module]") {

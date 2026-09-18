@@ -8,7 +8,7 @@ Run `bash build.sh` to compile. Use `bash build.sh -v` for verbose output.
 
 ## Test
 
-Run `bash build.sh test` to run the Catch2 test suite (546 cases / 2617 assertions). Use `bash build.sh test-all` to include integration tests (556 cases / 2666 assertions).
+Run `bash build.sh test` to run the Catch2 test suite (~987 cases; skips tests tagged `[integration]`). Use `bash build.sh test-all` to include integration tests (1099 cases / 6342 assertions — 1094 passed / 5 skipped).
 
 ## Key directories
 

@@ -16,6 +16,10 @@ This project provides the following skills for AI coding agents. Load the releva
 | Workflow | `.claude/skills/ezmk-workflow/SKILL.md` | Executing a version lifecycle — dev / pre / formal-release stages, commit conventions, release gate |
 | Repo | `.claude/skills/ezmk-repo/SKILL.md` | Managing packages in the official EazyMake repository |
 | Publish | `.claude/skills/ezmk-publish/SKILL.md` | Distributing a release to winget / Homebrew (manifests, formula, submission, pitfalls) |
+| Build (user project) | `.claude/skills/ezmk-user-build/SKILL.md` | Building a C/C++ project managed by EazyMake (`ezmk project build`, profiles, parallel compilation) |
+| Config (user project) | `.claude/skills/ezmk-user-config/SKILL.md` | Configuring an EazyMake project (`ezmk.toml` structure, sections, common patterns) |
+| Pkg (user project) | `.claude/skills/ezmk-user-pkg/SKILL.md` | Managing third-party packages in an EazyMake project (install / update / list / remove) |
+| Test (user project) | `.claude/skills/ezmk-user-test/SKILL.md` | Running tests in an EazyMake-managed project (test configuration, Catch2 integration, custom commands) |
 
 ## Quick reference
 

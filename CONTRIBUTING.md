@@ -22,8 +22,10 @@ Be respectful, constructive, and inclusive. Assume good faith.
 
 3. Run tests:
    ```bash
-   g++ -std=c++17 test/test_*.cpp src/vendor/catch2_impl.cpp src/build.cpp src/cache.cpp src/cli.cpp src/argparse.cpp src/config.cpp src/crypto.cpp src/file_watcher.cpp src/i18n.cpp src/lua_api.cpp src/pkg.cpp src/project.cpp src/repo.cpp src/toolchain.cpp src/util.cpp src/version.cpp src/vendor/*.c src/vendor/lua/*.c -I include/ -I include/vendor/ -I include/vendor/lua/ -DLUA_COMPAT_5_3 -o build/test_ezmk -lwinhttp -static && ./build/test_ezmk
+   bash build.sh test
    ```
+   (If you build by hand instead, keep the source list identical to `TEST_SRC` in `build.sh` —
+   an incomplete list fails at link time with undefined references.)
 
 See [`README.md`](README.md) for more details.
 
@@ -103,7 +105,7 @@ EazyMake maintains bilingual documentation: **Chinese (zh)** and **English (en)*
 ### .clang-format
 
 A `.clang-format` configuration is provided in the project root (based on LLVM style,
-4-space indent, 120-column limit, Allman braces). To auto-format your changes:
+4-space indent, 120-column limit, Attach (K&R) braces). To auto-format your changes:
 
 ```bash
 # Check formatting without modifying files:

@@ -48,6 +48,8 @@ EZMK_I18N_KEY(my_new_key)
 
 ### Step 2: Add translations to JSON files
 
+Add the key **inside the existing top-level `strings` object** (not at the root of the file).
+
 In `locale/en.json`:
 ```json
 "my_new_key": "This is the English text."
@@ -58,8 +60,8 @@ In `locale/zh.json`:
 "my_new_key": "这是中文文本。"
 ```
 
-- Use `%s` and `%d` for format arguments (printf-style)
-- Keep the JSON structure flat — no nested objects
+- Use **brace placeholders** for format arguments — e.g. `"Build successful: {path}"` (`locale/en.json:8`), filled at call time by `i18n::fmt(key, {{"path", …}})`
+- Keep new keys inside the top-level `strings` object — the file shape is `{ "meta": { … }, "strings": { … } }`, and `scripts/check_i18n.py` fails when the `strings` object is missing
 
 ### Step 3: Rebuild
 
@@ -77,8 +79,11 @@ This re-runs `scripts/embed_locale.py` and recompiles. The new key is now availa
 // Simple string
 util::info_line(i18n::get(I18nKey::build_success));
 
-// With format arguments
-util::info_line(i18n::get(I18nKey::compiling, source_name, n, total));
+// With format arguments — note: the parameterized API is fmt(), not get()
+// Named placeholders: the compiling string is "  Compiling {file}..."
+util::info(i18n::fmt(I18nKey::compiling, {{"file", source_name}}));
+// Positional overloads (fmt(key, arg0, arg1, arg2) → {0}, {1}, {2}) also exist,
+// but locale strings conventionally use named placeholders.
 ```
 
 ## Debug: audit_missing_keys()

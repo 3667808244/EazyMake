@@ -228,11 +228,11 @@ end
 
 ```bash
 pkgname=eazymake
-pkgver=1.2.0            # 随版本号手工同步（指向 v1.2.0 正式 tag）
+pkgver=1.4.2            # 随版本号手工同步（指向 v1.4.2 正式 tag）
 arch=('x86_64')
 makedepends=('gcc' 'python')    # 无 depends：build.sh 在 Linux 产出静态链接二进制
 source=("$pkgname-$pkgver.tar.gz::https://github.com/3667808244/EazyMake/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')     # 首次用 SKIP；稳定后填真实 digest（源码 tarball）
+sha256sums=('beeaade01036217cc0e6f26e7feca32394b54b4f54903b0d9692312a9f0560e0')   # v1.4.2 源码 tarball 真实 digest；首次本地验证可暂填 SKIP
 ```
 
 - **源码构建 vs 二进制重打包**：首选**源码构建**（PKGBUILD 标准形态：从 git tag 拉源码 + `build.sh` 编译，`EZMK_VERSION="$pkgver"` 注入版本号）；备选 `-bin` 风格（`source=` 直接指向 Release 资产 + `sha256sums` 用 §0 的真实 digest）——若远端网络受限用备选。

@@ -19,7 +19,10 @@ Runs the project's test suite using the framework configured in `ezmk.toml`.
 [test]
 framework = "catch2"          # Test framework: "catch2" or "ezmk" (anything else is an error)
 dirs = ["test"]               # Directories containing test source files
-flags = ["-g", "-O0"]         # Extra compile flags for test builds
+default_profile = "debug"     # Profile applied to the test build (CLI --profile wins)
+include_dirs = []             # Extra -I dirs for the test build only
+link_targets = []             # Extra libraries/objects linked into the test runner
+# flags = [...]               # DEPRECATED (1.2.0-dev.12, removed in 2.0.0): warns and will be removed — use the keys above
 ```
 
 ### Catch2 integration

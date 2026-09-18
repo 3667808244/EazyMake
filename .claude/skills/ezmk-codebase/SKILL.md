@@ -49,15 +49,14 @@ EazyMake/
 │   ├── 1.1.x/            # 1.1.0 dev/pre plans + 1.1.x patches
 │   ├── 1.2.x/            # 1.2.x plans (examples 1.2.3, source-pack 1.2.5, etc.)
 │   ├── 1.3.x/            # 1.3.x plans (workspace 1.3.0, shorthands 1.3.3, watch --run 1.3.4, ...)
-│   ├── 1.4.x/            # Current: 1.4.0 dev.1~dev.7 + pre.1
+│   ├── 1.4.x/            # Current series: 1.4.0 dev.1~dev.7 + pre.1, 1.4.1, 1.4.2
 │   └── README.md         # Version index + roadmap
 ├── locale/
 │   ├── en.json           # English translations
 │   └── zh.json           # Chinese translations
 ├── scripts/              # Build helper scripts (embed_locale.py, embed_logo.py, embed_examples.py)
-├── res/                  # Resources (logo.txt, ezk.zsh zsh completion)
-├── build.sh              # One-shot build + test script
-├── ezmk.toml             # EazyMake's own project config (dogfooding)
+├── res/                  # Resources (logo.txt, ezmk.zsh zsh completion)
+├── build.sh              # One-shot build + test script (this repo builds via build.sh, not self-hosted)
 ├── CLAUDE.md             # AI agent entry point → skill index
 ├── CHANGES.md            # Version changelog
 └── README.md             # User-facing documentation
@@ -222,7 +221,7 @@ Packages are `.zip` or `.tar.gz` archives compiled to static libraries. Install 
 
 **MSVC-aware:** `compile_package()` selects archiver based on `tc.family`: MSVC → `lib.exe`, GCC/Clang → `ar rcs`.
 
-**Header-only packages:** `pkg.toml` field `header_only = true` skips compilation — only `include/` is copied.
+**Header-only packages:** `header_only = true` in the package's own `ezmk.toml` (parsed as `[project].header_only`, `src/config.cpp`) skips compilation — only `include/` is copied.
 
 **Platform mapping:** `index.toml`'s `[platform]` section supports `os_arch_toolchain` triple keys with fallback to legacy `os_arch` double keys. `resolve_platform_prefix()` in `repo.cpp` tries triple → double → empty.
 
@@ -244,7 +243,7 @@ See `docs/en/repo.md` for full details.
 `[compile]` section supports `deterministic = true` and optional `source_date_epoch` (uint64 Unix timestamp). When enabled:
 - **GCC/Clang**: injects `-ffile-prefix-map=<proj_root>=.` + `-frandom-seed=<src_filename>` + sets `SOURCE_DATE_EPOCH`
 - **MSVC**: injects `/Brepro` + sets `SOURCE_DATE_EPOCH`
-- **Resolution priority**: environment variable → `ezmk.toml` config → git HEAD commit timestamp → `ezmk.toml` mtime
+- **Resolution priority**: `[compile].source_date_epoch` in `ezmk.toml` → `SOURCE_DATE_EPOCH` environment variable → git HEAD commit timestamp → `ezmk.toml` mtime
 
 ## Lockfile (`ezmk.lock`)
 

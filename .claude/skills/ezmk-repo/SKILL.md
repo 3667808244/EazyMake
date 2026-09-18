@@ -34,9 +34,9 @@ version = "1.3"
 type = "static"
 description = "Compression library"
 platform = "win-x64"        # Optional: restrict to specific platform (os-arch format)
-dependencies = []
+# dependencies = []         # Reserved — currently not read by repo.cpp
 sha256 = "abc123..."
-url = "packages/zlib-1.3.tar.gz"
+file = "packages/zlib-1.3.tar.gz"
 
 [[packages]]
 name = "zlib"
@@ -44,10 +44,13 @@ version = "1.2.13"
 type = "static"
 description = "Compression library (older version)"
 # platform omitted = available on all platforms
-dependencies = []
+# dependencies = []         # Reserved — currently not read by repo.cpp
 sha256 = "def456..."
-url = "packages/zlib-1.2.13.tar.gz"
+file = "packages/zlib-1.2.13.tar.gz"
 ```
+
+- `file` is the key `repo.cpp` reads for a package's archive (or directory) path — it must stay inside the repo dir (1.4.2 F-23). `url` belongs to the repository registry entry, not to `[[packages]]`.
+- `type` is currently only honored as `type = "dir"` (directory package, `repo.cpp`); any other value is ignored, as is `dependencies` (reserved).
 
 ### Platform fields
 
