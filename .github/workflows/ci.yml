@@ -40,7 +40,7 @@ jobs:
       # build, and gate CLI/config drift with scripts/check_man_sync.py. The grep
       # checks cover the character traps that groff cannot warn about — see
       # plans/1.4.x/1.4.3.md §3.6 for the rationale of each one.
-      - name: Man pages: static lint
+      - name: "Man pages: static lint"
         run: |
           set -euo pipefail
           groff -man -Tutf8 -z -ww man/ezmk.1 man/ezmk.toml.5
@@ -68,7 +68,7 @@ jobs:
           [ "$fail" -eq 0 ] || exit 1
           echo "OK: man static checks passed"
 
-      - name: Man pages: CLI drift gate
+      - name: "Man pages: CLI drift gate"
         run: python3 scripts/check_man_sync.py
 
       - name: Build + run all tests
