@@ -1,0 +1,517 @@
+.\" EazyMake manual page -- ezmk.toml(5)
+.\" Written for EazyMake 1.4.3.
+.\" Keep in sync with src/config.cpp: run scripts/check_man_sync.py before
+.\" committing changes to this file or to the parser.
+.TH EZMK.TOML 5 "2026-09-19" "EazyMake 1.4.3" "File Formats"
+.\" Disable hyphenation: this page is full of copy-pasteable keys and flags.
+.nh
+.SH NAME
+ezmk.toml \- EazyMake project configuration file
+.SH DESCRIPTION
+.B ezmk.toml
+is the single configuration file of an EazyMake project: it declares what to
+build, how to compile and link it, which packages it depends on, how it is
+tested and installed, and which Lua hooks run around the build.
+.PP
+Commands look for the file in the current directory and then walk up at most
+.B 5
+parent directories, so
+.B ezmk build
+works from a source subdirectory. A directory without
+.B ezmk.toml
+is not a project; a directory with only
+.B ezmk-workspace.toml
+is a workspace container (see
+.BR ezmk (1)).
+.PP
+Only
+.B [project].version
+is mandatory. Every other key is optional and has a default; keys that
+EazyMake does not know are ignored, so a configuration can be shared with
+other tools without breaking the build. An invalid value for a known key is
+an error, not a warning.
+.SH FILE FORMAT
+The file is TOML. Values used by EazyMake are strings, integers, booleans and
+arrays of strings; unsupported shapes (for example a table where an array is
+expected) are configuration errors.
+.PP
+Boolean
+.B false
+and an empty string count as "not set" for several keys: an explicitly empty
+.B src_dirs
+is an error, while an empty
+.B include_dirs
+or
+.B [test].dirs
+silently falls back to its default.
+.SH SECTIONS
+.SS [project]
+.TP
+.B name
+String, optional. Project name, used for the artifact name and for the
+.B EZMK_PROJECT_NAME
+macro. Only
+.B version
+is validated, so a missing
+.B name
+degrades quietly rather than failing the build.
+.TP
+.B version
+String, required (for example
+.BR 0.1.0 ).
+Feeds the
+.B EZMK_PROJECT_VERSION
+macro.
+.TP
+.B type
+String, optional, one of
+.BR executable " (default), " static ", " shared " or " utils .
+The type decides which sources are required and where artifacts are installed.
+.TP
+.B language
+String, optional, default
+.BR "C++17" .
+The language standard, written as
+.BR C++17 ", " C11 ", " GNUCPP17
+and so on;
+.BR C++ ", " CXX " and " CPP
+are interchangeable and matching is case\-insensitive. Two bound forms are
+accepted:
+.B >=C++11
+(a lower bound only) and
+.BR C++11..C++17
+(minimum and maximum, where the maximum is metadata: compilation always uses
+the minimum). A lone
+.B >
+is rejected, as is a reversed range.
+.TP
+.B stdlib
+String, optional, default
+.BR libstdc++ .
+Standard library of a package. Aliases are normalized:
+.BR glibcxx " and " gnu
+mean
+.BR libstdc++ ,
+.B llvm
+means
+.BR libc++ .
+.TP
+.B header_only
+Boolean, optional, default
+.BR false .
+Package setting: install
+.B include/
+and skip compilation entirely.
+.TP
+.B precompiled
+Boolean, optional, default
+.BR false .
+Package setting: use the archives in
+.B lib/
+instead of compiling sources.
+.TP
+.B precompiled_strict
+Boolean, optional, default
+.BR false .
+Package setting: refuse an ABI\-unsafe toolchain fallback and fail instead of
+warning.
+.SS [compile]
+.TP
+.B flags
+Array of strings, optional, default empty. Compiler flags. Common GCC and
+Clang flags are translated for MSVC.
+.TP
+.B msvc_flags
+Array of strings, optional, default empty. Appended verbatim, and only when
+the MSVC toolchain is used.
+.TP
+.B include_dirs
+Array of strings, optional, default
+.BR ["include"] .
+.B \-I
+search paths, relative to the project root. The project's
+.B include/
+directory is always added when it exists, whether or not it is listed here.
+.TP
+.B src_dirs
+Array of strings, optional, default
+.BR ["src"] .
+Directories scanned for source files. An explicitly empty array is an error.
+.TP
+.B ezmk_macros
+Boolean, optional, default
+.BR true .
+Inject the standard macros
+.BR EZMK ", " EZMK_VERSION ", " EZMK_PROJECT_NAME ", " EZMK_PROJECT_VERSION ,
+.BR EZMK_PROJECT_TYPE ", " EZMK_LANG " and " EZMK_STDLIB .
+.TP
+.B compile_commands
+Boolean, optional, default
+.BR false .
+Write
+.B compile_commands.json
+after a successful link.
+.TP
+.B default_profile
+String, optional, default empty. Profile applied when
+.B \-\-profile
+is not given. A plain
+.B ezmk build
+merges that profile; when empty, no profile is applied.
+.TP
+.B deterministic
+Boolean, optional, default
+.BR false .
+Reproducible builds: see
+.BR "DETERMINISTIC BUILDS" .
+.TP
+.B source_date_epoch
+Integer, optional, default
+.BR 0 .
+Timestamp for deterministic builds;
+.B 0
+means "resolve automatically" and a negative value is rejected.
+.TP
+.B include_dir
+String, deprecated. The old singular form of
+.BR include_dirs .
+When present it is mapped to
+.BR include_dirs .
+.SS [compile.macros]
+A table of macro names to values, compiled into
+.BR \-D
+flags:
+.TP
+.B NAME = \(dqtext\(dq
+Becomes
+.BR NAME="text" .
+.TP
+.B "NAME = 42"
+Becomes
+.BR NAME=42 .
+.TP
+.B "NAME = true"
+Becomes
+.BR NAME=1 ;
+.B false
+emits nothing.
+.TP
+.B NAME = \(dq\(dq
+Defines the symbol without a value.
+.PP
+Names must be valid C identifiers
+.RB ( [A-Za-z_][A-Za-z0-9_]* ).
+Later definitions win, so the precedence is: standard
+.B EZMK_*
+macros, then
+.B \-D
+entries in
+.BR flags ,
+then
+.BR [compile.macros] ,
+then macros generated for missing
+.B want
+dependencies.
+.SS [compile.profile.<name>]
+A named build profile:
+.TP
+.B flags
+Array of strings, optional. Appended after the base
+.BR [compile].flags .
+.TP
+.B msvc_flags
+Array of strings, optional. Appended after the base MSVC flags.
+.TP
+.B macros
+Table, optional. Merged over
+.BR [compile.macros] ;
+on a key conflict the profile wins.
+.SS [link]
+.TP
+.B flags
+Array of strings, optional, default empty. Link flags.
+.TP
+.B msvc_flags
+Array of strings, optional, default empty. MSVC\-only link flags.
+.TP
+.B link_dirs
+Array of strings, optional, default empty.
+.B \-L
+search paths, relative to the project root.
+.TP
+.B system_target
+Array of strings, optional, default empty. System libraries to link, for
+example
+.BR pthread " or " m .
+Note the singular spelling: the key is
+.BR system_target ,
+not
+.BR system_targets .
+.SS [link.profile.<name>]
+.TP
+.B flags ", " msvc_flags
+Array of strings, optional. Link flags appended after the base
+.BR [link] flags.
+.PP
+A profile must exist under
+.B [compile.profile.\fIname\fR]
+as well: profile lookup consults the compile profiles, so a name defined only
+here fails the build with an unknown\-profile error.
+.SS [depends]
+.TP
+.B lib
+Array of strings, optional, default empty. Hard dependencies. A missing
+package is a fatal error at build time with an install hint.
+.TP
+.B want
+Array of strings, optional, default empty. Optional dependencies. A missing
+package only warns and defines an
+.B EZMK_LIB_MISS_\fINAME\fR
+macro so the code can degrade gracefully.
+.TP
+.B workspace
+Array of strings, optional, default empty. Sibling members of the same
+workspace to build first, by relative path or member name. The dependency
+must be acyclic and the sibling must be of type
+.BR static ;
+version constraints are not supported here (see
+.BR ezmk\-workspace.toml (5)).
+.PP
+Entries of
+.B lib
+and
+.B want
+may carry a version constraint, for example
+.BR fmt ", " fmt@1.2.3 ", " fmt\(ha1.2.3 ", " "fmt\(ti1.2" ", " "fmt>=1.0" .
+See
+.BR "VERSION CONSTRAINTS" .
+.SS [test]
+.TP
+.B dirs
+Array of strings, optional, default
+.BR ["test"] .
+Directories holding test sources. An empty array falls back to the default.
+.TP
+.B framework
+String, optional, default
+.BR catch2 .
+Either
+.B catch2
+or the built\-in
+.BR ezmk ;
+the value is matched case\-insensitively, and anything else is an error.
+.TP
+.B default_profile
+String, optional, default empty. Profile applied to the test build when
+.B \-\-profile
+is not given.
+.TP
+.B include_dirs
+Array of strings, optional, default empty. Extra
+.B \-I
+directories for the test build only, relative to the project root.
+.TP
+.B link_targets
+Array of strings, optional, default empty. Extra system libraries linked into
+the test runner.
+.TP
+.B flags
+Array of strings, deprecated. Use
+.BR default_profile ", " include_dirs " and " link_targets .
+Using it prints a deprecation warning; it is removed in 2.0.0.
+.SS [hooks]
+Lua scripts run around the build, with
+.B ctx.output
+.RB ( pre_build
+only),
+.B ctx.project_root
+and
+.BR ctx.profile .
+.TP
+.B pre_build
+String, optional, default empty. Lua script executed before compilation.
+.TP
+.B post_build
+String, optional, default empty. Lua script executed after a successful link.
+.TP
+.B on_failure
+String, optional, default empty. Lua script executed when the
+.B link
+fails; a compile error does not trigger it.
+.PP
+Paths are relative to the project root. A missing script warns and is
+skipped. Build hooks are the project's own code; install hooks are package code
+and are gated by
+.BR [utils.permissions] .
+.SS [install]
+.TP
+.B prefix
+String, optional. Install root. Default:
+.B \(ti/.local
+on Unix and
+.B %LOCALAPPDATA%\eezmk
+on Windows. A leading
+.B \(ti/
+or a lone
+.B \(ti
+is expanded to the home directory.
+.TP
+.B bindir
+String, optional, default
+.BR bin .
+Subdirectory for executables and shared libraries.
+.TP
+.B libdir
+String, optional, default
+.BR lib .
+Subdirectory for static libraries and import libraries.
+.TP
+.B includedir
+String, optional, default
+.BR include .
+Subdirectory for headers, which are installed below
+.BR includedir/\fIname\fR/ .
+.TP
+.B sharedir
+String, optional, default
+.BR share .
+Reserved: it is parsed but no data files are installed yet, and
+.B ezmk project install \-\-no\-data
+has no effect.
+.SS [utils]
+.TP
+.B tools
+Array of strings, optional. Tool names provided by a
+.B type = utils
+package. The list is used for
+.B ezmk pkg info
+display only; tool lookup is filesystem\-based and looks for
+.B utils/\fIname\fR.lua
+inside installed packages.
+.SS [utils.permissions]
+Fine\-grained permissions for Lua tools and install hooks. Each key is an
+array of path patterns or command names; the decision order is
+.B deny
+then
+.B allow
+then ask, and in a non\-interactive environment an unanswered request is
+denied.
+.TP
+.B read ", " write
+Array of strings, optional. Allowed read and write paths, relative to the
+project root.
+.TP
+.B run
+Array of strings, optional. Allowed commands; a trailing
+.B *
+matches by prefix.
+.TP
+.B read_deny ", " write_deny ", " run_deny
+Array of strings, optional. Deny lists, which take precedence over the
+corresponding allow list.
+.TP
+.B network
+Boolean, optional, default
+.BR false .
+Declarative only: network access is recorded but not enforced yet.
+.PP
+A package that omits the whole
+.B [utils.permissions]
+section keeps the legacy unrestricted behaviour and prints a deprecation
+warning on the first controlled access.
+.SS [pkg]
+.TP
+.B strict_std_check
+Boolean, optional, default
+.BR false .
+Turn the install\-time standard\-compatibility check into a fatal error when a
+package requires a higher standard than
+.BR [project].language .
+.SH VERSION CONSTRAINTS
+Entries in
+.B [depends].lib
+and
+.B [depends].want
+accept an optional constraint. The operators are
+.BR >= ", " > ", " \(ha ", " \(ti " and " @ ,
+and the earliest occurrence in the string wins; a constraint without a package
+name is rejected, and the version part must be a numeric dotted version.
+.TP
+.B fmt
+No constraint: the highest available version.
+.TP
+.B fmt@1.2.3
+Exactly 1.2.3.
+.TP
+.B fmt>=1.0
+At least 1.0.
+.TP
+.B fmt>1.0
+Strictly greater than 1.0.
+.TP
+.B fmt\(ha1.2.3
+Compatible: at least 1.2.3 and below the next major version
+.RB ( <2.0.0 ).
+.TP
+.B fmt\(ti1.2.3
+Approximate: at least 1.2.3 and below the next minor version
+.RB ( <1.3.0 ).
+.PP
+Constraints are checked when packages are resolved and during the build; to
+pin exact versions for reproducibility, commit
+.BR ezmk.lock .
+.SH DETERMINISTIC BUILDS
+With
+.B deterministic = true
+EazyMake injects reproducible\-build flags (
+.B \-ffile\-prefix\-map
+and
+.B \-frandom\-seed
+for GCC and Clang,
+.B /Brepro
+for MSVC) and treats a missing or mismatched
+.B ezmk.lock
+as a fatal error; the lockfile hash also becomes part of the compile cache
+signature.
+.PP
+The timestamp comes from the first of these that yields a value:
+.BR [compile].source_date_epoch ,
+the
+.B SOURCE_DATE_EPOCH
+environment variable, the git HEAD commit time, and finally the modification
+time of
+.BR ezmk.toml .
+.SH EXAMPLE
+.nf
+.ft CR
+[project]
+name = "hello"
+version = "0.1.0"
+type = "executable"
+
+[compile]
+flags = ["-Wall", "-Wextra"]
+default_profile = "debug"
+
+[compile.profile.debug]
+flags = ["-g", "-O0"]
+
+[depends]
+lib = ["fmt\(ha10.0"]
+
+[test]
+framework = "catch2"
+dirs = ["test"]
+
+[install]
+prefix = "\(ti/.local"
+.ft R
+.fi
+.SH SEE ALSO
+.BR ezmk (1)
+.PP
+The full specification, the package authoring guide and the CLI reference ship
+with the source tree as
+.BR docs/en/config_file.md ", " docs/en/package_authoring.md " and " docs/en/cli.md .
+.PP
+https://github.com/3667808244/EazyMake

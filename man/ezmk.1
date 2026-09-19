@@ -199,7 +199,7 @@ Adopt an existing directory tree: create or update
 .TP
 .BI "ezmk utils " name " [args...]"
 Run a Lua\-based tool provided by an installed
-.B type = "utils"
+.B type = utils
 package. Everything after the tool name is passed through to the tool;
 .B \-\-
 ends option parsing.
@@ -306,7 +306,7 @@ Skip the initial build and only watch for changes.
 .BR \-r ", " \-\-run
 Run the freshly built executable after every successful rebuild (blocking;
 watching resumes when it exits). Valid only for
-.B type = "executable"
+.B type = executable
 projects, and the initial build does not run. Arguments after
 .B \-\-
 are passed to the program on every run.
@@ -421,7 +421,7 @@ Produce a prebuilt archive
 and
 .BR lib/ )
 instead of the default platform\-independent source package. Only valid for
-.BR "type = \"static\"" .
+.BR "type = static" .
 .TP
 .BR \-\-format " \fItar.gz|tgz|zip\fR"
 Archive format; the default is
@@ -594,9 +594,9 @@ and
 .TP
 .B \-u
 User scope:
-.B ~/.local/ezmk/pkg/
+.B \(ti/.local/ezmk/pkg/
 on Unix,
-.B %LOCALAPPDATA%\\ezmk\\pkg
+.B %LOCALAPPDATA%\eezmk\epkg
 on Windows.
 .TP
 .B \-g
@@ -755,8 +755,7 @@ Default location of test reports requested with
 Temporary build directory, removed by
 .BR "ezmk clean" .
 .SH SEE ALSO
-.BR ezmk.toml (5),
-.BR ezmk\-lua (1)
+.BR ezmk.toml (5)
 .PP
 Full command reference:
 .br

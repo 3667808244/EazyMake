@@ -42,9 +42,10 @@
 
 ### 阶段二：`ezmk.toml(5)`（M-02，对应设计 §3.4）
 
-- [ ] 写 `man/ezmk.toml.5`：`[project]`/`[compile]`/`[link]`/`[depends]`/`[test]`/`[hooks]`/`[install]`/`[utils]`/`[pkg]` 九节字段表（名/类型/默认值/一句话）
-- [ ] 逐条对照 `docs/en/config_file.md` 与 `src/config.cpp`；标注 `system_target` 单数、`[link.profile.*]` 前置条件、`sharedir` 未实现、`[test].flags` 已弃用
-- [ ] 自检：渲染 lint 零告警
+- [x] 写 `man/ezmk.toml.5`：13 个小节字段表（`[project]`/`[compile]`/`[compile.macros]`/`[compile.profile.<name>]`/`[link]`/`[link.profile.<name>]`/`[depends]`/`[test]`/`[hooks]`/`[install]`/`[utils]`/`[utils.permissions]`/`[pkg]`）+ `VERSION CONSTRAINTS` + `DETERMINISTIC BUILDS` + `EXAMPLE`；517 行
+- [x] 逐条对照 `docs/en/config_file.md` 与 `src/config.cpp`；标注 `system_target` 单数、`[link.profile.*]` 前置条件、`sharedir` 未实现、`[test].flags` 已弃用；并补上设计清单未列的真实键：`[utils.permissions]` 的 `read_deny`/`write_deny`/`run_deny`、`network`（声明式未强制）、legacy `include_dir`、`precompiled_strict`/`header_only`/`stdlib`
+- [x] 自检：`groff -man -Tutf8 -z -ww` 零告警；**配置键覆盖对照：`config.cpp` 读取的 55 个键 0 缺失**（多出者仅为散文词）
+- [x] 渲染目检并修掉四类真实缺陷（已回写设计 §3.6 检查清单与 §3.10 坑 13）：裸 `^`/`~` → `\(ha`/`\(ti`（否则 utf8 下变 ˆ/˜）；宏参数 `\\` → `\e`（否则 `%LOCALAPPDATA%\ezmk\pkg` 渲染成 `\zmkkg`）；宏参数裸 `"` → `\(dq`（否则引号被吞）；SEE ALSO 的超长 URL 触发 `cannot break line` → 改为仓库 URL + 树内路径
 
 ### 阶段三：防漂移校验脚本（M-03，对应设计 §3.5）
 
