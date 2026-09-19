@@ -60,7 +60,7 @@
 - [x] 新增 `man-pages` job（`man pages (1.4.3)`）：装 groff+man-db，两页 `man --warnings -l` 渲染（仅放行 grotty 设备级 `sgr 0` 一条），并断言 `NAME`/`SECTIONS` 节存在
 - [x] 本地 dry-run：static lint 7 项全 OK（**并借此发现 `ezmk.toml.5` 4 处真实未转义连字符**：`ezmk-workspace.toml`、标识符正则、示例里 `-Wall`/`-g` → 已修）；`man-pages` job 渲染 dry-run 通过（538/364 行）
 - [x] **分发断言 + 安装冒烟（阶段五落地后已补入同一 job）**：`Man pages: install-channel assertions` 断言 `install.sh` 的 `EZMK_NO_MAN` 与 `share/man/man{1,5}`、PKGBUILD 恰好两条 `install -Dm644 man/`、`release.yml` 恰好三条 `cp -r man`（并反向断言 Windows zip 步骤不含 man）、formula 的 `man1.install`/`man5.install`；`Man pages: install + man lookup smoke` 用临时 PREFIX 复现安装并断言 `man ezmk` / `man 5 ezmk.toml` 能命中
-- [ ] push 后确认 CI 全绿（`gh run list` / `gh run watch`）
+- [x] push 后确认 CI 全绿：run `35439991967`（阶段五 push）**全部 job success**，含新 job `man pages (1.4.3)`（23s：渲染两页 + 分发断言 + 安装冒烟全过）；阶段四那次 push（run `35439837699`）因 workflow 步骤名含 `: ` 解析失败（0s）→ 已由 `892ca9b` 加引号修正，并随阶段五 push 验证通过
 
 ### 阶段五：分发集成（M-05/M-06/M-07，对应设计 §3.7）
 
@@ -73,19 +73,20 @@
 
 ### 阶段六：`ezmk help` See also 与 i18n（M-08，对应设计 §3.8）
 
-- [ ] `i18n_keys.def` 加 `help_see_also_man` + en/zh 文案（zh-TW 按变体惯例继承）；`print_help()` 在语法说明之后（`src/cli.cpp:1426` 后）打印
-- [ ] `bash build.sh` 重建（embed_locale）；`python scripts/check_i18n.py` 三向一致（**406 键**）
-- [ ] 验证 `ezmk help` / `EZMK_LANG=zh ezmk help` / zh-TW 回退
+- [x] `i18n_keys.def` 加 `help_see_also_man` + en/zh 文案（zh-TW 按变体惯例继承）；`print_help()` 在语法说明之后打印（`src/cli.cpp` 语法块之后新增 `std::cout << "  " << get(I18nKey::help_see_also_man) << "\n";`，缩进与相邻语法行一致）
+- [x] `bash build.sh` 重建（embed_locale 重新生成 `src/locale_data.cpp`，4 个语言块均含新键）；`python scripts/check_i18n.py` → **406 键**三向一致（en 406 / zh 406 / zh-TW 变体继承 zh）
+- [x] 验证三种语言：`EZMK_LANG=en` → `See also: man ezmk (man 5 ezmk.toml for the config file)`；`EZMK_LANG=zh` → `另见：man ezmk（配置文件见 man 5 ezmk.toml）`；`EZMK_LANG=zh-TW` → 繁体正文 + 新键继承 zh（未转写，符合变体惯例）。注：不设 `EZMK_LANG` 时按系统区域自动选中文，属既有行为
+- [x] 零回归：单元测试 **1099 用例 / 1094 通过 / 5 跳过 / 0 失败**，断言 6342 → **6348**（新增 1 个键被 `test_i18n.cpp` 的 X-macro 全键循环自动覆盖，+6 断言，无需改测试）；`python scripts/check_man_sync.py` 仍 OK（新键不在 CLI 面，不触发漂移）
 
 ### 阶段七：文档收口（M-10，对应设计 §3.9）
 
-- [ ] `README.md`/`README_ZH.md`：安装选项表与 "Customize with …" 句子补 `EZMK_NO_MAN`
-- [ ] `docs/{en,zh}/cli.md`：Installation 节说明手册页位置 + 环境变量表补 `EZMK_NO_MAN`
-- [ ] `docs/{en,zh}/technical.md`：`## Shell Completion (zsh)` 旁新增 `## Man Pages`（路径 / 三渠道 / MANPATH 提示）
-- [ ] `CONTRIBUTING.md`：man 改动流程（跑 `check_man_sync.py` + groff lint + 发布 commit 更新 `.TH` 日期）+ man 与 docs 的职责边界
-- [ ] `CHANGES.md` 1.4.3 条目（新增 / 行为变更 / 文档 / 已知限制）
+- [x] `README.md` / `README_ZH.md`：安装选项表各加一行 `EZMK_NO_MAN`，"Customize with …" 句子补该变量并加一句"Unix 侧附带 `man ezmk` / `man 5 ezmk.toml`"（中英对称）
+- [x] `docs/{en,zh}/cli.md`：`## Installation` 节补手册页落位（`$PREFIX/share/man/man{1,5}`）、`EZMK_NO_MAN=1` 跳过与 `MANPATH` 提示，并链到 technical.md#man-pages；环境变量表各补一行 `EZMK_NO_MAN`
+- [x] `docs/{en,zh}/technical.md`：`## Shell Completion (zsh)` / `## Shell 补全（zsh）` 之后新增 `## Man Pages` / `## 手册页（man）`（两页路径与职责边界、三渠道落位表、非标准 PREFIX 的 `MANPATH` 导出、`man -l` 离线阅读、Windows 明确不做、防漂移脚本与 CI 渲染）
+- [x] `CONTRIBUTING.md`：补"发布 commit 更新 `.TH` 日期（构建期不打时间戳，保持可复现）"一条；原有「Man pages」小节已含 `check_man_sync.py` + groff lint 流程、roff 坑位与"man 精简速查 / docs 完整规范"的职责边界
+- [x] `CHANGES.md` 1.4.3 条目（`(未发布)`，发布 commit 时替换为发布日期）：新增（man 两页 / 校验脚本 / CI 闸门 / 三渠道分发）、行为变更（`ezmk help` 末行 See also，405→406 键）、文档、已知限制（仅英文 / Windows 无 man / 仅两页 / 无 `ezmk man`）
 - [x] `plans/1.4.x/README.md`、`plans/README.md` 索引与根 `plan.md`（2026-09-19 随设计文档一并就位）
-- [ ] 全仓死链检查零断链
+- [x] 全仓死链检查零断链：自写临时校验器扫 `*.md` **549 条相对链接/锚点**（跳过代码块与行内代码，避免把"示例路径"误判为链接）→ **0 条断链**；剩余告警均为历史计划文档中 emoji/CJK 标题锚点的启发式差异（如 `#⛔-发布门槛…` 与 `#-发布门槛…` 两写并存，取决于 slug 是否剥 emoji），**与本版改动无关、未改历史文档**
 
 ### 阶段八：随附项与收口（M-11 + 门槛复核，对应设计 §3.11/§4.8）
 

@@ -26,6 +26,8 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 
 Builds from source and installs `ezmk` to `$HOME/.local/bin`. See [README](../../README.md#quick-start) for customization options and environment variables.
 
+The Unix installer also installs the manual pages — `man ezmk` and `man 5 ezmk.toml` — under `$PREFIX/share/man/man1` and `$PREFIX/share/man/man5`. Set `EZMK_NO_MAN=1` to skip them; with a non-standard `PREFIX` the installer prints the `MANPATH` line to add. See [Man Pages](technical.md#man-pages).
+
 ### Windows (native, no MSYS2)
 
 ```powershell
@@ -593,6 +595,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `PREFIX` | install | Install prefix; binary goes to `$PREFIX/bin` (default `$HOME/.local`) (`install.sh`) |
 | `EZMK_REF` | install | git tag/branch/commit to build (`install.sh`) |
 | `EZMK_NO_COMPLETIONS` | install | Set to `1` to skip zsh completion install (`install.sh`) |
+| `EZMK_NO_MAN` | install | Set to `1` to skip manual page install (`install.sh`) |
 | `EZMK_NO_DEFAULT_REPO` | install | Set to `1` to skip official repo pre-registration (`install.sh`) |
 | `EZMK_TEST_BIN` | test | Path to the `ezmk` binary for integration tests (default `build/ezmk[.exe]`) |
 

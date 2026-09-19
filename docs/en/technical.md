@@ -160,3 +160,40 @@ cp res/ezmk.zsh ~/.zsh/completions/_ezmk
 ```
 
 After installing, restart your shell or run `autoload -Uz compinit && compinit`.
+
+## Man Pages
+
+`man/ezmk.1` and `man/ezmk.toml.5` are hand-written roff pages: a concise offline
+reference for the CLI and for `ezmk.toml`. The full specification stays in `docs/`;
+each page ends with a SEE ALSO pointing back here, and `ezmk help` prints the same
+pointer as its last line.
+
+| Channel | Where the pages land |
+|---|---|
+| `install.sh` (Linux / macOS / MSYS2) | `$PREFIX/share/man/man1/ezmk.1` and `$PREFIX/share/man/man5/ezmk.toml.5` (skip with `EZMK_NO_MAN=1`) |
+| Arch / MSYS2 package (`publish/arch/PKGBUILD`) | `/usr/share/man/man1/ezmk.1` and `/usr/share/man/man5/ezmk.toml.5` |
+| Release assets + Homebrew | the macOS / Linux tarballs carry `man/`; the formula installs it via `man1.install` / `man5.install` |
+
+With a non-standard prefix (`$HOME/.local`) `man` may not search there; the installer
+therefore prints the line to add to your shell profile:
+
+```bash
+export MANPATH="$HOME/.local/share/man:$MANPATH"
+```
+
+Read a page straight from a checkout without installing anything:
+
+```bash
+man -l man/ezmk.1
+man -l man/ezmk.toml.5
+```
+
+Windows (native, without MSYS2) has no `man` command and ships no pages: the PowerShell
+installer and the Windows zip are intentionally untouched; MSYS2 users get the pages
+through `install.sh`.
+
+**Keeping them in sync.** `scripts/check_man_sync.py` compares the pages against the CLI
+option specs (`src/cli.cpp`), the configuration parser (`src/config.cpp`) and the
+environment variables in both directions; CI additionally renders both pages with
+`groff -man -Tutf8 -z -ww`. See [CONTRIBUTING](../../CONTRIBUTING.md#man-pages) before
+editing a page.

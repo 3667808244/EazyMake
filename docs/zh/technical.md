@@ -150,3 +150,30 @@ cp res/ezmk.zsh ~/.zsh/completions/_ezmk
 ```
 
 安装后重启 shell，或运行 `autoload -Uz compinit && compinit`。
+
+## 手册页（man）
+
+`man/ezmk.1` 与 `man/ezmk.toml.5` 是手写的 roff 手册页：CLI 与 `ezmk.toml` 的离线速查。完整规范仍在 `docs/`；两页的 SEE ALSO 指回此处，`ezmk help` 末行也打印同一指引。
+
+| 渠道 | 手册页落位 |
+|---|---|
+| `install.sh`（Linux / macOS / MSYS2） | `$PREFIX/share/man/man1/ezmk.1` 与 `$PREFIX/share/man/man5/ezmk.toml.5`（`EZMK_NO_MAN=1` 跳过） |
+| Arch / MSYS2 包（`publish/arch/PKGBUILD`） | `/usr/share/man/man1/ezmk.1` 与 `/usr/share/man/man5/ezmk.toml.5` |
+| Release 资产 + Homebrew | macOS / Linux 压缩包含 `man/`；formula 通过 `man1.install` / `man5.install` 安装 |
+
+使用非标准前缀（`$HOME/.local`）时 `man` 可能搜索不到，安装脚本会打印需要追加到 shell 配置的行：
+
+```bash
+export MANPATH="$HOME/.local/share/man:$MANPATH"
+```
+
+不安装也可直接从检出目录阅读：
+
+```bash
+man -l man/ezmk.1
+man -l man/ezmk.toml.5
+```
+
+Windows（原生、无 MSYS2）没有 `man` 命令、也不分发手册页：PowerShell 安装脚本与 Windows 压缩包刻意保持不变；MSYS2 用户通过 `install.sh` 获得手册页。
+
+**防漂移。** `scripts/check_man_sync.py` 把手册页与 CLI 选项规格（`src/cli.cpp`）、配置解析器（`src/config.cpp`）及环境变量做双向比对；CI 另用 `groff -man -Tutf8 -z -ww` 渲染两页。改动手册页前请先阅读 [CONTRIBUTING](../../CONTRIBUTING.md#man-pages)。

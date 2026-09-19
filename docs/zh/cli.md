@@ -23,6 +23,8 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 
 从源码构建并安装 `ezmk` 到 `$HOME/.local/bin`。自定义选项和环境变量参见 [README](../../README_ZH.md#快速开始)。
 
+安装脚本还会一并安装手册页——`man ezmk` 与 `man 5 ezmk.toml`——位于 `$PREFIX/share/man/man1` 与 `$PREFIX/share/man/man5`。设 `EZMK_NO_MAN=1` 可跳过；使用非标准 `PREFIX` 时脚本会打印需要追加的 `MANPATH`。详见[手册页（man）](technical.md)。
+
 ### Windows（原生，无需 MSYS2）
 
 ```powershell
@@ -489,6 +491,7 @@ include_dirs = ["include", "@link:shared/include"]
 | `PREFIX` | 安装 | 安装前缀；二进制安装至 `$PREFIX/bin`（默认 `$HOME/.local`）（`install.sh`） |
 | `EZMK_REF` | 安装 | 要构建的 git tag/分支/提交（`install.sh`） |
 | `EZMK_NO_COMPLETIONS` | 安装 | 设为 `1` 跳过 zsh 补全安装（`install.sh`） |
+| `EZMK_NO_MAN` | 安装 | 设为 `1` 跳过手册页安装（`install.sh`） |
 | `EZMK_NO_DEFAULT_REPO` | 安装 | 设为 `1` 跳过官方仓库预注册（`install.sh`） |
 | `EZMK_TEST_BIN` | 测试 | 集成测试使用的 `ezmk` 二进制路径（默认 `build/ezmk[.exe]`） |
 

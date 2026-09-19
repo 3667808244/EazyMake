@@ -99,6 +99,9 @@ concise offline reference, while `docs/` stays the full specification. Two rules
   [`plans/1.4.x/1.4.3.md`](plans/1.4.x/1.4.3.md) §3.10: escape `\-`, write `\(ha` and
   `\(ti` for literal `^`/`~`, use `\e` for a backslash inside macro arguments, `\(dq`
   for a literal double quote, and keep the files LF-only.
+- **The release commit dates the pages**: `.TH` carries the release date (e.g.
+  `"2026-09-19"`); update it in the release commit together with the version bump.
+  Nothing is stamped at build time, so rendering a page stays reproducible.
 
 ### Translation guidelines
 

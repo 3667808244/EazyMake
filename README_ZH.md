@@ -85,7 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 ```
 
-可通过 `PREFIX`、`EZMK_REF`、`EZMK_VERSION`、`EZMK_NO_DEFAULT_REPO`、`EZMK_NO_COMPLETIONS` 自定义。详见[安装选项](#安装选项)。
+可通过 `PREFIX`、`EZMK_REF`、`EZMK_VERSION`、`EZMK_NO_DEFAULT_REPO`、`EZMK_NO_COMPLETIONS`、`EZMK_NO_MAN` 自定义。详见[安装选项](#安装选项)。在 Linux / macOS / MSYS2 上安装脚本会一并安装手册页，`man ezmk` 与 `man 5 ezmk.toml` 可离线查阅。
 
 ### 安装选项
 
@@ -96,6 +96,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `EZMK_VERSION` | 编译进二进制的版本号 | 检出目录的 `git describe --tags` |
 | `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （注册） |
 | `EZMK_NO_COMPLETIONS` | 设为 `1` 跳过 zsh 补全安装 | （有 zsh 时安装） |
+| `EZMK_NO_MAN` | 设为 `1` 跳过手册页安装 | （安装 `man ezmk` / `man 5 ezmk.toml`） |
 | `-Version`（PS） | 要安装的版本标签——**必须带 `v` 前缀**，如 `"v1.4.2"` | `"latest"` |
 | `-InstallDir`（PS） | 安装根目录（二进制 → `<InstallDir>\bin`） | `$env:LOCALAPPDATA\ezmk` |
 | `-NoPath`（PS） | 不修改用户 `PATH` | （配置 PATH） |
