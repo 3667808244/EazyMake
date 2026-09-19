@@ -34,9 +34,10 @@
 
 ### 阶段一：`man/` 与 `ezmk(1)`（M-01，对应设计 §3.1~§3.3）
 
-- [ ] 新建顶层 `man/`；按设计 §3.2 约定（传统 man macros、`.TH`、`\-` 转义、纯 ASCII）写 `man/ezmk.1` 全 12 节
-- [ ] 内容逐条对照 `docs/en/cli.md` 与 `src/cli.cpp` 的 spec/`kAliases`：命令表、选项组、scope flags 默认值、28 简写、GNU 语法、环境变量、exit status、FILES、SEE ALSO
-- [ ] 自检：`groff -man -Tutf8 -z -ww man/ezmk.1` 零告警
+- [x] 新建顶层 `man/`；按设计 §3.2 约定（传统 man macros、`.TH`、`\-` 转义、纯 ASCII）写 `man/ezmk.1` 全 12 节（NAME/SYNOPSIS/DESCRIPTION/COMMANDS/OPTIONS/SCOPE FLAGS/SHORTHANDS/OPTION SYNTAX/ENVIRONMENT/EXIT STATUS/FILES/SEE ALSO；802 行、118 个 `.TP`、21 个 `.SS`）
+- [x] 内容逐条对照 `docs/en/cli.md` 与 `src/cli.cpp` 的 spec/`kAliases`：命令表、选项组、scope flags 默认值、28 简写、GNU 语法、环境变量、exit status、FILES、SEE ALSO
+- [x] 本地静态自检（替代渲染 lint，本机无 groff/mandoc）：结构 lint 0 异常（含"`.` 开头非合法请求"检查）、未转义连字符 0、非 ASCII 字节 0、`.nf`/`.fi` 与 `.ft` 配对、`sort` 后再验；**选项清单对照 `cli.cpp` 权威集：37 个长选项 0 缺失**，多出者仅白名单项（`--color` 全局 / `--flag` 占位符 / `--version` 顶层；`-s` 为文中"不传给 Catch2"的提及）
+- [ ] 渲染自检 `groff -man -Tutf8 -z -ww man/ezmk.1` 零告警 —— **本机无 groff/mandoc**，留待阶段四的 CI（ubuntu + `apt install groff man-db`）执行；设计 §3.6 已含该步骤
 
 ### 阶段二：`ezmk.toml(5)`（M-02，对应设计 §3.4）
 

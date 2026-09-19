@@ -1,0 +1,807 @@
+.\" EazyMake manual page -- ezmk(1)
+.\" Written for EazyMake 1.4.3.
+.\" Keep in sync with src/cli.cpp: run scripts/check_man_sync.py before
+.\" committing changes to this file or to the CLI option specs.
+.TH EZMK 1 "2026-09-19" "EazyMake 1.4.3" "User Commands"
+.SH NAME
+ezmk \- a simple C/C++ build tool
+.SH SYNOPSIS
+.B ezmk
+.I command
+[
+.I subcommand
+] [
+.I options
+] [
+.I arguments
+]
+.br
+.B ezmk
+.I shorthand
+[
+.I options
+] [
+.I arguments
+]
+.br
+.B ezmk
+.I action
+[
+.I options
+] [
+.I arguments
+]
+.SH DESCRIPTION
+.B ezmk
+builds C and C++ projects from a single declarative
+.B ezmk.toml
+file: it collects sources, compiles them in parallel, links the final
+artifact and keeps an incremental cache under
+.BR .ezmk/ .
+There is no build script to write and no build directory to create.
+.PP
+The compiler is detected automatically
+.RB ( gcc ,
+.BR clang " or " cl.exe )
+and the same
+.B ezmk.toml
+works across toolchains; MSVC differences are handled by a flag
+translation layer plus an optional
+.B msvc_flags
+escape hatch.
+.PP
+.B Project root discovery.
+Commands that operate on a project look for
+.B ezmk.toml
+in the current directory and then walk up at most
+.B 5
+parent directories, so
+.B ezmk build
+works from a source subdirectory. A directory containing only
+.B ezmk\-workspace.toml
+is a workspace container: use
+.B ezmk workspace
+or the
+.B \-w
+redirect in that case.
+.PP
+.B Language.
+Diagnostics and help text follow the system locale and can be forced with
+.BR EZMK_LANG .
+The full command reference is documented in
+.IR docs/en/cli.md ,
+and the configuration file in
+.BR ezmk.toml (5).
+.SH COMMANDS
+.SS Daily builds
+.TP
+.B ezmk build
+[options]
+Incremental build (compile and link). Full form:
+.BR "ezmk project build" .
+.TP
+.B ezmk run
+[options] [\-\- args]
+Build and run the program. Full form:
+.BR "ezmk project run" .
+.TP
+.B ezmk clean
+Discard the incremental cache: removes
+.B .ezmk/cache
+and the temporary build directory. Full form:
+.BR "ezmk project clean" ;
+.B \-w
+redirects to
+.BR "ezmk workspace clean" .
+.TP
+.B ezmk watch
+[options]
+Rebuild automatically when a source file, header, or
+.B ezmk.toml
+changes (300 ms debounce). Full form:
+.BR "ezmk project watch" .
+.TP
+.B ezmk install
+[options]
+Install build artifacts (binary, libraries, headers) below the configured
+prefix. Full form:
+.BR "ezmk project install" .
+.TP
+.B ezmk test
+[options]
+Build and run the project test suite. Full form:
+.BR "ezmk project test" .
+.TP
+.B ezmk pack
+[options]
+Create a distributable archive. Full form:
+.BR "ezmk project pack" .
+.SS Project
+.TP
+.B ezmk project new
+.I name
+[options]
+Scaffold a new project directory.
+.TP
+.B ezmk project cc
+[options]
+Generate
+.B compile_commands.json
+for clangd and other language servers.
+.TP
+.B ezmk project export
+.RI < cmake | vscode >
+[options]
+Generate build configuration from
+.BR ezmk.toml :
+a
+.B CMakeLists.txt
+or the
+.B .vscode/
+debug trio (launch, tasks, settings).
+.TP
+.B ezmk project import
+[options]
+Import an existing CMake project into
+.BR ezmk.toml .
+Experimental: constructs that cannot be mapped abort the import without
+writing anything.
+.SS Packages
+.TP
+.B ezmk pkg install
+[options]
+.I file|url|name
+Install a package from a local archive or directory, a download URL, a
+registered repository (by name) or a git repository URL.
+.TP
+.B ezmk pkg remove
+[options]
+.I name
+Remove an installed package.
+.TP
+.B ezmk pkg search
+[options]
+.I name
+Search the registered repositories.
+.TP
+.B ezmk pkg info
+[options]
+.I name
+Show details for a package.
+.TP
+.B ezmk pkg list
+[options]
+List installed packages.
+.TP
+.B ezmk pkg update
+[options]
+[ name ]
+Update one package, or every installed package with
+.BR \-\-all .
+.SS Repositories
+.TP
+.B ezmk repo add
+[options]
+.I url_or_path
+Register a package repository (git URL or local directory).
+.TP
+.B ezmk repo remove
+[options]
+.I name
+Unregister a repository.
+.TP
+.B ezmk repo update
+[options]
+[ name ]
+Refresh repository indices; without a name, all of them.
+.TP
+.B ezmk repo list
+[options]
+List registered repositories.
+.TP
+.B ezmk repo info
+[options]
+.I name
+Show repository details.
+.SS Workspaces
+.TP
+.B ezmk workspace list
+List the members declared in
+.BR ezmk\-workspace.toml .
+.TP
+.B ezmk workspace build
+[options]
+Build all members in topological order, in parallel.
+.TP
+.B ezmk workspace test
+[options]
+Run the tests of every member.
+.TP
+.B ezmk workspace watch
+[options]
+Watch every member and rebuild on change.
+.TP
+.B ezmk workspace clean
+[options]
+Clean every member in reverse dependency order.
+.TP
+.B ezmk workspace scan
+[options] [ dir ]
+Adopt an existing directory tree: create or update
+.BR ezmk\-workspace.toml .
+.SS Other
+.TP
+.B ezmk utils
+.I name
+[args...]
+Run a Lua\-based tool provided by an installed
+.B type = "utils"
+package. Everything after the tool name is passed through to the tool;
+.B \-\-
+ends option parsing.
+.TP
+.B ezmk example
+[ name ] [options]
+Scaffold one of the built\-in examples, or list them with
+.BR list .
+.TP
+.B ezmk help
+Print the usage summary (also
+.BR \-h " / " \-\-help ).
+.TP
+.B ezmk version
+Print the version (also
+.BR \-V " / " \-\-version ).
+.SH OPTIONS
+Booleans take no value; options that take a value accept both
+.B \-\-flag=value
+and
+.BR "\-\-flag value" .
+.SS Global options
+.TP
+.BR \-\-color= \fImode\fR
+Colorize output. Values:
+.BR always " (alias " enable ),
+.BR auto " (alias " default ,
+the default) and
+.BR never " (alias " disable ).
+Case\-insensitive. An explicit
+.B always
+or
+.B never
+overrides the
+.B NO_COLOR
+environment variable; only
+.B auto
+honors it.
+.SS Common build options
+Accepted by
+.BR build ,
+.B run
+and
+.BR watch .
+.TP
+.BR \-v ", " \-\-verbose
+Print the full compile and link commands, cache hits and misses, and, for
+.BR build ,
+a per\-file timing breakdown of the units that were actually compiled.
+.TP
+.BR \-j " \fIN\fR, " \-\-jobs " \fIN\fR"
+Maximum number of parallel compile jobs.
+.B 0
+means automatic (hardware concurrency), which is the default.
+.TP
+.B \-\-disable\-cache
+Recompile every source file. No cache entries are written and
+.B record.json
+is left empty, so the next ordinary build compiles everything again.
+.TP
+.BR \-\-profile " \fIname\fR"
+Apply a build profile declared in
+.B [compile.profile.\fIname\fR]
+and
+.BR [link.profile.\fIname\fR] .
+The profile must exist under
+.BR [compile.profile.*] ;
+a link\-only profile is rejected.
+.TP
+.B \-\-auto\-update
+Run
+.B ezmk repo update \-pug
+before building.
+.TP
+.B \-\-compile\-commands
+Write
+.B compile_commands.json
+after a successful build, for this invocation only (one\-shot equivalent of
+.BR "[compile] compile_commands = true" ).
+.SS ezmk project build
+In addition to the common build options:
+.TP
+.BR \-w ", " \-\-workspace
+Redirect to
+.BR "ezmk workspace build" ;
+equivalent to
+.BR "ezmk build \-w" .
+.TP
+.B \-\-stop\-on\-error
+Workspace redirect only: stop dispatching after the first failing member.
+.TP
+.BR \-\-member " \fIname\fR"
+Workspace redirect only: build the named member and its dependency closure.
+.SS ezmk project run
+Accepts the common build options only. Everything after
+.B \-\-
+is passed to the program.
+.SS ezmk project watch
+In addition to the common build options:
+.TP
+.B \-\-no\-build\-on\-start
+Skip the initial build and only watch for changes.
+.TP
+.BR \-r ", " \-\-run
+Run the freshly built executable after every successful rebuild (blocking;
+watching resumes when it exits). Valid only for
+.B type = "executable"
+projects, and the initial build does not run. Arguments after
+.B \-\-
+are passed to the program on every run.
+.TP
+.BR \-w ", " \-\-workspace
+Redirect to
+.BR "ezmk workspace watch" .
+.TP
+.B \-\-stop\-on\-error
+Workspace redirect only, as for
+.BR "ezmk build" .
+.TP
+.BR \-\-member " \fIname\fR"
+Workspace redirect only, as for
+.BR "ezmk build" .
+.SS ezmk project test
+.TP
+.BR \-f " \fIframework\fR, " \-\-framework " \fIframework\fR"
+Override
+.B [test].framework
+for this run:
+.B catch2
+or
+.BR ezmk .
+.TP
+.BR \-\-filter " \fIpattern\fR"
+Run only matching tests. For
+.B catch2
+this is a test\-name filter; for the built\-in
+.B ezmk
+framework it is a plain filename substring (no wildcards).
+.TP
+.BR \-\-profile " \fIname\fR"
+Override
+.B [test].default_profile
+for this run.
+.TP
+.BR \-v ", " \-V ", " \-\-verbose
+Print the compile and link commands of the test build and the standard
+output of each test. The Catch2 runner is deliberately
+.B not
+given
+.BR \-s ,
+so passing cases are not listed individually. Note that
+.B \-V
+means \fIverbose\fR here, while at the top level
+.B \-V
+means \fIversion\fR.
+.TP
+.BR \-\-report " \fIfmt\fR[:\fIpath\fR]"
+Write a machine\-readable test report. The
+.B ezmk
+framework supports
+.BR junit ;
+the
+.B catch2
+framework also accepts any Catch2 reporter name
+.RB ( json ", " xml ", " sonarqube ", ...)."
+A relative
+.I path
+resolves against the project root. The report never changes the exit
+status.
+.TP
+.BR \-w ", " \-\-workspace
+Redirect to
+.BR "ezmk workspace test" .
+.TP
+.BR \-j " \fIN\fR, " \-\-jobs " \fIN\fR, " \-\-stop\-on\-error ", " \-\-member " \fIname\fR"
+Workspace redirect only, as for
+.BR "ezmk workspace build" .
+.SS ezmk project new
+.TP
+.BR \-\-type " \fItype\fR"
+Project type:
+.BR executable " (default), " static ", " shared " or " utils .
+Each type scaffolds a different source layout.
+.TP
+.B \-\-disable\-git\-init
+Do not run
+.B git init
+in the new project.
+.TP
+.B \-\-disable\-gitignore
+Do not generate a
+.BR .gitignore .
+.SS ezmk project install
+.TP
+.BR \-\-prefix " \fIpath\fR"
+Override
+.BR [install].prefix .
+.TP
+.B \-\-dry\-run
+Show what would be installed without copying anything.
+.TP
+.B \-\-no\-headers
+Do not install headers.
+.TP
+.B \-\-no\-data
+Accepted but currently a no\-op: data\-file installation is not implemented.
+.TP
+.BR \-v ", " \-\-verbose
+Print the files being installed.
+.SS ezmk project pack
+.TP
+.BR \-\-output " \fIdir\fR"
+Output directory (default
+.BR . ).
+.TP
+.B \-\-precompiled
+Produce a prebuilt archive
+.RB ( include/
+and
+.BR lib/ )
+instead of the default platform\-independent source package. Only valid for
+.BR "type = \"static\"" .
+.TP
+.BR \-\-format " \fItar.gz|tgz|zip\fR"
+Archive format; the default is
+.BR tar.gz ,
+and
+.B tgz
+is a case\-insensitive alias for it. Every format writes a
+.B <archive>.sha256
+sidecar.
+.TP
+.BR \-v ", " \-\-verbose
+Print the staged files and the archive command.
+.SS ezmk project cc
+.TP
+.BR \-o " \fIpath\fR, " \-\-output " \fIpath\fR"
+Output file (default
+.BR compile_commands.json
+in the project root).
+.TP
+.BR \-\-profile " \fIname\fR"
+Apply a build profile when computing the compile flags.
+.SS ezmk project export
+.TP
+.BR \-o " \fIpath\fR, " \-\-output " \fIpath\fR"
+Output path (cmake target only).
+.TP
+.B \-\-profile " \fIname\fR"
+Apply a build profile when generating the configuration.
+.TP
+.B \-\-overwrite
+Overwrite existing generated files.
+.TP
+.BR \-\-resolve ", " \-\-glob ", " \-\-no\-glob
+cmake target only: resolve
+.B @link:
+paths to absolute paths, collect sources with a recursive glob, or emit an
+explicit source list instead.
+.SS ezmk project import
+.TP
+.BR \-\-from " \fIformat\fR"
+Source format; currently only
+.B cmake
+(case\-insensitive).
+.TP
+.B \-\-overwrite
+Overwrite an existing
+.BR ezmk.toml .
+.SS ezmk example
+.TP
+.BR \-o " \fIdir\fR, " \-\-output " \fIdir\fR"
+Directory to scaffold into (default
+.BR . ).
+.TP
+.BR \-h ", " \-\-help
+Print the usage of this command and list the available examples.
+.SS Package and repository options
+.TP
+.B scope flags
+.BR \-p ", " \-u " and " \-g
+select the project, user or global scope (see
+.BR "SCOPE FLAGS" ).
+.B pkg install
+and
+.B repo add
+accept exactly one and default to the project scope; the other scoped
+commands accept combinations such as
+.B \-pug
+and default to all three scopes.
+.TP
+.BR \-\-sha256 " \fIhash\fR"
+.B pkg install
+only: verify the archive against this SHA\-256 hash before installing.
+.TP
+.BR \-y ", " \-\-yes
+.BR pkg " " install
+and
+.BR "pkg update" :
+skip all confirmation prompts. Accepted by
+.B pkg update
+since 1.4.2.
+.TP
+.B \-\-locked
+.B pkg install
+only: install only what the existing
+.B ezmk.lock
+pins, and fail on any mismatch.
+.TP
+.B \-\-no\-lock
+.B pkg install
+only: do not create or update
+.BR ezmk.lock .
+.TP
+.BR \-\-branch " \fIref\fR"
+.B pkg install
+only: for git URLs, clone this branch, tag or commit; it wins over a
+.B #ref
+fragment in the URL.
+.TP
+.B \-\-all
+.B pkg update
+only: update every installed package. Without a package name and without
+.BR \-\-all ,
+.B pkg update
+fails. The command exits non\-zero when any update failed.
+.TP
+.BR \-\-name " \fIname\fR"
+.B repo add
+only: register the repository under this name instead of the name derived
+from the URL.
+.TP
+.BR \-\-branch " \fIref\fR"
+.B repo add
+only: check out this branch, tag or commit of a git repository.
+.TP
+.BR \-v ", " \-\-verbose
+Print detailed progress for every package and repository command.
+.SS Workspace options
+.TP
+.BR \-j " \fIN\fR, " \-\-jobs " \fIN\fR"
+Intra\-layer parallelism. Precedence:
+.BR \-j " > " "[workspace.options].default_jobs" " > hardware concurrency."
+.TP
+.B \-\-stop\-on\-error
+Stop dispatching new member tasks after the first failure; running members
+finish naturally. Supported by
+.B workspace build
+and
+.BR "workspace test" ,
+not by
+.BR "workspace clean" .
+.TP
+.BR \-\-member " \fIname\fR"
+Select one member plus its dependency closure. Repeatable; both the full
+relative path and the member basename are accepted.
+.TP
+.BR \-\-report " \fIfmt\fR[:\fIpath\fR]"
+.B workspace test
+only: forward a test report to every member.
+.TP
+.BR \-r ", " \-\-run
+.B workspace watch
+only: forward
+.B \-\-run
+to executable members.
+.TP
+.B \-\-dry\-run
+.B workspace scan
+only: print what would be written without touching the file.
+.TP
+.BR \-y ", " \-\-yes
+.B workspace scan
+only: skip the confirmation prompt before merging into an existing
+.BR ezmk\-workspace.toml .
+.TP
+.BR \-v ", " \-\-verbose
+Print detailed workspace progress. Watchers are started one thread per
+selected member, so
+.B \-j
+does not cap
+.B workspace watch
+concurrency.
+.SH SCOPE FLAGS
+Packages and repositories are installed per scope:
+.TP
+.B \-p
+Project scope:
+.BR <project>/.ezmk/pkg/
+and
+.BR <project>/.ezmk/repo/ .
+.TP
+.B \-u
+User scope:
+.B ~/.local/ezmk/pkg/
+on Unix,
+.B %LOCALAPPDATA%\\ezmk\\pkg
+on Windows.
+.TP
+.B \-g
+Global scope: the
+.B pkg
+and
+.B repo
+directories next to the
+.B ezmk
+binary.
+.PP
+.B pkg install
+and
+.B repo add
+write to one concrete location and therefore accept exactly one scope
+flag, defaulting to
+.BR \-p .
+Query commands accept combinations such as
+.B \-pug
+and default to all three scopes.
+.SH SHORTHANDS
+Shorthands are expanded only in the command position
+.RB ( "ezmk pb" ,
+not
+.BR "ezmk project pb" ).
+.PP
+.nf
+.ft CR
+pn  project new        ki  pkg install       ra  repo add         wl  workspace list
+pb  project build      kr  pkg remove        rr  repo remove      wb  workspace build
+pr  project run        ks  pkg search        rl  repo list        wt  workspace test
+pc  project clean      kn  pkg info          ru  repo update      wc  workspace clean
+pi  project install    kl  pkg list          ri  repo info        ww  workspace watch
+pp  project pack       ku  pkg update                            ws  workspace scan
+pw  project watch
+pt  project test
+u   utils              h   help              v   version
+.ft R
+.fi
+.PP
+The
+.B example
+command group deliberately has no shorthand.
+.SH OPTION SYNTAX
+Options follow GNU conventions:
+.TP
+.B Long options
+.B \-\-flag=value
+and
+.B \-\-flag value
+are equivalent.
+.TP
+.B Short grouping
+.B \-pug
+equals
+.BR "\-p \-u \-g" .
+.TP
+.B Attached values
+.B \-j4
+equals
+.BR "\-j 4" .
+.TP
+.B Interleaving
+Options and positional arguments may be mixed freely.
+.TP
+.B Terminator
+Everything after
+.B \-\-
+is passed through as arguments, for example in
+.BR "ezmk run" ,
+.BR "ezmk watch \-\-run" ,
+.B "ezmk utils"
+and the workspace commands.
+.SH ENVIRONMENT
+.TP
+.B EZMK_LANG
+Interface language:
+.BR en ,
+.B zh
+or a variant tag such as
+.BR zh\-TW .
+BCP 47\-style tags are normalized
+.RB ( zh_CN ,
+.BR zh\-CN ,
+.B zh_CN.UTF\-8 ).
+Unknown variants fall back to the base language and then to English.
+.TP
+.B NO_COLOR
+Disable colored output. Honored only when
+.B \-\-color
+is left at
+.BR auto .
+.TP
+.B CXX ", " CC
+Override the detected C++ and C compiler.
+.TP
+.B SOURCE_DATE_EPOCH
+Timestamp used by deterministic builds. Resolution order:
+.BR "[compile].source_date_epoch" ,
+then this variable, then the git HEAD commit time, then the modification
+time of
+.BR ezmk.toml .
+.TP
+.B EDITOR ", " VISUAL
+Editor opened to review a legacy shell install hook. Lua install hooks are
+sandboxed and never opened, and
+.B \-y
+skips the editor.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Fatal error: missing or invalid configuration, build failure, package or
+repository failure, permission denial. A file watcher that stops
+unexpectedly also exits with
+.BR 1 ;
+stopping
+.B ezmk watch
+with an interrupt exits
+.BR 0 .
+.TP
+.B other
+.B ezmk test
+exits with the test runner's status, so a failing test suite is reported as
+a non\-zero exit code.
+.SH FILES
+.TP
+.B ezmk.toml
+Project configuration; the only file a project needs.
+.TP
+.B ezmk.lock
+Pinned dependency versions and content hashes, written by
+.BR "ezmk pkg install" .
+.TP
+.B ezmk\-workspace.toml
+Workspace member list, options and name.
+.TP
+.B .ezmk/cache/
+Incremental build cache:
+.B record.json
+plus cached object files.
+.TP
+.B .ezmk/pkg/
+Project\-scope installed packages.
+.TP
+.B .ezmk/repo/
+Project\-scope repository registry and clones.
+.TP
+.B .ezmk/test\-results/
+Default location of test reports requested with
+.BR \-\-report .
+.TP
+.B .ezmk/temp/
+Temporary build directory, removed by
+.BR "ezmk clean" .
+.SH SEE ALSO
+.BR ezmk.toml (5),
+.BR ezmk\-lua (1)
+.PP
+Full command reference:
+.br
+https://github.com/3667808244/EazyMake/blob/main/docs/en/cli.md
+.PP
+Configuration file specification:
+.br
+https://github.com/3667808244/EazyMake/blob/main/docs/en/config_file.md
+.PP
+Tutorial:
+.br
+https://github.com/3667808244/EazyMake/tree/main/tutorial/en
