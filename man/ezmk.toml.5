@@ -20,7 +20,7 @@ parent directories, so
 works from a source subdirectory. A directory without
 .B ezmk.toml
 is not a project; a directory with only
-.B ezmk-workspace.toml
+.B ezmk\-workspace.toml
 is a workspace container (see
 .BR ezmk (1)).
 .PP
@@ -199,8 +199,8 @@ emits nothing.
 .B NAME = \(dq\(dq
 Defines the symbol without a value.
 .PP
-Names must be valid C identifiers
-.RB ( [A-Za-z_][A-Za-z0-9_]* ).
+Names must be valid C identifiers (a letter or underscore followed by letters,
+digits or underscores).
 Later definitions win, so the precedence is: standard
 .B EZMK_*
 macros, then
@@ -490,11 +490,11 @@ version = "0.1.0"
 type = "executable"
 
 [compile]
-flags = ["-Wall", "-Wextra"]
+flags = ["\-Wall", "\-Wextra"]
 default_profile = "debug"
 
 [compile.profile.debug]
-flags = ["-g", "-O0"]
+flags = ["\-g", "\-O0"]
 
 [depends]
 lib = ["fmt\(ha10.0"]

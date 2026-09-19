@@ -56,9 +56,11 @@
 
 ### 阶段四：渲染 lint 与 CI 闸门（M-04/M-09，对应设计 §3.6）
 
-- [ ] `ci.yml` ubuntu job 增装 `groff man-db`，新增 `render lint` 与 `drift gate` 两步
-- [ ] 新增 `man-pages` job：断言 `install.sh`（man 块 + `EZMK_NO_MAN`）、PKGBUILD（两条 `install -Dm644`）、`release.yml`（linux/macOS 含 man、Windows 不含）、`ezmk.rb`（`man1.install`/`man5.install`）；并用 `PREFIX=$RUNNER_TEMP` 复现安装 + `man --warnings -l` 渲染验证
-- [ ] push 后确认 CI 全绿
+- [x] `ci.yml` ubuntu job 增装 `groff man-db`，新增 `Man pages: static lint`（groff `-z -ww` + 6 条字符陷阱 grep：CRLF / 未转义连字符 / 裸 `^`~` / 宏参数 `\\` / `\"` 注释转义 / 标签内裸引号）与 `Man pages: CLI drift gate`（`python3 scripts/check_man_sync.py`）两步，插在依赖安装之后、构建之前（快速失败）
+- [x] 新增 `man-pages` job（`man pages (1.4.3)`）：装 groff+man-db，两页 `man --warnings -l` 渲染（仅放行 grotty 设备级 `sgr 0` 一条），并断言 `NAME`/`SECTIONS` 节存在
+- [x] 本地 dry-run：static lint 7 项全 OK（**并借此发现 `ezmk.toml.5` 4 处真实未转义连字符**：`ezmk-workspace.toml`、标识符正则、示例里 `-Wall`/`-g` → 已修）；`man-pages` job 渲染 dry-run 通过（538/364 行）
+- [ ] **分发断言（延后到阶段五）**：`install.sh`（man 块 + `EZMK_NO_MAN`）、PKGBUILD（两条 `install -Dm644`）、`release.yml`（linux/macOS 含 man、Windows 不含）、`ezmk.rb`（`man1.install`/`man5.install`）的 grep 断言，以及 `PREFIX=$RUNNER_TEMP` 复现安装——**必须等阶段五的脚本改动落地后再加**，否则 push 即红
+- [ ] push 后确认 CI 全绿（`gh run list` / `gh run watch`）
 
 ### 阶段五：分发集成（M-05/M-06/M-07，对应设计 §3.7）
 

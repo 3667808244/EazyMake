@@ -8,6 +8,8 @@ name: CI
 #     locale branch when Python is missing, which must not happen in CI.
 #   * `build.sh test*` now propagates the test-suite exit code, so a failing test
 #     fails the job (and the release gate that depends on this workflow).
+#   * 1.4.3 adds two man-page gates: a static roff lint inside the ubuntu job and
+#     a dedicated `man-pages` render job.
 
 on:
   push:
@@ -32,7 +34,42 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ python3
+          sudo apt-get install -y g++ python3 groff man-db
+
+      # 1.4.3: `man/` holds hand-written roff. Lint it statically before the slow
+      # build, and gate CLI/config drift with scripts/check_man_sync.py. The grep
+      # checks cover the character traps that groff cannot warn about — see
+      # plans/1.4.x/1.4.3.md §3.6 for the rationale of each one.
+      - name: Man pages: static lint
+        run: |
+          set -euo pipefail
+          groff -man -Tutf8 -z -ww man/ezmk.1 man/ezmk.toml.5
+          echo "OK: groff reports no warnings"
+
+          fail=0
+          if grep -q $'\r' man/ezmk.1 man/ezmk.toml.5; then
+            echo "FAIL: CR byte in a man source (keep the files LF-only)" >&2; fail=1
+          fi
+          if grep -v -e '^\.TH' -e '^\.\\"' man/ezmk.1 man/ezmk.toml.5 | grep -nP '(?<!\\)-'; then
+            echo "FAIL: unescaped hyphen (write \\- so the output stays copy-pasteable)" >&2; fail=1
+          fi
+          if grep -n -e '\^' -e '~' man/ezmk.1 man/ezmk.toml.5; then
+            echo "FAIL: raw ^ or ~ (use \\(ha / \\(ti; utf8 renders the raw forms as U+02C6 / U+02DC)" >&2; fail=1
+          fi
+          if grep -nF '\\' man/ezmk.1 man/ezmk.toml.5; then
+            echo "FAIL: double backslash in a macro argument (use \\e)" >&2; fail=1
+          fi
+          if grep -v '^\.\\"' man/ezmk.1 man/ezmk.toml.5 | grep -nF '\"'; then
+            echo "FAIL: backslash-quote starts a roff comment and swallows the rest of the line" >&2; fail=1
+          fi
+          if grep -nE '^\.(B|BR|BI|RB) [A-Za-z_]+ = "' man/ezmk.1 man/ezmk.toml.5; then
+            echo "FAIL: bare quote in a tag (macro arguments eat it; use \\(dq)" >&2; fail=1
+          fi
+          [ "$fail" -eq 0 ] || exit 1
+          echo "OK: man static checks passed"
+
+      - name: Man pages: CLI drift gate
+        run: python3 scripts/check_man_sync.py
 
       - name: Build + run all tests
         run: bash build.sh test-all 2>&1 | tee test-report.log
@@ -214,3 +251,38 @@ jobs:
             || { echo "FAIL: _ezmk completion not registered by compinit" >&2; exit 1; }
 
           echo "OK: zsh completion install verified (marker idempotent + _ezmk loadable)"
+
+  # ── Man pages (1.4.3): render check ───────────────────────────────────────
+  # The static lint above is not enough: `.TP`-tag and literal-block layout
+  # problems only show up once the page is rendered (phase 1 of 1.4.3 found
+  # `[options]` falling into the description column that way).
+  # Distribution assertions (install.sh / PKGBUILD / release assets / Homebrew
+  # formula) are added by 1.4.3 phase 5.
+  man-pages:
+    name: man pages (1.4.3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install groff + man-db
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y groff man-db
+
+      - name: Render both pages
+        run: |
+          set -euo pipefail
+          for page in man/ezmk.1 man/ezmk.toml.5; do
+            out="/tmp/$(basename "$page").txt"
+            err="/tmp/$(basename "$page").err"
+            MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings -l "$page" >"$out" 2>"$err"
+            echo "rendered $page: $(wc -l <"$out") lines"
+            # grotty 1.23 emits one device-level 'sgr 0' notice per page (stock
+            # system pages trigger it too); anything else is a real warning.
+            if grep -v "unrecognized X command 'sgr 0' ignored" "$err" | grep -q .; then
+              cat "$err" >&2; exit 1
+            fi
+          done
+          grep -q '^NAME' /tmp/ezmk.1.txt
+          grep -q '^SECTIONS' /tmp/ezmk.toml.5.txt
+          echo "OK: both man pages render"
