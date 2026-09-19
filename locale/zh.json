@@ -339,6 +339,7 @@
     "help_option_syntax_long": "长选项接受 --flag=value 或 --flag value。",
     "help_option_syntax_short": "短选项可组合 (-pug) 并可紧贴取值 (-j4)。",
     "help_option_syntax_dashdash": "使用 -- 结束选项解析，其余原样透传 (utils、project run)。",
+    "help_see_also_man": "另见：man ezmk（配置文件见 man 5 ezmk.toml）",
     "toolchain_msvc_detected": "检测到 MSVC 工具链 (cl.exe + link.exe + lib.exe)",
     "cache_hit_detail": "源码哈希匹配，{count} 个头文件未变更",
     "example_list_header": "可用示例：",

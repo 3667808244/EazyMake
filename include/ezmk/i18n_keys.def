@@ -376,6 +376,7 @@ EZMK_I18N_KEY(help_option_syntax_title)
 EZMK_I18N_KEY(help_option_syntax_long)
 EZMK_I18N_KEY(help_option_syntax_short)
 EZMK_I18N_KEY(help_option_syntax_dashdash)
+EZMK_I18N_KEY(help_see_also_man)   // 1.4.3: `ezmk help` 末尾 See also 行
 
 // ---- toolchain ----
 EZMK_I18N_KEY(toolchain_msvc_detected)

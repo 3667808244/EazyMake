@@ -1424,6 +1424,9 @@ namespace ezmk::cli
                   << "  " << get(I18nKey::help_option_syntax_long) << "\n"
                   << "  " << get(I18nKey::help_option_syntax_short) << "\n"
                   << "  " << get(I18nKey::help_option_syntax_dashdash) << "\n";
+
+        // See also: offline manual pages (1.4.3, M-08).
+        std::cout << "  " << get(I18nKey::help_see_also_man) << "\n";
     }
 
 } // namespace ezmk::cli
