@@ -75,6 +75,31 @@ EazyMake maintains bilingual documentation: **Chinese (zh)** and **English (en)*
    - English docs: assume `EZMK_LANG=en` (the default)
    - Chinese docs: specify `EZMK_LANG=zh` if showing localized output
 
+### Man pages
+
+`man/` holds the hand-written roff manual pages (`ezmk.1`, `ezmk.toml.5`); they are a
+concise offline reference, while `docs/` stays the full specification. Two rules:
+
+- **Never let them drift**: after touching the CLI option specs (`src/cli.cpp`), the
+  configuration parser (`src/config.cpp`), or the man pages themselves, run
+  ```bash
+  python scripts/check_man_sync.py
+  ```
+  It compares options, shorthands, commands, environment variables and configuration
+  keys in both directions and fails on any difference (including a stale entry the CLI
+  no longer has). A built-in extraction baseline also fails when a refactor makes the
+  extractor stop matching, so the gate cannot silently pass.
+- **Render before committing**: the script above cannot see layout, so also run
+  ```bash
+  groff -man -Tutf8 -z -ww man/ezmk.1 man/ezmk.toml.5   # zero warnings
+  MANPAGER=cat man -l man/ezmk.1                        # eyeball the layout
+  ```
+  On MSYS2 install the tooling once with `pacman -S --needed groff man-db`. When
+  editing, remember the roff traps documented in
+  [`plans/1.4.x/1.4.3.md`](plans/1.4.x/1.4.3.md) §3.10: escape `\-`, write `\(ha` and
+  `\(ti` for literal `^`/`~`, use `\e` for a backslash inside macro arguments, `\(dq`
+  for a literal double quote, and keep the files LF-only.
+
 ### Translation guidelines
 
 - **Technical identifiers stay in English**: command names, flags, TOML keys, field names,
@@ -134,6 +159,7 @@ Before submitting a pull request, please verify:
 - [ ] New user-visible strings are added to `include/ezmk/i18n_keys.def` and both `locale/en.json` and `locale/zh.json`
 - [ ] Documentation is updated in both `docs/en/` and `docs/zh/` (if applicable)
 - [ ] Consider running `clang-format --dry-run` on modified files to verify style consistency
+- [ ] If the CLI, the configuration parser or `man/` changed: `python scripts/check_man_sync.py` passes and `groff -man -Tutf8 -z -ww man/*` reports no warnings
 - [ ] New features include test coverage in `test/`
 
 ## Reporting issues

@@ -49,9 +49,10 @@
 
 ### 阶段三：防漂移校验脚本（M-03，对应设计 §3.5）
 
-- [ ] 实现 `scripts/check_man_sync.py`：从 `src/cli.cpp` 提取 OptionSpec/`kAliases`/help 命令表、从 `src/*.cpp` 提取 `getenv`；从 man 提取 OPTIONS/SHORTHANDS/COMMANDS/ENVIRONMENT
-- [ ] 双向差集断言 + 白名单（`--color`/`--help`/`--version`/`--`）+ **提取基线断言**（低于基线即失败，防 CLI 重构后静默失效）
-- [ ] 跑通并修掉 man 侧全部 missing/extra；用法写入 CONTRIBUTING
+- [x] 实现 `scripts/check_man_sync.py`（零依赖 Python 3）：从 `src/cli.cpp` 提取 OptionSpec 长/短选项、`kAliases` 简写与顶层别名、`print_help()` 命令行，从 `src/*.cpp` 提取 `getenv`，从 `src/config.cpp` 提取配置键；与两份 man（先做 roff 反转义）双向比对
+- [x] 双向差集断言 + 白名单（`--color`/`--help`/`--version`/`--flag` 占位符、`-s` 他方工具提及）+ **提取基线断言**（长选项 37 / 短选项 12 / 简写 28 / 顶层别名 7 / 命令 32 / 环境变量 14 / 配置键 55，低于基线即失败并提示更新提取器）；环境变量还做"三分法"（文档化 / `ENV_INTERNAL` 归类 / 未归类即失败），避免新增变量静默漏文档
+- [x] 跑通：`python scripts/check_man_sync.py` → **OK**（0 漂移）；用法写入 CONTRIBUTING（新增「Man pages」小节 + pre-commit 清单一项）
+- [x] **对抗测试（沙箱副本，6 例全部按预期失败）**：man 删选项 → 抓；cli.cpp 加选项 → 抓；man 写不存在的选项 → 抓；重命名 `kAliases` → 提取失败（exit 1）；man 删配置键 → 抓；代码改用未归类环境变量 → 双向抓（原变量"文档有代码无" + 新变量"未归类"）
 
 ### 阶段四：渲染 lint 与 CI 闸门（M-04/M-09，对应设计 §3.6）
 
