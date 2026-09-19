@@ -1,6 +1,6 @@
 # EazyMake 1.4.3 执行计划
 
-> **状态：✅ 已发布（tag `v1.4.3`，2026-09-19）**——阶段一~八全部落地、CI 全绿；版本号已置 1.4.3（`build.sh` fallback + `include/ezmk/version.hpp`）、4 页 `.TH` 日期 = 2026-09-19、`CHANGES.md` 条目已定稿；发布后跟进：Release 资产核对、Homebrew digest 回填、winget PR、pacman 出包。
+> **状态：✅ 已发布并完成三渠道分发（tag `v1.4.3`，2026-09-19）**——阶段一~八全部落地、CI 全绿；版本号已置 1.4.3（`build.sh` fallback + `include/ezmk/version.hpp`）、4 页 `.TH` 日期 = 2026-09-19、`CHANGES.md` 条目与发布记录已定稿；Release 7 资产已核对（linux/macos 含 `man/` 4 页、Windows zip 不含）、Homebrew tap 与仓库副本同步、pacman 本机 `makepkg -fd` 出包验证、winget PR `#437604`（CLA 已 pass；CI 校验与版主审批为发布后跟进项）。
 >
 > 详细设计：[**1.4.3.md**](plans/1.4.x/1.4.3.md)。为 `ezmk` 提供离线、符合 Unix 惯例的 man 手册（`ezmk(1)` + `ezmk.toml(5)`），打通三渠道分发，并用**构建期防漂移校验**保证 man 不与 `src/cli.cpp` 脱节。
 >

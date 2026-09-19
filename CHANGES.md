@@ -49,6 +49,17 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **Windows 无 man**：原生 Windows 无 `man` 命令，`install.ps1` 与 Windows 压缩包不含手册页；MSYS2 用户经 `install.sh` 获得。
 - **无 `ezmk man` 子命令**：CLI 面保持不变。
 
+### 发布（2026-09-19，tag `v1.4.3`）
+
+- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.3（dev 阶段保持 1.4.2 的补丁惯例）；4 页 `.TH` 日期 = 2026-09-19；定稿后复跑全量 **1099 用例 / 6348 断言零失败**
+- **tag / Release**：annotated tag `v1.4.3` 已推送；GitHub Release 已发布，`release.yml` 产出 **7 个资产**——`ezmk-windows-x64.zip` / `ezmk-linux-x64.tar.gz` / `ezmk-macos-arm64.tar.gz` + 独立 `ezmk.exe` / `ezmk-lua.exe` 与各自 `.sha256` 边车（`macos-x64` 仍无资产——`macos-13` runner 在 free tier 长期不分配，与 1.2.x ~ 1.4.2 相同）
+- **资产哈希**（取 `assets[].digest`）：`ezmk-windows-x64.zip` `32012a279b5400ae2b624ef5238422591eabff3209383d954b448d9afcfe05d4`、`ezmk-linux-x64.tar.gz` `72b5ec018774835c708c46397917ae980ce80dd055013b3a82761cab66085466`、`ezmk-macos-arm64.tar.gz` `b82608f27e26d6db43b09b7fa25bee174ba05c45d8dfad435442ea1e7545816a`、`ezmk.exe` `e85aad74853add2d9b496b0a09227c092a088c046187ab234054532030ae0248`、`ezmk-lua.exe` `1665589d110d998a8bbb412671261f1a9b3f9fd91019615ff0d8474c6a91ea9b`
+  - 一致性核对：三个压缩包完整下载后本地 sha256 与 API digest **逐字节一致**；两个 `.sha256` 边车内容与对应资产实际 digest 一致（`install.ps1` 依赖该边车）
+  - **产物内容核对（本版新增项）**：linux / macos 压缩包含 `ezmk`、`ezmk-lua`、`_ezmk` 与 **`man/` 4 页**（tar 内 `groff -man -Tutf8 -z -ww` 零告警；按 formula 的 `man1.install`/`man5.install` 落位后 `man 1 ezmk` / `man 1 ezmk-lua` / `man 5 ezmk.toml` / `man 5 ezmk-workspace.toml` 全部命中；tar 内 ELF 含版本串 `1.4.3`）；**Windows zip 仅 `_ezmk` + 两个 exe，不含 `man/`**（与设计 §3.7 一致）
+- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.3（源码 tarball 真实 digest `0ab1488d1a0139122743872ae59023c9f255f0610b987cf6486e1a3dad42da30`，codeload 与 archive 两端点字节一致、1924119 字节）；本机 MSYS2 MINGW64 `makepkg -fd` 直接拉取 v1.4.3 tag 源码出包 `eazymake-1.4.3-1-x86_64.pkg.tar.zst`，包内 `usr/bin/ezmk.exe` / `ezmk-lua.exe` / `usr/share/man/man{1,5}/` 4 页（makepkg 自动 gzip）/ `usr/share/zsh/site-functions/_ezmk` 落位，`ezmk.exe version` → **1.4.3**，包内 man 页 `MANPATH` 命中 4/4
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.3（macos-arm64 `b82608f2…` / linux-x64 `72b5ec01…` 真实 digest，含四条 `man1.install`/`man5.install`；仓库副本 `publish/homebrew/ezmk.rb` 同步），线上内容与仓库副本 sha256 **逐字节一致**
+- **winget**：split manifests（`InstallerType: zip` + `NestedInstallerType: portable`，`InstallerSha256` = `32012a27…`）已提交 `microsoft/winget-pkgs#437604`；本机 `winget validate` 通过（「清单验证成功」），`license/cla` 检查已 pass（账户此前已签）；其余 CI 校验 + 版主审批为发布后跟进项，不阻塞发布
+
 ---
 
 ## 1.4.2 (2026-09-13) — 代码质量审计修复（第二轮）
