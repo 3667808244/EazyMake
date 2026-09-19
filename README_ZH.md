@@ -97,7 +97,7 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 | `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （注册） |
 | `EZMK_NO_COMPLETIONS` | 设为 `1` 跳过 zsh 补全安装 | （有 zsh 时安装） |
 | `EZMK_NO_MAN` | 设为 `1` 跳过手册页安装 | （安装 `man ezmk` / `man 5 ezmk.toml`） |
-| `-Version`（PS） | 要安装的版本标签——**必须带 `v` 前缀**，如 `"v1.4.2"` | `"latest"` |
+| `-Version`（PS） | 要安装的版本标签——**必须带 `v` 前缀**，如 `"v1.4.3"` | `"latest"` |
 | `-InstallDir`（PS） | 安装根目录（二进制 → `<InstallDir>\bin`） | `$env:LOCALAPPDATA\ezmk` |
 | `-NoPath`（PS） | 不修改用户 `PATH` | （配置 PATH） |
 | `-DryRun`（PS） | 预览操作，不做实际更改 | （关闭） |

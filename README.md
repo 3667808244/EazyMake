@@ -98,7 +98,7 @@ Customize with `PREFIX`, `EZMK_REF`, `EZMK_VERSION`, `EZMK_NO_DEFAULT_REPO`, `EZ
 | `EZMK_NO_DEFAULT_REPO` | Set to `1` to skip official repo registration | (registers) |
 | `EZMK_NO_COMPLETIONS` | Set to `1` to skip zsh completion install | (installs when zsh is present) |
 | `EZMK_NO_MAN` | Set to `1` to skip manual page install | (installs `man ezmk` / `man 5 ezmk.toml`) |
-| `-Version` (PS) | Version tag to install — **`v`-prefixed**, e.g. `"v1.4.2"` | `"latest"` |
+| `-Version` (PS) | Version tag to install — **`v`-prefixed**, e.g. `"v1.4.3"` | `"latest"` |
 | `-InstallDir` (PS) | Root install directory (binary → `<InstallDir>\bin`) | `$env:LOCALAPPDATA\ezmk` |
 | `-NoPath` (PS) | Do not modify the user `PATH` | (PATH is configured) |
 | `-DryRun` (PS) | Preview without making changes | (off) |

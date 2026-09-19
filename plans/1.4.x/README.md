@@ -1,8 +1,8 @@
 # 1.4.x — 功能版本系列（调试配置自动化 + 语言标准收尾）
 
-> 1.4.x 系列 = **1.4.0 功能版本**（dev.1 调试配置生成 → dev.2 工具链能力表 + 校验严格化 → dev.3 编译协商 → dev.4 CMake 互操作补全 → dev.5 功能收口 → dev.6 代码质量审计 → **dev.7 workspace scan（用户确认插队）** → pre.1 发布前收口）—— **2026-08-30 已发布 ✅（tag `v1.4.0`）**；**1.4.1 补丁版本**（`pkg install` 支持 git 仓库 URL）—— **2026-09-03 已发布 ✅（tag `v1.4.1`）**；**1.4.2 补丁版本（代码质量审计修复第二轮）—— ✅ 已发布（2026-09-13，tag `v1.4.2`；全量 1099/6342 零回归；分发完成：Release 7 资产（真实 digest 已回填 homebrew/winget）+ pacman 本机 makepkg 出包 + winget PR #434086；winget 版主审批为发布后跟进项）**；**1.4.3 补丁版本（man 手册 `ezmk(1)` + `ezmk.toml(5)`）—— 📝 设计就绪（2026-09-19），执行中**（见 [1.4.3.md](1.4.3.md)）。
+> 1.4.x 系列 = **1.4.0 功能版本**（dev.1 调试配置生成 → dev.2 工具链能力表 + 校验严格化 → dev.3 编译协商 → dev.4 CMake 互操作补全 → dev.5 功能收口 → dev.6 代码质量审计 → **dev.7 workspace scan（用户确认插队）** → pre.1 发布前收口）—— **2026-08-30 已发布 ✅（tag `v1.4.0`）**；**1.4.1 补丁版本**（`pkg install` 支持 git 仓库 URL）—— **2026-09-03 已发布 ✅（tag `v1.4.1`）**；**1.4.2 补丁版本（代码质量审计修复第二轮）—— ✅ 已发布（2026-09-13，tag `v1.4.2`；全量 1099/6342 零回归；分发完成：Release 7 资产（真实 digest 已回填 homebrew/winget）+ pacman 本机 makepkg 出包 + winget PR #434086；winget 版主审批为发布后跟进项）**；**1.4.3 补丁版本（man 手册 4 页：`ezmk.1` + `ezmk-lua.1` + `ezmk.toml.5` + `ezmk-workspace.toml.5`）—— ✅ 已发布（2026-09-19，tag `v1.4.3`；全量 1099/6348 零回归）**（见 [1.4.3.md](1.4.3.md)）。
 >
-> 本目录为 1.4.x 全部文档的**平铺结构**（无子文件夹）：`1.4.0-dev.N.md` 为开发子版本，`1.4.0-pre.N.md` 为发布前收口（`1.4.0-pre.1.md` 已建），`1.4.0.md` 为正式版聚合（届时新建），`1.4.1.md` / `1.4.2.md` 为正式发布后的补丁版本（对照 1.3.x 补丁惯例），`1.4.3.md` 为 man 手册补丁（设计就绪，执行中）。
+> 本目录为 1.4.x 全部文档的**平铺结构**（无子文件夹）：`1.4.0-dev.N.md` 为开发子版本，`1.4.0-pre.N.md` 为发布前收口（`1.4.0-pre.1.md` 已建），`1.4.0.md` 为正式版聚合（届时新建），`1.4.1.md` / `1.4.2.md` 为正式发布后的补丁版本（对照 1.3.x 补丁惯例），`1.4.3.md` 为 man 手册补丁（**已发布**，2026-09-19，tag `v1.4.3`）。
 
 ## 定位
 
@@ -29,7 +29,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 | [1.4.0-pre.1](1.4.0-pre.1.md) | 发布前收口 | 用户触达打磨（别名总表 / `--help` / README 速览）+ 全量文档检查（docs/README/tutorial/skill + i18n 三向）+ 缺陷收集与未实现项补全（dev 已知限制聚合裁定表）+ 1.4.0 聚合 changelog + API 稳定性承诺扩展 + 发布门槛预核对 | ✅ 收口完成（2026-08-30：全量 1003/5835 零回归，+15 用例/+65 断言；门槛 ①②③ 满足） |
 | [1.4.1](1.4.1.md) | pkg install 支持 git 仓库 URL | `pkg install` 识别 git URL（`git@`/`git://`/`file://`/`.git`）→ 克隆 → ref 定位（`#<ref>`/`--branch`，分支/标签浅克隆、commit 全量）→ 复用目录安装链路 → lockfile 记录 `source="git"` + `commit` + `--locked` 校验 | ✅ 已发布（2026-09-03，tag `v1.4.1`；全量 1020/5970 零回归；三渠道：winget PR #428792 / homebrew tap / pacman PKGBUILD） |
 | [1.4.2](1.4.2.md) | 代码质量审计修复（第二轮） | 六路并行审计 + 独立核查的修复落地（P0~P4 共 36 项）：Lua 报错对象 UB/权限/执行预算、`workspace watch` 线程模型、MSVC 依赖跟踪（stdout 流/本地化前缀）、`--locked` 哈希语义分离、watcher 死亡感知与目录补挂、Windows 窄 API/参数装配、repo 路径约束、import/CLI 语义修正、workspace 文件层健壮性等 | ✅ 已发布（2026-09-13，tag `v1.4.2`；阶段一~八逐 commit：全量 **1099/6342 零回归** vs 基线 1020/5970；首方代码零告警；i18n 405 键三向一致；F-37 低危项择优随附）；三渠道分发完成：Homebrew tap 1.4.2 / pacman 产物 / winget PR #434086 |
-| [1.4.3](1.4.3.md) | man 手册 | 新增 `man/ezmk.1` + `man/ezmk.toml.5`（手写 roff，仅英文）；`scripts/check_man_sync.py` 防漂移闸门（man ↔ `src/cli.cpp` 双向比对 + 提取基线断言）+ groff 渲染 lint；三渠道分发（`install.sh` 加 `EZMK_NO_MAN` / PKGBUILD / Release 资产 + Homebrew `man1.install`）；`ezmk help` 末尾 See also（i18n 405→406） | 📝 设计就绪（2026-09-19），执行中（阶段一~八见根 [`plan.md`](../../plan.md)） |
+| [1.4.3](1.4.3.md) | man 手册 | 新增 man 4 页（`man/ezmk.1`、`man/ezmk-lua.1`、`man/ezmk.toml.5`、`man/ezmk-workspace.toml.5`，手写 roff，仅英文）；`scripts/check_man_sync.py` 防漂移闸门（man ↔ `src/cli.cpp` 双向比对 + 提取基线断言）+ groff 渲染 lint；三渠道分发（`install.sh` 加 `EZMK_NO_MAN` / PKGBUILD / Release 资产 + Homebrew `man1.install`/`man5.install`）；`ezmk help` 末尾 See also（i18n 405→406） | ✅ 已发布（2026-09-19，tag `v1.4.3`；阶段一~八逐 commit：全量 **1099/6348 零回归**（基线 6342 + 新键 6 条）；`check_man_sync.py` OK + groff 4 页零告警；i18n 406 键三向一致） |
 
 ### 依赖关系
 
@@ -40,7 +40,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
               ├──→ 1.4.0-dev.5 (功能收口, 独立)
               ├──→ 1.4.0-dev.6 (代码质量审计, 独立)
               └──→ 1.4.0-dev.7 (workspace scan, 独立)
-1.4.0-pre.1 (收口) ──→ 1.4.0 (正式发布, 2026-08-30) ──→ 1.4.1 (git URL 安装, 已发布 2026-09-03) ──→ 1.4.2 (代码质量审计修复第二轮, 已发布 2026-09-13 / tag `v1.4.2`) ──→ 1.4.3 (man 手册, 设计就绪 2026-09-19)
+1.4.0-pre.1 (收口) ──→ 1.4.0 (正式发布, 2026-08-30) ──→ 1.4.1 (git URL 安装, 已发布 2026-09-03) ──→ 1.4.2 (代码质量审计修复第二轮, 已发布 2026-09-13 / tag `v1.4.2`) ──→ 1.4.3 (man 手册 4 页, 已发布 2026-09-19 / tag `v1.4.3`)
 ```
 
 - dev.1 / dev.5 / dev.6 / dev.7 与语言标准主线完全独立，可并行。
@@ -48,7 +48,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 - dev.7 依赖 dev.6 收口后重新打开 dev 阶段（用户确认）；**pre.1 依赖全部 dev 完成**（已完成，接 1.4.0 正式版聚合发布）。
 - **1.4.1 为 1.4.0 发布后的补丁版本**（对照 1.3.x 补丁惯例），复用 1.4.0 的 `install_from_directory` 目录安装链路与 repo 子系统 git helper；与 1.4.0 各 dev 无顺序依赖。dev 阶段 2026-09-01 完成（全量 1020/5970 零回归），**2026-09-03 正式发布（tag `v1.4.1`）**。
 - **1.4.2 为 1.4.1 发布后的代码质量审计补丁版本**（对照 dev.6 / 1.3.6 审计先例），修复面跨 Lua/workspace/build/pkg/repo/CLI/Windows 六域（见 [1.4.2.md](1.4.2.md) §2）；零功能新增、公共 API 无破坏性变更；与 1.4.1 无顺序依赖（独立补丁）。**✅ 已发布（2026-09-13，tag `v1.4.2`）**：阶段一~八逐 commit 落地 + 每阶段全量回归，最终 **1099 用例 / 6342 断言零失败**（基线 1020/5970）；三渠道分发完成：Homebrew tap `3667808244/homebrew-eazymake` 已更新至 1.4.2、pacman `publish/arch/PKGBUILD` 本机 `makepkg -fd` 出包验证、winget `microsoft/winget-pkgs#434086`（版主审批为发布后跟进项）。
-- **1.4.3 为 1.4.2 发布后的文档/分发补丁版本**：新增 man 手册（`ezmk(1)` + `ezmk.toml(5)`，手写 roff、仅英文）+ 构建期防漂移校验（`scripts/check_man_sync.py` + groff 渲染 lint，纳入 CI）+ 三渠道分发（`install.sh` 加 `EZMK_NO_MAN`、PKGBUILD、Release 资产 + Homebrew formula）；零 CLI 行为变更（唯一改动为 `ezmk help` 末尾 See also 一行，i18n 405→406）；与 1.4.2 无顺序依赖。**📝 设计就绪（2026-09-19），执行阶段见根 [`plan.md`](../../plan.md)**。
+- **1.4.3 为 1.4.2 发布后的文档/分发补丁版本**：新增 man 手册 4 页（`ezmk(1)` / `ezmk-lua(1)` / `ezmk.toml(5)` / `ezmk-workspace.toml(5)`，手写 roff、仅英文）+ 构建期防漂移校验（`scripts/check_man_sync.py` + groff 渲染 lint，纳入 CI）+ 三渠道分发（`install.sh` 加 `EZMK_NO_MAN`、PKGBUILD、Release 资产 + Homebrew formula）；零 CLI 行为变更（唯一改动为 `ezmk help` 末尾 See also 一行，i18n 405→406）；与 1.4.2 无顺序依赖。**✅ 已发布（2026-09-19，tag `v1.4.3`）**：阶段一~八逐 commit 落地，最终 **1099 用例 / 6348 断言零失败**（基线 6342 + 新 i18n 键 6 条）。
 
 ## 跨版本关注点
 
@@ -56,6 +56,6 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 - **1.3.6 重构收益**：`run_executable`（watch 透传通道）、`run_member`（workspace watch 模型）、`TestRunContext`（测试基础设施）为本系列复用。
 - **1.3.6 延后重构项随主线穿插**：build.cpp/pkg.cpp 全面重构、Catch2 结构化解析（报告语义化）——不单列 dev，随相关 dev 一并评估。
 - **cli.cpp 命令组拆文件**（`parse_*` 1272 行单文件）：2.0.0 前评估。
-- **回归基线**：全量 1020 用例 / 5970 断言（1.4.1 发布态实测）；1.4.2 开发完成后为 1099/6342，新增功能不得引入回归；**1.4.3 保持 1099/6342**（纯文档/分发，不新增用例数），附加门槛为 `check_man_sync.py` + groff 渲染 lint 通过、i18n **406** 键三向一致。
+- **回归基线**：全量 1020 用例 / 5970 断言（1.4.1 发布态实测）；1.4.2 开发完成后为 1099/6342，新增功能不得引入回归；**1.4.3 实测 1099 用例 / 6348 断言**（基线 6342 + 新键 6 条；纯文档/分发，不新增用例数），附加门槛为 `check_man_sync.py` + groff 渲染 lint 通过、i18n **406** 键三向一致。
 - **i18n**：各 dev 新增 key 三向一致 + `check_i18n.py` 通过。
 - **与 2.0.0 解耦**：本系列纯增量，不依赖任何 deprecation 到期；2.0.0 保持破坏性变更窗口。
