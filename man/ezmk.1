@@ -3,6 +3,8 @@
 .\" Keep in sync with src/cli.cpp: run scripts/check_man_sync.py before
 .\" committing changes to this file or to the CLI option specs.
 .TH EZMK 1 "2026-09-19" "EazyMake 1.4.3" "User Commands"
+.\" Disable hyphenation: this page is full of copy-pasteable option names.
+.nh
 .SH NAME
 ezmk \- a simple C/C++ build tool
 .SH SYNOPSIS
@@ -75,13 +77,11 @@ and the configuration file in
 .SH COMMANDS
 .SS Daily builds
 .TP
-.B ezmk build
-[options]
+.B ezmk build [options]
 Incremental build (compile and link). Full form:
 .BR "ezmk project build" .
 .TP
-.B ezmk run
-[options] [\-\- args]
+.B ezmk run [options] [\-\- args]
 Build and run the program. Full form:
 .BR "ezmk project run" .
 .TP
@@ -94,44 +94,35 @@ and the temporary build directory. Full form:
 redirects to
 .BR "ezmk workspace clean" .
 .TP
-.B ezmk watch
-[options]
+.B ezmk watch [options]
 Rebuild automatically when a source file, header, or
 .B ezmk.toml
 changes (300 ms debounce). Full form:
 .BR "ezmk project watch" .
 .TP
-.B ezmk install
-[options]
+.B ezmk install [options]
 Install build artifacts (binary, libraries, headers) below the configured
 prefix. Full form:
 .BR "ezmk project install" .
 .TP
-.B ezmk test
-[options]
+.B ezmk test [options]
 Build and run the project test suite. Full form:
 .BR "ezmk project test" .
 .TP
-.B ezmk pack
-[options]
+.B ezmk pack [options]
 Create a distributable archive. Full form:
 .BR "ezmk project pack" .
 .SS Project
 .TP
-.B ezmk project new
-.I name
-[options]
+.BI "ezmk project new [options] " name
 Scaffold a new project directory.
 .TP
-.B ezmk project cc
-[options]
+.B ezmk project cc [options]
 Generate
 .B compile_commands.json
 for clangd and other language servers.
 .TP
-.B ezmk project export
-.RI < cmake | vscode >
-[options]
+.BI "ezmk project export [options] " "<cmake|vscode>"
 Generate build configuration from
 .BR ezmk.toml :
 a
@@ -140,68 +131,47 @@ or the
 .B .vscode/
 debug trio (launch, tasks, settings).
 .TP
-.B ezmk project import
-[options]
+.B ezmk project import [options]
 Import an existing CMake project into
 .BR ezmk.toml .
 Experimental: constructs that cannot be mapped abort the import without
 writing anything.
 .SS Packages
 .TP
-.B ezmk pkg install
-[options]
-.I file|url|name
+.BI "ezmk pkg install [options] " "file|url|name"
 Install a package from a local archive or directory, a download URL, a
 registered repository (by name) or a git repository URL.
 .TP
-.B ezmk pkg remove
-[options]
-.I name
+.BI "ezmk pkg remove [options] " name
 Remove an installed package.
 .TP
-.B ezmk pkg search
-[options]
-.I name
+.BI "ezmk pkg search [options] " name
 Search the registered repositories.
 .TP
-.B ezmk pkg info
-[options]
-.I name
+.BI "ezmk pkg info [options] " name
 Show details for a package.
 .TP
-.B ezmk pkg list
-[options]
+.B ezmk pkg list [options]
 List installed packages.
 .TP
-.B ezmk pkg update
-[options]
-[ name ]
+.BI "ezmk pkg update [options] " name
 Update one package, or every installed package with
 .BR \-\-all .
 .SS Repositories
 .TP
-.B ezmk repo add
-[options]
-.I url_or_path
+.BI "ezmk repo add [options] " url_or_path
 Register a package repository (git URL or local directory).
 .TP
-.B ezmk repo remove
-[options]
-.I name
+.BI "ezmk repo remove [options] " name
 Unregister a repository.
 .TP
-.B ezmk repo update
-[options]
-[ name ]
+.BI "ezmk repo update [options] " name
 Refresh repository indices; without a name, all of them.
 .TP
-.B ezmk repo list
-[options]
+.B ezmk repo list [options]
 List registered repositories.
 .TP
-.B ezmk repo info
-[options]
-.I name
+.BI "ezmk repo info [options] " name
 Show repository details.
 .SS Workspaces
 .TP
@@ -209,38 +179,32 @@ Show repository details.
 List the members declared in
 .BR ezmk\-workspace.toml .
 .TP
-.B ezmk workspace build
-[options]
+.B ezmk workspace build [options]
 Build all members in topological order, in parallel.
 .TP
-.B ezmk workspace test
-[options]
+.B ezmk workspace test [options]
 Run the tests of every member.
 .TP
-.B ezmk workspace watch
-[options]
+.B ezmk workspace watch [options]
 Watch every member and rebuild on change.
 .TP
-.B ezmk workspace clean
-[options]
+.B ezmk workspace clean [options]
 Clean every member in reverse dependency order.
 .TP
-.B ezmk workspace scan
+.BI "ezmk workspace scan [options] " dir
 [options] [ dir ]
 Adopt an existing directory tree: create or update
 .BR ezmk\-workspace.toml .
 .SS Other
 .TP
-.B ezmk utils
-.I name
-[args...]
+.BI "ezmk utils " name " [args...]"
 Run a Lua\-based tool provided by an installed
 .B type = "utils"
 package. Everything after the tool name is passed through to the tool;
 .B \-\-
 ends option parsing.
 .TP
-.B ezmk example
+.BI "ezmk example [options] " name
 [ name ] [options]
 Scaffold one of the built\-in examples, or list them with
 .BR list .

@@ -36,8 +36,9 @@
 
 - [x] 新建顶层 `man/`；按设计 §3.2 约定（传统 man macros、`.TH`、`\-` 转义、纯 ASCII）写 `man/ezmk.1` 全 12 节（NAME/SYNOPSIS/DESCRIPTION/COMMANDS/OPTIONS/SCOPE FLAGS/SHORTHANDS/OPTION SYNTAX/ENVIRONMENT/EXIT STATUS/FILES/SEE ALSO；802 行、118 个 `.TP`、21 个 `.SS`）
 - [x] 内容逐条对照 `docs/en/cli.md` 与 `src/cli.cpp` 的 spec/`kAliases`：命令表、选项组、scope flags 默认值、28 简写、GNU 语法、环境变量、exit status、FILES、SEE ALSO
-- [x] 本地静态自检（替代渲染 lint，本机无 groff/mandoc）：结构 lint 0 异常（含"`.` 开头非合法请求"检查）、未转义连字符 0、非 ASCII 字节 0、`.nf`/`.fi` 与 `.ft` 配对、`sort` 后再验；**选项清单对照 `cli.cpp` 权威集：37 个长选项 0 缺失**，多出者仅白名单项（`--color` 全局 / `--flag` 占位符 / `--version` 顶层；`-s` 为文中"不传给 Catch2"的提及）
-- [ ] 渲染自检 `groff -man -Tutf8 -z -ww man/ezmk.1` 零告警 —— **本机无 groff/mandoc**，留待阶段四的 CI（ubuntu + `apt install groff man-db`）执行；设计 §3.6 已含该步骤
+- [x] 本地静态自检：结构 lint 0 异常（含"`.` 开头非合法请求"检查）、未转义连字符 0、非 ASCII 字节 0、`.nf`/`.fi` 与 `.ft` 配对、行尾纯 LF；**选项清单对照 `cli.cpp` 权威集：37 个长选项 0 缺失**，多出者仅白名单项（`--color` 全局 / `--flag` 占位符 / `--version` 顶层；`-s` 为文中"不传给 Catch2"的提及）
+- [x] **渲染自检（本机已可执行）**：MSYS2 安装 `pacman -S --needed groff man-db`（`groff 1.23.0-3` / `man-db 2.13.1-2`）后，`groff -man -Tutf8 -z -ww man/ezmk.1` **零告警**、`man --warnings -l man/ezmk.1` 通过；渲染目检修掉两处真实排版缺陷（COMMANDS 的 `[options]` 掉进描述列 → 标签改为「命令 + 参数」单行、占位符用 `.BI` 斜体；自动断词把 "temporary" 断成 "tempo-rary" → 加 `.nh`）。已知无害项：`-Tascii`/不带 `-z` 时 grotty 1.23 会报一条 `unrecognized X command 'sgr 0'`，**系统自带 man 页同样如此**（设备级怪癖，与本文无关）
+- [x] 本机工具链踩坑记录（写入设计 §3.6/§3.10）：man 源**必须是 LF**——用 PowerShell `Set-Content` 重写会引入 CRLF，troff 会对每一行报 `invalid input character code 13`
 
 ### 阶段二：`ezmk.toml(5)`（M-02，对应设计 §3.4）
 
