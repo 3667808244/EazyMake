@@ -1,6 +1,6 @@
 # EazyMake 1.4.3 执行计划
 
-> **状态：✅ 阶段一~八已执行完毕（2026-09-19）**——本文档把设计文档 §4 转成可勾选的八阶段清单；索引（[`plans/1.4.x/README.md`](plans/1.4.x/README.md)、[`plans/README.md`](plans/README.md)）已同步就位。剩余动作仅在**正式发布步**：发布 commit 回填 `CHANGES.md` 日期与 `man/*.TH` 日期、确认资产含 `man/`、回填 Homebrew digest。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
+> **状态：✅ 阶段一~八已执行完毕并通过 CI（2026-09-19）**——本文档把设计文档 §4 转成可勾选的八阶段清单；索引（[`plans/1.4.x/README.md`](plans/1.4.x/README.md)、[`plans/README.md`](plans/README.md)）已同步就位。剩余动作仅在**正式发布步**：发布 commit 回填 `CHANGES.md` 日期与 `man/*.TH` 日期、确认资产含 `man/`、回填 Homebrew digest。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
 > 详细设计：[**1.4.3.md**](plans/1.4.x/1.4.3.md)。为 `ezmk` 提供离线、符合 Unix 惯例的 man 手册（`ezmk(1)` + `ezmk.toml(5)`），打通三渠道分发，并用**构建期防漂移校验**保证 man 不与 `src/cli.cpp` 脱节。
 >
@@ -96,6 +96,7 @@
 - [x] 发布清单加项：`ezmk-publish` skill 补"资产含 `man/`（4 页）→ formula 四条 `man1/man5.install` → 每次发布按 `assets[].digest` 回填 sha256"，PKGBUILD 章节补四条安装与解包校验 `usr/share/man/man{1,5}/`；`ezmk-workflow` §3.3 产物核对加"资产含 `man/` 且 `groff -z` 零告警、Windows zip 不含"，§3.4 Homebrew 步骤注明四条 man 安装（对照 1.4.2 流程）
 - [x] 两页新增后同步 `install.sh`（4 页循环安装，核心页必需、随附页存在则装）、`PKGBUILD`（2 → 4 条 `install -Dm644 man/`）、Homebrew formula（4 条 `man1/man5.install`）、CI（lint 页清单、渲染 4 页、分发断言 2→4、安装冒烟 4 页）与 `README×2` / `docs/{en,zh}/{cli,technical}.md` / `CONTRIBUTING.md` / `CHANGES.md`
 - [x] CI 检查健壮性修正（设计 §7 坑 14）：MSYS2 `grep 3.0` 在「管道 + `-P` 回顾」下误报，CI 两条检查改为无管道单次 grep，并以注入式反例验证仍能抓到真实漂移
+- [x] 推送后 CI 全绿：run `35442281182`（commit `9012ef2`）**4 个 job 全部 success**——`man pages (1.4.3)`（渲染 4 页 + 分发断言 + 安装冒烟）、`Ubuntu (g++) — test-all`（含静态 lint 与漂移闸门）、`Windows (MSYS2 g++) — test`、`zsh completions`
 
 ---
 
