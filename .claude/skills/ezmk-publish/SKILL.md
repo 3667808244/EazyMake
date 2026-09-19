@@ -195,6 +195,9 @@ class Ezmk < Formula
     chdir dir do
       bin.install "ezmk"
       zsh_completion.install "_ezmk"
+      # 1.4.3+: 资产内含 man/（tar 根目录下），否则装完没有手册页
+      man1.install "man/ezmk.1"
+      man5.install "man/ezmk.toml.5"
     end
   end
 
@@ -209,6 +212,7 @@ end
 - **`on_macos` 只有 arm64**：Intel x64 一直没有 Release 资产（`macos-13` runner 在 GitHub free tier 长期不分配），Intel Mac 会得到 brew 的 "unsupported" 错误。不要加 x64 分支。
 - **必须 `chdir dir`**：`release.yml` 打包的 tarball 根目录是平台 triple 名，不 chdir 会装不到 `ezmk`。
 - **sha256 用真实 digest**（见 §0），空字符串 = 公式不可用。
+- **资产内含 `man/`（1.4.3+）**：Linux / macOS tarball 打包时 `cp -r man`（Windows zip 不含），formula 必须写 `man1.install "man/ezmk.1"` + `man5.install "man/ezmk.toml.5"`（在 `chdir dir` 之内），否则 `brew install` 后 `man ezmk` 为空。**资产内容变化 → 每次发布都要按 §0 重取 digest 回填**。
 - **版本号手工同步**：`version "1.1.3"` 随 Release 更新。
 - 安装测试：`brew tap 3667808244/eazymake && brew install ezmk`。
 - 验证：`brew install` 前可用 `gh api .../releases/tags/<tag>` 的 `.assets[].digest` 交叉核对公式里的 sha256。
@@ -240,10 +244,11 @@ sha256sums=('beeaade01036217cc0e6f26e7feca32394b54b4f54903b0d9692312a9f0560e0') 
 - **package() 双变体**：Linux 产出 `build/ezmk`；Windows/MSYS2 产出 `build/ezmk.exe`（`if [ -f build/ezmk.exe ]` 分支），保证 MSYS2 渠道可用。
 - **`ezmk-lua` 一并安装**：dev.8 的 CMake 导出钩子独立运行时，保证 pacman 渠道下导出钩子可用。
 - **`_ezmk` 补全**：安装到 `zsh/site-functions/_ezmk`，与 Homebrew 的 `zsh_completion.install "_ezmk"` 对齐。
+- **手册页（1.4.3+）**：`package()` 各变体均加 `install -Dm644 man/ezmk.1 "$pkgdir/usr/share/man/man1/ezmk.1"` 与 `install -Dm644 man/ezmk.toml.5 "$pkgdir/usr/share/man/man5/ezmk.toml.5"`（放在 `if [ -f build/ezmk.exe ]` 之外，Linux 与 MSYS2 两分支共用）；验证时核对 `usr/share/man/man{1,5}/` 落位。
 
 ### 3.2 验证流程（无需 AUR 账户）
 
-- **本机 MSYS2**（已实测通过 2026-08-17）：`export MSYSTEM=MINGW64` + `export PATH=/mingw64/bin:/usr/bin:/bin` 后 `makepkg -fd`（`-d`：MINGW 工具链已装、msys 包名 `gcc`/`python` 不满足依赖检查）生成 `.pkg.tar.zst`；解包验证 `usr/bin/ezmk.exe`、`usr/bin/ezmk-lua.exe`、`usr/share/zsh/site-functions/_ezmk` 落位；`ezmk.exe version` 输出正确版本。
+- **本机 MSYS2**（已实测通过 2026-08-17）：`export MSYSTEM=MINGW64` + `export PATH=/mingw64/bin:/usr/bin:/bin` 后 `makepkg -fd`（`-d`：MINGW 工具链已装、msys 包名 `gcc`/`python` 不满足依赖检查）生成 `.pkg.tar.zst`；解包验证 `usr/bin/ezmk.exe`、`usr/bin/ezmk-lua.exe`、`usr/share/zsh/site-functions/_ezmk`、`usr/share/man/man1/ezmk.1`、`usr/share/man/man5/ezmk.toml.5` 落位；`ezmk.exe version` 输出正确版本。
 - **远程 Arch Linux**：`scp` PKGBUILD + 源码 tarball 到真机（VM 到 github 大文件传输被 reset，需自带 tarball），`makepkg -f` 生成并验证（Linux 二进制 `ezmk` + `_ezmk`；依赖 `gcc`/`python` 在 Arch 正常解析）。
 - **tag 未发布时的本地替代**：`v1.2.0` tag 不存在时，用 `git archive --prefix=EazyMake-1.2.0/ HEAD -o eazymake-1.2.0.tar.gz` 生成同名 tarball 放 PKGBUILD 同目录——makepkg 识别本地文件不下载（GitHub tag tarball 根目录同为 `EazyMake-1.2.0/`）。
 
@@ -279,6 +284,7 @@ sha256sums=('beeaade01036217cc0e6f26e7feca32394b54b4f54903b0d9692312a9f0560e0') 
 | 10 | MSYS2 环境跑 makepkg 用错环境 | MSYS 环境无 g++/python | `export MSYSTEM=MINGW64`（MINGW64 环境） |
 | 11 | MINGW64 下依赖检查失败 | 报缺 `gcc`/`python`（msys 包名） | `makepkg -d`/`--nodeps`（MINGW 工具链已装） |
 | 12 | `pkgver` 指向未发布 tag | makepkg 拉不到源码 | `git archive` 本地同名 tarball 做功能验证，最终验证延后到 Release 后 |
+| 13 | 资产新增 `man/` 后沿用旧 digest | `brew install` 校验失败 | 每次发布按 §0 用 `assets[].digest` 回填 formula 的 sha256 |
 
 ## 5. 相关文件
 

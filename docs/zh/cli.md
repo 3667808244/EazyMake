@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 
 从源码构建并安装 `ezmk` 到 `$HOME/.local/bin`。自定义选项和环境变量参见 [README](../../README_ZH.md#快速开始)。
 
-安装脚本还会一并安装手册页——`man ezmk` 与 `man 5 ezmk.toml`——位于 `$PREFIX/share/man/man1` 与 `$PREFIX/share/man/man5`。设 `EZMK_NO_MAN=1` 可跳过；使用非标准 `PREFIX` 时脚本会打印需要追加的 `MANPATH`。详见[手册页（man）](technical.md)。
+安装脚本还会一并安装手册页——`man ezmk`、`man 1 ezmk-lua`、`man 5 ezmk.toml`、`man 5 ezmk-workspace.toml`——位于 `$PREFIX/share/man/man1` 与 `$PREFIX/share/man/man5`。设 `EZMK_NO_MAN=1` 可跳过；使用非标准 `PREFIX` 时脚本会打印需要追加的 `MANPATH`。详见[手册页（man）](technical.md)。
 
 ### Windows（原生，无需 MSYS2）
 

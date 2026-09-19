@@ -163,15 +163,15 @@ After installing, restart your shell or run `autoload -Uz compinit && compinit`.
 
 ## Man Pages
 
-`man/ezmk.1` and `man/ezmk.toml.5` are hand-written roff pages: a concise offline
-reference for the CLI and for `ezmk.toml`. The full specification stays in `docs/`;
-each page ends with a SEE ALSO pointing back here, and `ezmk help` prints the same
-pointer as its last line.
+Four hand-written roff pages form a concise offline reference: `ezmk.1`,
+`ezmk-lua.1`, `ezmk.toml.5` and `ezmk-workspace.toml.5`. The full specification
+stays in `docs/`; each page ends with a SEE ALSO pointing back here, and
+`ezmk help` prints the same pointer as its last line.
 
 | Channel | Where the pages land |
 |---|---|
-| `install.sh` (Linux / macOS / MSYS2) | `$PREFIX/share/man/man1/ezmk.1` and `$PREFIX/share/man/man5/ezmk.toml.5` (skip with `EZMK_NO_MAN=1`) |
-| Arch / MSYS2 package (`publish/arch/PKGBUILD`) | `/usr/share/man/man1/ezmk.1` and `/usr/share/man/man5/ezmk.toml.5` |
+| `install.sh` (Linux / macOS / MSYS2) | `$PREFIX/share/man/man1/{ezmk.1,ezmk-lua.1}` and `$PREFIX/share/man/man5/{ezmk.toml.5,ezmk-workspace.toml.5}` (skip with `EZMK_NO_MAN=1`) |
+| Arch / MSYS2 package (`publish/arch/PKGBUILD`) | `/usr/share/man/man1/{ezmk.1,ezmk-lua.1}` and `/usr/share/man/man5/{ezmk.toml.5,ezmk-workspace.toml.5}` |
 | Release assets + Homebrew | the macOS / Linux tarballs carry `man/`; the formula installs it via `man1.install` / `man5.install` |
 
 With a non-standard prefix (`$HOME/.local`) `man` may not search there; the installer
@@ -185,7 +185,9 @@ Read a page straight from a checkout without installing anything:
 
 ```bash
 man -l man/ezmk.1
+man -l man/ezmk-lua.1
 man -l man/ezmk.toml.5
+man -l man/ezmk-workspace.toml.5
 ```
 
 Windows (native, without MSYS2) has no `man` command and ships no pages: the PowerShell

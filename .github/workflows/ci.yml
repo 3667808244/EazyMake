@@ -43,26 +43,30 @@ jobs:
       - name: "Man pages: static lint"
         run: |
           set -euo pipefail
-          groff -man -Tutf8 -z -ww man/ezmk.1 man/ezmk.toml.5
+          MAN_PAGES="man/ezmk.1 man/ezmk-lua.1 man/ezmk.toml.5 man/ezmk-workspace.toml.5"
+          groff -man -Tutf8 -z -ww $MAN_PAGES
           echo "OK: groff reports no warnings"
 
           fail=0
-          if grep -q $'\r' man/ezmk.1 man/ezmk.toml.5; then
+          if grep -q $'\r' $MAN_PAGES; then
             echo "FAIL: CR byte in a man source (keep the files LF-only)" >&2; fail=1
           fi
-          if grep -v -e '^\.TH' -e '^\.\\"' man/ezmk.1 man/ezmk.toml.5 | grep -nP '(?<!\\)-'; then
+          # Single-grep forms on purpose: piping `grep -v` into `grep -P` makes
+          # old greps (MSYS2 grep 3.0) report false positives, and a pipe is not
+          # needed — the exclusions are part of the pattern.
+          if grep -nP '^(?!\.TH|\.\\").*(?<!\\)-' $MAN_PAGES; then
             echo "FAIL: unescaped hyphen (write \\- so the output stays copy-pasteable)" >&2; fail=1
           fi
-          if grep -n -e '\^' -e '~' man/ezmk.1 man/ezmk.toml.5; then
+          if grep -n -e '\^' -e '~' $MAN_PAGES; then
             echo "FAIL: raw ^ or ~ (use \\(ha / \\(ti; utf8 renders the raw forms as U+02C6 / U+02DC)" >&2; fail=1
           fi
-          if grep -nF '\\' man/ezmk.1 man/ezmk.toml.5; then
+          if grep -nF '\\' $MAN_PAGES; then
             echo "FAIL: double backslash in a macro argument (use \\e)" >&2; fail=1
           fi
-          if grep -v '^\.\\"' man/ezmk.1 man/ezmk.toml.5 | grep -nF '\"'; then
+          if grep -nP '^(?!\.\\").*\\"' $MAN_PAGES; then
             echo "FAIL: backslash-quote starts a roff comment and swallows the rest of the line" >&2; fail=1
           fi
-          if grep -nE '^\.(B|BR|BI|RB) [A-Za-z_]+ = "' man/ezmk.1 man/ezmk.toml.5; then
+          if grep -nE '^\.(B|BR|BI|RB) [A-Za-z_]+ = "' $MAN_PAGES; then
             echo "FAIL: bare quote in a tag (macro arguments eat it; use \\(dq)" >&2; fail=1
           fi
           [ "$fail" -eq 0 ] || exit 1
@@ -268,10 +272,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y groff man-db
 
-      - name: Render both pages
+      - name: Render all pages
         run: |
           set -euo pipefail
-          for page in man/ezmk.1 man/ezmk.toml.5; do
+          for page in man/ezmk.1 man/ezmk-lua.1 man/ezmk.toml.5 man/ezmk-workspace.toml.5; do
             out="/tmp/$(basename "$page").txt"
             err="/tmp/$(basename "$page").err"
             MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings -l "$page" >"$out" 2>"$err"
@@ -281,10 +285,12 @@ jobs:
             if grep -v "unrecognized X command 'sgr 0' ignored" "$err" | grep -q .; then
               cat "$err" >&2; exit 1
             fi
+            grep -q '^NAME' "$out"
           done
-          grep -q '^NAME' /tmp/ezmk.1.txt
           grep -q '^SECTIONS' /tmp/ezmk.toml.5.txt
-          echo "OK: both man pages render"
+          grep -q '^WORKSPACE FILE' /tmp/ezmk-workspace.toml.5.txt
+          grep -q '^OPTIONS' /tmp/ezmk-lua.1.txt
+          echo "OK: all man pages render"
 
       # 1.4.3: every install channel must ship the pages. These assertions guard
       # the channel edits the same way the zsh-completions job guards
@@ -297,16 +303,26 @@ jobs:
             || { echo "FAIL: install.sh lost the EZMK_NO_MAN opt-out" >&2; fail=1; }
           grep -q 'share/man/man1' install.sh && grep -q 'share/man/man5' install.sh \
             || { echo "FAIL: install.sh does not install into share/man/man{1,5}" >&2; fail=1; }
+          for page in ezmk.1 ezmk-lua.1 ezmk.toml.5 ezmk-workspace.toml.5; do
+            grep -q "$page" install.sh \
+              || { echo "FAIL: install.sh does not install $page" >&2; fail=1; }
+          done
           grep -q 'ezmk.toml.5' install.sh \
             || { echo "FAIL: install.sh does not install the config man page" >&2; fail=1; }
-          [ "$(grep -c 'install -Dm644 man/' publish/arch/PKGBUILD)" -eq 2 ] \
-            || { echo "FAIL: PKGBUILD must install both man pages" >&2; fail=1; }
+          [ "$(grep -c 'install -Dm644 man/' publish/arch/PKGBUILD)" -eq 4 ] \
+            || { echo "FAIL: PKGBUILD must install all four man pages" >&2; fail=1; }
           [ "$(grep -c 'cp -r man' .github/workflows/release.yml)" -eq 3 ] \
             || { echo "FAIL: release.yml must add man/ to the three Unix assets" >&2; fail=1; }
+          [ "$(grep -c 'man[15]\.install "man/' publish/homebrew/ezmk.rb)" -eq 4 ] \
+            || { echo "FAIL: the Homebrew formula must install all four man pages" >&2; fail=1; }
           grep -q 'man1.install "man/ezmk.1"' publish/homebrew/ezmk.rb \
             || { echo "FAIL: the Homebrew formula does not install ezmk.1" >&2; fail=1; }
+          grep -q 'man1.install "man/ezmk-lua.1"' publish/homebrew/ezmk.rb \
+            || { echo "FAIL: the Homebrew formula does not install ezmk-lua.1" >&2; fail=1; }
           grep -q 'man5.install "man/ezmk.toml.5"' publish/homebrew/ezmk.rb \
             || { echo "FAIL: the Homebrew formula does not install ezmk.toml.5" >&2; fail=1; }
+          grep -q 'man5.install "man/ezmk-workspace.toml.5"' publish/homebrew/ezmk.rb \
+            || { echo "FAIL: the Homebrew formula does not install ezmk-workspace.toml.5" >&2; fail=1; }
           # the Windows zip is built with Copy-Item and must NOT ship man/
           if sed -n '/Package (zip)/,/Compress-Archive/p' .github/workflows/release.yml \
                | grep -qE 'cp -r man|Copy-Item[^)]*man/'; then
@@ -320,11 +336,15 @@ jobs:
           set -euo pipefail
           PREFIX="$(mktemp -d)/prefix"
           mkdir -p "$PREFIX/share/man/man1" "$PREFIX/share/man/man5"
-          cp man/ezmk.1 "$PREFIX/share/man/man1/ezmk.1"
-          cp man/ezmk.toml.5 "$PREFIX/share/man/man5/ezmk.toml.5"
+          cp man/ezmk.1 man/ezmk-lua.1 "$PREFIX/share/man/man1/"
+          cp man/ezmk.toml.5 man/ezmk-workspace.toml.5 "$PREFIX/share/man/man5/"
           export MANPATH="$PREFIX/share/man"
           MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings 1 ezmk >/tmp/m1.txt
+          MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings 1 ezmk-lua >/tmp/m1lua.txt
           MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings 5 ezmk.toml >/tmp/m5.txt
+          MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings 5 ezmk-workspace.toml >/tmp/m5ws.txt
           grep -q '^EZMK(1)' /tmp/m1.txt
+          grep -q '^EZMK-LUA(1)' /tmp/m1lua.txt
           grep -q '^EZMK.TOML(5)' /tmp/m5.txt
-          echo "OK: man ezmk + man 5 ezmk.toml resolve from a custom prefix"
+          grep -q '^EZMK-WORKSPACE.TOML(5)' /tmp/m5ws.txt
+          echo "OK: all four man pages resolve from a custom prefix"

@@ -1,0 +1,162 @@
+.\" ezmk-lua(1) - standalone Lua hook runtime (1.4.3)
+.TH EZMK\-LUA 1 "2026-09-19" "EazyMake 1.4.3" "User Commands"
+.nh
+.SH NAME
+ezmk\-lua \- standalone Lua hook runtime for EazyMake
+.SH SYNOPSIS
+.B ezmk\-lua
+.I hook.lua
+.RB [ \-\-project\-root
+.IR dir ]
+.RB [ \-\-profile
+.IR name ]
+.RB [ \-\-output
+.IR path ]
+.br
+.B ezmk\-lua
+.B \-h
+.SH DESCRIPTION
+.B ezmk\-lua
+executes a single Lua hook script with the
+.B ezmk.*
+API registered. It is the companion runtime used by
+.B ezmk project export cmake
+to re\-run the
+.B pre_build
+and
+.B post_build
+hooks of
+.BR [hooks] :
+the generated CMake calls
+.B ezmk\-lua
+instead of linking the whole build tool, so hook post\-processing keeps working
+under a plain CMake build.
+.PP
+The binary ships next to
+.B ezmk
+in every distribution channel. It runs one script and exits; it never loads a
+project configuration for a full build and it is
+.B not
+the runtime behind
+.B ezmk utils
+or package install hooks (those use the sandboxed in\-process runtime).
+The generated CMake looks it up with
+.BR "find_program(EZMK_LUA ezmk\-lua)" ;
+when the program cannot be found the hook is skipped with a CMake warning, and
+.B on_failure
+hooks are never exported (CMake has no equivalent).
+.SH OPTIONS
+.TP
+.BR \-\-project\-root " " \fIdir\fR
+Project root used to resolve
+.B ezmk.toml
+and every relative path exposed by the
+.B ezmk.*
+API. Defaults to the current directory. When no
+.B ezmk.toml
+exists there, the configuration readers degrade to empty values instead of
+failing.
+.TP
+.BR \-\-profile " " \fIname\fR
+Profile name stored in
+.BR ctx.profile .
+It selects which profile sections
+.RB ( [compile.profile.<name>] ", " [link.profile.<name>] )
+the surrounding CMake configuration was generated for.
+.TP
+.BR \-\-output " " \fIpath\fR
+Path of the produced artifact, stored in
+.BR ctx.output
+\(em typically
+.B $<TARGET_FILE:...>
+of the exported target.
+.TP
+.BR \-h ", " \-\-help
+Print usage and exit with status 0.
+.PP
+Unknown options, a missing option value and a missing
+.I hook.lua
+operand are usage errors: usage is printed and the exit status is 2.
+.SH HOOK CONTRACT
+The script is loaded as an ordinary Lua chunk and must define a global
+function
+.BR run :
+.nf
+function run(ctx)
+    \-\- ctx.output        (string, may be empty)
+    \-\- ctx.project_root  (string)
+    \-\- ctx.profile       (string, may be empty)
+    return 0
+end
+.fi
+.PP
+A chunk that raises an error, or that never defines
+.BR run ,
+aborts the run: the message is printed and the exit status is 1. The value
+returned by
+.B run
+becomes the process exit status; a non\-numeric return value counts as 0. A
+Lua
+.B error()
+call likewise prints the message and exits with status 1.
+.SH ENVIRONMENT
+The script runs in the
+.B full
+Lua global environment: the standard libraries are available, including
+.B io
+and
+.BR os .
+This is a strict superset of the sandbox used by
+.BR "ezmk build" ,
+and
+.B [utils.permissions]
+is
+.B not
+enforced here \(em the runtime is a developer tool outside the trust boundary
+of package code and is therefore never used to execute third\-party scripts.
+.PP
+Because the two environments differ in what they
+.I allow
+but not in the
+.B ezmk.*
+functions they expose, hooks that must behave identically under
+.B ezmk build
+and under an exported CMake build should restrict themselves to the
+.B ezmk.*
+API subset documented in
+.IR docs/en/utils.md .
+.SH EXIT STATUS
+.TP
+.B 0
+The hook returned 0 (or a non\-numeric value).
+.TP
+.B 1
+Lua error, missing
+.B run()
+function, or a non\-zero value returned by the hook.
+.TP
+.B 2
+Usage error (unknown option, missing option value, missing script operand).
+.SH FILES
+.TP
+.BR scripts/*.lua
+Typical location of hook scripts referenced by
+.BR [hooks] ;
+paths in
+.B ezmk.toml
+are resolved relative to the project root.
+.SH SEE ALSO
+.BR ezmk (1),
+.BR ezmk.toml (5),
+.BR ezmk\-workspace.toml (5)
+.PP
+Full specification:
+.IR https://github.com/3667808244/EazyMake
+(section
+.B hooks
+of
+.IR docs/en/config_file.md ,
+and the
+.B ezmk
+Lua API in
+.IR docs/en/utils.md ).

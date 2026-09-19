@@ -3,7 +3,7 @@
 # Installs the prebuilt binary for the current platform from the EazyMake
 # GitHub Release. Each tarball (ezmk-<os>-<arch>.tar.gz) contains `ezmk`
 # (the binary), `ezmk-lua` (standalone Lua hook runtime, 1.2.0-dev.8+),
-# `_ezmk` (zsh completion) and `man/` (ezmk(1) + ezmk.toml(5), 1.4.3+).
+# `_ezmk` (zsh completion) and `man/` (ezmk(1) + ezmk-lua(1), 1.4.3+).
 #
 # NOTE 1.4.3: the tarball now carries man/, so the sha256 below must be updated
 # from the Release asset digest of the version that ships man pages.
@@ -46,7 +46,9 @@ class Ezmk < Formula
       zsh_completion.install "_ezmk"
       # 1.4.3: man pages, shipped inside the release tarball as man/
       man1.install "man/ezmk.1"
+      man1.install "man/ezmk-lua.1"
       man5.install "man/ezmk.toml.5"
+      man5.install "man/ezmk-workspace.toml.5"
     end
   end
 

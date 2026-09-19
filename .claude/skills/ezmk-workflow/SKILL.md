@@ -75,11 +75,11 @@ description: EazyMake 开发发布工作流 —— dev / pre / 正式发布三�
 
 7. `git tag v1.x.0` + `git push origin v1.x.0`
 8. 创建 GitHub Release → `release.yml` 触发多平台构建/打包（windows-x64 / linux-x64 / macos-x64 / macos-arm64）
-9. 人工核对产物：`res/ezmk.zsh` 拷贝为 `_ezmk`、二进制可运行（`./ezmk version`）
+9. 人工核对产物：`res/ezmk.zsh` 拷贝为 `_ezmk`、二进制可运行（`./ezmk version`）、macOS/Linux 资产内含 `man/`（`man ezmk.1` / `man ezmk.toml.5`，`groff -man -Tutf8 -z` 零告警），Windows zip **不含** `man/`
 
 ### 3.4 分发渠道（加载 `ezmk-publish` skill）
 
-10. **Homebrew**：从 Release 资产 digest（`gh api .../releases/tags/<tag>`）取真实 sha256，填 `homebrew-eazymake/ezmk.rb`（双处同步），`brew install` 冒烟
+10. **Homebrew**：从 Release 资产 digest（`gh api .../releases/tags/<tag>`）取真实 sha256，填 `homebrew-eazymake/ezmk.rb`（双处同步，含 `man1.install` / `man5.install`），`brew install` 冒烟
 11. **winget**：填 split manifest（version/installer/defaultLocale），提交 `microsoft/winget-pkgs` PR（审批为发布后跟进项，不阻塞发布）
 12. **pacman**：`publish/arch/PKGBUILD` 自取 + `makepkg -si`（本机 MSYS2 + 远程 Arch Linux 验证；AUR 延后）
 13. **install.sh / install.ps1** 真机回归（含 zsh 补全）

@@ -8,7 +8,8 @@
 #
 # 构建说明：build.sh 在 Linux 产出静态链接二进制（LDFLAGS="-static"），
 # 故 depends 为空、makedepends 仅 gcc + python；ezmk-lua 为 dev.8 新增的
-# CMake 导出钩子独立运行时，随包一并安装；_ezmk 为 zsh 补全。
+# CMake 导出钩子独立运行时，随包一并安装；_ezmk 为 zsh 补全；man/ 下 4 页
+# （ezmk(1)、ezmk-lua(1)、ezmk.toml(5)、ezmk-workspace.toml(5)，1.4.3+）。
 
 pkgname=eazymake
 pkgver=1.4.2
@@ -39,5 +40,7 @@ package() {
   install -Dm644 res/ezmk.zsh "$pkgdir/usr/share/zsh/site-functions/_ezmk"
   # 1.4.3: man pages (shared by the Linux and the MSYS2 branch above)
   install -Dm644 man/ezmk.1 "$pkgdir/usr/share/man/man1/ezmk.1"
+  install -Dm644 man/ezmk-lua.1 "$pkgdir/usr/share/man/man1/ezmk-lua.1"
   install -Dm644 man/ezmk.toml.5 "$pkgdir/usr/share/man/man5/ezmk.toml.5"
+  install -Dm644 man/ezmk-workspace.toml.5 "$pkgdir/usr/share/man/man5/ezmk-workspace.toml.5"
 }

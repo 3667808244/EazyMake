@@ -1,6 +1,6 @@
 # EazyMake 1.4.3 执行计划
 
-> **状态：📝 计划就绪（未开工）**——本文档把设计文档 §4 转成可勾选的八阶段清单；索引（[`plans/1.4.x/README.md`](plans/1.4.x/README.md)、[`plans/README.md`](plans/README.md)）已同步就位（2026-09-19）。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
+> **状态：✅ 阶段一~八已执行完毕（2026-09-19）**——本文档把设计文档 §4 转成可勾选的八阶段清单；索引（[`plans/1.4.x/README.md`](plans/1.4.x/README.md)、[`plans/README.md`](plans/README.md)）已同步就位。剩余动作仅在**正式发布步**：发布 commit 回填 `CHANGES.md` 日期与 `man/*.TH` 日期、确认资产含 `man/`、回填 Homebrew digest。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)。
 >
 > 详细设计：[**1.4.3.md**](plans/1.4.x/1.4.3.md)。为 `ezmk` 提供离线、符合 Unix 惯例的 man 手册（`ezmk(1)` + `ezmk.toml(5)`），打通三渠道分发，并用**构建期防漂移校验**保证 man 不与 `src/cli.cpp` 脱节。
 >
@@ -28,7 +28,7 @@
 | 触达（M-08） | P1 | `ezmk help` 末尾 See also（`help_see_also_man`，405→406 键） |
 | CI（M-09） | P0 | 渲染 lint + 漂移闸门 + 分发断言（对照既有 `zsh-completions` job 的"断言 + 局部模拟"策略） |
 | 文档（M-10） | P1 | README×2 / `docs/{en,zh}/cli.md` / `docs/{en,zh}/technical.md` / CONTRIBUTING / CHANGES.md 1.4.3 |
-| 随附（M-11） | P2 | `man/ezmk-workspace.toml.5`、`man/ezmk-lua.1`（择优随附，余者延后） |
+| 随附（M-11） | P2 | `man/ezmk-workspace.toml.5`、`man/ezmk-lua.1`（**均已交付**） |
 
 ## 3 执行阶段（每阶段一个 commit，阶段间 `bash build.sh test-all` 全量回归）
 
@@ -90,10 +90,12 @@
 
 ### 阶段八：随附项与收口（M-11 + 门槛复核，对应设计 §3.11/§4.8）
 
-- [ ] 择优随附 `man/ezmk-workspace.toml.5`、`man/ezmk-lua.1`（未落地者在设计 §3.11 明确标注延后）
-- [ ] 门槛复核：① 清单全完成/收口；② 公共 API 无破坏性变更；③ 全量 `bash build.sh test-all` 零回归（**1099/6342**）；④ `check_man_sync.py` + 渲染 lint 通过、i18n 406 键三向
-- [ ] 首方代码零告警（`-Wall -Wextra -Wpedantic -Wshadow -Wformat=2`）
-- [ ] 发布清单加项：确认 man 进 Release 资产 → 回填 Homebrew digest（对照 1.4.2 流程）
+- [x] 随附两页**均已落地**：`man/ezmk-workspace.toml.5`（207 行、渲染 124 行：`[workspace]` / `[workspace.options]` 字段表、成员依赖与产物注入、校验规则）与 `man/ezmk-lua.1`（163 行、渲染 97 行：选项表、`run(ctx)` 契约、无沙箱边界、退出码）；`check_man_sync.py` 同步扩展 workspace 键（5，取自 `src/workspace.cpp` 白名单数组）与 `ezmk-lua` 长选项（4，取自 `src/ezmk_lua_main.cpp`）的**双向**校验，并做对抗测试（改键名 / 删选项均按预期失败）
+- [x] 门槛复核：① 清单全完成/收口（两页随附项已落地，无延后项）；② 公共 API 无破坏性变更（唯一 CLI 改动＝`ezmk help` 末行）；③ 全量回归 **1099 用例 / 1094 通过 / 5 跳过 / 0 失败**，断言 **6348**（基线 6342 + 新 i18n 键 6 条；本机需用 Windows 临时目录跑，见设计 §7 坑 15）；④ `check_man_sync.py` OK（9 项提取）+ `groff -man -Tutf8 -z -ww` 4 页零告警 + i18n 406 键三向一致
+- [x] 首方代码零告警（`CXXFLAGS='-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2' bash build.sh test`，gcc 16.2.0）：**`src/` 与 `include/ezmk/` 0 条告警**（511 条诊断中 504 条来自第三方 `src/vendor/lua` + `include/vendor/lua`，按 CLAUDE.md 不改动；余 7 条在 `test/`：`test_build.cpp:73` 缺初始化项、`test_cache.cpp:711` 多行注释、`test_integration.cpp` 4 处 `-Wrange-loop-construct`、`test_lua.cpp:53` 未用函数——均为既有测试代码问题、与本版无关，留待 1.4.4 清理）
+- [x] 发布清单加项：`ezmk-publish` skill 补"资产含 `man/`（4 页）→ formula 四条 `man1/man5.install` → 每次发布按 `assets[].digest` 回填 sha256"，PKGBUILD 章节补四条安装与解包校验 `usr/share/man/man{1,5}/`；`ezmk-workflow` §3.3 产物核对加"资产含 `man/` 且 `groff -z` 零告警、Windows zip 不含"，§3.4 Homebrew 步骤注明四条 man 安装（对照 1.4.2 流程）
+- [x] 两页新增后同步 `install.sh`（4 页循环安装，核心页必需、随附页存在则装）、`PKGBUILD`（2 → 4 条 `install -Dm644 man/`）、Homebrew formula（4 条 `man1/man5.install`）、CI（lint 页清单、渲染 4 页、分发断言 2→4、安装冒烟 4 页）与 `README×2` / `docs/{en,zh}/{cli,technical}.md` / `CONTRIBUTING.md` / `CHANGES.md`
+- [x] CI 检查健壮性修正（设计 §7 坑 14）：MSYS2 `grep 3.0` 在「管道 + `-P` 回顾」下误报，CI 两条检查改为无管道单次 grep，并以注入式反例验证仍能抓到真实漂移
 
 ---
 
@@ -113,7 +115,7 @@
 | 变更 | 影响 | 处理 |
 |---|---|---|
 | 新增 `man/*.1`、`man/*.5`、`scripts/check_man_sync.py` | 无（纯新增，不参与二进制构建） | — |
-| `install.sh` 加 man 安装 | 已安装用户多出两个手册页 | `EZMK_NO_MAN=1` 跳过 |
+| `install.sh` 加 man 安装 | 已安装用户多出四个手册页 | `EZMK_NO_MAN=1` 跳过 |
 | 新环境变量 `EZMK_NO_MAN` | 新增可选项（默认安装） | README + `cli.md` 环境变量表记录 |
 | PKGBUILD 加两条安装 | 包体约 +10 KB | 无 |
 | Release 资产含 `man/` | **资产 digest 变化** | 发布后回填 Homebrew `sha256`（既有流程，勿漏） |
@@ -124,6 +126,6 @@
 
 ## 6 延后项
 
-- `man/ezmk-workspace.toml.5`、`man/ezmk-lua.1` 若未随本版落地 → 延后至 1.4.4 或 2.0.0 前补丁（设计 §3.11 / 目标 M-11）。
+- `man/ezmk-workspace.toml.5`、`man/ezmk-lua.1` —— **本版已交付**（原列入延后候选，阶段八落地；其余可选页如 man 多语言/`ezmk man` 子命令不受影响）。
 - man 多语言（`man/zh_CN`）、`ezmk man` / `--man` 子命令、mdoc 迁移、与 zsh 补全的双向校验、`docs/` 与 man 的字段级自动同步 —— 均为后续可选演进，**本版不做**。
 - **2.0.0 联动提醒**：2.0.0 移除 `[test].flags` 与 `ezmk utils cc` 时，`check_man_sync.py` 会立即失败（设计意图）；2.0.0 计划需把"同步 man 条目"列为显式交付项。

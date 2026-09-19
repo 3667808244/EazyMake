@@ -22,6 +22,10 @@ Checks performed
                      classified deliberately).
   6. config keys   - every key read by src/config.cpp is documented in
                      ezmk.toml(5).
+  7. workspace     - every key allow-listed by src/workspace.cpp is documented
+                     in ezmk-workspace.toml(5).
+  8. ezmk-lua      - every long option accepted by src/ezmk_lua_main.cpp is
+                     documented in ezmk-lua(1).
 
 Anti-silent-failure rule: extraction has a built-in BASELINE. If a refactor of
 src/cli.cpp or src/config.cpp makes the regular expressions match fewer entries
@@ -39,9 +43,16 @@ import re
 import sys
 from pathlib import Path
 
-MAN_PAGES = ["man/ezmk.1", "man/ezmk.toml.5"]
+MAN_PAGES = [
+    "man/ezmk.1",
+    "man/ezmk.toml.5",
+    "man/ezmk-workspace.toml.5",
+    "man/ezmk-lua.1",
+]
 CLI_SOURCE = "src/cli.cpp"
 CONFIG_SOURCE = "src/config.cpp"
+WORKSPACE_SOURCE = "src/workspace.cpp"
+LUA_MAIN_SOURCE = "src/ezmk_lua_main.cpp"
 
 # ---------------------------------------------------------------- baselines --
 # Deliberately updated by hand. Lower extraction numbers mean the regexes no
@@ -54,6 +65,8 @@ BASELINE = {
     "commands": 32,         # rows in cli::print_help()
     "env_vars": 14,
     "config_keys": 55,
+    "workspace_keys": 5,    # name members options default_jobs stop_on_error
+    "lua_options": 4,       # --project-root --profile --output --help
 }
 
 # Long options that legitimately appear in the man pages without being an
@@ -99,6 +112,13 @@ ENV_DOCUMENTED = {
 # Config keys that may appear as a bare ".B key" tag without being read by
 # config.cpp (none today; the list keeps the reverse check honest).
 CONFIG_KEY_EXTRA_OK = set()
+
+# Same idea for the workspace page: keys that are legitimately tagged there but
+# come from a member's own ezmk.toml rather than from ezmk-workspace.toml.
+WORKSPACE_KEY_EXTRA_OK = {"workspace"}
+# Long options documented in ezmk-lua(1) that the runtime does not accept (none
+# today: --help is parsed in src/ezmk_lua_main.cpp as well).
+LUA_OPTION_EXTRA_OK = set()
 
 
 # ------------------------------------------------------------- roff helpers --
@@ -223,6 +243,24 @@ def config_keys(config_text):
     return keys
 
 
+def workspace_keys(ws_text):
+    """Keys allowed by src/workspace.cpp (kWorkspaceKeys / kOptionsKeys)."""
+    keys = set()
+    for array in ("kWorkspaceKeys", "kOptionsKeys"):
+        block = re.search(
+            rf"{array}\s*\[\s*\]\s*=\s*\{{(.*?)\}}\s*;", ws_text, re.S
+        )
+        if not block:
+            raise ValueError(f"{array} allow-list not found in src/workspace.cpp")
+        keys.update(re.findall(r'"([a-z_]+)"', block.group(1)))
+    return keys
+
+
+def lua_options(lua_main_text):
+    """Long options accepted by the standalone ezmk-lua runtime."""
+    return set(re.findall(r'arg\s*==\s*"--([a-z][a-z0-9-]*)"', lua_main_text))
+
+
 # ------------------------------------------------------------------- checks --
 class Report:
     def __init__(self):
@@ -263,6 +301,8 @@ def main():
     try:
         cli_text = read(CLI_SOURCE, root)
         config_text = read(CONFIG_SOURCE, root)
+        ws_text = read(WORKSPACE_SOURCE, root)
+        lua_text = read(LUA_MAIN_SOURCE, root)
         pages = {p: read(p, root) for p in MAN_PAGES}
         src_texts = [p.read_text(encoding="utf-8") for p in sorted((root / "src").glob("*.cpp"))]
     except (FileNotFoundError, ValueError) as exc:
@@ -273,6 +313,8 @@ def main():
     ezmk1 = man_plain["man/ezmk.1"]
     ezmk1_sections = sections(pages["man/ezmk.1"])
     t5 = man_plain["man/ezmk.toml.5"]
+    ws5 = man_plain["man/ezmk-workspace.toml.5"]
+    lua1 = man_plain["man/ezmk-lua.1"]
 
     # ---- extraction -------------------------------------------------------
     longs, shorts = cli_options(cli_text)
@@ -280,6 +322,8 @@ def main():
     commands = cli_commands(cli_text)
     env_vars = code_env_vars(src_texts)
     keys = config_keys(config_text)
+    ws_keys = workspace_keys(ws_text)
+    lua_opts = lua_options(lua_text)
 
     counts = {
         "long_options": len(longs),
@@ -289,6 +333,8 @@ def main():
         "commands": len(commands),
         "env_vars": len(env_vars),
         "config_keys": len(keys),
+        "workspace_keys": len(ws_keys),
+        "lua_options": len(lua_opts),
     }
     check_baseline(report, counts)
 
@@ -357,6 +403,25 @@ def main():
         if m and m.group(1) not in keys and m.group(1) not in CONFIG_KEY_EXTRA_OK:
             report.fail("config keys", f"ezmk.toml(5) documents key '{m.group(1)}' which src/config.cpp never reads")
 
+    # ---- 7) workspace keys -------------------------------------------------
+    for key in sorted(ws_keys):
+        if not re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", ws5):
+            report.fail("workspace keys", f"'{key}' is allowed by src/workspace.cpp but not documented in ezmk-workspace.toml(5)")
+    ws5_lines = sections(pages["man/ezmk-workspace.toml.5"]).get("WORKSPACE FILE", "").splitlines()
+    for index, line in enumerate(ws5_lines):
+        if line != ".TP" or index + 1 >= len(ws5_lines):
+            continue
+        m = re.match(r"^\.B\s+([a-z_]+)\s*$", ws5_lines[index + 1])
+        if m and m.group(1) not in ws_keys and m.group(1) not in WORKSPACE_KEY_EXTRA_OK:
+            report.fail("workspace keys", f"ezmk-workspace.toml(5) documents key '{m.group(1)}' which src/workspace.cpp never accepts")
+
+    # ---- 8) ezmk-lua options ----------------------------------------------
+    lua_documented = set(m.group(1) for m in re.finditer(r"(?<![\w-])--([a-z][a-z0-9-]*)", lua1))
+    for name in sorted(lua_opts - lua_documented):
+        report.fail("lua options", f"--{name} is accepted by src/ezmk_lua_main.cpp but not documented in ezmk-lua(1)")
+    for name in sorted(lua_documented - lua_opts - LUA_OPTION_EXTRA_OK):
+        report.fail("lua options", f"--{name} is documented in ezmk-lua(1) but src/ezmk_lua_main.cpp does not accept it")
+
     # ---- summary ----------------------------------------------------------
     print("man page sync check")
     for name in sorted(counts):
@@ -364,7 +429,8 @@ def main():
     print(f"  man pages           : {', '.join(MAN_PAGES)}")
     print()
     if report.ok():
-        print(f"OK: man pages are in sync with {CLI_SOURCE} and {CONFIG_SOURCE}.")
+        print(f"OK: man pages are in sync with {CLI_SOURCE}, {CONFIG_SOURCE}, "
+              f"{WORKSPACE_SOURCE} and {LUA_MAIN_SOURCE}.")
         return 0
 
     grouped = {}

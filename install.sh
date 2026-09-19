@@ -179,17 +179,24 @@ if [ "${EZMK_NO_COMPLETIONS:-}" != "1" ] && need zsh; then
 fi
 
 # ----------------------------------------------------------- man pages ------
-# 1.4.3: ezmk(1) + ezmk.toml(5). $PREFIX is usually not on the default man path
-# (e.g. $HOME/.local), so print the MANPATH hint when it is not.
+# 1.4.3: ezmk(1) + ezmk-lua(1) + ezmk.toml(5) + ezmk-workspace.toml(5). $PREFIX
+# is usually not on the default man path (e.g. $HOME/.local), so print the
+# MANPATH hint when it is not.
 if [ "${EZMK_NO_MAN:-}" != "1" ]; then
     MAN_SRC_DIR="$SRC_DIR/man"
     if [ -f "$MAN_SRC_DIR/ezmk.1" ] && [ -f "$MAN_SRC_DIR/ezmk.toml.5" ]; then
         MAN1_DIR="$PREFIX/share/man/man1"
         MAN5_DIR="$PREFIX/share/man/man5"
         mkdir -p "$MAN1_DIR" "$MAN5_DIR"
-        cp "$MAN_SRC_DIR/ezmk.1" "$MAN1_DIR/ezmk.1"
-        cp "$MAN_SRC_DIR/ezmk.toml.5" "$MAN5_DIR/ezmk.toml.5"
-        info "Installed man pages: $MAN1_DIR/ezmk.1, $MAN5_DIR/ezmk.toml.5"
+        # The two core pages are mandatory; the companion pages are optional so
+        # an older checkout (or a slimmed tarball) still installs the basics.
+        for page in ezmk.1 ezmk-lua.1; do
+            [ -f "$MAN_SRC_DIR/$page" ] && cp "$MAN_SRC_DIR/$page" "$MAN1_DIR/$page"
+        done
+        for page in ezmk.toml.5 ezmk-workspace.toml.5; do
+            [ -f "$MAN_SRC_DIR/$page" ] && cp "$MAN_SRC_DIR/$page" "$MAN5_DIR/$page"
+        done
+        info "Installed man pages: $MAN1_DIR/ezmk.1, $MAN5_DIR/ezmk.toml.5 (plus companion pages when present)"
         case ":$MANPATH:" in
             *":$PREFIX/share/man:"*) ;;
             *) echo

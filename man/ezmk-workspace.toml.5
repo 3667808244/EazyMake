@@ -1,0 +1,206 @@
+.\" ezmk-workspace.toml(5) - EazyMake workspace configuration file (1.4.3)
+.TH EZMK\-WORKSPACE.TOML 5 "2026-09-19" "EazyMake 1.4.3" "File Formats"
+.nh
+.SH NAME
+ezmk\-workspace.toml \- EazyMake workspace configuration file
+.SH SYNOPSIS
+.nf
+[workspace]
+name = "my\-ws"
+members = ["apps/tool\-a", "libs/strutil"]
+
+[workspace.options]
+default_jobs = 4
+stop_on_error = false
+.fi
+.SH DESCRIPTION
+A workspace is a collection of independent projects (called
+.IR members )
+that live under one directory. The file
+.B ezmk\-workspace.toml
+declares the member list and the workspace\-wide options, and the
+.B ezmk workspace
+commands then operate on every member in dependency order.
+.PP
+The file is
+.B independent of
+.BR ezmk.toml :
+each member keeps its own
+.B ezmk.toml
+with its own project settings, and a workspace root may itself be a project
+as well (a directory holding both files is the workspace root
+.I and
+a member).
+.PP
+The workspace root is located by searching
+.B upward
+from the current directory, so every
+.B ezmk workspace
+command (and the
+.B \-w
+redirect of
+.BR "build" ", " "test" ", " "watch" ", " "clean" )
+works from any subdirectory. A directory that contains only
+.B ezmk\-workspace.toml
+is a
+.IR "pure container root" :
+.B ezmk build
+there prints a hint to use
+.B ezmk workspace build
+(or
+.BR "ezmk build \-w" )
+instead of failing.
+.SH WORKSPACE FILE
+.SS The [workspace] table
+.TP
+.B name
+Optional workspace name (string). Used for display only; it does not have to
+match the directory name and is preserved verbatim by
+.BR "ezmk workspace scan" .
+.TP
+.B members
+Required, non\-empty array of member directories, relative to the workspace
+root. Entries must exist, must contain their own
+.BR ezmk.toml ,
+and must not contain a nested
+.B ezmk\-workspace.toml
+(nested workspaces are rejected). A member may also be listed by a
+.I basename
+elsewhere on the command line, see
+.B \-\-member
+in
+.BR ezmk (1).
+.SS The [workspace.options] table
+.TP
+.B default_jobs
+Non\-negative integer. Default
+.BR 0 ,
+which means
+.IR "auto" :
+use the hardware concurrency. It sets the workspace\-wide parallelism for
+.B workspace build
+and
+.BR "workspace test" ;
+an explicit
+.B \-j
+on the command line wins over it.
+.TP
+.B stop_on_error
+Boolean, default
+.BR false .
+When
+.BR true ,
+.B workspace build
+and
+.B workspace test
+stop dispatching new member tasks after the first failure: members that have
+not started yet are reported as
+.IR skipped ,
+while members already running finish naturally (they are never killed).
+.B workspace clean
+has no dependency semantics and rejects the flag.
+.PP
+Unknown keys inside either table are rejected with an error naming the
+offending key, so typos fail loudly instead of being ignored. Type errors
+(e.g. a string where an array is expected) are reported with the file path.
+.SH MEMBER DEPENDENCIES
+A member declares a dependency on a sibling member of the
+.I same
+workspace with the
+.B workspace
+key of its own
+.BR [depends] ,
+in its own
+.BR ezmk.toml :
+
+.nf
+[depends]
+workspace = ["strutil"]      # basename, or "libs/strutil" (relative path)
+.fi
+
+Rules:
+.IP \(bu 2
+The graph must be
+.BR "one\-way acyclic" ;
+cycles and self\-loops are rejected when the configuration is loaded.
+.IP \(bu 2
+The depended\-upon member must be
+.BR "type = \(dqstatic\(dq" ;
+its
+.B build/lib<name>.a
+is reused. No version constraints exist: this is develop\-and\-use against
+source, not a package dependency (version constraints belong to the package
+system, see
+.B ezmk pkg
+in
+.BR ezmk (1)).
+.IP \(bu 2
+Sibling artifacts are injected automatically during the member's own build:
+.B \-I
+.IB <ws>/<member>/include
+(only when it exists) and
+.B \-L
+.IB <ws>/<member>/build
+.B \-l<member>
+(only when the static library exists). No environment variable is involved,
+so injection does not grow with workspace size.
+.IP \(bu 2
+The injected include path is part of the compile signature: changing a
+library header recompiles its dependents, while changing a library source
+only relinks them.
+.PP
+When a sibling artifact is missing (for example in a standalone build inside
+one member), the build prints a hint to run
+.B ezmk workspace build
+first and continues; a link error follows naturally if the artifact is really
+needed.
+.SH COMMANDS
+The workspace commands are documented in
+.BR ezmk (1),
+section
+.BR COMMANDS :
+.BR "ezmk workspace list" ,
+.BR build ,
+.BR test ,
+.BR watch ,
+.BR clean
+and
+.BR scan .
+The most important interactions with this file are the parallelism precedence
+(explicit
+.B \-j
+overrides
+.BR default_jobs ,
+which overrides hardware concurrency), the
+.B \-\-member
+target plus dependency closure, and the
+.B \-w
+redirect that turns a project command into its workspace equivalent.
+.SH FILES
+.TP
+.B ezmk\-workspace.toml
+The workspace root file described here.
+.TP
+.B <member>/ezmk.toml
+Per\-member project configuration; the
+.B [depends]
+.B workspace
+key is read from there.
+.TP
+.BR .ezmk/ " and " build/
+Per\-member state directories; workspace commands do not share them between
+members.
+.SH SEE ALSO
+.BR ezmk (1),
+.BR ezmk.toml (5)
+.PP
+Full specification:
+.IR https://github.com/3667808244/EazyMake
+(section
+.B workspace
+of
+.IR docs/en/cli.md ,
+and
+.B depends
+of
+.IR docs/en/config_file.md ).

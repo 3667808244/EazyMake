@@ -77,8 +77,9 @@ EazyMake maintains bilingual documentation: **Chinese (zh)** and **English (en)*
 
 ### Man pages
 
-`man/` holds the hand-written roff manual pages (`ezmk.1`, `ezmk.toml.5`); they are a
-concise offline reference, while `docs/` stays the full specification. Two rules:
+`man/` holds the hand-written roff manual pages (`ezmk.1`, `ezmk-lua.1`,
+`ezmk.toml.5`, `ezmk-workspace.toml.5`); they are a concise offline reference,
+while `docs/` stays the full specification. Two rules:
 
 - **Never let them drift**: after touching the CLI option specs (`src/cli.cpp`), the
   configuration parser (`src/config.cpp`), or the man pages themselves, run
@@ -91,8 +92,8 @@ concise offline reference, while `docs/` stays the full specification. Two rules
   extractor stop matching, so the gate cannot silently pass.
 - **Render before committing**: the script above cannot see layout, so also run
   ```bash
-  groff -man -Tutf8 -z -ww man/ezmk.1 man/ezmk.toml.5   # zero warnings
-  MANPAGER=cat man -l man/ezmk.1                        # eyeball the layout
+  groff -man -Tutf8 -z -ww man/*.1 man/*.5   # zero warnings
+  MANPAGER=cat man -l man/ezmk.1             # eyeball the layout
   ```
   On MSYS2 install the tooling once with `pacman -S --needed groff man-db`. When
   editing, remember the roff traps documented in
