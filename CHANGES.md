@@ -59,6 +59,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.3（源码 tarball 真实 digest `0ab1488d1a0139122743872ae59023c9f255f0610b987cf6486e1a3dad42da30`，codeload 与 archive 两端点字节一致、1924119 字节）；本机 MSYS2 MINGW64 `makepkg -fd` 直接拉取 v1.4.3 tag 源码出包 `eazymake-1.4.3-1-x86_64.pkg.tar.zst`，包内 `usr/bin/ezmk.exe` / `ezmk-lua.exe` / `usr/share/man/man{1,5}/` 4 页（makepkg 自动 gzip）/ `usr/share/zsh/site-functions/_ezmk` 落位，`ezmk.exe version` → **1.4.3**，包内 man 页 `MANPATH` 命中 4/4
 - **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.3（macos-arm64 `b82608f2…` / linux-x64 `72b5ec01…` 真实 digest，含四条 `man1.install`/`man5.install`；仓库副本 `publish/homebrew/ezmk.rb` 同步），线上内容与仓库副本 sha256 **逐字节一致**
 - **winget**：split manifests（`InstallerType: zip` + `NestedInstallerType: portable`，`InstallerSha256` = `32012a27…`）已提交 `microsoft/winget-pkgs#437604`；本机 `winget validate` 通过（「清单验证成功」），`license/cla` 检查已 pass（账户此前已签）；其余 CI 校验 + 版主审批为发布后跟进项，不阻塞发布
+- **安装器回归**：`install.sh` 以 `EZMK_REF=v1.4.3` + 临时 `PREFIX` 实跑——克隆 tag → 构建 → 安装成功，`ezmk version` → **v1.4.3**，4 页 man 落位 `$PREFIX/share/man/man{1,5}` 且 `man` 四页全部命中，非标准前缀的 `MANPATH` 提示按预期打印（本机 `github.com:443` 当时不可达，clone 传输层以本地 bare 镜像替代，其余流程未改动）；`install.ps1` 的下载路径受同一网络问题未能端到端复跑——已改用 `gh release download` 完整取回 `ezmk.exe` / `ezmk-lua.exe`（12702064 / 12629349 字节）并核对本地 sha256 与 `assets[].digest`、`.sha256` 边车三者一致
 
 ---
 

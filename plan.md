@@ -130,3 +130,4 @@
 - `man/ezmk-workspace.toml.5`、`man/ezmk-lua.1` —— **本版已交付**（原列入延后候选，阶段八落地；其余可选页如 man 多语言/`ezmk man` 子命令不受影响）。
 - man 多语言（`man/zh_CN`）、`ezmk man` / `--man` 子命令、mdoc 迁移、与 zsh 补全的双向校验、`docs/` 与 man 的字段级自动同步 —— 均为后续可选演进，**本版不做**。
 - **2.0.0 联动提醒**：2.0.0 移除 `[test].flags` 与 `ezmk utils cc` 时，`check_man_sync.py` 会立即失败（设计意图）；2.0.0 计划需把"同步 man 条目"列为显式交付项。
+- **`install.ps1 -DryRun` 既有缺陷（1.4.4 候选，发布期发现）**：DryRun 路径下 `Join-Path $DestDir ...` 因 `$DestDir` 为空而在 `install.ps1:197` 报错，即 README 记载的 `.\install.ps1 -DryRun` 预览用法实跑失败；`install.ps1` 在 `v1.4.2..HEAD` 间**无任何改动**，非 1.4.3 引入（本版范围边界明确"Windows 不做"），留待 1.4.4 修复并回归。
