@@ -252,12 +252,11 @@ jobs:
 
           echo "OK: zsh completion install verified (marker idempotent + _ezmk loadable)"
 
-  # ── Man pages (1.4.3): render check ───────────────────────────────────────
+  # ── Man pages (1.4.3): render + distribution checks ───────────────────────
   # The static lint above is not enough: `.TP`-tag and literal-block layout
   # problems only show up once the page is rendered (phase 1 of 1.4.3 found
-  # `[options]` falling into the description column that way).
-  # Distribution assertions (install.sh / PKGBUILD / release assets / Homebrew
-  # formula) are added by 1.4.3 phase 5.
+  # `[options]` falling into the description column that way), and every install
+  # channel has to actually carry the pages.
   man-pages:
     name: man pages (1.4.3)
     runs-on: ubuntu-latest
@@ -286,3 +285,46 @@ jobs:
           grep -q '^NAME' /tmp/ezmk.1.txt
           grep -q '^SECTIONS' /tmp/ezmk.toml.5.txt
           echo "OK: both man pages render"
+
+      # 1.4.3: every install channel must ship the pages. These assertions guard
+      # the channel edits the same way the zsh-completions job guards
+      # install.sh's completion block.
+      - name: "Man pages: install-channel assertions"
+        run: |
+          set -euo pipefail
+          fail=0
+          grep -q 'EZMK_NO_MAN' install.sh \
+            || { echo "FAIL: install.sh lost the EZMK_NO_MAN opt-out" >&2; fail=1; }
+          grep -q 'share/man/man1' install.sh && grep -q 'share/man/man5' install.sh \
+            || { echo "FAIL: install.sh does not install into share/man/man{1,5}" >&2; fail=1; }
+          grep -q 'ezmk.toml.5' install.sh \
+            || { echo "FAIL: install.sh does not install the config man page" >&2; fail=1; }
+          [ "$(grep -c 'install -Dm644 man/' publish/arch/PKGBUILD)" -eq 2 ] \
+            || { echo "FAIL: PKGBUILD must install both man pages" >&2; fail=1; }
+          [ "$(grep -c 'cp -r man' .github/workflows/release.yml)" -eq 3 ] \
+            || { echo "FAIL: release.yml must add man/ to the three Unix assets" >&2; fail=1; }
+          grep -q 'man1.install "man/ezmk.1"' publish/homebrew/ezmk.rb \
+            || { echo "FAIL: the Homebrew formula does not install ezmk.1" >&2; fail=1; }
+          grep -q 'man5.install "man/ezmk.toml.5"' publish/homebrew/ezmk.rb \
+            || { echo "FAIL: the Homebrew formula does not install ezmk.toml.5" >&2; fail=1; }
+          # the Windows zip is built with Copy-Item and must NOT ship man/
+          if sed -n '/Package (zip)/,/Compress-Archive/p' .github/workflows/release.yml \
+               | grep -qE 'cp -r man|Copy-Item[^)]*man/'; then
+            echo "FAIL: the Windows asset must not contain man/" >&2; fail=1
+          fi
+          [ "$fail" -eq 0 ] || exit 1
+          echo "OK: all install channels carry the man pages"
+
+      - name: "Man pages: install + man lookup smoke"
+        run: |
+          set -euo pipefail
+          PREFIX="$(mktemp -d)/prefix"
+          mkdir -p "$PREFIX/share/man/man1" "$PREFIX/share/man/man5"
+          cp man/ezmk.1 "$PREFIX/share/man/man1/ezmk.1"
+          cp man/ezmk.toml.5 "$PREFIX/share/man/man5/ezmk.toml.5"
+          export MANPATH="$PREFIX/share/man"
+          MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings 1 ezmk >/tmp/m1.txt
+          MANWIDTH=80 MANPAGER=cat PAGER=cat man --warnings 5 ezmk.toml >/tmp/m5.txt
+          grep -q '^EZMK(1)' /tmp/m1.txt
+          grep -q '^EZMK.TOML(5)' /tmp/m5.txt
+          echo "OK: man ezmk + man 5 ezmk.toml resolve from a custom prefix"

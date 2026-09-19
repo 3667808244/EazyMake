@@ -102,6 +102,7 @@ jobs:
           cp build/ezmk "dist/${name}/"
           cp build/ezmk-lua "dist/${name}/"
           cp res/ezmk.zsh "dist/${name}/_ezmk"
+          cp -r man "dist/${name}/"
           tar -czf "dist/ezmk-linux-x64.tar.gz" -C dist "${name}"
 
       - name: Upload Release Asset
@@ -131,6 +132,7 @@ jobs:
           cp build/ezmk "dist/${name}/"
           cp build/ezmk-lua "dist/${name}/"
           cp res/ezmk.zsh "dist/${name}/_ezmk"
+          cp -r man "dist/${name}/"
           tar -czf "dist/ezmk-macos-x64.tar.gz" -C dist "${name}"
 
       - name: Upload Release Asset
@@ -160,6 +162,7 @@ jobs:
           cp build/ezmk "dist/${name}/"
           cp build/ezmk-lua "dist/${name}/"
           cp res/ezmk.zsh "dist/${name}/_ezmk"
+          cp -r man "dist/${name}/"
           tar -czf "dist/ezmk-macos-arm64.tar.gz" -C dist "${name}"
 
       - name: Upload Release Asset

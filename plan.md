@@ -59,16 +59,17 @@
 - [x] `ci.yml` ubuntu job 增装 `groff man-db`，新增 `Man pages: static lint`（groff `-z -ww` + 6 条字符陷阱 grep：CRLF / 未转义连字符 / 裸 `^`~` / 宏参数 `\\` / `\"` 注释转义 / 标签内裸引号）与 `Man pages: CLI drift gate`（`python3 scripts/check_man_sync.py`）两步，插在依赖安装之后、构建之前（快速失败）
 - [x] 新增 `man-pages` job（`man pages (1.4.3)`）：装 groff+man-db，两页 `man --warnings -l` 渲染（仅放行 grotty 设备级 `sgr 0` 一条），并断言 `NAME`/`SECTIONS` 节存在
 - [x] 本地 dry-run：static lint 7 项全 OK（**并借此发现 `ezmk.toml.5` 4 处真实未转义连字符**：`ezmk-workspace.toml`、标识符正则、示例里 `-Wall`/`-g` → 已修）；`man-pages` job 渲染 dry-run 通过（538/364 行）
-- [ ] **分发断言（延后到阶段五）**：`install.sh`（man 块 + `EZMK_NO_MAN`）、PKGBUILD（两条 `install -Dm644`）、`release.yml`（linux/macOS 含 man、Windows 不含）、`ezmk.rb`（`man1.install`/`man5.install`）的 grep 断言，以及 `PREFIX=$RUNNER_TEMP` 复现安装——**必须等阶段五的脚本改动落地后再加**，否则 push 即红
+- [x] **分发断言 + 安装冒烟（阶段五落地后已补入同一 job）**：`Man pages: install-channel assertions` 断言 `install.sh` 的 `EZMK_NO_MAN` 与 `share/man/man{1,5}`、PKGBUILD 恰好两条 `install -Dm644 man/`、`release.yml` 恰好三条 `cp -r man`（并反向断言 Windows zip 步骤不含 man）、formula 的 `man1.install`/`man5.install`；`Man pages: install + man lookup smoke` 用临时 PREFIX 复现安装并断言 `man ezmk` / `man 5 ezmk.toml` 能命中
 - [ ] push 后确认 CI 全绿（`gh run list` / `gh run watch`）
 
 ### 阶段五：分发集成（M-05/M-06/M-07，对应设计 §3.7）
 
-- [ ] `install.sh`：man 安装块 + `EZMK_NO_MAN=1` 跳过 + 非标准 PREFIX 的 `MANPATH` 提示 + 头部注释
-- [ ] `publish/arch/PKGBUILD`：两条 `install -Dm644`（Linux 与 MSYS2 两分支共用）
-- [ ] `.github/workflows/release.yml`：linux/macOS 打包步骤加 `man/`；**Windows 不加**
-- [ ] `publish/homebrew/ezmk.rb`：`man1.install`/`man5.install` + 头注释资产列表（`version`/`url`/`sha256` 留待发布步）
-- [ ] 本机 MSYS2 复现：`makepkg -fd` 出包后 `man ezmk` 命中
+- [x] `install.sh`：man 安装块（`$PREFIX/share/man/man{1,5}`）+ `EZMK_NO_MAN=1` 跳过 + 非标准 PREFIX 的 `MANPATH` 提示 + 头部注释新增该变量
+- [x] `publish/arch/PKGBUILD`：两条 `install -Dm644 man/…`（放在 `if [ -f build/ezmk.exe ]` 之外，Linux 与 MSYS2 两分支共用）
+- [x] `.github/workflows/release.yml`：三个 Unix 打包步骤（linux-x64 / macos-x64 / macos-arm64）各加 `cp -r man "dist/${name}/"`；**Windows zip 不加**（`git diff` 确认只改这 3 处）
+- [x] `publish/homebrew/ezmk.rb`：`man1.install "man/ezmk.1"` + `man5.install "man/ezmk.toml.5"` + 头注释补资产列表与"digest 必须随本版回填"的提醒（`version`/`url`/`sha256` 留待发布步）
+- [x] 验证：`bash -n install.sh` / `bash -n publish/arch/PKGBUILD` 通过；本地 dry-run 复现 install.sh 的 man 块（文件落位 + `man ezmk` 538 行 / `man 5 ezmk.toml` 364 行，0 告警）与 PKGBUILD 两条安装命令（`$pkgdir` 内落位 + MANPATH 命中）
+- [ ] **完整 `makepkg -fd` 出包留待发布前**：PKGBUILD 的 `source=` 指向 `v1.4.3` tag，tag 尚未创建（既有先例：用 `git archive` 本地同名 tarball 做功能验证，最终验证在发布后）；本阶段以「语法检查 + 命令级模拟 + CI 断言」替代
 
 ### 阶段六：`ezmk help` See also 与 i18n（M-08，对应设计 §3.8）
 
