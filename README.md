@@ -72,6 +72,14 @@ makepkg -si --nodeps
 
 > Source build (statically linked); requires `base-devel` (Arch) or the MINGW64 toolchain (MSYS2; `--nodeps` skips the dependency check). Not on AUR yet (registration unavailable) — self-serve `publish/arch/PKGBUILD` + `makepkg -si` for now.
 
+**Windows — winget:**
+
+```powershell
+winget install EazyMake.EazyMake
+```
+
+> Installs the portable `ezmk.exe` from the Windows release zip and puts the `ezmk` command on your `PATH` (no admin required; the manifest is published in the community `microsoft/winget-pkgs` repository). Update with `winget upgrade EazyMake.EazyMake`. The same zip carries `ezmk-lua.exe`; Windows has no `man` command, so no manual pages are installed.
+
 **Alternative — install script:**
 
 **Linux / macOS / MSYS2:**

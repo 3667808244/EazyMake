@@ -25,6 +25,14 @@ curl -fsSL https://raw.githubusercontent.com/3667808244/EazyMake/main/install.sh
 
 安装脚本还会一并安装手册页——`man ezmk`、`man 1 ezmk-lua`、`man 5 ezmk.toml`、`man 5 ezmk-workspace.toml`——位于 `$PREFIX/share/man/man1` 与 `$PREFIX/share/man/man5`。设 `EZMK_NO_MAN=1` 可跳过；使用非标准 `PREFIX` 时脚本会打印需要追加的 `MANPATH`。详见[手册页（man）](technical.md)。
 
+### Windows（winget）
+
+```powershell
+winget install EazyMake.EazyMake
+```
+
+安装 Windows Release 压缩包里的便携版 `ezmk.exe`，并把 `ezmk` 命令放进 `PATH`（无需管理员权限；清单发布在社区仓库 `microsoft/winget-pkgs`）。升级用 `winget upgrade EazyMake.EazyMake`。同一压缩包内还带 `ezmk-lua.exe`。Windows 无 `man` 命令，故不安装手册页。
+
 ### Windows（原生，无需 MSYS2）
 
 ```powershell

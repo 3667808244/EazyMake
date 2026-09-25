@@ -28,6 +28,14 @@ Builds from source and installs `ezmk` to `$HOME/.local/bin`. See [README](../..
 
 The Unix installer also installs the manual pages — `man ezmk`, `man 1 ezmk-lua`, `man 5 ezmk.toml` and `man 5 ezmk-workspace.toml` — under `$PREFIX/share/man/man1` and `$PREFIX/share/man/man5`. Set `EZMK_NO_MAN=1` to skip them; with a non-standard `PREFIX` the installer prints the `MANPATH` line to add. See [Man Pages](technical.md#man-pages).
 
+### Windows (winget)
+
+```powershell
+winget install EazyMake.EazyMake
+```
+
+Installs the portable `ezmk.exe` from the Windows release zip and exposes the `ezmk` command on your `PATH` (no admin required; the manifest is published in the community `microsoft/winget-pkgs` repository). Update with `winget upgrade EazyMake.EazyMake`. The same zip carries `ezmk-lua.exe`. Windows ships no `man` command, so no manual pages are installed.
+
 ### Windows (native, no MSYS2)
 
 ```powershell

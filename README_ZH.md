@@ -71,6 +71,14 @@ makepkg -si --nodeps
 
 > 源码构建（静态链接），需 `base-devel`（Arch）或 MINGW64 工具链（MSYS2；`--nodeps` 跳过依赖检查）。暂未提交 AUR（账户注册未开放）—— 以仓库内 `publish/arch/PKGBUILD` 自取 + `makepkg -si` 为主。
 
+**Windows —— winget：**
+
+```powershell
+winget install EazyMake.EazyMake
+```
+
+> 安装 Windows Release 压缩包里的便携版 `ezmk.exe`，并把 `ezmk` 命令放进 `PATH`（无需管理员权限；清单发布在社区仓库 `microsoft/winget-pkgs`）。升级用 `winget upgrade EazyMake.EazyMake`。同一压缩包内还带 `ezmk-lua.exe`；Windows 无 `man` 命令，故不安装手册页。
+
 **备选 —— 安装脚本：**
 
 **Linux / macOS / MSYS2：**
