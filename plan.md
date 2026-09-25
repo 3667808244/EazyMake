@@ -1,6 +1,6 @@
 # EazyMake 1.4.4 执行计划
 
-> **状态：📝 计划就绪（未开工）**——本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.0/REMOVALS.md`](plans/2.0.0/REMOVALS.md)（本版**不执行**其中任何一项）。
+> **状态：📝 计划就绪（未开工）**——本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项）。
 >
 > 详细设计：[**1.4.4.md**](plans/1.4.x/1.4.4.md)。主题：**历史遗留清理**——1.4.3 发布后全仓扫描出的"小而确定"的债：`install.ps1 -DryRun` 缺陷、`test/` 7 条编译告警、`.gitignore` 过期条目、过期 TODO、`release.yml` 僵尸 job、`check_docs_sync` 未接线。
 >
@@ -57,7 +57,7 @@
 ### 阶段四：过期 TODO 与"挂版本承诺"扫查（M-04，对应设计 §3.4）
 
 - [ ] `src/cli.cpp:1144-1146`：改写为**不挂版本**的已知限制（argv 由 OS 保证 NUL 结尾、不可能含嵌入 NUL，故无需防御；明确它不是待办）
-- [ ] 全仓扫同类"挂版本承诺"（`归 1.`、`将在 1.`、`TODO(1.`、`待 1.`）→ 指向已发布版本的一并改写为事实陈述或指向 `plans/2.0.0/REMOVALS.md`
+- [ ] 全仓扫同类"挂版本承诺"（`归 1.`、`将在 1.`、`TODO(1.`、`待 1.`）→ 指向已发布版本的一并改写为事实陈述或指向 `plans/2.0.x/REMOVALS.md`
 - [ ] **不改**历史溯源注释（`// 1.2.0-dev.11: …` 这类记录实现时间的注释，与承诺区分）
 - [ ] 复核：`grep -rn "归 1\." src/ include/ezmk/` 无命中
 
@@ -96,7 +96,7 @@
 - **`check_docs_sync` 接入而非退役**：它是唯一能防"en 加了文档、zh 忘了"的机械检查（内容质量仍靠人工），成本是一步 bash。
 - **过期承诺改陈述、不改行为**：`cli.cpp` 的 TODO 改写不引入任何代码路径（"检测截断"本无防御对象）。
 - **不动 man/CLI/配置正文**：本版零行为变更，`check_man_sync.py` 预期无感；仅发布 commit 更新 `.TH` 日期。
-- **与 2.0.0 严格分工**：本版只清"不需要弃用到期"的债；弃用面与决策项留 [`plans/2.0.0/REMOVALS.md`](plans/2.0.0/REMOVALS.md)。
+- **与 2.0.0 严格分工**：本版只清"不需要弃用到期"的债；弃用面与决策项留 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
 
 ## 5 兼容性矩阵
 
@@ -114,7 +114,7 @@
 ## 6 延后项
 
 - **`locale/zh-TW.json` 的 32 个未译键**：变体继承是既定设计，补齐属增强而非清理；留待专门的语言变体计划（设计 §3.8）。
-- **`[install].sharedir`（解析但不生效）**：实现属新功能、移除影响配置兼容性 → 归 [`plans/2.0.0/REMOVALS.md`](plans/2.0.0/REMOVALS.md) **D-07** 拍板。
+- **`[install].sharedir`（解析但不生效）**：实现属新功能、移除影响配置兼容性 → 归 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md) **D-07** 拍板。
 - **2.0.0 弃用面与兼容垫片**（`[test].flags`、`ezmk utils cc`、lockfile `sha256` 别名、`[compile].include_dir` 单数、`-V`、`util::run_executable(int)`、`[utils.permissions]` 缺省、旧式 shell 钩子、repo `[platform]` 缺省、未知键策略）：见 2.0.0 清单 §2/§3，本版一律不动。
 - **本地残留文件**（根目录 `temp.md`/`sessions.md`/`build_err.txt`/`*.eml`、`build/pkg-arch/…`）：未被跟踪，不属仓库内容。
 - **`test_file_watcher.cpp` 的 7 处环境相关 SKIP**：需在 Linux/CI 环境判定，本版不动。
