@@ -1,6 +1,6 @@
 # EazyMake 1.4.4 执行计划
 
-> **状态：✅ 阶段一~六完成（实现收口，2026-09-19）**——本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项）。
+> **状态：✅ 已发布（tag `v1.4.4`，2026-09-26）**——本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项）。
 >
 > 详细设计：[**1.4.4.md**](plans/1.4.x/1.4.4.md)。主题：**历史遗留清理**——1.4.3 发布后全仓扫描出的"小而确定"的债：`install.ps1 -DryRun` 缺陷、`test/` 7 条编译告警、`.gitignore` 过期条目、过期 TODO、`release.yml` 僵尸 job、`check_docs_sync` 未接线。
 >
@@ -79,11 +79,11 @@
 
 ### 阶段七：正式发布（workflow §3，对照 1.4.3 流程）
 
-- [ ] 版本定稿：`build.sh` fallback + `include/ezmk/version.hpp` → 1.4.4；4 页 `.TH` 日期 = 发布日期；`CHANGES.md` 日期回填
-- [ ] tag `v1.4.4`（annotated）+ GitHub Release（notes 取 CHANGES 1.4.4 节）+ 产物核对（linux/macos tar 含 `man/` 4 页、Windows zip 不含；digest 与 `assets[].digest` 一致）
-- [ ] 三渠道：Homebrew（本地副本 + tap，真实 digest）/ pacman（`PKGBUILD` pkgver + 源码 tarball digest + `makepkg -fd` 出包）/ winget（split manifest + PR；CLA 账户已签）
-- [ ] **验证阶段五的成果**：Release run 不再长期 `queued`（`gh run watch --exit-status` 能真正代表结果）
-- [ ] 发布记录：`CHANGES.md`「发布」小节 + `publish/release-notes-1.4.4.md` + 索引状态
+- [x] 版本定稿：`build.sh` fallback + `include/ezmk/version.hpp` → 1.4.4；4 页 `.TH` 日期 = 发布日期；`CHANGES.md` 日期回填
+- [x] tag `v1.4.4`（annotated）+ GitHub Release（notes 取 CHANGES 1.4.4 节）+ 产物核对（linux/macos tar 含 `man/` 4 页、Windows zip 不含；digest 与 `assets[].digest` 一致）
+- [x] 三渠道：Homebrew（本地副本 + tap，真实 digest）/ pacman（`PKGBUILD` pkgver + 源码 tarball digest + `makepkg -fd` 出包）/ winget（split manifest + PR；CLA 账户已签）
+- [x] **验证阶段五的成果**：Release run 不再长期 `queued`（`gh run watch --exit-status` 能真正代表结果）
+- [x] 发布记录：`CHANGES.md`「发布」小节 + `publish/release-notes-1.4.4.md` + 索引状态
 
 ---
 

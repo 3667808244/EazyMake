@@ -62,6 +62,19 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 - ⛔ ① 计划清单全部完成或明确收口 ② 公共 API **无破坏性变更**（唯一 CLI 相关改动是源码注释）③ 全量测试**零回归**（基线 1.4.3 发布态 1099/6348）④ 附加门槛：`check_man_sync.py` 通过、`groff` 4 页零告警、i18n 406 键三向一致、新增 docs-sync CI 步通过。
 
+### 发布（2026-09-26，tag `v1.4.4`）
+
+- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.4（实测 `./build/ezmk version` → `EazyMake 1.4.4`）；4 页 `.TH` 日期 = 2026-09-26；`docs/{en,zh}/config_file.md`（`EZMK_VERSION` 默认值 / lockfile `generated_by`）与 `README.md` / `README_ZH.md` 的 winget `-Version` 示例同步 1.4.4（对照 1.4.3 发布 commit 先例）。
+- **tag / Release**：annotated tag `v1.4.4` 已推送；GitHub Release 已发布，`release.yml`（run 36236733247）**success**，产出 **7 个资产**——`ezmk-windows-x64.zip` / `ezmk-linux-x64.tar.gz` / `ezmk-macos-arm64.tar.gz` + 独立 `ezmk.exe` / `ezmk-lua.exe` 与各自 `.sha256` 边车。
+- **`macos-x64` 默认跳过已在生产验证（阶段五成果）**：该 job 在本次 run 中为 **skipped（0s）**，整轮 run 正常结束——v1.2.x~v1.4.3 的 Release run 均因该 job 排队 24h 后被取消（`cancelled 24h0m6s`），本版起 `gh run watch --exit-status` 才真正代表发布结果。
+- **资产哈希**（取 `assets[].digest`，与本地下载逐一核对**逐字节一致**）：`ezmk-windows-x64.zip` `06115d53a7278ca257db69a6dcb64520f44f65e467bae1f07f919d927157314e`、`ezmk-linux-x64.tar.gz` `8b8f9d5c4265fa438fc68a963a78a16f9f7ac49f7f984e8e30704d68d0b9eead`、`ezmk-macos-arm64.tar.gz` `5048221f9310064d67a1fc25496821d2205c0186320c505e056d0cbd626ec9b7`、`ezmk.exe` `442ec5d9ac82f828a8fb5baac08942facb435bd30e399a0883286f90558dbe3c`、`ezmk-lua.exe` `1b0f92761bfa12c16a8f468145be592ccc0b6b046c3be9b84c5f05b2211f9ff2`
+  - 两个 `.sha256` 边车内容与对应资产 digest 一致（`install.ps1` 依赖该边车）。
+  - **产物内容核对**：linux / macos 压缩包含 `ezmk`、`ezmk-lua`、`_ezmk` 与 **`man/` 4 页**（tar 内 `groff -man -Tutf8 -z -ww` 零告警；ELF 版本串 `1.4.4`）；**Windows zip 仅 `_ezmk` + 两个 exe，不含 `man/`**（与设计 §3.7/§3.8 一致）。
+- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.4（源码 tarball 真实 digest `bd52470ce9825ae7bd2541125bd61a8c4a6baf604f603e55354481f9dbad5b3a`，1949019 字节；codeload 与 archive 两端点字节一致）；本机 MSYS2 MINGW64 `makepkg -fd` 出包 `eazymake-1.4.4-1-x86_64.pkg.tar.zst`（sha256 `1f67b69b243d941c4fa6781c9d7fe43b035c004d61dcc8b6600c10686dcf0fc8`），包内 `usr/bin/ezmk.exe` / `ezmk-lua.exe` / `usr/share/man/man{1,5}/` 4 页（makepkg 自动 gzip）/ `usr/share/zsh/site-functions/_ezmk` 落位，包内 `ezmk.exe version` → **1.4.4**（源 tarball 下载一度被重置，改用已验证的本地 tarball 预置后 `sha256sums` 校验通过）。
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.4（commit `1128c8b`；macos-arm64 `5048221f…` / linux-x64 `8b8f9d5c…` 真实 digest，含四条 `man1.install` / `man5.install`），仓库副本 `publish/homebrew/ezmk.rb` 同步且内容一致；`brew install` 真机冒烟需 macOS，本机为 Windows，未执行（与 1.4.x 前例一致）。
+- **winget**：split manifests（`InstallerType: zip` + `NestedInstallerType: portable`，`InstallerSha256` = `06115d53…`）本机 `winget validate` 通过（「清单验证成功」），已提交 `microsoft/winget-pkgs#441646`；CI 校验 + 版主审批为发布后跟进项，不阻塞发布。
+- **发布记录**：Release notes 正文见 [`publish/release-notes-1.4.4.md`](publish/release-notes-1.4.4.md)。
+
 ---
 
 ## 1.4.3 (2026-09-19) — 离线 man 手册 + 防漂移闸门
