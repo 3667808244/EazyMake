@@ -182,6 +182,33 @@ jobs:
         shell: msys2 {0}
         run: bash build.sh test 2>&1 | tee test-report.log
 
+      # 1.4.4 M-01/M-07: `-DryRun` is the documented preview usage (README and
+      # the script's comment-based help). It must complete with exit code 0,
+      # print the full plan, and touch nothing — and it must not need network
+      # (latest-version resolution is stubbed while -DryRun is active).
+      - name: "install.ps1: -DryRun smoke (1.4.4)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $target = Join-Path $env:RUNNER_TEMP "ezmk-dryrun-target"
+          if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+
+          # -DryRun reports through Write-Host (the information stream), so merge
+          # every stream to capture the preview text. Seed $LASTEXITCODE so a
+          # silent clean exit is distinguishable from a script that calls `exit N`
+          # (a piped invocation would swallow that code).
+          $LASTEXITCODE = 0
+          $output = (& ./install.ps1 -DryRun -InstallDir $target *>&1) -join ([char]10)
+          $exit = $LASTEXITCODE
+          Write-Host $output
+
+          if ($exit -ne 0) { throw "install.ps1 -DryRun failed (exit code $exit)" }
+          if (Test-Path $target) { throw "install.ps1 -DryRun created $target — it must be side-effect free" }
+          foreach ($needle in @("[DRY RUN] Would download to:", "[DRY RUN] Would install:", "Would add to user PATH", "Would run:")) {
+            if ($output -notmatch [regex]::Escape($needle)) { throw "install.ps1 -DryRun output is missing: $needle" }
+          }
+          Write-Host "OK: install.ps1 -DryRun is complete and side-effect free"
+
       - name: Emit test report on failure
         if: failure()
         shell: msys2 {0}

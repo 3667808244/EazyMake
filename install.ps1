@@ -193,6 +193,10 @@ function Invoke-BinaryDownload {
         [string]$DisplayName
     )
 
+    if (-not $DestDir) {
+        Write-Die "Internal error: Invoke-BinaryDownload called without a destination directory."
+    }
+
     $url = "$Script:DownloadBase/$VersionTag/$BinName"
     $dest = Join-Path $DestDir $BinName
     $checksumUrl = "$Script:DownloadBase/$VersionTag/$BinName.sha256"
@@ -255,17 +259,17 @@ function Test-Checksum {
         [string]$ChecksumPath
     )
 
+    if (Test-DryRun) {
+        Write-Host "       [DRY RUN] Would verify: $BinaryPath" -ForegroundColor DarkGray
+        return $true
+    }
+
     if (-not $ChecksumPath -or -not (Test-Path $ChecksumPath)) {
         Write-Warn "No checksum file — skipping verification."
         return $true
     }
 
     Write-Info "Verifying SHA-256 checksum..."
-
-    if (Test-DryRun) {
-        Write-Host "       [DRY RUN] Would verify: $BinaryPath" -ForegroundColor DarkGray
-        return $true
-    }
 
     $actualHash = (Get-FileHash -Path $BinaryPath -Algorithm SHA256).Hash.ToLower()
     $expectedLine = Get-Content $ChecksumPath -First 1
@@ -375,18 +379,19 @@ function Update-Path {
 function Register-OfficialRepo {
     $ezmkBin = Get-BinPath
 
+    if (Test-DryRun) {
+        Write-Info "Registering official package repository ($Script:OfficialRepoName)..."
+        Write-Host "       [DRY RUN] Would run: $ezmkBin repo add -u $Script:OfficialRepo --name $Script:OfficialRepoName" -ForegroundColor DarkGray
+        Write-Host "       [DRY RUN] Would run: $ezmkBin repo update -u $Script:OfficialRepoName" -ForegroundColor DarkGray
+        return
+    }
+
     if (-not (Test-Path $ezmkBin)) {
         Write-Warn "ezmk.exe not found at $ezmkBin — skipping repo registration."
         return
     }
 
     Write-Info "Registering official package repository ($Script:OfficialRepoName)..."
-
-    if (Test-DryRun) {
-        Write-Host "       [DRY RUN] Would run: $ezmkBin repo add -u $Script:OfficialRepo --name $Script:OfficialRepoName" -ForegroundColor DarkGray
-        Write-Host "       [DRY RUN] Would run: $ezmkBin repo update -u $Script:OfficialRepoName" -ForegroundColor DarkGray
-        return
-    }
 
     # repo add -u (user scope)
     $addResult = & $ezmkBin repo add -u $Script:OfficialRepo --name $Script:OfficialRepoName 2>&1
@@ -412,18 +417,20 @@ function Register-OfficialRepo {
 function Preinstall-OfficialUtils {
     $ezmkBin = Get-BinPath
 
+    $pkgName = "ezmk-official-utils"
+
+    if (Test-DryRun) {
+        Write-Info "Pre-installing official utils package ($pkgName)..."
+        Write-Host "       [DRY RUN] Would run: $ezmkBin pkg install -g $pkgName -y" -ForegroundColor DarkGray
+        return
+    }
+
     if (-not (Test-Path $ezmkBin)) {
         Write-Warn "ezmk.exe not found at $ezmkBin — skipping utils pre-install."
         return
     }
 
-    $pkgName = "ezmk-official-utils"
     Write-Info "Pre-installing official utils package ($pkgName)..."
-
-    if (Test-DryRun) {
-        Write-Host "       [DRY RUN] Would run: $ezmkBin pkg install -g $pkgName -y" -ForegroundColor DarkGray
-        return
-    }
 
     $result = & $ezmkBin pkg install -g $pkgName -y 2>&1
     if ($LASTEXITCODE -eq 0) {
@@ -439,18 +446,18 @@ function Preinstall-OfficialUtils {
 function Confirm-Installation {
     $ezmkBin = Get-BinPath
 
+    if (Test-DryRun) {
+        Write-Info ""
+        Write-Host "       [DRY RUN] Would run: $ezmkBin version" -ForegroundColor DarkGray
+        return
+    }
+
     if (-not (Test-Path $ezmkBin)) {
         Write-Warn "Cannot verify — ezmk.exe not found at $ezmkBin"
         return
     }
 
     Write-Info ""
-
-    if (Test-DryRun) {
-        Write-Host "       [DRY RUN] Would run: $ezmkBin version" -ForegroundColor DarkGray
-        return
-    }
-
     Write-Info "Verifying installation..."
     Write-Host "────────────────────────────────────────────────────────────"
 
@@ -517,9 +524,10 @@ function Main {
     $resolvedVersion = Resolve-Version -RequestedVersion $Version
 
     # 3. Prepare temp directory
-    $tempDir = ""
+    # Compute the display path in both modes; create the directory only for a real
+    # install so -DryRun stays side-effect free (Remove-TempFiles guards on existence).
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "ezmk-install.$pid"
     if (-not (Test-DryRun)) {
-        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "ezmk-install.$pid"
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     }
 
