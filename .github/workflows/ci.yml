@@ -75,6 +75,12 @@ jobs:
       - name: "Man pages: CLI drift gate"
         run: python3 scripts/check_man_sync.py
 
+      # 1.4.4 M-06: filename-set parity between docs/{en,zh} and tutorial/{en,zh}.
+      # Cheap (seconds) and mechanical — it cannot judge content, only that a
+      # translation never forgets the counterpart file.
+      - name: "Docs: en/zh file parity"
+        run: bash scripts/check_docs_sync.sh
+
       - name: Build + run all tests
         run: bash build.sh test-all 2>&1 | tee test-report.log
 

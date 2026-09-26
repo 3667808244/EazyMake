@@ -113,6 +113,12 @@ jobs:
   # ── macOS x64 (Intel) ──────────────────────────────────────────────
   macos-x64:
     needs: version
+    # Intel macOS (x64): the macos-13 runner is not allocated on the free tier,
+    # so this job would sit queued and hold the entire Release run open until the
+    # 24h timeout (v1.2.x~v1.4.3 all did). Skipped by default — no Intel asset is
+    # produced today. Set the repository variable ENABLE_MACOS_X64 to 'true'
+    # (Settings -> Secrets and variables -> Actions -> Variables) to re-enable it.
+    if: vars.ENABLE_MACOS_X64 == 'true'
     runs-on: macos-13
     env:
       EZMK_VERSION: ${{ needs.version.outputs.version }}

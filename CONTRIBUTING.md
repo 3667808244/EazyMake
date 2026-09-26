@@ -27,6 +27,13 @@ Be respectful, constructive, and inclusive. Assume good faith.
    (If you build by hand instead, keep the source list identical to `TEST_SRC` in `build.sh` —
    an incomplete list fails at link time with undefined references.)
 
+   CI also smoke-tests the Windows installer preview on every push/PR
+   (`install.ps1: -DryRun smoke` in `.github/workflows/ci.yml`). Run the same check
+   locally — it must exit 0, print the plan, and create nothing:
+   ```powershell
+   ./install.ps1 -DryRun -InstallDir "$env:TEMP\ezmk-dryrun"
+   ```
+
 See [`README.md`](README.md) for more details.
 
 ## Pull request workflow
@@ -66,6 +73,9 @@ EazyMake maintains bilingual documentation: **Chinese (zh)** and **English (en)*
    # or
    powershell scripts/check_docs_sync.ps1   # Windows
    ```
+   CI enforces this on every push/PR (`Docs: en/zh file parity` in the ubuntu job),
+   so treat the script as a local pre-flight. It compares filename sets only —
+   content quality is still reviewed by hand.
 
 4. **Terminology** — consult [`docs/en/glossary.md`](docs/en/glossary.md) (English) or
    [`docs/zh/glossary.md`](docs/zh/glossary.md) (Chinese) for standardized translations
@@ -164,6 +174,7 @@ Before submitting a pull request, please verify:
 - [ ] Documentation is updated in both `docs/en/` and `docs/zh/` (if applicable)
 - [ ] Consider running `clang-format --dry-run` on modified files to verify style consistency
 - [ ] If the CLI, the configuration parser or `man/` changed: `python scripts/check_man_sync.py` passes and `groff -man -Tutf8 -z -ww man/*` reports no warnings
+- [ ] `docs/` and `tutorial/` have identical `en`/`zh` file sets (`bash scripts/check_docs_sync.sh`; CI also enforces this)
 - [ ] New features include test coverage in `test/`
 
 ## Reporting issues
