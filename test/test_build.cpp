@@ -70,7 +70,10 @@ TEST_CASE("build: BuildOptions struct", "[build]") {
     REQUIRE(opts.disable_cache == false);
     REQUIRE(opts.verbose == false);
 
-    BuildOptions opts2{true, true};
+    // 1.4.4: spell out every aggregate field (C++17 positional init) so
+    // -Wmissing-field-initializers stays clean. Designated initializers
+    // (`.field = value`) are C++20 and must not reappear here (1.4.2 F-10).
+    BuildOptions opts2{true, true, 0, "", false, false};
     REQUIRE(opts2.disable_cache == true);
     REQUIRE(opts2.verbose == true);
 }

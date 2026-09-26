@@ -708,9 +708,10 @@ TEST_CASE("compile_options_signature: source_date_epoch is folded in", "[cache][
     REQUIRE(sig0 != sig2);
 }
 
-// 1.2.0-dev.11: GCC depfiles escape spaces with backslash ("C:\My\
-// Project\...") — the parser must not split the token at the escaped space,
-// or the header path is never hashed and changes go undetected.
+// 1.2.0-dev.11: GCC depfiles escape spaces with a backslash — a Windows path
+// like "C:\My Project\hdr.hpp" is written as "C:\My\ Project\hdr.hpp". The
+// parser must not split the token at the escaped space, or the header path is
+// never hashed and changes go undetected.
 TEST_CASE("parse_depfile_and_hash: escaped spaces stay in the path", "[cache][1.2.0-dev.11]") {
     TempDir tmp;
     fs::path depfile = tmp.path / "x.d";

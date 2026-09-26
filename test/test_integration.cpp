@@ -31,6 +31,7 @@
 #include <fstream>
 #include <map>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -2396,12 +2397,12 @@ TEST_CASE("integration: ezmk example lists all built-in examples (1.2.3)", "[int
     TempDir tmp;
 
     // Bare `ezmk example` and explicit `ezmk example list` both list 6 examples.
-    for (const std::string& args : {"example", "example list"}) {
-        ProcResult r = run_ezmk(args, tmp.path);
+    for (std::string_view args : {"example", "example list"}) {
+        ProcResult r = run_ezmk(std::string(args), tmp.path);
         INFO("stderr: " << r.err);
         INFO("stdout: " << r.out);
         REQUIRE(r.exit_code == 0);
-        for (const std::string& name :
+        for (std::string_view name :
              {"hello", "greeter", "with-packages", "with-tests", "with-hooks", "cmake-interop"}) {
             INFO("list must contain: " << name);
             REQUIRE((r.out + r.err).find(name) != std::string::npos);
@@ -2416,8 +2417,8 @@ TEST_CASE("integration: ezmk example scaffolds match source tree (1.2.3)", "[int
     TempDir tmp;
 
     // Generate `hello` and `with-hooks`; every file must byte-match the source.
-    for (const std::string& name : {"hello", "with-hooks"}) {
-        ProcResult g = run_ezmk("example " + name, tmp.path);
+    for (std::string_view name : {"hello", "with-hooks"}) {
+        ProcResult g = run_ezmk("example " + std::string(name), tmp.path);
         INFO(name << " stderr: " << g.err);
         REQUIRE(g.exit_code == 0);
         fs::path out_dir = tmp.path / name;
@@ -2472,9 +2473,9 @@ TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integr
 
     // Dependency-free examples: hello / greeter / with-hooks / cmake-interop build
     // out of the box.
-    for (const std::string& name :
+    for (std::string_view name :
          {"hello", "greeter", "with-hooks", "cmake-interop"}) {
-        ProcResult g = run_ezmk("example " + name, tmp.path);
+        ProcResult g = run_ezmk("example " + std::string(name), tmp.path);
         INFO(name << " gen stderr: " << g.err);
         REQUIRE(g.exit_code == 0);
         fs::path proj = tmp.path / name;

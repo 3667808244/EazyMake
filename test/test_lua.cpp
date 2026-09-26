@@ -49,22 +49,6 @@ static fs::path write_lua_script(const fs::path& dir, const std::string& name,
     return p;
 }
 
-// Execute a Lua string in protected mode and return {ok, result_or_error}
-static std::pair<bool, std::string> lua_dostring_safe(lua_State* L, const std::string& code) {
-    if (luaL_dostring(L, code.c_str())) {
-        std::string err = lua_tostring(L, -1);
-        lua_pop(L, 1);
-        return {false, err};
-    }
-    // Capture string result if any
-    std::string result;
-    if (lua_gettop(L) > 0 && lua_isstring(L, -1)) {
-        result = lua_tostring(L, -1);
-    }
-    lua_settop(L, 0);
-    return {true, result};
-}
-
 // ===================================================================
 // Lifecycle tests
 // ===================================================================
