@@ -24,7 +24,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.4.4 (未发布) — 历史遗留清理（安装器 / 告警 / 工具链卫生）
+## 1.4.4 (2026-09-26) — 历史遗留清理（安装器 / 告警 / 工具链卫生）
 
 1.4.3 发布后对仓库做了一次全量「历史遗留」扫描，本版取其中**不需要新功能即可收口**的五类：用户可见缺陷（`install.ps1 -DryRun`）、质量口径缺口（`test/` 编译告警）、仓库卫生（`.gitignore`）、过期承诺（`cli.cpp` TODO）、流程僵尸与未接线检查（`macos-x64` job、`check_docs_sync`）。**零功能新增、零 CLI 行为变更、零配置语义变更、公共 API 无破坏性变更**；不放宽也不移除任何弃用面（`[test].flags` / `ezmk utils cc` 等留 2.0.0）。
 

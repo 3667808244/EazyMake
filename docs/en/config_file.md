@@ -163,7 +163,7 @@ A standalone subsection that defines preprocessor macros. More semantic than usi
 | Macro name | Type | Example value | Description |
 |------------|------|---------------|-------------|
 | `EZMK` | integer | `1` | Always defined as `1`; identifies the build system as EazyMake |
-| `EZMK_VERSION` | string | `"1.4.3"` | EazyMake's own version number |
+| `EZMK_VERSION` | string | `"1.4.4"` | EazyMake's own version number |
 | `EZMK_PROJECT_NAME` | string | `"myapp"` | `[project].name` |
 | `EZMK_PROJECT_VERSION` | string | `"1.0.0"` | `[project].version` |
 | `EZMK_PROJECT_TYPE` | string | `"executable"` | `[project].type` |
@@ -280,7 +280,7 @@ Conversion rules from `want` package name to macro name:
 ```toml
 [metadata]
 version = 1
-generated_by = "ezmk 1.4.3"
+generated_by = "ezmk 1.4.4"
 toolchain = "gcc"
 direct_deps = ["fmt", "spdlog@^1.14.0"]
 
