@@ -1141,9 +1141,8 @@ namespace ezmk::cli
         std::vector<std::string> toks;
         toks.reserve(argc);
         for (int i = 0; i < argc; ++i)
-            // 1.1.3 C5: argv 项若含嵌入 NUL，std::string(argv[i]) 会在 NUL 处截断，
-            // 与 C 字符串语义一致（操作系统不会传入真正含 NUL 的 argv）。已知限制：
-            // 完整防御（检测截断/显式拒绝）归 1.2.0（TODO）。
+            // 1.1.3 C5: 依赖 C 字符串语义：std::string(argv[i]) 在首个 NUL 处截断。
+            // OS 不会传入含嵌入 NUL 的 argv，故此处无需额外防御（已知限制，不是待办项）。
             toks.emplace_back(argv[i]);
         strip_color_option(toks);
 
