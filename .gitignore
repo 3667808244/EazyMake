@@ -1,42 +1,27 @@
-# Build output
+# ── Generated sources (written by build.sh) ─────────────────────────────────
+src/locale_data.cpp
+src/example_data.cpp
+include/ezmk/logo.gen.h
+
+# ── Build artifacts ─────────────────────────────────────────────────────────
 build/
-
-# EazyMake internal directories
 .ezmk/
-
-# Archives
+*.exe
+*.o
 *.7z
 
-# Claude AI settings (local)
+# ── Local scratch files / tooling bridges ───────────────────────────────────
+temp.md
+sessions.md
+build_err.txt
+stdout_and_stderr.txt
+*.eml
+.dsh/
 .claude/*
 !.claude/skills/
 
-# DSH local skill bridge (junctions into .claude/skills)
-.dsh/ 
-
-# IDE files
+# ── IDE / OS ────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
-
-# OS files
 Thumbs.db
 Desktop.ini
-
-*.exe
-*.o
-
-stdout_in_linux_vm.txt
-
-plan.md
-src/locale_data.cpp
-src/example_data.cpp
-stdout_and_stderr.txt
-build_err.txt
-temp.md
-include/ezmk/version.hpp
-
-!.claude/skills/
-sessions.md
-include/ezmk/logo.gen.h
-
-*.eml
