@@ -15,10 +15,11 @@
 # Repo: https://github.com/3667808244/EazyMake
 # Release assets: https://github.com/3667808244/EazyMake/releases
 #
-# Note: macOS Intel (x64) has no prebuilt asset yet — the `macos-13` runner is
-# not allocated on GitHub's free tier, so the x64 job stalls and the release
-# never carries `ezmk-macos-x64.tar.gz`. Intel Macs get a clean "unsupported
-# on this architecture" error from brew until a binary is published.
+# Note: macOS Intel (x64) has no prebuilt asset by default — the x64 release job
+# is skipped unless the repository variable ENABLE_MACOS_X64 is 'true' (the
+# `macos-13` runner is not allocated on GitHub's free tier, so an always-on job
+# stalls the whole Release run; see .github/workflows/release.yml). Intel Macs
+# get a clean "unsupported on this architecture" error from brew until then.
 
 class Ezmk < Formula
   desc "A simple C/C++ build tool (GCC/Clang/MSVC)"

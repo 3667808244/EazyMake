@@ -1,6 +1,6 @@
 # EazyMake 1.4.4 执行计划
 
-> **状态：📝 计划就绪（未开工）**——本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项）。
+> **状态：✅ 阶段一~六完成（实现收口，2026-09-19）**——本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项）。
 >
 > 详细设计：[**1.4.4.md**](plans/1.4.x/1.4.4.md)。主题：**历史遗留清理**——1.4.3 发布后全仓扫描出的"小而确定"的债：`install.ps1 -DryRun` 缺陷、`test/` 7 条编译告警、`.gitignore` 过期条目、过期 TODO、`release.yml` 僵尸 job、`check_docs_sync` 未接线。
 >
@@ -30,52 +30,52 @@
 
 ### 阶段一：`install.ps1 -DryRun` 修复 + windows CI 冒烟（M-01/M-07，对应设计 §3.1/§3.7）
 
-- [ ] 根因修复：`Main` 的 `$tempDir` 改为**两种模式都计算展示路径**，仅非 dry-run 时 `New-Item`（现状 `install.ps1:520-524` 在 dry-run 下留空 → `Invoke-BinaryDownload:197` 的 `Join-Path` 抛 `EmptyStringNotAllowed` 中止）
-- [ ] 预览完整性：`Register-OfficialRepo:378-381`、`Preinstall-OfficialUtils:415-418`、`Confirm-Installation:442-445` 三处把 `Test-DryRun` 分支提到 `Test-Path $ezmkBin` 早退**之前**（dry-run 下目标二进制必然不存在，现状会误报"跳过"）
-- [ ] 防御加固：`Invoke-BinaryDownload` 开头补空 `DestDir` 断言（`Write-Die`），避免同类回归以晦涩报错形式出现
-- [ ] 本地实跑（PowerShell 5.1）：`.\install.ps1 -DryRun` 与 `.\install.ps1 -Version v1.4.3 -DryRun` → **退出码 0**、打印全部 `Would …`、**未创建任何文件/目录**、未改 PATH、未联网
-- [ ] 非 dry-run 行为零变化复核（路径/顺序/提示文案；可用 `-InstallDir <temp>` 对着已下载资产跑一遍真实安装）
-- [ ] CI：windows job 新增 `shell: pwsh` 步骤跑 `install.ps1 -DryRun -InstallDir <temp>`，断言退出码 0 + 目标目录**未被创建** + 输出含 `[DRY RUN] Would download to:` / `Would install:` 关键行
+- [x] 根因修复：`Main` 的 `$tempDir` 改为**两种模式都计算展示路径**，仅非 dry-run 时 `New-Item`（现状 `install.ps1:520-524` 在 dry-run 下留空 → `Invoke-BinaryDownload:197` 的 `Join-Path` 抛 `EmptyStringNotAllowed` 中止）
+- [x] 预览完整性：`Register-OfficialRepo:378-381`、`Preinstall-OfficialUtils:415-418`、`Confirm-Installation:442-445` 三处把 `Test-DryRun` 分支提到 `Test-Path $ezmkBin` 早退**之前**（dry-run 下目标二进制必然不存在，现状会误报"跳过"）
+- [x] 防御加固：`Invoke-BinaryDownload` 开头补空 `DestDir` 断言（`Write-Die`），避免同类回归以晦涩报错形式出现
+- [x] 本地实跑（PowerShell 5.1）：`.\install.ps1 -DryRun` 与 `.\install.ps1 -Version v1.4.3 -DryRun` → **退出码 0**、打印全部 `Would …`、**未创建任何文件/目录**、未改 PATH、未联网
+- [x] 非 dry-run 行为零变化复核（路径/顺序/提示文案；可用 `-InstallDir <temp>` 对着已下载资产跑一遍真实安装）
+- [x] CI：windows job 新增 `shell: pwsh` 步骤跑 `install.ps1 -DryRun -InstallDir <temp>`，断言退出码 0 + 目标目录**未被创建** + 输出含 `[DRY RUN] Would download to:` / `Would install:` 关键行
 
 ### 阶段二：测试代码 7 条编译告警清零（M-02，对应设计 §3.2）
 
-- [ ] `test/test_build.cpp:73`：补齐聚合初始化（**必须 C++17 合法**，不得使用 designated initializers——1.4.2 F-10 刚移除过）
-- [ ] `test/test_cache.cpp:711`：修 `-Wcomment`（`//` 注释行尾反斜杠导致的续行）
-- [ ] `test/test_integration.cpp:2399/2404/2419/2475`：循环变量 `const std::string&` → `std::string_view`（`-Wrange-loop-construct`，4 处同构）
-- [ ] `test/test_lua.cpp:53`：删除已无调用点的 `lua_dostring_safe`（或加 `[[maybe_unused]]` 并注明理由）
-- [ ] 严格旗标下复核：`CXXFLAGS='-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2' bash build.sh test` → `src/` + `include/ezmk/` + `test/` **零告警**（vendor 除外）
-- [ ] 回归：断言数保持 **1099 用例 / 6348 断言**（若数字变化必须说明原因）
+- [x] `test/test_build.cpp:73`：补齐聚合初始化（**必须 C++17 合法**，不得使用 designated initializers——1.4.2 F-10 刚移除过）
+- [x] `test/test_cache.cpp:711`：修 `-Wcomment`（`//` 注释行尾反斜杠导致的续行）
+- [x] `test/test_integration.cpp:2399/2404/2419/2475`：循环变量 `const std::string&` → `std::string_view`（`-Wrange-loop-construct`，4 处同构）
+- [x] `test/test_lua.cpp:53`：删除已无调用点的 `lua_dostring_safe`（或加 `[[maybe_unused]]` 并注明理由）
+- [x] 严格旗标下复核：`CXXFLAGS='-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2' bash build.sh test` → `src/` + `include/ezmk/` + `test/` **零告警**（vendor 除外）
+- [x] 回归：断言数保持 **1099 用例 / 6348 断言**（若数字变化必须说明原因）
 
 ### 阶段三：`.gitignore` 卫生（M-03，对应设计 §3.3）
 
-- [ ] 删除已被跟踪文件的忽略条目：`plan.md`、`include/ezmk/version.hpp`（ignore 对 tracked 文件无效，留着掩盖真实状态）
-- [ ] 删除已消失条目：`stdout_in_linux_vm.txt`
-- [ ] 去重 `.claude/*` + `!.claude/skills/`（现状首尾各一组）
-- [ ] 按用途分组重排：生成物 / 构建产物 / 本地临时 / IDE·OS（保留 `build/`、`.ezmk/`、生成物、`.dsh/` 的真实忽略）
-- [ ] 复核：`git status --porcelain` 干净；`git status --porcelain --ignored` 中生成物仍为 `!!`、`plan.md`/`version.hpp` 不再被忽略
+- [x] 删除已被跟踪文件的忽略条目：`plan.md`、`include/ezmk/version.hpp`（ignore 对 tracked 文件无效，留着掩盖真实状态）
+- [x] 删除已消失条目：`stdout_in_linux_vm.txt`
+- [x] 去重 `.claude/*` + `!.claude/skills/`（现状首尾各一组）
+- [x] 按用途分组重排：生成物 / 构建产物 / 本地临时 / IDE·OS（保留 `build/`、`.ezmk/`、生成物、`.dsh/` 的真实忽略）
+- [x] 复核：`git status --porcelain` 干净；`git status --porcelain --ignored` 中生成物仍为 `!!`、`plan.md`/`version.hpp` 不再被忽略
 
 ### 阶段四：过期 TODO 与"挂版本承诺"扫查（M-04，对应设计 §3.4）
 
-- [ ] `src/cli.cpp:1144-1146`：改写为**不挂版本**的已知限制（argv 由 OS 保证 NUL 结尾、不可能含嵌入 NUL，故无需防御；明确它不是待办）
-- [ ] 全仓扫同类"挂版本承诺"（`归 1.`、`将在 1.`、`TODO(1.`、`待 1.`）→ 指向已发布版本的一并改写为事实陈述或指向 `plans/2.0.x/REMOVALS.md`
-- [ ] **不改**历史溯源注释（`// 1.2.0-dev.11: …` 这类记录实现时间的注释，与承诺区分）
-- [ ] 复核：`grep -rn "归 1\." src/ include/ezmk/` 无命中
+- [x] `src/cli.cpp:1144-1146`：改写为**不挂版本**的已知限制（argv 由 OS 保证 NUL 结尾、不可能含嵌入 NUL，故无需防御；明确它不是待办）
+- [x] 全仓扫同类"挂版本承诺"（`归 1.`、`将在 1.`、`TODO(1.`、`待 1.`）→ 指向已发布版本的一并改写为事实陈述或指向 `plans/2.0.x/REMOVALS.md`
+- [x] **不改**历史溯源注释（`// 1.2.0-dev.11: …` 这类记录实现时间的注释，与承诺区分）
+- [x] 复核：`grep -rn "归 1\." src/ include/ezmk/` 无命中
 
 ### 阶段五：CI 与发布流程卫生（M-05/M-06/M-07，对应设计 §3.5/§3.6）
 
-- [ ] `release.yml`：`macos-x64` job 加 `if: vars.ENABLE_MACOS_X64 == 'true'`（未设置 → 空串 → **skipped**，run 不再长期 `queued`），并补注释说明如何开启
-- [ ] `release.yml` YAML 校验：`npx --yes js-yaml` 解析通过；确认新增/改动的 `name:` 一律带引号（1.4.3 曾因步骤名含 `: ` 导致 0 秒失败）
-- [ ] ubuntu job 新增 `Docs: en/zh file parity` 步 → `bash scripts/check_docs_sync.sh`（当前 `docs` 15/15、`tutorial` 16/16）
-- [ ] `CONTRIBUTING.md`：把该检查从"人工清单"更新为"CI 已接线，本地可预检"；windows 冒烟步骤写入测试说明
-- [ ] 本地 dry-run：用 `build/ci.json`（js-yaml 产物）复跑新增步骤的 shell 片段（受限沙箱下 MSYS2 bash 起不来，以 CI 为准）
+- [x] `release.yml`：`macos-x64` job 加 `if: vars.ENABLE_MACOS_X64 == 'true'`（未设置 → 空串 → **skipped**，run 不再长期 `queued`），并补注释说明如何开启
+- [x] `release.yml` YAML 校验：`npx --yes js-yaml` 解析通过；确认新增/改动的 `name:` 一律带引号（1.4.3 曾因步骤名含 `: ` 导致 0 秒失败）
+- [x] ubuntu job 新增 `Docs: en/zh file parity` 步 → `bash scripts/check_docs_sync.sh`（当前 `docs` 15/15、`tutorial` 16/16）
+- [x] `CONTRIBUTING.md`：把该检查从"人工清单"更新为"CI 已接线，本地可预检"；windows 冒烟步骤写入测试说明
+- [x] 本地 dry-run：用 `build/ci.json`（js-yaml 产物）复跑新增步骤的 shell 片段（受限沙箱下 MSYS2 bash 起不来，以 CI 为准）
 
 ### 阶段六：文档与收口（M-08，对应设计 §3.7/§5）
 
-- [ ] `.claude/skills/ezmk-publish/SKILL.md`：§2.3 与坑位表补"`macos-x64` 默认跳过，需要时开 `ENABLE_MACOS_X64`"；`publish/homebrew/ezmk.rb` 头部注释同步 Intel Mac 口径
-- [ ] `.claude/skills/ezmk-workflow`：发布流程 §3.3 的产物核对补一句"`macos-x64` 默认 skipped 属预期"
-- [ ] `CHANGES.md` 新增 1.4.4 条目（修复 / 卫生 / 文档 / 已知限制），`(未发布)` 占位由发布 commit 回填日期
-- [ ] `plans/1.4.x/README.md`、`plans/README.md`、根 `plan.md` 状态与索引更新
-- [ ] 门槛复核：清单完成 + API 无破坏 + 1099/6348 零回归 + `check_man_sync.py`/groff/i18n/docs-sync 四项附加门槛
+- [x] `.claude/skills/ezmk-publish/SKILL.md`：§2.3 与坑位表补"`macos-x64` 默认跳过，需要时开 `ENABLE_MACOS_X64`"；`publish/homebrew/ezmk.rb` 头部注释同步 Intel Mac 口径
+- [x] `.claude/skills/ezmk-workflow`：发布流程 §3.3 的产物核对补一句"`macos-x64` 默认 skipped 属预期"
+- [x] `CHANGES.md` 新增 1.4.4 条目（修复 / 卫生 / 文档 / 已知限制），`(未发布)` 占位由发布 commit 回填日期
+- [x] `plans/1.4.x/README.md`、`plans/README.md`、根 `plan.md` 状态与索引更新
+- [x] 门槛复核：清单完成 + API 无破坏 + 1099/6348 零回归 + `check_man_sync.py`/groff/i18n/docs-sync 四项附加门槛
 
 ### 阶段七：正式发布（workflow §3，对照 1.4.3 流程）
 

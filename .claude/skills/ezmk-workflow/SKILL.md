@@ -75,7 +75,7 @@ description: EazyMake 开发发布工作流 —— dev / pre / 正式发布三�
 
 7. `git tag v1.x.0` + `git push origin v1.x.0`
 8. 创建 GitHub Release → `release.yml` 触发多平台构建/打包（windows-x64 / linux-x64 / macos-x64 / macos-arm64）
-9. 人工核对产物：`res/ezmk.zsh` 拷贝为 `_ezmk`、二进制可运行（`./ezmk version`）、macOS/Linux 资产内含 `man/`（`man ezmk.1` / `man ezmk.toml.5`，`groff -man -Tutf8 -z` 零告警），Windows zip **不含** `man/`
+9. 人工核对产物：`res/ezmk.zsh` 拷贝为 `_ezmk`、二进制可运行（`./ezmk version`）、macOS/Linux 资产内含 `man/`（`man ezmk.1` / `man ezmk.toml.5`，`groff -man -Tutf8 -z` 零告警），Windows zip **不含** `man/`；`macos-x64` job 默认 **skipped**（未设仓库变量 `ENABLE_MACOS_X64`）属预期，run 不再长期 `queued`
 
 ### 3.4 分发渠道（加载 `ezmk-publish` skill）
 

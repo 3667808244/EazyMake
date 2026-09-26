@@ -24,6 +24,46 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.4 (未发布) — 历史遗留清理（安装器 / 告警 / 工具链卫生）
+
+1.4.3 发布后对仓库做了一次全量「历史遗留」扫描，本版取其中**不需要新功能即可收口**的五类：用户可见缺陷（`install.ps1 -DryRun`）、质量口径缺口（`test/` 编译告警）、仓库卫生（`.gitignore`）、过期承诺（`cli.cpp` TODO）、流程僵尸与未接线检查（`macos-x64` job、`check_docs_sync`）。**零功能新增、零 CLI 行为变更、零配置语义变更、公共 API 无破坏性变更**；不放宽也不移除任何弃用面（`[test].flags` / `ezmk utils cc` 等留 2.0.0）。
+
+### 修复
+
+- **`install.ps1 -DryRun`（M-01）**：README 与脚本 comment-based help 都记载 `-DryRun` 可预览，实际必然中止——`Main` 在 dry-run 下把 `$tempDir` 留空，`Invoke-BinaryDownload` 首行 `Join-Path $DestDir …` 抛 `ParameterArgumentValidationErrorEmptyStringNotAllowed`，在 `$ErrorActionPreference = "Stop"` 下退出码 1、且在打印任何 `[DRY RUN] Would …` 之前。改为**两种模式都计算展示路径、仅非 dry-run 创建目录**；`Test-DryRun` 分支前移到 `Register-OfficialRepo` / `Preinstall-OfficialUtils` / `Confirm-Installation` 三处 `Test-Path $ezmkBin` 早退之前（dry-run 下目标二进制必然不存在，原先会误报「跳过」），并让校验预览走 `Test-Checksum` 的 dry-run 分支；`Invoke-BinaryDownload` 补空 `DestDir` 断言。行为契约：`-DryRun`（含 `-Version <tag> -DryRun`）**退出码 0、零副作用、零网络、完整打印计划**；真实安装的路径 / 顺序 / 文案零变化（dry-run 分支在非 dry-run 下均为不可达）。
+- **Windows CI 冒烟锁定（M-07）**：`ci.yml` windows job 新增 `shell: pwsh` 步骤 `install.ps1: -DryRun smoke`，断言退出码 0、目标目录**未被创建**、输出含 `Would download to` / `Would install` / `Would add to user PATH` / `Would run` 关键行——防止预览契约再度悄悄退化。
+
+### 卫生
+
+- **`test/` 7 条编译告警清零（M-02）**：`test_build.cpp:73` 补齐 `BuildOptions` 聚合初始化（C++17 位置初始化，不用 C++20 designated initializers，避免重蹈 1.4.2 F-10）；`test_cache.cpp:711` 的 `//` 注释行尾反斜杠改写（`-Wcomment` 续行）；`test_integration.cpp` 四处 `const std::string&` 循环变量改 `std::string_view`（`-Wrange-loop-construct`，并补 `<string_view>`）；删除 `test_lua.cpp` 已无调用点的 `lua_dostring_safe`。严格旗标（`-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2`）下**首方代码（`src/` + `include/ezmk/` + `test/`）零告警**，剩余告警全部来自 vendor（Lua computed goto 与 `-Wformat-nonliteral`）。
+- **`.gitignore`（M-03）**：删除对已跟踪文件无效的 `plan.md`、`include/ezmk/version.hpp` 两条与已不存在的 `stdout_in_linux_vm.txt`，去重 `.claude/*` + `!.claude/skills/`，按「生成物 / 构建产物 / 本地临时·工具桥 / IDE·OS」分组重排；`git check-ignore` 复核 `plan.md`/`version.hpp` 不再命中，生成物与 `.dsh/` 仍被忽略。
+- **过期 TODO（M-04）**：`src/cli.cpp` 的「完整防御归 1.2.0（TODO）」（1.2.0 早已发布）改为不挂版本的已知限制——OS 不会传入含嵌入 NUL 的 argv，故无需防御，明确它不是待办；全仓扫 `归 1.` / `将在 1.` / `TODO(1.` / `待 1.` 无其余命中。历史溯源注释（如 `// 1.2.0-dev.11: …`）按要求保留。
+
+### CI 与发布流程
+
+- **`release.yml` 的 `macos-x64` 默认跳过（M-05）**：加 `if: vars.ENABLE_MACOS_X64 == 'true'`。该 job 声明 `runs-on: macos-13`，而 free tier 长期不分配该 runner，常驻会让**整轮 Release 长期 `queued`**（v1.2.x~v1.4.3 均如此，24h 后被取消），发布者与 `gh run watch --exit-status` 都被假信号干扰。未设变量 → skipped，run 正常结束；需要 Intel 包时把仓库变量设为 `true`。资产集合不变（本就无 x64 资产）。
+- **docs-sync 接入 CI（M-06）**：ubuntu job 在 man 漂移闸门之后新增 `Docs: en/zh file parity` → `bash scripts/check_docs_sync.sh`（秒级；当前 `docs` 15/15、`tutorial` 16/16）；`CONTRIBUTING.md` 把该检查从人工清单改为「CI 已接线、本地可预检」，并把 windows `-DryRun` 冒烟写入测试说明。
+
+### 文档
+
+- `.claude/skills/ezmk-publish`（§2.3 + 坑位表 #9）、`publish/homebrew/ezmk.rb` 头部注释、`.claude/skills/ezmk-workflow` §3.3 同步「`macos-x64` 默认 skipped，需要时开 `ENABLE_MACOS_X64`」口径；`plans/1.4.x/README.md`、`plans/README.md`、根 `plan.md` 状态与索引更新。
+
+### 测试
+
+- **全量回归零失败**：`bash build.sh test-all` → **1099 用例 / 6349 断言**（0 失败，4 跳过）。文档记录的 1.4.3 基线为 1099/6348；把 `test/` 回退到 1.4.3 状态在本机复跑同样得到 **6349**（4 跳过：2 个符号链接相关、2 个网络相关集成用例），即 ±1 来自运行环境的条件断言，**非本版引入**；本版用例数与断言数均未改变。
+- **严格旗标零告警**：`CXXFLAGS='-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2' bash build.sh test` → 首方代码 0 告警（唯一非 vendor 命中为 `test_workspace.cpp:301` 的 Catch2 运行期 `WARN`，刻意保留）。
+- **附加门槛**：`python scripts/check_man_sync.py` 通过；`groff -man -Tutf8 -z -ww` 4 页零告警；i18n **406** 键三向一致（`scripts/check_i18n.py`）；新增 docs-sync 检查本地通过（`docs` 15/15、`tutorial` 16/16）。
+
+### 已知限制 / 明确不做
+
+- `locale/zh-TW.json` 的未译键补齐（变体继承是既定设计，缺键回落基础语言）、`[install].sharedir`（新功能或 2.0.0 决策项）、2.0.0 弃用面与兼容垫片（见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)）、本地残留文件清理（未被跟踪，不属仓库内容）、`test_file_watcher.cpp` 的 7 处环境相关 SKIP、`test_workspace.cpp:301` 的运行期 `WARN`——均不在本版（详见 [`plans/1.4.x/1.4.4.md`](plans/1.4.x/1.4.4.md) §3.8）。
+
+### 发布门槛
+
+- ⛔ ① 计划清单全部完成或明确收口 ② 公共 API **无破坏性变更**（唯一 CLI 相关改动是源码注释）③ 全量测试**零回归**（基线 1.4.3 发布态 1099/6348）④ 附加门槛：`check_man_sync.py` 通过、`groff` 4 页零告警、i18n 406 键三向一致、新增 docs-sync CI 步通过。
+
+---
+
 ## 1.4.3 (2026-09-19) — 离线 man 手册 + 防漂移闸门
 
 为 `ezmk` 补上 Unix 惯例的离线手册：手写 man 页 + 构建期防漂移校验 + 三渠道分发。**零 CLI 行为变更、零功能新增、公共 API 无破坏性变更**（唯一 CLI 相关改动是 `ezmk help` 末行新增一行 See also 文案）。

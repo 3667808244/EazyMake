@@ -209,7 +209,7 @@ end
 
 ### 2.3 要点 / 坑
 
-- **`on_macos` 只有 arm64**：Intel x64 一直没有 Release 资产（`macos-13` runner 在 GitHub free tier 长期不分配），Intel Mac 会得到 brew 的 "unsupported" 错误。不要加 x64 分支。
+- **`on_macos` 只有 arm64**：Intel x64 默认没有 Release 资产——`release.yml` 的 `macos-x64` job 用 `if: vars.ENABLE_MACOS_X64 == 'true'` 默认跳过（`macos-13` runner 在 GitHub free tier 长期不分配，常驻会让整个 Release run 长期 `queued`）；需要出 Intel 包时把仓库变量 `ENABLE_MACOS_X64` 设为 `true`。未开启时 Intel Mac 会得到 brew 的 "unsupported" 错误，不要给公式加 x64 分支。
 - **必须 `chdir dir`**：`release.yml` 打包的 tarball 根目录是平台 triple 名，不 chdir 会装不到 `ezmk`。
 - **sha256 用真实 digest**（见 §0），空字符串 = 公式不可用。
 - **资产内含 `man/`（1.4.3+）**：Linux / macOS tarball 打包时 `cp -r man`（Windows zip 不含），formula 必须写 `man1.install "man/ezmk.1"` + `man5.install "man/ezmk.toml.5"`（在 `chdir dir` 之内），否则 `brew install` 后 `man ezmk` 为空。**资产内容变化 → 每次发布都要按 §0 重取 digest 回填**。
@@ -280,7 +280,7 @@ sha256sums=('beeaade01036217cc0e6f26e7feca32394b54b4f54903b0d9692312a9f0560e0') 
 | 6 | 提交时漏签 CLA | PR 卡在 `Needs-CLA` | PR 上回 `@microsoft-github-policy-service agree` |
 | 7 | 以为 CI 全绿就完事 | 不知道还要等版主 | CI 绿后还有版主人工批准（几小时~几天） |
 | 8 | 查 check-runs 用 merge commit | 拿不到数据 | 用 PR 的 **head SHA**（`headRefOid`） |
-| 9 | Intel macOS 加进公式 | 误导用户 | 明确只在 arm64 下提供（缺 x64 资产） |
+| 9 | Intel macOS 加进公式 | 误导用户 | 明确只在 arm64 下提供（`macos-x64` job 默认跳过；要出 Intel 包先设 `ENABLE_MACOS_X64=true`） |
 | 10 | MSYS2 环境跑 makepkg 用错环境 | MSYS 环境无 g++/python | `export MSYSTEM=MINGW64`（MINGW64 环境） |
 | 11 | MINGW64 下依赖检查失败 | 报缺 `gcc`/`python`（msys 包名） | `makepkg -d`/`--nodeps`（MINGW 工具链已装） |
 | 12 | `pkgver` 指向未发布 tag | makepkg 拉不到源码 | `git archive` 本地同名 tarball 做功能验证，最终验证延后到 Release 后 |
