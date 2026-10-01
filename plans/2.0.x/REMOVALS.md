@@ -2,9 +2,9 @@
 
 > **位置说明**：本文件属 **2.0.x 系列目录**（[`plans/2.0.x/`](README.md)，按仓库系列目录惯例命名）；目录名是系列，具体版本的计划文档将命名为 `2.0.0.md` / `2.0.1.md` …。
 >
-> **状态：📝 草拟（2026-09-19）**——本文件**不是** 2.0.0 的完整计划，而是**移除清单 + 决策台**：1.x 期间所有"已对外宣布移除 / 已退化为兼容垫片 / 已静默无效"的接口在此登记，供 2.0.0 计划逐条消费。
+> **状态：📝 草拟（2026-09-19，2026-09-27 补登记 R-03/R-04）**——本文件**不是** 2.0.0 的完整计划，而是**移除清单 + 决策台**：1.x 期间所有"已对外宣布移除 / 已退化为兼容垫片 / 已静默无效"的接口在此登记，供 2.0.0 计划逐条消费。**R-03 / R-04 由 1.4.5（生成物格式统一）新增**：1.4.5 为"旧 lockfile / 旧注册表格式"与 `list_toml_path()` 加了兼容回退，按本清单的登记纪律一并登记，待 2.0.0 移除。
 >
-> **适用窗口**：破坏性变更仅在 `2.0.0` 引入（`CHANGES.md` §API Stability 的既有承诺）。1.4.x（含 1.4.4）**不放宽也不移除**其中任何一项。
+> **适用窗口**：破坏性变更仅在 `2.0.0` 引入（`CHANGES.md` §API Stability 的既有承诺）。1.4.x（含 1.4.4、1.4.5）**不放宽也不移除**其中任何一项；1.4.5 的方向相反——它**新增**回退（见 R-03/R-04），不构成提前破坏 1.x 兼容。
 >
 > **清单可信度**：每条都带"现状证据"（文件:行）与"联动面"，均来自 1.4.3 发布后的**全量遗留扫描**（代码弃用面 / 兼容垫片 / 静默无效配置三类）；`src/vendor/`（Lua、miniz、Catch2）不在范围内（第三方，含其上游 TODO，按 `CLAUDE.md` 不改）。
 
@@ -45,6 +45,28 @@
 | 联动 | **仓库内夹具** `pkg/ezmk-cc/`（被跟踪的 2 个文件：`ezmk.toml` + `utils/cc.lua`）与 `test/test_integration.cpp:256-302` 的使用例；`test/test_utils_perms.cpp:23` 仅把它当**路径字符串**（无 I/O，无需改，但可顺手更名）；`ezmk-official-utils` 打包与分发材料（若提及） |
 | 风险 | 夹具删除后，`ezmk utils <name>` 的"开发回退查找"（`<cwd>/pkg/*/utils/<name>.lua`）将无仓内样例 → 若该查找逻辑仍需测试，改用新的中立夹具 |
 
+### R-03 旧格式 lockfile / 仓库注册表读取回退（1.4.5 新增）
+
+| 项 | 内容 |
+|----|------|
+| 现状证据 | lockfile：`src/lockfile.cpp` 的 `load()` 双读（`ezmk.lock.json` 优先 → 旧 `ezmk.lock` TOML 回退）+ `save()` 写新删旧；注册表：`src/repo.cpp` 的 `load_repo_list()` / `save_repo_list()` 同构（`list.json` ↔ 旧 `list.toml`，三作用域） |
+| 承诺 | [`../1.4.x/1.4.5.md`](../1.4.x/1.4.5.md) §3.12：本回退**仅为兼容存量文件**而存在；1.4.5 的文档（`CHANGES.md` / `docs/{en,zh}/config_file.md`）明写"旧格式可读、首次写入自动迁移"，并**未承诺永久读取** |
+| 移除内容 | 两条旧格式解析路径（`toml::parse_file` 调用 + 旧字段读取）+ 旧路径查询（`lockfile::legacy_lockfile_path()` / `repo::legacy_repo_list_path()`）+ 双文件共存的陈旧警告 + 相关 i18n 键（`lock_legacy_detected` / `lock_legacy_stale` / `repo_list_legacy_detected`；`lock_migrated` / `repo_list_migrated` 随之失去意义）+ 迁移文案 |
+| 迁移写法 | 无需手动迁移：任何一次 1.4.5+ 的 `pkg install` / `repo add|remove|update` 已自动把文件改写为新名。2.0.0 起旧文件应给**明确迁移报错**（"检测到旧格式 …，请用 1.4.5+ 先迁移"），而不是静默当作"无 lockfile"（后者在 `deterministic = true` 下会退化成难懂的"缺少 lockfile"） |
+| 联动 | `check_i18n.py`（删键 → 键数回落）；`docs/{en,zh}/config_file.md` + `repo.md` + `tutorial/{en,zh}/packages/02-version-lockfile.md` 的"旧格式仍可读"表述；`test_lockfile.cpp` / `test_repo.cpp` 的旧 TOML 夹具（**注意**：`test_integration.cpp:938-941` 的旧 TOML 夹具是 1.4.5 双读路径的覆盖，删除回退时必须一并改写为负向用例） |
+| 风险 | 用户在 1.4.5~1.5.x 期间生成的旧格式文件（例如长期未 `pkg install` 的项目）在 2.0.0 后会被拒读 → 必须以**明确报错 + 迁移指引**落地（见「单条移除的执行清单」第 1 步），并保证 1.4.5 的自动迁移在 2.0.0 之前有足够长的生效窗口 |
+
+### R-04 `repo::list_toml_path()` 公共别名（1.4.5 新增）
+
+| 项 | 内容 |
+|----|------|
+| 现状证据 | `include/ezmk/repo.hpp`（1.4.5 起保留，转发到 `legacy_repo_list_path()`）；仓库内消费点：`test/test_repo.cpp:25,35,45` |
+| 承诺 | [`../1.4.x/1.4.5.md`](../1.4.x/1.4.5.md) §3.5/§5：保留旧名以避免公共头破坏性变更（1.4.5 是补丁版，不属破坏窗口）；删除归 2.0.0 |
+| 移除内容 | `repo::list_toml_path()` 声明与实现；测试改用 `repo_list_path()` / `legacy_repo_list_path()` |
+| 迁移写法 | `repo_list_path(scope)`（当前生效路径 = `list.json`）或 `legacy_repo_list_path(scope)`（旧路径，通常只用于迁移检测） |
+| 联动 | `include/ezmk/repo.hpp` + `src/repo.cpp` 注释；`test/test_repo.cpp`；`.claude/skills/ezmk-repo`（若提及函数名） |
+| 风险 | 低——该函数是路径查询工具，仓库外消费方稀少；与 R-03 同批处理可共享一次回归 |
+
 ## 3 需在 2.0.0 计划中拍板的决策项
 
 > 每项给"选项 + 倾向"，**结论必须在 2.0.0 设计文档里落定**再开工。
@@ -81,12 +103,12 @@
 | 教程 | `tutorial/{en,zh}/**` | 同上 |
 | 顶层文档 | `README.md`、`README_ZH.md`、`CHANGES.md`、`CLAUDE.md` | README 速览与 CLAUDE 的"快速参考"若列旧写法需改 |
 | skills | `.claude/skills/*`（尤其 `ezmk-codebase` 的 CLI/配置面、`ezmk-user-*`） | 与 `docs/` 同步；`CLAUDE.md` 的 skill 表若受影响也改 |
-| 测试 | `test/*.cpp`、仓库内夹具 `pkg/ezmk-cc/` | 断言基线随实际变化更新，负向用例必须新增 |
+| 测试 | `test/*.cpp`、仓库内夹具 `pkg/ezmk-cc/` | 断言基线随实际变化更新，负向用例必须新增；**旧格式夹具**（1.4.5 的双读覆盖，含 `test_integration.cpp:938-941`）在 R-03 落地时须转为"旧文件 → 明确报错"的负向用例 |
 | 分发材料 | `publish/**`、`install.sh` / `install.ps1`（若提及旧写法）、Release notes 模板 | wings/pacman/homebrew 一般不涉及，但 release notes 需含迁移指南链接 |
 
 ## 6 验收清单（2.0.0 发布前逐条勾）
 
-- [ ] 被删符号在仓库内**零残留**（建议 grep 模式：`utils cc`、`test_flags_deprecated`、`cfg.test.flags`、`include_dir`（单数）、`run_executable(int)`、`sharedir`、`"sha256"`（lockfile 别名，视 D-01 结论））
+- [ ] 被删符号在仓库内**零残留**（建议 grep 模式：`utils cc`、`test_flags_deprecated`、`cfg.test.flags`、`include_dir`（单数）、`run_executable(int)`、`sharedir`、`"sha256"`（lockfile 别名，视 D-01 结论）、`list_toml_path`、`legacy_lockfile_path`、`legacy_repo_list_path`、`ezmk.lock"`（旧文件名，排除 `ezmk.lock.json`）、`list.toml`）
 - [ ] `python scripts/check_i18n.py` 通过（键数变化已在脚本输出中体现）
 - [ ] `python scripts/check_man_sync.py` 通过（**BASELINE 已按新规模更新**，非"把脚本改松"）
 - [ ] `groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警
@@ -98,7 +120,8 @@
 
 ## 7 与 1.4.x 的边界（硬约束）
 
-- 1.4.x（含 1.4.4）**不放宽、不移除**任何弃用面，也不删除本节登记的垫片。
+- 1.4.x（含 1.4.4、1.4.5）**不放宽、不移除**任何弃用面，也不删除本节登记的垫片。
+- **1.4.5 的方向是"新增"回退**（R-03 旧格式读取、R-04 `list_toml_path()` 别名）——与"不移除垫片"同向，不构成提前破坏 1.x 兼容；它们与本节其余条目一样，只在 2.0.0 被清理。
 - **联动红灯是设计意图**：删 `[test].flags` / `ezmk utils cc` 会让 `check_man_sync.py` 与 `check_i18n.py` 立刻失败——2.0.0 计划必须把"同步 man / i18n / 测试夹具 / 文档"写成显式交付项，而不是事后补。
 - 若 2.0.0 采用 D-09(a)（移除键 fail-fast），1.4.x 期间**不要**提前引入该报错（否则等于提前破坏 1.x 兼容）。
 
@@ -115,3 +138,6 @@
 | `[utils.permissions]` 缺省 | 不限制（有一次性告警） | 按 D-05（倾向改为缺省拒绝） | 显式声明 `read`/`write`/`run` |
 | 旧式 shell 钩子 | 打开编辑器审查后执行 | 按 D-06（倾向显式 opt-in） | 迁移为 Lua 钩子（沙箱内 `ezmk.*` API） |
 | `[install].sharedir` | 可写但**不生效** | 按 D-07：实现 或 移除 | 取决于结论 |
+| 旧格式 `ezmk.lock`（TOML） | 可读（1.4.5 起回退读取 + 自动迁移） | 移除（R-03，明确迁移报错） | 跑一次 1.4.5+ 的 `pkg install` → `ezmk.lock.json` |
+| 旧格式 `.ezmk/repo/list.toml`（三作用域） | 可读（同上） | 移除（R-03） | 跑一次 `repo add/remove/update` → `list.json`（或重新 `repo add`） |
+| `repo::list_toml_path()` | 保留（返回旧路径） | 移除（R-04） | `repo_list_path()` / `legacy_repo_list_path()` |
