@@ -1,6 +1,6 @@
 # EazyMake 1.4.5 执行计划
 
-> **状态：✅ 阶段一~六完成（2026-09-27）—— 阶段七（正式发布）待用户确认后执行**。本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项，但已**新增**两条回退供其登记消费 R-03/R-04）。
+> **状态：✅ 已发布（tag `v1.4.5`，2026-10-02）—— 阶段一~七全部完成**。本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项，但已**新增**两条回退供其登记消费 R-03/R-04）。
 >
 > 详细设计：[**1.4.5.md**](plans/1.4.x/1.4.5.md)。主题：**生成物格式统一**——把两个「ezmk 全权生成、用户不该手改」的文件从 TOML 改为 JSON：`ezmk.lock` → `ezmk.lock.json`、`list.toml` → `list.json`（三作用域）。旧格式**继续可读**，首次成功写入时**自动迁移**（写新 → 删旧）。
 >
@@ -97,10 +97,10 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段七：正式发布（workflow §3，对照 1.4.4 流程）
 
-- [ ] 版本定稿：`build.sh` fallback + `include/ezmk/version.hpp` → 1.4.5；4 页 `.TH` 日期 = 发布日期；`CHANGES.md` 日期回填
-- [ ] tag `v1.4.5`（annotated）+ GitHub Release（notes 取 CHANGES 1.4.5 节）+ 产物核对（linux/macos tar 含 `man/` 4 页、Windows zip 不含；digest 与 `assets[].digest` 一致；`macos-x64` job 预期 skipped）
-- [ ] 三渠道：Homebrew（本地副本 + tap，真实 digest）/ pacman（`PKGBUILD` pkgver + 源码 tarball digest + `makepkg -fd` 出包）/ winget（split manifest + PR）
-- [ ] 发布记录：`CHANGES.md`「发布」小节 + `publish/release-notes-1.4.5.md` + 索引状态
+- [x] 版本定稿（commit `e29ae82`）：`build.sh` fallback + `include/ezmk/version.hpp` → 1.4.5（实测 `./build/ezmk version` → `EazyMake 1.4.5`）；4 页 `.TH` 日期 = **2026-10-02**；`CHANGES.md` 日期回填；`docs/{en,zh}/config_file.md` 的 `EZMK_VERSION` 与 `README{,_ZH}.md` 的 winget `-Version` 示例同步 1.4.5；新增 `publish/release-notes-1.4.5.md`；定稿后全量 **1113/6491 零失败**
+- [x] tag `v1.4.5`（annotated，tag 对象 `5ee6829`）+ GitHub Release（notes 取 `publish/release-notes-1.4.5.md`）：`release.yml` run **`36993548272` success**（`version` / `linux-x64` / `macos-arm64` / `windows-x64` 全绿，`macos-x64` **skipped**，与 1.4.4 一致）；7 资产全量下载核对——digest 与 `assets[].digest` **逐一一致**、两个 `.sha256` 边车与对应 digest 一致；linux/macos tar 含 `man/` 4 页（groff 零告警）且 ELF 版本串 `1.4.5`、Windows zip 仅 `_ezmk` + 两个 exe（不含 `man/`）、下载的 `ezmk.exe version` → `EazyMake 1.4.5`
+- [x] 三渠道：**Homebrew** tap `3667808244/homebrew-eazymake` commit `09b304c`（macos-arm64 `4ded2624…` / linux-x64 `7e922199…` 真实 digest，仓库副本同步）/ **pacman** `publish/arch/PKGBUILD` → v1.4.5（源码 digest `1ca961fc…`，codeload == archive）+ MSYS2 MINGW64 `makepkg -fd` 出包 `eazymake-1.4.5-1-x86_64.pkg.tar.zst`（sha256 `25bbabf7…`，`sha256sums` 通过，包内 `ezmk.exe version` → 1.4.5、man 4 页零告警、`_ezmk` 落位）/ **winget** split manifests（`publish/winget/e/ezmk/1.4.5/`）`winget validate` 通过 + PR [`microsoft/winget-pkgs#445627`](https://github.com/microsoft/winget-pkgs/pull/445627)（`license/cla` pass；`07/08/09` 长跑 check 与版主审批为发布后跟进项）
+- [x] 发布记录：`CHANGES.md` 1.4.5「发布」小节 + [`publish/release-notes-1.4.5.md`](publish/release-notes-1.4.5.md) + `plans/1.4.x/README.md` / `plans/README.md` / 根 `plan.md` 状态更新（1.4.5 移入「已完成」，mermaid 节点 `v145p` → done）
 
 ---
 

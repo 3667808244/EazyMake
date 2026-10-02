@@ -68,6 +68,21 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 - ⛔ ① 阶段清单全部完成或明确收口 ② 公共 API **无破坏性变更**（纯新增 + 生成物格式）③ 全量测试**零回归**（1113/6491，基线 1099/6349）④ 附加门槛：`check_man_sync.py` / groff 4 页 / i18n 412 键 / docs-sync 全通过。
 
+### 发布（2026-10-02，tag `v1.4.5`）
+
+- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.5（实测 `./build/ezmk version` → `EazyMake 1.4.5`）；4 页 `.TH` 日期 = 2026-10-02；`docs/{en,zh}/config_file.md` 的 `EZMK_VERSION` 示例与 `README.md` / `README_ZH.md` 的 winget `-Version` 示例同步 1.4.5（对照 1.4.4 发布 commit 先例）。定稿 commit `e29ae82`，定稿后全量 `test-all` **1113 / 6491 零失败**。
+- **tag / Release**：annotated tag `v1.4.5`（tag 对象 `5ee6829`）已推送；GitHub Release 已发布，`release.yml`（run `36993548272`）**success**——`version` / `linux-x64` / `macos-arm64` / `windows-x64` 全绿，`macos-x64` **skipped**（预期，未设 `ENABLE_MACOS_X64`），产出 **7 个资产**。
+- **资产核对**（`gh release download` 全量下载后逐字节核对，与 `assets[].digest` **全部一致**）：
+  - `ezmk-windows-x64.zip` `e7bb5b55a78342461d047daf8cdc8bb18761915d4e12dd7a3299808e0c17981b`（4890866 字节）
+  - `ezmk-linux-x64.tar.gz` `7e922199f0be9eed1e6bb8425dac7bfb7f935a5f71f42de29454ef5c77865f11`（5320970）
+  - `ezmk-macos-arm64.tar.gz` `4ded2624115bce2d38abf47061f4b209d0492f90093300f86e882f9efdffa4d5`（2754014）
+  - `ezmk.exe` `631f9db3ecbfc2c4db41431c37e0915183aa4ba02183c7e4e8d2815ef8ddd575` / `ezmk-lua.exe` `8c708b0aed8e63843d3a6e69c8db410cff219799210bc279e1680d1fc9cb44d1`，两个 `.sha256` 边车内容与对应 digest 一致
+  - **产物内容核对**：linux / macos 压缩包含 `ezmk`、`ezmk-lua`、`_ezmk` 与 **`man/` 4 页**（tar 内 `groff -man -Tutf8 -z -ww` 零告警；linux ELF 版本串 `1.4.5`）；**Windows zip 仅 `_ezmk` + 两个 exe，不含 `man/`**；下载的 `ezmk.exe version` → `EazyMake 1.4.5`
+- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.5（源码 tarball 真实 digest `1ca961fc4d09a35ed94053d2e6c909e03384614f05698fe81497d425ef30452a`，1982839 字节；codeload 与 archive 两端点字节一致）；本机 MSYS2 MINGW64 `makepkg -fd` 出包 `eazymake-1.4.5-1-x86_64.pkg.tar.zst`（sha256 `25bbabf76c05839be84e8492681982da6571870eb620b46c83d4d439ef65ec22`，`sha256sums` 校验通过），包内 `usr/bin/{ezmk.exe,ezmk-lua.exe}` / `usr/share/man/man{1,5}/` 4 页（makepkg 自动 gzip，groff 零告警）/ `usr/share/zsh/site-functions/_ezmk` 落位，包内 `ezmk.exe version` → **1.4.5**。
+- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.5（commit `09b304c`；macos-arm64 `4ded2624…` / linux-x64 `7e922199…` 真实 digest，含 `man1.install` / `man5.install`），仓库副本 `publish/homebrew/ezmk.rb` 同步且内容一致；`brew install` 真机冒烟需 macOS，本机为 Windows，未执行（与 1.4.x 前例一致）。
+- **winget**：split manifests（`publish/winget/e/ezmk/1.4.5/`，`InstallerType: zip` + `NestedInstallerType: portable`，`InstallerSha256` = `e7bb5b55…`）本机 `winget validate` 通过（「清单验证成功」），已提交 `microsoft/winget-pkgs#445627`——`license/cla` **pass**、01/02/03/05/06 五项 pass，`07 Installers Scan` / `08 Installation Validation` / `09 Installer Metadata Validation` 为长跑项（约 5~40 分钟），版主审批为发布后跟进项，不阻塞发布。
+- **发布记录**：Release notes 正文见 [`publish/release-notes-1.4.5.md`](publish/release-notes-1.4.5.md)。
+
 ### 明确不做
 
 - `index.toml`（仓库侧索引，作者手写、生态已固化）、`ezmk.toml` / `ezmk-workspace.toml`（人写配置保留 TOML，`toml++` 依赖不退役）。
