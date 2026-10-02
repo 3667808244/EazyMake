@@ -50,9 +50,9 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段三：原子写 helper 上提（M-05，对应设计 §3.5）
 
-- [ ] `include/ezmk/util.hpp` / `src/util.cpp`：`util::atomic_write_text()` 公共 helper（**已在阶段一落地**——`file_write` 之上加 tmp → `atomic_rename`，失败返回 false 并清理临时文件）
-- [ ] `src/workspace.cpp:521` 的文件内实现改为调用公共版本（`ezmk-workspace.toml` 写入行为零变化）——本阶段仅剩这一项
-- [ ] 复核两个新写入器（lockfile / 注册表）全部走该 helper；回归零失败
+- [x] `include/ezmk/util.hpp` / `src/util.cpp`：`util::atomic_write_text()` 公共 helper（**已在阶段一落地**——`file_write` 之上加 tmp → `atomic_rename`，失败返回 false 并清理临时文件）
+- [x] `src/workspace.cpp:521` 的文件内实现改为调用公共版本（更名为 `write_workspace_config`，保留"用户文件写入失败必须响亮中止"的 `util::fatal` 语义；`ezmk-workspace.toml` 的文本级拼接与二进制写行为零变化）
+- [x] 复核两个新写入器（lockfile / 注册表）全部走该 helper；回归零失败（**1111 用例 / 6452 断言**，与阶段二持平——纯重构）
 
 ### 阶段四：i18n + man + 文档 + skill（M-07/M-10，对应设计 §3.8/§3.11）
 

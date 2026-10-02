@@ -515,17 +515,17 @@ std::string member_compare_key(const std::string& p) {
     return s;
 }
 
-// Atomic text write: temp file + util::atomic_rename (crash-safe). Binary
-// mode — text mode would translate '\n' → '\r\n' on Windows and corrupt a
+// Atomic text write of the workspace config — a USER-authored file (not a
+// generated artifact), so a failed write must abort loudly rather than let the
+// caller believe the merge succeeded.
+// 1.4.5: the temp → rename recipe itself moved into util::atomic_write_text
+// (shared with the lockfile / repo registry writers); binary mode there too —
+// text mode would translate '\n' → '\r\n' on Windows and corrupt a
 // CRLF-preserving splice into '\r\r\n'.
-void atomic_write_text(const fs::path& target, const std::string& content) {
-    auto tmp = target;
-    tmp += ".tmp";
-    {
-        std::ofstream of(tmp, std::ios::binary);
-        of << content;
+void write_workspace_config(const fs::path& target, const std::string& content) {
+    if (!util::atomic_write_text(target, content)) {
+        util::fatal(std::string("failed to write: ") + target.string());
     }
-    util::atomic_rename(tmp, target);
 }
 
 // Leading whitespace of a line.
@@ -810,7 +810,7 @@ void write_workspace_file(const fs::path& root,
         content += util::toml_quote(members[i]);
     }
     content += "]\n";
-    atomic_write_text(root / "ezmk-workspace.toml", content);
+    write_workspace_config(root / "ezmk-workspace.toml", content);
 }
 
 void update_workspace_file(const fs::path& root,
@@ -823,7 +823,7 @@ void update_workspace_file(const fs::path& root,
     // read_workspace_members), so a syntax error here is impossible.
     std::string updated =
         replace_members_in_text(util::file_read(file), file.string(), members);
-    atomic_write_text(file, updated);
+    write_workspace_config(file, updated);
 }
 
 } // namespace ezmk::workspace
