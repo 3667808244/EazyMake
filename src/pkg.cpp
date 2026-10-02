@@ -946,7 +946,8 @@ fs::path compile_package(const fs::path& pkg_dir,
     // 1.2.0-dev.7: lockfile resolved against the located project root
     if (cfg.compile.deterministic) {
         auto root = util::locate_project_root(fs::current_path());
-        auto lock_path = (root.value_or(fs::current_path())) / "ezmk.lock";
+        // 1.4.5: hash the active lockfile (shared with build.cpp / cache.cpp)
+        auto lock_path = lockfile::active_path(root.value_or(fs::current_path()));
         if (util::file_exists(lock_path)) {
             cur_sig += ":" + crypto::sha256_file(lock_path);
         }

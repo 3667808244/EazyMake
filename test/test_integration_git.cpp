@@ -221,12 +221,12 @@ TEST_CASE("integration: pkg install git URL — lockfile records source=git + co
     INFO("stdout: " << r.out);
     REQUIRE(r.exit_code == 0);
 
-    // ezmk.lock records the git provenance: source = "git" + the pinned commit.
-    fs::path lock = proj / "ezmk.lock";
+    // ezmk.lock.json records the git provenance: source = "git" + the pinned commit.
+    fs::path lock = proj / "ezmk.lock.json";
     REQUIRE(fs::exists(lock));
     std::string lock_text = file_read(lock);
-    REQUIRE(lock_text.find("source = \"git\"") != std::string::npos);
-    REQUIRE(lock_text.find("commit = \"" + fx.sha_a + "\"") != std::string::npos);
+    REQUIRE(lock_text.find("\"source\": \"git\"") != std::string::npos);
+    REQUIRE(lock_text.find("\"commit\": \"" + fx.sha_a + "\"") != std::string::npos);
 }
 
 TEST_CASE("integration: pkg install git URL — --locked re-clones the recorded commit (1.4.1)", "[integration][1.4.1]") {
@@ -274,12 +274,12 @@ TEST_CASE("integration: pkg install git URL — --locked rejects a tampered comm
 
     // Tamper: replace the recorded commit with a bogus SHA — simulates a
     // force-pushed branch/tag whose recorded commit no longer exists upstream.
-    fs::path lock = proj / "ezmk.lock";
+    fs::path lock = proj / "ezmk.lock.json";
     std::string lock_text = file_read(lock);
     std::string bogus(40, '0');
-    auto pos = lock_text.find("commit = \"" + fx.sha_a + "\"");
+    auto pos = lock_text.find("\"commit\": \"" + fx.sha_a + "\"");
     REQUIRE(pos != std::string::npos);
-    lock_text.replace(pos + 10, fx.sha_a.size(), bogus);
+    lock_text.replace(pos + 11, fx.sha_a.size(), bogus);   // past `"commit": "`
     file_write(lock, lock_text);
 
     ProcResult r2 = run_ezmk(

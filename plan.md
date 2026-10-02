@@ -31,13 +31,13 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段一：lockfile JSON 化（M-01/M-02/M-04，对应设计 §3.1~§3.6）
 
-- [ ] `include/ezmk/lockfile.hpp` / `src/lockfile.cpp`：新增 `lockfile_path(proj_root)`（= `ezmk.lock.json`）、`legacy_lockfile_path(proj_root)`（= `ezmk.lock`）、`active_path(proj_root)`（JSON 优先 → 旧文件 → 默认新名）；`load` / `save` / `verify` / `depends_changed` / `direct_dep_specs` **签名不变**
-- [ ] `save()` 改为 `nlohmann::json` 序列化 + `dump(2)`：`metadata` 对象（`version` 仍 **1**、`generated_by` / `generated_at` / `toolchain` / `toolchain_version` / `direct_deps`）+ `packages` 数组，键名与旧 TOML **逐字一致**（含 `sha256` 别名继续双写）
-- [ ] 空字段策略沿用旧写入器：`lib_sha256` / `archive_sha256` / `commit` 为空**不写出**；`direct_deps` / `dependencies` 空写 `[]`
-- [ ] `save()` 改用原子写（阶段三的 `util::atomic_write_text`；若阶段三先行则此处直接依赖），**新文件写入成功后**才 `fs::remove` 旧文件（best-effort，失败仅警告）；`--no-lock` / 非项目作用域行为不变
-- [ ] `load()` 双读：`ezmk.lock.json` → JSON 路径；否则旧 `ezmk.lock` → 保留 TOML 回退解析（字段读取代码不动）+ 进程内一次性 `lock_legacy_detected`；两文件共存 → JSON 生效 + `lock_legacy_stale` 警告；解析失败仍为"警告 + 当作无 lockfile"
-- [ ] **缓存签名三处同改**（设计 §3.6，本版最易踩的坑）：`src/build.cpp:1035`、`src/cache.cpp:317`、`src/pkg.cpp:949` 全部改用 `lockfile::active_path(proj_root)`，保存侧与校验侧算法逐字节一致（对照 1.4.2 的同类缺陷 `CHANGES.md:430`）
-- [ ] 回归：全量零失败（基线 1099/6349）
+- [x] `include/ezmk/lockfile.hpp` / `src/lockfile.cpp`：新增 `lockfile_path(proj_root)`（= `ezmk.lock.json`）、`legacy_lockfile_path(proj_root)`（= `ezmk.lock`）、`active_path(proj_root)`（JSON 优先 → 旧文件 → 默认新名）；`load` / `save` / `verify` / `depends_changed` / `direct_dep_specs` **签名不变**
+- [x] `save()` 改为 `nlohmann::json` 序列化 + `dump(2)`：`metadata` 对象（`version` 仍 **1**、`generated_by` / `generated_at` / `toolchain` / `toolchain_version` / `direct_deps`）+ `packages` 数组，键名与旧 TOML **逐字一致**（含 `sha256` 别名继续双写）
+- [x] 空字段策略沿用旧写入器：`lib_sha256` / `archive_sha256` / `commit` 为空**不写出**；`direct_deps` / `dependencies` 空写 `[]`
+- [x] `save()` 改用原子写（**注**：`util::atomic_write_text` 本阶段即落地——旧写入器是直写 `util::file_write`，原子写是本节验收的一部分；阶段三只剩 `workspace.cpp` 收敛），**新文件写入成功后**才 `fs::remove` 旧文件（best-effort，失败仅警告）；`--no-lock` / 非项目作用域行为不变
+- [x] `load()` 双读：`ezmk.lock.json` → JSON 路径；否则旧 `ezmk.lock` → 保留 TOML 回退解析（字段读取代码不动）+ `lock_legacy_detected` 提示；两文件共存 → JSON 生效 + `lock_legacy_stale` 警告；解析失败仍为"警告 + 当作无 lockfile"
+- [x] **缓存签名三处同改**（设计 §3.6，本版最易踩的坑）：`src/build.cpp:1035`、`src/cache.cpp:317`、`src/pkg.cpp:949` 全部改用 `lockfile::active_path(proj_root)`，保存侧与校验侧算法逐字节一致（对照 1.4.2 的同类缺陷 `CHANGES.md:430`）
+- [x] 回归：全量零失败（**1106 用例 / 6412 断言**，4 跳过；基线 1099/6349 → +7 用例 / +63 断言）
 
 ### 阶段二：仓库注册表 JSON 化（M-03/M-08，对应设计 §3.7）
 
@@ -50,9 +50,9 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段三：原子写 helper 上提（M-05，对应设计 §3.5）
 
-- [ ] `include/ezmk/util.hpp` / `src/util.cpp`：新增 `util::atomic_write_text(const fs::path&, std::string_view)`（tmp → rename，失败返回 false / 抛错口径与既有 helper 一致）
-- [ ] `src/workspace.cpp:521` 的文件内实现改为调用公共版本（`ezmk-workspace.toml` 写入行为零变化）
-- [ ] 两个新写入器（lockfile / 注册表）全部走该 helper；回归零失败
+- [ ] `include/ezmk/util.hpp` / `src/util.cpp`：`util::atomic_write_text()` 公共 helper（**已在阶段一落地**——`file_write` 之上加 tmp → `atomic_rename`，失败返回 false 并清理临时文件）
+- [ ] `src/workspace.cpp:521` 的文件内实现改为调用公共版本（`ezmk-workspace.toml` 写入行为零变化）——本阶段仅剩这一项
+- [ ] 复核两个新写入器（lockfile / 注册表）全部走该 helper；回归零失败
 
 ### 阶段四：i18n + man + 文档 + skill（M-07/M-10，对应设计 §3.8/§3.11）
 

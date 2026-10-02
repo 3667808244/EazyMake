@@ -1031,8 +1031,10 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
                                                     st.lang.std_flag,
                                                     st.stdlib, st.use_pic);
     // 1.1.0: deterministic build — include lockfile hash in signature
+    // 1.4.5: hash the ACTIVE lockfile (ezmk.lock.json, else the legacy ezmk.lock)
+    // so the save side and cache.cpp's check side always hash the same file.
     if (st.compile_cfg.deterministic) {
-        auto lock_path = st.proj_root / "ezmk.lock";
+        auto lock_path = lockfile::active_path(st.proj_root);
         if (util::file_exists(lock_path)) {
             cur_sig += ":" + crypto::sha256_file(lock_path);
         }

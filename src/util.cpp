@@ -295,6 +295,25 @@ void atomic_rename(const fs::path& from, const fs::path& to) {
     }
 }
 
+// 1.4.5: crash-safe text write — same temp → atomic_rename recipe the cache
+// (record.json), compile_commands.json and the .vscode trio already use, lifted
+// into one place for the generated TOML→JSON artifacts (lockfile, repo registry).
+bool atomic_write_text(const fs::path& p, std::string_view content) {
+    auto tmp = p;
+    tmp += ".tmp";
+    if (!file_write(tmp, content)) return false;  // file_write creates parent dirs
+    try {
+        atomic_rename(tmp, p);
+    } catch (const std::exception&) {
+        // atomic_rename already reported why; drop the temp so a failed write
+        // cannot leave a file that looks like a valid artifact.
+        std::error_code ec;
+        fs::remove(tmp, ec);
+        return false;
+    }
+    return true;
+}
+
 // 1.1.2 C5: TOML double-quoted string literal with escaping.
 std::string toml_quote(std::string_view s) {
     std::string r;

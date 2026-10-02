@@ -4,6 +4,7 @@
 #include "ezmk/pkg.hpp"
 #include "ezmk/util.hpp"
 #include "toml.hpp"
+#include "nlohmann_json.hpp"
 
 #include <algorithm>
 #include <set>
@@ -13,21 +14,32 @@
 namespace ezmk::lockfile {
 
 // ===================================================================
-// Lockfile path
+// Lockfile paths (1.4.5: JSON is the written format; TOML is read-only legacy)
 // ===================================================================
 
-static fs::path lockfile_path(const fs::path& proj_root) {
-    return proj_root / "ezmk.lock";
+fs::path lockfile_path(const fs::path& proj_root) {
+    return proj_root / "ezmk.lock.json";
+}
+
+fs::path legacy_lockfile_path(const fs::path& proj_root) {
+    return proj_root / "ezmk.lock";   // pre-1.4.5 TOML — read-only
+}
+
+fs::path active_path(const fs::path& proj_root) {
+    auto json_path = lockfile_path(proj_root);
+    if (util::file_exists(json_path)) return json_path;
+    auto legacy = legacy_lockfile_path(proj_root);
+    if (util::file_exists(legacy)) return legacy;
+    return json_path;   // nothing on disk yet → the write target
 }
 
 // ===================================================================
 // Load / Save
 // ===================================================================
 
-std::optional<config::Lockfile> load(const fs::path& proj_root) {
-    auto path = lockfile_path(proj_root);
-    if (!util::file_exists(path)) return std::nullopt;
-
+// 1.4.5: pre-1.4.5 TOML reader — kept as the migration path for projects whose
+// lockfile was written by ezmk <= 1.4.4. Removed in 2.0.0 (REMOVALS R-03).
+static std::optional<config::Lockfile> parse_toml(const fs::path& path) {
     try {
         auto root = toml::parse_file(path.string());
         config::Lockfile lf;
@@ -99,69 +111,162 @@ std::optional<config::Lockfile> load(const fs::path& proj_root) {
     }
 }
 
+// 1.4.5: JSON reader — the format ezmk writes from 1.4.5 on. Field-by-field
+// identical to parse_toml (including the default values), so a lockfile is
+// format-independent once loaded; test_lockfile.cpp pins that equivalence.
+static std::optional<config::Lockfile> parse_json(const fs::path& path) {
+    try {
+        auto j = nlohmann::json::parse(util::file_read(path));
+        if (!j.is_object()) {
+            util::warn(std::string("failed to parse ") + path.filename().string() +
+                       ": expected a JSON object");
+            return std::nullopt;
+        }
+
+        config::Lockfile lf;
+
+        // metadata
+        if (auto meta = j.find("metadata"); meta != j.end() && meta->is_object()) {
+            lf.version = meta->value("version", 1);
+            lf.generated_by = meta->value("generated_by", "");
+            lf.generated_at = meta->value("generated_at", "");
+            lf.toolchain = meta->value("toolchain", "");
+            lf.toolchain_version = meta->value("toolchain_version", "");
+            if (auto dd = meta->find("direct_deps"); dd != meta->end() && dd->is_array()) {
+                for (auto& v : *dd) {
+                    if (v.is_string()) lf.direct_deps.push_back(v.get<std::string>());
+                }
+            }
+        }
+
+        // packages
+        if (auto pkgs = j.find("packages"); pkgs != j.end() && pkgs->is_array()) {
+            for (auto& tbl : *pkgs) {
+                if (!tbl.is_object()) continue;
+
+                config::LockedPackage pkg;
+                pkg.name = tbl.value("name", "");
+                pkg.version = tbl.value("version", "");
+                pkg.source = tbl.value("source", "");
+                pkg.source_url = tbl.value("source_url", "");
+                // 1.4.2 F-04: a pre-1.4.2 lockfile has only `sha256` (the artifact
+                // hash) → it is the legacy alias of lib_sha256; archive_sha256
+                // stays empty (nothing to verify the install archive against).
+                pkg.sha256 = tbl.value("sha256", "");
+                pkg.archive_sha256 = tbl.value("archive_sha256", "");
+                pkg.lib_sha256 = tbl.value("lib_sha256", "");
+                // 1.4.1: optional commit pin for git sources — absent in old
+                // lockfiles → empty string, normalizes fine.
+                pkg.commit = tbl.value("commit", "");
+                pkg.type = tbl.value("type", "static");
+                pkg.scope = tbl.value("scope", "user");
+                pkg.platform = tbl.value("platform", "");
+
+                if (auto deps = tbl.find("dependencies");
+                    deps != tbl.end() && deps->is_array()) {
+                    for (auto& v : *deps) {
+                        if (v.is_string()) pkg.dependencies.push_back(v.get<std::string>());
+                    }
+                }
+
+                if (!pkg.name.empty()) {
+                    lf.packages.push_back(std::move(pkg));
+                }
+            }
+        }
+
+        return lf;
+    } catch (const std::exception& e) {
+        util::warn(std::string("failed to parse ") + path.filename().string() +
+                   ": " + e.what());
+        return std::nullopt;
+    }
+}
+
+std::optional<config::Lockfile> load(const fs::path& proj_root) {
+    auto json_path = lockfile_path(proj_root);
+    auto legacy = legacy_lockfile_path(proj_root);
+
+    if (util::file_exists(json_path)) {
+        // Both files on disk: the JSON one wins, the TOML one is stale (it is
+        // cleaned up by the next save()). Never merge, never pick silently.
+        if (util::file_exists(legacy)) {
+            util::warn(ezmk::i18n::I18nKey::lock_legacy_stale);
+        }
+        return parse_json(json_path);
+    }
+
+    if (util::file_exists(legacy)) {
+        // Pre-1.4.5 lockfile: read it (so upgrades are transparent) and tell the
+        // user it will be rewritten as ezmk.lock.json by the next write.
+        util::info(ezmk::i18n::I18nKey::lock_legacy_detected);
+        return parse_toml(legacy);
+    }
+
+    return std::nullopt;
+}
+
 void save(const fs::path& proj_root, const config::Lockfile& lf) {
     auto path = lockfile_path(proj_root);
 
-    std::ostringstream out;
-
-    out << "# ezmk.lock — AUTO-GENERATED by ezmk. Do not edit manually.\n";
-    out << "# Generated by: " << lf.generated_by << "\n\n";
-
-    out << "[metadata]\n";
-    out << "version = " << lf.version << "\n";
-    out << "generated_by = " << util::toml_quote(lf.generated_by) << "\n";
-    out << "generated_at = " << util::toml_quote(lf.generated_at) << "\n";
-    out << "toolchain = " << util::toml_quote(lf.toolchain) << "\n";
-    out << "toolchain_version = " << util::toml_quote(lf.toolchain_version) << "\n";
+    // 1.4.5: JSON writer (was hand-rolled TOML string concatenation). The shape
+    // mirrors the pre-1.4.5 TOML one-for-one (metadata object + packages array,
+    // identical key names) so the migration can be verified field-by-field, and
+    // escaping is the library's job instead of a per-interpolation discipline.
+    nlohmann::json j;
+    auto& meta = j["metadata"] = nlohmann::json::object();
+    meta["version"] = lf.version;
+    meta["generated_by"] = lf.generated_by;
+    meta["generated_at"] = lf.generated_at;
+    meta["toolchain"] = lf.toolchain;
+    meta["toolchain_version"] = lf.toolchain_version;
     // 1.1.2 C3: root project's direct deps (name or name@spec), sorted
-    out << "direct_deps = [";
-    for (size_t i = 0; i < lf.direct_deps.size(); ++i) {
-        if (i > 0) out << ", ";
-        out << util::toml_quote(lf.direct_deps[i]);
-    }
-    out << "]\n\n";
+    auto& direct = meta["direct_deps"] = nlohmann::json::array();
+    for (auto& d : lf.direct_deps) direct.push_back(d);
 
-    // 1.1.2 C5: package name/version/url are user-controlled — toml_quote all
-    // interpolated strings so a `"` or newline cannot corrupt/inject ezmk.lock.
+    auto& pkgs = j["packages"] = nlohmann::json::array();
     for (auto& pkg : lf.packages) {
-        out << "[[packages]]\n";
-        out << "name = " << util::toml_quote(pkg.name) << "\n";
-        out << "version = " << util::toml_quote(pkg.version) << "\n";
-        out << "source = " << util::toml_quote(pkg.source) << "\n";
-        out << "source_url = " << util::toml_quote(pkg.source_url) << "\n";
-        out << "sha256 = " << util::toml_quote(pkg.sha256) << "\n";
+        nlohmann::json p = nlohmann::json::object();
+        p["name"] = pkg.name;
+        p["version"] = pkg.version;
+        p["source"] = pkg.source;
+        p["source_url"] = pkg.source_url;
+        p["sha256"] = pkg.sha256;
         // 1.4.2 F-04: the artifact hash (verify) and the install-source archive
         // hash (--locked reinstall) are distinct values. `sha256` is kept as the
         // legacy alias of lib_sha256 so pre-1.4.2 readers keep working; both new
-        // fields are written only when known (old output stays byte-stable).
-        if (!pkg.lib_sha256.empty()) {
-            out << "lib_sha256 = " << util::toml_quote(pkg.lib_sha256) << "\n";
-        }
-        if (!pkg.archive_sha256.empty()) {
-            out << "archive_sha256 = " << util::toml_quote(pkg.archive_sha256) << "\n";
-        }
-        // 1.4.1: git-source commit pin — only written when non-empty so old
-        // lockfile output stays byte-stable.
-        if (!pkg.commit.empty()) {
-            out << "commit = " << util::toml_quote(pkg.commit) << "\n";
-        }
-        out << "type = " << util::toml_quote(pkg.type) << "\n";
-        out << "scope = " << util::toml_quote(pkg.scope) << "\n";
-        out << "platform = " << util::toml_quote(pkg.platform) << "\n";
-        if (!pkg.dependencies.empty()) {
-            out << "dependencies = [";
-            for (size_t i = 0; i < pkg.dependencies.size(); ++i) {
-                if (i > 0) out << ", ";
-                out << util::toml_quote(pkg.dependencies[i]);
-            }
-            out << "]\n";
-        } else {
-            out << "dependencies = []\n";
-        }
-        out << "\n";
+        // fields are written only when known — mirroring the pre-1.4.5 TOML
+        // writer, whose "absent" and "unknown" were the same thing (readers
+        // default to "").
+        if (!pkg.lib_sha256.empty()) p["lib_sha256"] = pkg.lib_sha256;
+        if (!pkg.archive_sha256.empty()) p["archive_sha256"] = pkg.archive_sha256;
+        // 1.4.1: git-source commit pin — only written when non-empty.
+        if (!pkg.commit.empty()) p["commit"] = pkg.commit;
+        p["type"] = pkg.type;
+        p["scope"] = pkg.scope;
+        p["platform"] = pkg.platform;
+        auto& deps = p["dependencies"] = nlohmann::json::array();
+        for (auto& d : pkg.dependencies) deps.push_back(d);
+        pkgs.push_back(std::move(p));
     }
 
-    util::file_write(path, out.str());
+    if (!util::atomic_write_text(path, j.dump(2) + "\n")) return;
+
+    // Migration: a legacy ezmk.lock was only ever read to keep existing projects
+    // working. Now that ezmk.lock.json is on disk it must not linger — two copies
+    // of the truth is exactly the drift this change removes. Best-effort: if the
+    // removal fails the next load() warns about the stale file instead.
+    auto legacy = legacy_lockfile_path(proj_root);
+    if (util::file_exists(legacy)) {
+        std::error_code ec;
+        fs::remove(legacy, ec);
+        if (ec) {
+            util::warn(std::string("could not remove the legacy lockfile: ") +
+                       legacy.filename().string() + " (" + ec.message() + ")");
+        } else {
+            util::info(ezmk::i18n::I18nKey::lock_migrated);
+        }
+    }
 }
 
 // 1.4.2 F-28: see header. Sorted (relative path, content hash) pairs → one hash.

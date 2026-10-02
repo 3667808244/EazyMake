@@ -103,6 +103,13 @@ void copy_recursive(const fs::path& from, const fs::path& to);
 // ezmk::fatal_error if both fail, so callers must NOT report success.
 void atomic_rename(const fs::path& from, const fs::path& to);
 
+// 1.4.5: crash-safe write of a GENERATED text artifact (temp file + atomic_rename,
+// binary mode so '\n' is not translated to CRLF on Windows). A half-written
+// lockfile / registry is worse than a missing one: the reader would accept the
+// truncated record as valid. Returns false (and drops the temp) when the write
+// fails, so the caller can decide whether the artifact is essential.
+bool atomic_write_text(const fs::path& p, std::string_view content);
+
 // 1.1.2 C5: wrap a string as a TOML double-quoted string literal, escaping
 // `"` `\` and control chars. Writers that interpolate user-controlled strings
 // (project/package names, URLs) MUST use this — raw interpolation produces

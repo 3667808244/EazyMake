@@ -1,5 +1,6 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/crypto.hpp"
+#include "ezmk/lockfile.hpp"
 #include "ezmk/util.hpp"
 #include "ezmk/toolchain.hpp"
 #include "nlohmann_json.hpp"
@@ -314,7 +315,10 @@ std::optional<fs::path> check_cache(const fs::path& src_file,
     // Must mirror build.cpp's save side exactly, or every build is a cache
     // miss (the saved signature carries the lock hash, the check doesn't).
     if (record.deterministic) {
-        auto lock_path = proj_root / "ezmk.lock";
+        // 1.4.5: same resolution as the save side (build.cpp) — the cache
+        // signature must hash the lockfile that is actually in effect, not a
+        // hard-coded name, or the two sides can never match after migration.
+        auto lock_path = lockfile::active_path(proj_root);
         if (util::file_exists(lock_path)) {
             cur_sig += ":" + crypto::sha256_file(lock_path);
         }

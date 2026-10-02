@@ -106,8 +106,8 @@ TEST_CASE("lockfile save/load: optional git commit field round-trips (1.4.1)", "
     lf.packages = { p };
 
     ezmk::lockfile::save(tmp.path, lf);
-    auto text = ezmk::util::file_read(tmp.path / "ezmk.lock");
-    REQUIRE(text.find("commit = \"0123456789abcdef0123456789abcdef01234567\"") != std::string::npos);
+    auto text = ezmk::util::file_read(tmp.path / "ezmk.lock.json");
+    REQUIRE(text.find("\"commit\": \"0123456789abcdef0123456789abcdef01234567\"") != std::string::npos);
 
     auto loaded = ezmk::lockfile::load(tmp.path);
     REQUIRE(loaded.has_value());
@@ -217,10 +217,10 @@ TEST_CASE("lockfile save/load: archive + lib hashes round-trip (1.4.2 F-04)", "[
     lf.packages = { p };
 
     ezmk::lockfile::save(tmp.path, lf);
-    auto text = ezmk::util::file_read(tmp.path / "ezmk.lock");
-    REQUIRE(text.find("archive_sha256 = \"" + p.archive_sha256 + "\"") != std::string::npos);
-    REQUIRE(text.find("lib_sha256 = \"" + p.lib_sha256 + "\"") != std::string::npos);
-    REQUIRE(text.find("sha256 = \"" + p.lib_sha256 + "\"") != std::string::npos);
+    auto text = ezmk::util::file_read(tmp.path / "ezmk.lock.json");
+    REQUIRE(text.find("\"archive_sha256\": \"" + p.archive_sha256 + "\"") != std::string::npos);
+    REQUIRE(text.find("\"lib_sha256\": \"" + p.lib_sha256 + "\"") != std::string::npos);
+    REQUIRE(text.find("\"sha256\": \"" + p.lib_sha256 + "\"") != std::string::npos);
 
     auto loaded = ezmk::lockfile::load(tmp.path);
     REQUIRE(loaded.has_value());
@@ -363,4 +363,153 @@ TEST_CASE("lockfile verify: git source checks the commit marker (F-28)", "[lockf
     ezmk::util::file_write(tmp.path / ".ezmk/pkg/gitpkg/.ezmk-git-source",
                            "https://example.com/x.git\n" + std::string(40, 'f') + "\n");
     REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"gitpkg"});
+}
+
+// ===================================================================
+// 1.4.5: ezmk.lock → ezmk.lock.json (JSON writer, dual read, migration)
+// ===================================================================
+
+TEST_CASE("lockfile paths: json is the written name, legacy is read-only (1.4.5)", "[lockfile][1.4.5]") {
+    fs::path root = fs::temp_directory_path() / "ezmk_lockfile_path_probe_1_4_5";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+
+    REQUIRE(ezmk::lockfile::lockfile_path(root).filename() == "ezmk.lock.json");
+    REQUIRE(ezmk::lockfile::legacy_lockfile_path(root).filename() == "ezmk.lock");
+    // Nothing on disk yet → the active path is the write target (the JSON name).
+    REQUIRE(ezmk::lockfile::active_path(root) == ezmk::lockfile::lockfile_path(root));
+}
+
+TEST_CASE("lockfile active path: legacy alone, then json wins (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir tmp;
+    ezmk::util::file_write(ezmk::lockfile::legacy_lockfile_path(tmp.path), "x");
+    REQUIRE(ezmk::lockfile::active_path(tmp.path) ==
+            ezmk::lockfile::legacy_lockfile_path(tmp.path));
+
+    ezmk::util::file_write(ezmk::lockfile::lockfile_path(tmp.path), "{}");
+    REQUIRE(ezmk::lockfile::active_path(tmp.path) ==
+            ezmk::lockfile::lockfile_path(tmp.path));
+}
+
+TEST_CASE("lockfile save: writes json and migrates the legacy file away (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir tmp;
+    // A pre-1.4.5 lockfile left behind by an older ezmk.
+    ezmk::util::file_write(ezmk::lockfile::legacy_lockfile_path(tmp.path),
+        "[metadata]\nversion = 1\ngenerated_by = \"ezmk 1.4.4\"\ndirect_deps = []\n");
+
+    Lockfile lf;
+    lf.direct_deps = { "fmt@^1.0" };
+    LockedPackage p; p.name = "fmt"; p.version = "10.2.1";
+    lf.packages = { p };
+
+    ezmk::lockfile::save(tmp.path, lf);
+
+    REQUIRE(ezmk::util::file_exists(ezmk::lockfile::lockfile_path(tmp.path)));
+    REQUIRE_FALSE(ezmk::util::file_exists(ezmk::lockfile::legacy_lockfile_path(tmp.path)));
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->direct_deps == lf.direct_deps);
+    REQUIRE(loaded->packages.size() == 1);
+    REQUIRE(loaded->packages[0].name == "fmt");
+}
+
+// The pre-1.4.5 TOML reader is the migration path: every field the JSON reader
+// understands must come back identical from an old file.
+TEST_CASE("lockfile load: a legacy TOML file still loads field by field (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir tmp;
+    ezmk::util::file_write(ezmk::lockfile::legacy_lockfile_path(tmp.path),
+        "[metadata]\n"
+        "version = 1\n"
+        "generated_by = \"ezmk 1.4.4\"\n"
+        "generated_at = \"2026-09-26T00:00:00Z\"\n"
+        "toolchain = \"gcc\"\n"
+        "toolchain_version = \"g++ (GCC) 14.2.0\"\n"
+        "direct_deps = [\"fmt\"]\n"
+        "\n"
+        "[[packages]]\n"
+        "name = \"fmt\"\n"
+        "version = \"10.2.1\"\n"
+        "source = \"ezmk-official\"\n"
+        "source_url = \"https://example.com/fmt.tar.gz\"\n"
+        "sha256 = \"aa\"\n"
+        "lib_sha256 = \"bb\"\n"
+        "type = \"static\"\n"
+        "scope = \"project\"\n"
+        "platform = \"linux_x86_64_gcc\"\n"
+        "dependencies = [\"zlib\"]\n");
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->version == 1);
+    REQUIRE(loaded->generated_by == "ezmk 1.4.4");
+    REQUIRE(loaded->generated_at == "2026-09-26T00:00:00Z");
+    REQUIRE(loaded->toolchain == "gcc");
+    REQUIRE(loaded->toolchain_version == "g++ (GCC) 14.2.0");
+    REQUIRE(loaded->direct_deps == std::vector<std::string>{"fmt"});
+    REQUIRE(loaded->packages.size() == 1);
+
+    const auto& p = loaded->packages[0];
+    REQUIRE(p.name == "fmt");
+    REQUIRE(p.version == "10.2.1");
+    REQUIRE(p.source == "ezmk-official");
+    REQUIRE(p.source_url == "https://example.com/fmt.tar.gz");
+    REQUIRE(p.sha256 == "aa");
+    REQUIRE(p.lib_sha256 == "bb");
+    REQUIRE(p.archive_sha256.empty());
+    REQUIRE(p.commit.empty());
+    REQUIRE(p.type == "static");
+    REQUIRE(p.scope == "project");
+    REQUIRE(p.platform == "linux_x86_64_gcc");
+    REQUIRE(p.dependencies == std::vector<std::string>{"zlib"});
+}
+
+TEST_CASE("lockfile save: empty optional fields are omitted from the json (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir tmp;
+    Lockfile lf;
+    lf.version = 1;
+    LockedPackage p; p.name = "greet"; p.version = "1.0.0";  // no hashes, no commit
+    lf.packages = { p };
+
+    ezmk::lockfile::save(tmp.path, lf);
+    auto text = ezmk::util::file_read(ezmk::lockfile::lockfile_path(tmp.path));
+
+    REQUIRE(text.find("lib_sha256") == std::string::npos);
+    REQUIRE(text.find("archive_sha256") == std::string::npos);
+    REQUIRE(text.find("commit") == std::string::npos);
+    REQUIRE(text.find("\"dependencies\": []") != std::string::npos);
+    REQUIRE(text.find("\"direct_deps\": []") != std::string::npos);
+
+    // "absent" and "unknown" stay the same thing on the way back in.
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->packages[0].lib_sha256.empty());
+    REQUIRE(loaded->packages[0].archive_sha256.empty());
+    REQUIRE(loaded->packages[0].commit.empty());
+}
+
+TEST_CASE("lockfile load: json wins over a stale legacy file (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir tmp;
+    Lockfile lf;
+    lf.direct_deps = { "fresh" };
+    LockedPackage p; p.name = "fresh"; p.version = "2.0.0";
+    lf.packages = { p };
+    ezmk::lockfile::save(tmp.path, lf);
+
+    // A legacy file reappears (older ezmk, or a restored checkout).
+    ezmk::util::file_write(ezmk::lockfile::legacy_lockfile_path(tmp.path),
+        "[metadata]\nversion = 1\ngenerated_by = \"old\"\ndirect_deps = [\"stale\"]\n"
+        "\n[[packages]]\nname = \"stale\"\nversion = \"0.0.1\"\n");
+
+    auto loaded = ezmk::lockfile::load(tmp.path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->direct_deps == std::vector<std::string>{"fresh"});
+    REQUIRE(loaded->packages.size() == 1);
+    REQUIRE(loaded->packages[0].name == "fresh");
+}
+
+TEST_CASE("lockfile load: corrupt json is a warning, not a crash (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir tmp;
+    ezmk::util::file_write(ezmk::lockfile::lockfile_path(tmp.path), "{ not json");
+    REQUIRE_FALSE(ezmk::lockfile::load(tmp.path).has_value());
 }

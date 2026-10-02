@@ -9,10 +9,25 @@
 namespace ezmk::lockfile {
 namespace fs = std::filesystem;
 
-// Load ezmk.lock from project root. Returns std::nullopt if file doesn't exist.
+// ---- 1.4.5: lockfile paths ----
+// `lockfile_path`      — the JSON file ezmk writes (ezmk.lock.json).
+// `legacy_lockfile_path` — the pre-1.4.5 TOML file (ezmk.lock): still READ so
+//                        existing projects keep working; the next save() migrates
+//                        it (writes the JSON file, removes this one).
+// `active_path`        — what readers/verifiers must use: the JSON file when it
+//                        exists, else the legacy file, else the JSON path (the
+//                        write target). The deterministic-build cache signature
+//                        hashes this file, so all three call sites must agree.
+fs::path lockfile_path(const fs::path& proj_root);
+fs::path legacy_lockfile_path(const fs::path& proj_root);
+fs::path active_path(const fs::path& proj_root);
+
+// Load the lockfile from project root (ezmk.lock.json, falling back to the
+// pre-1.4.5 ezmk.lock). Returns std::nullopt if neither file exists.
 std::optional<config::Lockfile> load(const fs::path& proj_root);
 
-// Write ezmk.lock to project root.
+// Write ezmk.lock.json to project root (atomically). A legacy ezmk.lock left
+// behind by an older ezmk is removed once the new file is on disk.
 void save(const fs::path& proj_root, const config::Lockfile& lf);
 
 // Verify installed packages match lockfile entries.

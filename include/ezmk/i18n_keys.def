@@ -30,6 +30,9 @@ EZMK_I18N_KEY(lock_locked_pkg_not_in_lockfile)      // 1.4.0-dev.5: --locked, pa
 EZMK_I18N_KEY(lock_locked_version_unavailable)      // 1.4.0-dev.5: --locked, locked version not found in repos
 EZMK_I18N_KEY(lock_commit_mismatch)        // 1.4.1: --locked, cloned git HEAD != lockfile commit (force-push drift)
 EZMK_I18N_KEY(lock_sha256_mismatch)        // 1.1.0
+EZMK_I18N_KEY(lock_legacy_detected)        // 1.4.5: pre-1.4.5 TOML ezmk.lock read → migrated on next write
+EZMK_I18N_KEY(lock_migrated)               // 1.4.5: ezmk.lock → ezmk.lock.json migration written
+EZMK_I18N_KEY(lock_legacy_stale)           // 1.4.5: both lockfiles present; the JSON one wins
 EZMK_I18N_KEY(install_summary)             // 1.1.0
 EZMK_I18N_KEY(install_dry_run)             // 1.1.0
 EZMK_I18N_KEY(pack_not_static)             // 1.1.0-dev.2
