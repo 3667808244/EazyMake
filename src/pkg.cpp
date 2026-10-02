@@ -1501,7 +1501,7 @@ static void process_installed_pkg(const fs::path& pkg_root,
     util::info(ezmk::i18n::I18nKey::installed, {{"pkg", pkg_name}});
 }
 
-// 1.1.0: generate/update ezmk.lock with resolved dependency snapshot.
+// 1.1.0: generate/update ezmk.lock.json with resolved dependency snapshot.
 // Shared by archive and directory installs (project scope only, unless --no-lock).
 static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                                  const toolchain::Toolchain& tc,
@@ -1668,7 +1668,7 @@ static InstallOutcome install_from_directory(const fs::path& dir, cli::Scope sco
 // `source_url` is the clone URL WITHOUT any "#ref" fragment; `ref` is the
 // requested branch/tag ("" = the remote's default branch).
 // `expected_commit` (--locked git reinstall): the url+commit come from
-// ezmk.lock — a full clone + detached checkout of that exact commit must land
+// ezmk.lock.json — a full clone + detached checkout of that exact commit must land
 // on it, otherwise the source drifted (force-push) → fatal lock_commit_mismatch.
 static InstallOutcome install_git_source(const std::string& source_url,
                                          std::string_view ref,
@@ -1790,7 +1790,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // 1.2.0-dev.7: lockfile + config resolved against the located project root
     // 1.4.0-dev.5: --locked must actually PIN the version (previously it only
     // checked direct-dep specs and then installed the newest — silently
-    // upgrading and REWRITING ezmk.lock, the exact drift --locked prevents).
+    // upgrading and REWRITING ezmk.lock.json, the exact drift --locked prevents).
     // Now: the lockfile's recorded version for this package becomes an Exact
     // constraint for the repo search, and the lockfile is never rewritten.
     std::string locked_version;    // non-empty only in --locked mode
@@ -1880,7 +1880,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         return install_from_directory(input, scope, assume_yes, no_lock);
     }
 
-    // 1.4.1: --locked git source — the url+commit were resolved from ezmk.lock
+    // 1.4.1: --locked git source — the url+commit were resolved from ezmk.lock.json
     // above (matched by package name or by source_url). Clone at the recorded
     // commit and refuse on drift (lock_commit_mismatch).
     if (!locked_git_url.empty()) {
@@ -1988,7 +1988,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
             util::info(ezmk::i18n::I18nKey::searching_repos, {{"pkg", pkg_file}});
             auto search_result = [&]() {
                 if (!locked_version.empty()) {
-                    // --locked: pin to the exact version recorded in ezmk.lock.
+                    // --locked: pin to the exact version recorded in ezmk.lock.json.
                     config::VersionConstraint exact;
                     exact.op = config::VersionConstraint::Exact;
                     exact.version = locked_version;
@@ -2154,7 +2154,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
 
     // 1.4.2 F-04: write the install-source marker into the INSTALLED package dir
     // (it must outlive the staging cleanup above) so maybe_write_lockfile can
-    // pin source/source_url/archive hash into ezmk.lock.
+    // pin source/source_url/archive hash into ezmk.lock.json.
     if (!prov_kind.empty()) {
         std::string installed_name;
         try {
@@ -2173,7 +2173,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         }
     }
 
-    // 1.1.0: generate/update ezmk.lock with resolved dependency snapshot
+    // 1.1.0: generate/update ezmk.lock.json with resolved dependency snapshot
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);
     txn_guard.committed = true;   // 1.4.2 F-30: keep auto-installed dependencies
     return InstallOutcome::Ok;

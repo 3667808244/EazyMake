@@ -237,7 +237,7 @@ ezmk pkg install -p file:///tmp/mylib.git          # 本地仓库
 - **识别规则**：参数以 `git@` 开头、使用 `git://` / `file://` 协议、或（剥去 `#ref` 片段后）以 `.git` 结尾时判定为 git 源；归档 URL（`.zip` / `.tar.gz`）绝不会误判。
 - **`git://` 为明文协议**：克隆前警告并确认（`-y` 跳过），与 `http://` 下载一致。
 - **完整性**：git 源以 **commit SHA** 为指纹，无归档 sha256；显式 `--sha256` 会提示跳过。
-- **lockfile**：`ezmk.lock` 记录 `source = "git"`、`source_url` 与固定的 `commit`；`ezmk pkg install <url> --locked` 按记录的 commit 重新克隆，若上游 ref 被 force-push 或漂移则拒绝安装（`lock_commit_mismatch`）。
+- **lockfile**：`ezmk.lock.json` 记录 `source = "git"`、`source_url` 与固定的 `commit`；`ezmk pkg install <url> --locked` 按记录的 commit 重新克隆，若上游 ref 被 force-push 或漂移则拒绝安装（`lock_commit_mismatch`）。
 
 ### URL 下载
 

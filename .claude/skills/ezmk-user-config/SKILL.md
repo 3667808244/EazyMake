@@ -126,7 +126,7 @@ source_date_epoch = 1700000000   # Optional: fixed Unix timestamp
 When enabled:
 - Debug paths use relative paths (`-ffile-prefix-map`)
 - `__DATE__` / `__TIME__` use `SOURCE_DATE_EPOCH`
-- Lockfile (`ezmk.lock`) is required and strictly verified
+- Lockfile (`ezmk.lock.json`) is required and strictly verified
 
 ## Install layout
 

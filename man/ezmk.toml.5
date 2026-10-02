@@ -459,7 +459,7 @@ Approximate: at least 1.2.3 and below the next minor version
 .PP
 Constraints are checked when packages are resolved and during the build; to
 pin exact versions for reproducibility, commit
-.BR ezmk.lock .
+.BR ezmk.lock.json .
 .SH DETERMINISTIC BUILDS
 With
 .B deterministic = true
@@ -470,9 +470,13 @@ and
 for GCC and Clang,
 .B /Brepro
 for MSVC) and treats a missing or mismatched
-.B ezmk.lock
+.B ezmk.lock.json
 as a fatal error; the lockfile hash also becomes part of the compile cache
-signature.
+signature. A pre\-1.4.5
+.B ezmk.lock
+(TOML) is still read, and the next
+.B ezmk pkg install
+migrates it.
 .PP
 The timestamp comes from the first of these that yields a value:
 .BR [compile].source_date_epoch ,

@@ -3,7 +3,7 @@
 // 生成：ezmk example with-packages
 // 安装依赖：cd with-packages && ezmk pkg install fmt -y     （需网络）
 // 运行：ezmk build && ezmk run
-// 锁文件：ezmk build 首次成功会生成 ezmk.lock；之后 ezmk build --locked 复现构建。
+// 锁文件：ezmk pkg install 会生成 ezmk.lock.json；之后 ezmk build --locked 复现构建。
 #include <fmt/core.h>
 
 int main() {

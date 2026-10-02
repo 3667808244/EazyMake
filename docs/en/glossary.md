@@ -26,7 +26,7 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | dependency | A required library declared in `[depends].lib`. Missing to build error. |
 | optional dependency | A library declared in `[depends].want`. Missing to warning + `EZMK_LIB_MISS_*` macro, build continues. |
 | index | The `index.toml` file in a repository listing all available packages with versions and SHA-256 hashes. |
-| registry | The `list.toml` file tracking registered repositories per scope. |
+| registry | The `list.json` file tracking registered repositories per scope. |
 | upstream | The original third-party project that a package wraps (e.g. fmt, spdlog). |
 
 > **Why does a missing optional dependency only warn?** Optional deps back

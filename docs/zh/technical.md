@@ -127,12 +127,13 @@ my_project/
     temp/           # 临时文件（自动清理）
     cache/          # 构建缓存（record.json + obj/）
     repo/           # 仓库注册表 + 克隆的仓库
-      list.toml
+      list.json
       .cache/
   include/          # 项目头文件（*.h, *.hpp）
   src/              # 项目源文件（*.c, *.cpp, *.cxx）
   build/            # 构建输出
   ezmk.toml         # 项目配置
+  ezmk.lock.json    # 依赖锁定文件（自动生成）
 ```
 
 ## Shell 补全（zsh）

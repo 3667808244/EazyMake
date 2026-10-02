@@ -506,13 +506,13 @@ since 1.4.2.
 .B \-\-locked
 .B pkg install
 only: install only what the existing
-.B ezmk.lock
+.B ezmk.lock.json
 pins, and fail on any mismatch.
 .TP
 .B \-\-no\-lock
 .B pkg install
 only: do not create or update
-.BR ezmk.lock .
+.BR ezmk.lock.json .
 .TP
 .BR \-\-branch " \fIref\fR"
 .B pkg install
@@ -729,9 +729,12 @@ a non\-zero exit code.
 .B ezmk.toml
 Project configuration; the only file a project needs.
 .TP
-.B ezmk.lock
+.B ezmk.lock.json
 Pinned dependency versions and content hashes, written by
 .BR "ezmk pkg install" .
+A pre\-1.4.5
+.B ezmk.lock
+(TOML) is still read and migrated on the next write.
 .TP
 .B ezmk\-workspace.toml
 Workspace member list, options and name.

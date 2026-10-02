@@ -117,7 +117,7 @@ code supports a baseline standard (optionally up to a documented upper bound):
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
 | `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
-| `deterministic` | bool | No | `false` | **1.1.0+** Deterministic (reproducible) builds: injects `-ffile-prefix-map` / `-frandom-seed` (GCC/Clang) or `/Brepro` (MSVC), and makes a missing or hash-mismatched `ezmk.lock` a **fatal error** |
+| `deterministic` | bool | No | `false` | **1.1.0+** Deterministic (reproducible) builds: injects `-ffile-prefix-map` / `-frandom-seed` (GCC/Clang) or `/Brepro` (MSVC), and makes a missing or hash-mismatched `ezmk.lock.json` a **fatal error** |
 | `source_date_epoch` | integer | No | `0` | **1.1.0+** Deterministic build timestamp (`0` = resolve automatically; negative values are rejected) |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
@@ -234,13 +234,13 @@ Each dependency entry can optionally include a version constraint using one of t
 
 **Design notes:**
 - **Backward compatible**: entries without operators (`"fmt"`) behave exactly as in previous versions (take latest).
-- **Lockfile (`ezmk.lock`, 1.1.0+)**: version resolution happens at install time, then `ezmk.lock` pins the exact versions that were actually installed. See the Lockfile subsection below.
+- **Lockfile (`ezmk.lock.json`, 1.1.0+)**: version resolution happens at install time, then `ezmk.lock.json` pins the exact versions that were actually installed. See the Lockfile subsection below.
 - **Constraint unsatisfied**: if no available version satisfies the constraint, installation fails with an error listing all available versions.
 
 > **Why backward compatible?** Bare entries (`"fmt"`) keep their old
 > "latest wins" meaning so existing configs don't change behavior. The lockfile
 > (1.1.0+) sits on top of that: install resolution still honors `[depends]`
-> constraints, but once written, `ezmk.lock` records exactly what was installed
+> constraints, but once written, `ezmk.lock.json` records exactly what was installed
 > for reproducible builds.
 
 **Example:**
@@ -266,37 +266,44 @@ Conversion rules from `want` package name to macro name:
 - Remove other special characters
 - Examples: `sqlite3` → `EZMK_LIB_MISS_SQLITE3`, `boost-filesystem` → `EZMK_LIB_MISS_BOOST_FILESYSTEM`
 
-### Lockfile (`ezmk.lock`) (1.1.0+)
+### Lockfile (`ezmk.lock.json`) (1.1.0+)
 
-`ezmk pkg install` writes `ezmk.lock` (TOML) in the project root, pinning each installed package's **exact version**, `sha256`, platform, and dependency graph for reproducible builds.
+`ezmk pkg install` writes `ezmk.lock.json` (JSON) in the project root, pinning each installed package's **exact version**, `sha256`, platform, and dependency graph for reproducible builds.
 
 - **Written**: automatically on every `ezmk pkg install`.
 - **Verified**: `ezmk build` checks it at startup:
   - `[compile] deterministic = true` → a missing or failing lockfile is an **error**; the lockfile hash is part of the compile-cache signature.
   - otherwise → changed dependencies / sha256 mismatch are just **warnings**.
 - **Flags**: `ezmk pkg install --locked` (install only against the lockfile, error on mismatch); `--no-lock` (skip lockfile generation).
-- **Do not hand-edit**: `ezmk.lock` is auto-generated — edit `[depends]` in `ezmk.toml` and reinstall instead.
+- **Do not hand-edit**: `ezmk.lock.json` is auto-generated — edit `[depends]` in `ezmk.toml` and reinstall instead.
+- **Format and migration (1.4.5+)**: `ezmk.lock.json` (JSON). The pre-1.4.5 `ezmk.lock` (TOML) is still readable and is migrated automatically to `ezmk.lock.json` on the next write (`ezmk pkg install`), which removes the old file. **Downgrade caveat**: 1.4.4 and earlier only recognize `ezmk.lock`, so after reverting to an older version `deterministic = true` fails with a fatal "missing lockfile" error — restore the old TOML file from version control.
 
-```toml
-[metadata]
-version = 1
-generated_by = "ezmk 1.4.4"
-toolchain = "gcc"
-direct_deps = ["fmt", "spdlog@^1.14.0"]
-
-[[packages]]
-name = "spdlog"
-version = "1.14.1"
-sha256 = "..."                      # legacy alias of lib_sha256 — still written by 1.4.2
-archive_sha256 = "..."              # SHA-256 of the ARCHIVE this package was installed from (1.4.2)
-lib_sha256 = "..."                  # SHA-256 of the installed artifact (1.4.2)
-type = "static"
-scope = "project"                   # lockfiles are generated in project scope only
-platform = "windows_x86_64_msvc"    # real os_arch_toolchain of the installing toolchain (1.4.2; MSYS2/g++ writes windows_x86_64_gcc)
-source = "repo"                     # source TYPE: "repo" / "url" / "local" ("archive" when no provenance marker)
-source_url = "..."                  # the concrete source: URL, absolute path, or repo name
-commit = ""                         # pinned commit SHA for git sources (1.4.1+, optional)
-dependencies = []
+```json
+{
+  "metadata": {
+    "version": 1,
+    "generated_by": "ezmk 1.4.5",
+    "generated_at": "2026-09-27T10:00:00Z",
+    "toolchain": "gcc",
+    "toolchain_version": "g++ (GCC) 14.2.0",
+    "direct_deps": ["fmt", "spdlog@^1.14.0"]
+  },
+  "packages": [
+    {
+      "name": "fmt",
+      "version": "10.2.1",
+      "source": "repo",
+      "source_url": "ezmk-official",
+      "sha256": "…",
+      "lib_sha256": "…",
+      "archive_sha256": "…",
+      "type": "static",
+      "scope": "project",
+      "platform": "windows_x86_64_gcc",
+      "dependencies": ["zlib"]
+    }
+  ]
+}
 ```
 
 **Two hashes, two meanings (1.4.2):** `archive_sha256` identifies the archive the
@@ -313,6 +320,10 @@ of a fixed placeholder.
 `"url"` or `"local"` (`"archive"` when no provenance marker is present) — while
 the concrete origin (URL, absolute path, or repository name) is written to
 `source_url`.
+
+**`scope`:** records the **scope** the package was installed into (`"project"` /
+`"user"` / `"global"`); a lockfile is a project-level file, so it only records
+packages installed in **project** scope.
 
 **Header-only packages:** `lib_sha256` (and its legacy alias `sha256`) is the hash
 of the `include/` **manifest** — the sorted `relpath\n<file hash>\n` concatenation

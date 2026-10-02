@@ -136,12 +136,13 @@ my_project/
     temp/           # temp files (auto-cleaned)
     cache/          # build cache (record.json + obj/)
     repo/           # repo registry + cloned repos
-      list.toml
+      list.json
       .cache/
   include/          # project headers (*.h, *.hpp)
   src/              # project sources (*.c, *.cpp, *.cxx)
   build/            # build output
   ezmk.toml         # project configuration
+  ezmk.lock.json    # dependency lockfile (auto-generated)
 ```
 
 ## Shell Completion (zsh)

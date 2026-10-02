@@ -26,7 +26,7 @@ EazyMake 文档的标准化中文术语。维护者和翻译者应参考此术�
 | 依赖 | dependency | `[depends].lib` 中声明的必需库。缺失 → 构建报错 |
 | 可选依赖 | optional dependency | `[depends].want` 中声明的库。缺失 → 警告 + `EZMK_LIB_MISS_*` 宏，构建继续 |
 | 索引 | index | 仓库中的 `index.toml` 文件，列出所有可用包及其版本和 SHA-256 哈希 |
-| 注册表 | registry | 各作用域的 `list.toml` 文件，记录已注册仓库 |
+| 注册表 | registry | 各作用域的 `list.json` 文件，记录已注册仓库 |
 | 上游 | upstream | 包所包装的原始第三方项目（如 fmt、spdlog） |
 
 > **为什么可选依赖缺失时只告警而不报错？** 可选依赖支撑的是代码可以舍弃的

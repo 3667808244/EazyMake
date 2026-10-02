@@ -100,39 +100,34 @@ file = "packages/mylib/"
 
 ## 仓库注册与本地缓存
 
-### 注册表 `list.toml`
+### 注册表 `list.json`
 
 已注册的仓库列表存储路径：
 
 | 作用域 | 路径                                 |
 | ------ | ------------------------------------ |
-| 全局   | `<ezmk_install_dir>/repo/list.toml`  |
-| 用户   | `~/.local/ezmk/repo/list.toml`（Unix）· `%LOCALAPPDATA%\ezmk\repo\list.toml`（Windows） |
-| 项目   | `<project_dir>/.ezmk/repo/list.toml` |
+| 全局   | `<ezmk_install_dir>/repo/list.json`  |
+| 用户   | `~/.local/ezmk/repo/list.json`（Unix）· `%LOCALAPPDATA%\ezmk\repo\list.json`（Windows） |
+| 项目   | `<project_dir>/.ezmk/repo/list.json` |
 
 格式：
 
-```toml
-[[repos]]
-name = "my-repo"
-url = "git@github.com:user/ezmk-repo.git"
-type = "git"
-branch = "main"
-last_update = "2026-06-19T12:00:00Z"
-
-[[repos]]
-name = "community"
-url = "https://gitee.com/example/ezmk-repo.git"
-type = "git"
-branch = "main"
-last_update = ""
-
-[[repos]]
-name = "local-dev"
-url = "E:/packages/my-dev-repo"
-type = "local"
-last_update = "2026-06-19T10:00:00Z"
+```json
+{
+  "version": 1,
+  "repos": [
+    {
+      "name": "ezmk-official",
+      "url": "https://github.com/3667808244/eazymake-repo.git",
+      "type": "git",
+      "branch": "main",
+      "last_update": "2026-09-27T10:00:00Z"
+    }
+  ]
+}
 ```
+
+`type = "local"` 的条目不写 `branch`。
 
 | 字段          | 说明                                                              |
 | ------------- | ----------------------------------------------------------------- |
@@ -141,6 +136,8 @@ last_update = "2026-06-19T10:00:00Z"
 | `type`        | `"git"` 或 `"local"`                                              |
 | `branch`      | 跟踪的分支，`type = "git"` 时有效，默认 `main`                    |
 | `last_update` | `type = "git"` 时为被跟踪分支最新 commit 的时间（`git log -1 --format=%cI`）；`type = "local"` 时为最后一次 `update` 的墙钟时间。pull 未带来新提交时该值不变 |
+
+- **格式与迁移（1.4.5+）**：`list.json`（JSON）。1.4.5 之前的 `list.toml` 仍可读取，并在下次 `repo add/remove/update` 时自动迁移（旧文件随即删除）。降级到 1.4.4 及更早版本后注册表会显示为空（已安装的包不受影响，重新 `ezmk repo add` 即可恢复）。
 
 ### 本地缓存路径
 
@@ -202,7 +199,7 @@ ezmk repo add -g https://gitee.com/org/public-repo.git
 3. 对于本地目录：
    - 验证 `index.toml` 存在且格式正确
    - 不 clone，直接记录路径
-4. 写入 `list.toml`
+4. 写入 `list.json`
 5. 如同名仓库已存在 → 报错（如需覆盖先 `remove`）
 
 ### `ezmk repo remove`
@@ -251,7 +248,7 @@ ezmk repo update [-p|-u|-g] [<name>]
    - `git pull` 失败 → 警告但不报错（网络问题不应阻断构建）
 2. **本地目录**（`type = "local"`）：
    - 重新读取 `index.toml`
-3. 更新 `list.toml` 中的 `last_update` 时间戳
+3. 更新 `list.json` 中的 `last_update` 时间戳
 
 **示例**：
 
@@ -305,7 +302,7 @@ ezmk pkg install -p foo
 
 当 `pkg install` 的参数既不是本地文件路径、也不是带 `://` 的 URL 时：
 
-1. 按**项目 → 用户 → 全局**的顺序查找注册表 `list.toml`
+1. 按**项目 → 用户 → 全局**的顺序查找注册表 `list.json`
 2. 在每个作用域内按注册顺序遍历仓库
 3. 对于每个仓库，读取其 `index.toml`（git 仓库读本地缓存，本地仓库读源路径）
 4. 在 `[[packages]]` 中按 `name` 搜索
@@ -386,11 +383,11 @@ ezmk repo add -p ./vendor/ezmk-repo --name internal
 
 | 路径                                     | 说明                |
 | ---------------------------------------- | ------------------- |
-| `<ezmk_install_dir>/repo/list.toml`      | 全局仓库注册表      |
+| `<ezmk_install_dir>/repo/list.json`      | 全局仓库注册表      |
 | `<ezmk_install_dir>/repo/.cache/<name>/` | 全局仓库 clone 缓存 |
-| `~/.local/ezmk/repo/list.toml`（Unix）· `%LOCALAPPDATA%\ezmk\repo\list.toml`（Windows） | 用户仓库注册表      |
+| `~/.local/ezmk/repo/list.json`（Unix）· `%LOCALAPPDATA%\ezmk\repo\list.json`（Windows） | 用户仓库注册表      |
 | `~/.local/ezmk/repo/.cache/<name>/`（Unix）· `%LOCALAPPDATA%\ezmk\repo\.cache\<name>\`（Windows） | 用户仓库 clone 缓存 |
-| `.ezmk/repo/list.toml`                   | 项目仓库注册表      |
+| `.ezmk/repo/list.json`                   | 项目仓库注册表      |
 | `.ezmk/repo/.cache/<name>/`              | 项目仓库 clone 缓存 |
 
 ---

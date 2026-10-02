@@ -200,8 +200,8 @@ _ezmk_pkg_install() {
         '--sha256[Verify against SHA-256]:hash:' \
         '(-y)--yes[Skip interactive prompts]' \
         '(-y)-y[Skip interactive prompts (short)]' \
-        '--locked[Use locked versions from ezmk.lock]' \
-        '--no-lock[Do not write ezmk.lock]' \
+        '--locked[Use locked versions from ezmk.lock.json]' \
+        '--no-lock[Do not write ezmk.lock.json]' \
         '1:package file, URL, or name:_files'
 }
 

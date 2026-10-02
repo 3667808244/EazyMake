@@ -213,20 +213,24 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
     // mirrors the pre-1.4.5 TOML one-for-one (metadata object + packages array,
     // identical key names) so the migration can be verified field-by-field, and
     // escaping is the library's job instead of a per-interpolation discipline.
-    nlohmann::json j;
-    auto& meta = j["metadata"] = nlohmann::json::object();
+    // ordered_json (not json): the emitted field order is the insertion order, so
+    // a lockfile committed to git diffs in a readable, stable order and matches
+    // the documented example (nlohmann::json would sort keys alphabetically and
+    // bury `name` in the middle of every package).
+    nlohmann::ordered_json j;
+    auto& meta = j["metadata"] = nlohmann::ordered_json::object();
     meta["version"] = lf.version;
     meta["generated_by"] = lf.generated_by;
     meta["generated_at"] = lf.generated_at;
     meta["toolchain"] = lf.toolchain;
     meta["toolchain_version"] = lf.toolchain_version;
     // 1.1.2 C3: root project's direct deps (name or name@spec), sorted
-    auto& direct = meta["direct_deps"] = nlohmann::json::array();
+    auto& direct = meta["direct_deps"] = nlohmann::ordered_json::array();
     for (auto& d : lf.direct_deps) direct.push_back(d);
 
-    auto& pkgs = j["packages"] = nlohmann::json::array();
+    auto& pkgs = j["packages"] = nlohmann::ordered_json::array();
     for (auto& pkg : lf.packages) {
-        nlohmann::json p = nlohmann::json::object();
+        nlohmann::ordered_json p = nlohmann::ordered_json::object();
         p["name"] = pkg.name;
         p["version"] = pkg.version;
         p["source"] = pkg.source;
@@ -245,7 +249,7 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
         p["type"] = pkg.type;
         p["scope"] = pkg.scope;
         p["platform"] = pkg.platform;
-        auto& deps = p["dependencies"] = nlohmann::json::array();
+        auto& deps = p["dependencies"] = nlohmann::ordered_json::array();
         for (auto& d : pkg.dependencies) deps.push_back(d);
         pkgs.push_back(std::move(p));
     }

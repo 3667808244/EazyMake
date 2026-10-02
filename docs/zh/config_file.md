@@ -90,7 +90,7 @@
 | `ezmk_macros` | bool | 否 | `true` | **0.2.2+** 是否自动注入 `EZMK_*` 标准预处理器宏（`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`） |
 | `compile_commands` | bool | 否 | `false` | **1.1.1+** 构建成功后自动生成 `compile_commands.json`（clangd 索引） |
 | `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
-| `deterministic` | bool | 否 | `false` | **1.1.0+** 确定性构建：注入 `-ffile-prefix-map` / `-frandom-seed`（GCC/Clang）或 `/Brepro`（MSVC），并让 `ezmk.lock` 缺失/哈希不匹配成为**致命错误** |
+| `deterministic` | bool | 否 | `false` | **1.1.0+** 确定性构建：注入 `-ffile-prefix-map` / `-frandom-seed`（GCC/Clang）或 `/Brepro`（MSVC），并让 `ezmk.lock.json` 缺失/哈希不匹配成为**致命错误** |
 | `source_date_epoch` | 整数 | 否 | `0` | **1.1.0+** 确定性构建时间戳（`0` = 自动解析；负值报错） |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
@@ -192,10 +192,10 @@ workspace = ["strutil"]          # 兄弟成员（末段或完整相对路径，
 
 **设计说明：**
 - **向后兼容**：不带运算符的条目（`"fmt"`）行为与之前版本完全一致。
-- **锁定文件（`ezmk.lock`，1.1.0+）**：版本解析在安装时执行，随后 `ezmk.lock` 钉扎实际安装的精确版本。详见下文 Lockfile 小节。
+- **锁定文件（`ezmk.lock.json`，1.1.0+）**：版本解析在安装时执行，随后 `ezmk.lock.json` 钉扎实际安装的精确版本。详见下文 Lockfile 小节。
 - **约束无法满足**：若无可满足约束的版本，安装失败并列出所有可用版本。
 
-> **为什么向后兼容？** 不带运算符的条目（`"fmt"`）保持旧的"取最新"语义，已有配置行为不变。锁文件（1.1.0+）在此基础上叠加：安装解析仍遵循 `[depends]` 约束，但写入 `ezmk.lock` 后，记录的是实际安装的精确内容，用于可复现构建。
+> **为什么向后兼容？** 不带运算符的条目（`"fmt"`）保持旧的"取最新"语义，已有配置行为不变。锁文件（1.1.0+）在此基础上叠加：安装解析仍遵循 `[depends]` 约束，但写入 `ezmk.lock.json` 后，记录的是实际安装的精确内容，用于可复现构建。
 
 **示例：**
 ```toml
@@ -220,37 +220,44 @@ want = [
 - 去除其他特殊字符
 - 示例：`sqlite3` → `EZMK_LIB_MISS_SQLITE3`，`boost-filesystem` → `EZMK_LIB_MISS_BOOST_FILESYSTEM`
 
-### Lockfile（`ezmk.lock`）（1.1.0+）
+### Lockfile（`ezmk.lock.json`）（1.1.0+）
 
-`ezmk pkg install` 在项目根目录写入 `ezmk.lock`（TOML 格式），钉扎每个已安装包的**精确版本**、`sha256`、平台与依赖图，实现可复现构建。
+`ezmk pkg install` 在项目根目录写入 `ezmk.lock.json`（JSON 格式），钉扎每个已安装包的**精确版本**、`sha256`、平台与依赖图，实现可复现构建。
 
 - **生成**：每次 `ezmk pkg install` 自动写入/更新。
 - **校验**：`ezmk build` 启动时校验：
   - `[compile] deterministic = true` 时——lockfile 缺失或校验失败 → **报错**；lockfile 内容哈希纳入编译缓存签名。
   - 非 deterministic——依赖变化 / sha256 不匹配仅 **警告**。
 - **相关 flag**：`ezmk pkg install --locked`（仅按 lockfile 安装，不一致则报错）；`--no-lock`（跳过 lockfile 生成）。
-- **请勿手改**：`ezmk.lock` 为自动生成文件——如需变更依赖，编辑 `ezmk.toml` 的 `[depends]` 后重新安装。
+- **请勿手改**：`ezmk.lock.json` 为自动生成文件——如需变更依赖，编辑 `ezmk.toml` 的 `[depends]` 后重新安装。
+- **格式与迁移（1.4.5+）**：`ezmk.lock.json`（JSON）。1.4.5 之前的 `ezmk.lock`（TOML）仍可读取，并在下次写入（`ezmk pkg install`）时自动迁移为 `ezmk.lock.json`（旧文件随即删除）。**降级注意**：1.4.4 及更早版本只识别 `ezmk.lock`，回退到旧版本时 `deterministic = true` 会因"缺少 lockfile"报致命错误——从版本库里取回旧的 TOML 文件即可。
 
-```toml
-[metadata]
-version = 1
-generated_by = "ezmk 1.4.4"
-toolchain = "gcc"
-direct_deps = ["fmt", "spdlog@^1.14.0"]
-
-[[packages]]
-name = "spdlog"
-version = "1.14.1"
-sha256 = "..."                      # 旧字段：lib_sha256 的兼容别名（1.4.2 仍会写出）
-archive_sha256 = "..."              # 安装所用**归档**的 SHA-256（1.4.2）
-lib_sha256 = "..."                  # 已安装**产物**的 SHA-256（1.4.2）
-type = "static"
-scope = "project"                   # lockfile 只在项目作用域生成
-platform = "windows_x86_64_msvc"    # 安装时工具链的真实 os_arch_toolchain（1.4.2；MSYS2/g++ 下为 windows_x86_64_gcc）
-source = "repo"                     # 来源**类型**："repo" / "url" / "local"（无来源标记时为 "archive"）
-source_url = "..."                  # 具体来源：URL / 绝对路径 / 仓库名
-commit = ""                         # git 源锁定的 commit SHA（1.4.1+，可选）
-dependencies = []
+```json
+{
+  "metadata": {
+    "version": 1,
+    "generated_by": "ezmk 1.4.5",
+    "generated_at": "2026-09-27T10:00:00Z",
+    "toolchain": "gcc",
+    "toolchain_version": "g++ (GCC) 14.2.0",
+    "direct_deps": ["fmt", "spdlog@^1.14.0"]
+  },
+  "packages": [
+    {
+      "name": "fmt",
+      "version": "10.2.1",
+      "source": "repo",
+      "source_url": "ezmk-official",
+      "sha256": "…",
+      "lib_sha256": "…",
+      "archive_sha256": "…",
+      "type": "static",
+      "scope": "project",
+      "platform": "windows_x86_64_gcc",
+      "dependencies": ["zlib"]
+    }
+  ]
+}
 ```
 
 **两个哈希，两种含义（1.4.2）：** `archive_sha256` 标识包**下载来源的归档**，`--locked`
@@ -261,6 +268,9 @@ dependencies = []
 
 **`source` 与 `source_url`：** `source` 记录来源**类型**——`"repo"` / `"url"` / `"local"`
 （无来源标记时为 `"archive"`）；具体来源（URL、绝对路径或仓库名）写在 `source_url`。
+
+**`scope`：** 记录包被安装到的**作用域**（`"project"` / `"user"` / `"global"`）；
+lockfile 是项目级文件，**只记录项目作用域**安装的包。
 
 **header-only 包：** `lib_sha256`（及旧别名 `sha256`）是 `include/` **清单哈希**——
 排序后的 `relpath\n文件哈希\n` 拼接再整体哈希，不是单文件摘要。注意 1.4.2 写出的新

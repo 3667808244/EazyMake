@@ -167,12 +167,12 @@ ezmk project pack --output ./dist --format tar.gz   # or: zip / tgz (tgz = tar.g
 
 ## Repository registries
 
-Each scope has its own `list.toml` tracking registered repos:
+Each scope has its own registry tracking registered repos. Since 1.4.5 that registry is JSON (`list.json`); the legacy `list.toml` is still readable and is migrated automatically on the next `repo add/remove/update` (new file written, old file deleted).
 
 | Scope | Path |
 |-------|------|
-| Global | `<ezmk_install_dir>/repo/list.toml` |
-| User | `~/.local/ezmk/repo/list.toml` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows) |
-| Project | `<project>/.ezmk/repo/list.toml` |
+| Global | `<ezmk_install_dir>/repo/list.json` |
+| User | `~/.local/ezmk/repo/list.json` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.json` (Windows) |
+| Project | `<project>/.ezmk/repo/list.json` |
 
 See `docs/en/repo.md` for full details.

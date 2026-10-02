@@ -91,7 +91,7 @@ effective = min( max(pkg_min, consumer_min), compiler_capability, pkg_max )
   consumer-standard change recompiles the package automatically. The same
   package built under different consumers yields different artifacts — the
   install cache is shared per scope, so reuse it only when the negotiated
-  standard is identical (deterministic builds pin it via `ezmk.lock`).
+  standard is identical (deterministic builds pin it via `ezmk.lock.json`).
 
 ### 2.2 `[depends]`
 

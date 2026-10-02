@@ -181,11 +181,13 @@ std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
 void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
     auto path = repo_list_path(scope);
 
-    nlohmann::json j;
+    // ordered_json: keep the documented field order (name / url / type / branch /
+    // last_update) instead of nlohmann::json's alphabetical sort.
+    nlohmann::ordered_json j;
     j["version"] = 1;
-    auto& repos = j["repos"] = nlohmann::json::array();
+    auto& repos = j["repos"] = nlohmann::ordered_json::array();
     for (auto& e : entries) {
-        nlohmann::json r = nlohmann::json::object();
+        nlohmann::ordered_json r = nlohmann::ordered_json::object();
         r["name"] = e.name;
         r["url"] = e.url;
         r["type"] = e.type;
@@ -545,7 +547,7 @@ void add(const cli::RepoOptions& opts) {
 // ===================================================================
 
 void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
-    // 1.4.2 F-24: a hand-edited/foreign list.toml name could escape the cache
+    // 1.4.2 F-24: a hand-edited/foreign registry name could escape the cache
     // tree (cache_dir / name is removed recursively) — validate before use.
     util::validate_pkg_name(std::string(name));
     for (auto scope : scopes) {

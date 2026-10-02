@@ -35,7 +35,7 @@ EazyMake/
 │   ├── util.cpp          # Utilities (path/process/color/platform)
 │   ├── version.cpp       # Version number
 │   ├── argparse.cpp      # GNU-style argument parsing
-│   ├── lockfile.cpp      # ezmk.lock generation & verification
+│   ├── lockfile.cpp      # ezmk.lock.json generation & verification
 │   └── vendor/           # Third-party (miniz, Catch2 impl, Lua 5.4.7)
 ├── include/ezmk/         # Public headers (mirrors src/ layout; one header per module)
 │   └── i18n_keys.def     # X-macro: single source of truth for all i18n keys
@@ -71,7 +71,7 @@ EazyMake/
 | **main** | `src/main.cpp` | Entry point (ezmk binary). Parses CLI via `cli::parse()`, dispatches to command handlers. (`src/ezmk_lua_main.cpp` is the separate entry point of the `ezmk-lua` runtime — same `COMMON_SRC`, own `main()`.) |
 | **cli** | `src/cli.cpp` | GNU-style argument parsing. Defines `CliArgs` struct with all command options. Command shorthands (`pb`→`project build`, `ki`→`pkg install`, `wl`→`workspace list`, etc.) expanded here. Global `--color=<mode>` consumed here. |
 | **argparse** | `src/argparse.cpp` | Low-level argument parser — handles `--flag`, `--key=value`, positional args, `--` pass-through. |
-| **config** | `src/config.cpp` | Parses `ezmk.toml`. Defines all config structs (`ProjectSection`, `CompileSection`, `LinkSection`, `DependsSection`, `InstallSection`, etc.). Also parses `ezmk.lock` (via `lockfile::load()`). |
+| **config** | `src/config.cpp` | Parses `ezmk.toml`. Defines all config structs (`ProjectSection`, `CompileSection`, `LinkSection`, `DependsSection`, `InstallSection`, etc.). Also parses `ezmk.lock.json` (via `lockfile::load()`). |
 | **build** | `src/build.cpp` | Build orchestration: source collection, compilation scheduling (via `ThreadPool`), linking, `ezmk project install`. Calls into `cache.cpp` and `toolchain.cpp`. Also owns `pack_project()` — `ezmk project pack` archive creation (there is **no** `src/pack.cpp`). |
 | **cache** | `src/cache.cpp` | Content-hash-based incremental compilation. Reads/writes `record.json` (v2: includes `compiler`, `compiler_version`, `deterministic` fields). Atomic writes via temp → rename. |
 | **toolchain** | `src/toolchain.cpp` | Compiler auto-detection (GCC/Clang/MSVC). `Toolchain` struct captures family, path, flags, and version. GCC→MSVC flag translation layer. |
@@ -110,7 +110,7 @@ EazyMake/
 | **file_watcher** | `src/file_watcher.cpp` | Cross-platform file monitoring. Windows: `ReadDirectoryChangesW` + IOCP; Linux: `inotify`; macOS: `kqueue`. 300ms debounce. |
 | **project** | `src/project.cpp` | `ezmk project new` — scaffolds project from templates. |
 | **version** | `src/version.cpp` | Version comparison utilities. |
-| **lockfile** | `src/lockfile.cpp` | `ezmk.lock` generation, loading, verification. |
+| **lockfile** | `src/lockfile.cpp` | `ezmk.lock.json` generation, loading, verification. Resolves the active lockfile path (`lockfile_path()` / `legacy_lockfile_path()` / `active_path()`); the legacy `ezmk.lock` (TOML) is read-only fallback and is migrated on the next write. |
 
 ## Data flow
 
@@ -231,10 +231,10 @@ See `docs/en/pkg.md` for full details.
 
 A repo is a git repository containing `index.toml` + `packages/` directory. `ezmk repo add` clones to local cache; `ezmk repo update` does `git pull`. Local directories supported (`type = "local"`).
 
-Repo registries (`list.toml`) per scope:
-- Global: `<ezmk_install_dir>/repo/list.toml`
-- User: `~/.local/ezmk/repo/list.toml` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows)
-- Project: `.ezmk/repo/list.toml`
+Repo registries (JSON, `list.json`) per scope — 1.4.5+; the legacy `list.toml` is still readable and is migrated on the next write (new file written, old file deleted):
+- Global: `<ezmk_install_dir>/repo/list.json`
+- User: `~/.local/ezmk/repo/list.json` (Unix) / `%LOCALAPPDATA%\ezmk\repo\list.json` (Windows)
+- Project: `.ezmk/repo/list.json`
 
 See `docs/en/repo.md` for full details.
 
@@ -245,10 +245,10 @@ See `docs/en/repo.md` for full details.
 - **MSVC**: injects `/Brepro` + sets `SOURCE_DATE_EPOCH`
 - **Resolution priority**: `[compile].source_date_epoch` in `ezmk.toml` → `SOURCE_DATE_EPOCH` environment variable → git HEAD commit timestamp → `ezmk.toml` mtime
 
-## Lockfile (`ezmk.lock`)
+## Lockfile (`ezmk.lock.json`)
 
-TOML file pinning exact dependency versions and content hashes.
-- **API**: `lockfile::load()` / `lockfile::save()` / `lockfile::verify()` / `lockfile::depends_changed()`
+JSON file pinning exact dependency versions and content hashes. Written as TOML (`ezmk.lock`) before 1.4.5 — that legacy file is still read, and the next write migrates it to `ezmk.lock.json` (new file written, old file deleted).
+- **API**: `lockfile::load()` / `lockfile::save()` / `lockfile::verify()` / `lockfile::depends_changed()` / `lockfile::lockfile_path()` / `lockfile::legacy_lockfile_path()` / `lockfile::active_path()` (the legacy name `ezmk.lock` is a read-only fallback path, removed in 2.0.0)
 - **Strict mode**: when `deterministic = true` — missing lockfile or sha256 mismatch → fatal error
 - **`--locked` mode**: requires lockfile to exist and match `ezmk.toml`; used in CI to prevent accidental dependency drift
 

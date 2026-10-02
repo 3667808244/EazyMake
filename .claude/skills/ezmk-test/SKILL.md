@@ -67,7 +67,7 @@ test/
 ├── test_utils_perms.cpp           # `utils` permission model tests
 ├── test_version.cpp               # Version comparison tests
 ├── test_crypto.cpp                # SHA-256 tests
-├── test_lockfile.cpp              # ezmk.lock tests
+├── test_lockfile.cpp              # ezmk.lock.json tests
 ├── test_file_watcher.cpp          # File watcher tests
 ├── test_thread_pool.cpp           # ThreadPool tests
 ├── test_integration.cpp           # End-to-end integration tests

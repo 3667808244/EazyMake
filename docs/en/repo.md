@@ -111,39 +111,34 @@ Multiple versions of the same package are represented by repeating `[[packages]]
 
 ## Repository Registration and Local Cache
 
-### Registry `list.toml`
+### Registry `list.json`
 
 Storage paths for the registered repository list:
 
 | Scope   | Path                                 |
 | ------- | ------------------------------------ |
-| Global  | `<ezmk_install_dir>/repo/list.toml`  |
-| User    | `~/.local/ezmk/repo/list.toml` (Unix) · `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows) |
-| Project | `<project_dir>/.ezmk/repo/list.toml` |
+| Global  | `<ezmk_install_dir>/repo/list.json`  |
+| User    | `~/.local/ezmk/repo/list.json` (Unix) · `%LOCALAPPDATA%\ezmk\repo\list.json` (Windows) |
+| Project | `<project_dir>/.ezmk/repo/list.json` |
 
 Format:
 
-```toml
-[[repos]]
-name = "my-repo"
-url = "git@github.com:user/ezmk-repo.git"
-type = "git"
-branch = "main"
-last_update = "2026-06-19T12:00:00Z"
-
-[[repos]]
-name = "community"
-url = "https://gitee.com/example/ezmk-repo.git"
-type = "git"
-branch = "main"
-last_update = ""
-
-[[repos]]
-name = "local-dev"
-url = "E:/packages/my-dev-repo"
-type = "local"
-last_update = "2026-06-19T10:00:00Z"
+```json
+{
+  "version": 1,
+  "repos": [
+    {
+      "name": "ezmk-official",
+      "url": "https://github.com/3667808244/eazymake-repo.git",
+      "type": "git",
+      "branch": "main",
+      "last_update": "2026-09-27T10:00:00Z"
+    }
+  ]
+}
 ```
+
+Entries with `type = "local"` do not write `branch`.
 
 | Field         | Description                                                          |
 | ------------- | -------------------------------------------------------------------- |
@@ -152,6 +147,8 @@ last_update = "2026-06-19T10:00:00Z"
 | `type`        | `"git"` or `"local"`                                                 |
 | `branch`      | Tracked branch, valid when `type = "git"`, default `main`            |
 | `last_update` | For `type = "git"`, the commit time of the tracked branch's latest commit (`git log -1 --format=%cI`); for `type = "local"`, the wall-clock time of the last `update`. A pull that brings no new commits leaves the value unchanged |
+
+- **Format and migration (1.4.5+)**: `list.json` (JSON). The pre-1.4.5 `list.toml` is still readable and is migrated automatically on the next `repo add/remove/update` (the old file is then deleted). After downgrading to 1.4.4 or earlier the registry shows up empty (installed packages are unaffected; re-running `ezmk repo add` restores it).
 
 ### Local Cache Paths
 
@@ -215,7 +212,7 @@ ezmk repo add -g https://gitee.com/org/public-repo.git
 3. For local directories:
    - Validate that `index.toml` exists and is well-formed
    - Do not clone; record the path directly
-4. Write to `list.toml`
+4. Write to `list.json`
 5. If a repository with the same name already exists → error (run `remove` first if replacement is needed)
 
 ### `ezmk repo remove`
@@ -264,7 +261,7 @@ ezmk repo update [-p|-u|-g] [<name>]
    - `git pull` failure → warning, not an error (network issues should not block builds)
 2. **Local directories** (`type = "local"`):
    - Re-read `index.toml`
-3. Update the `last_update` timestamp in `list.toml`
+3. Update the `last_update` timestamp in `list.json`
 
 **Examples**:
 
@@ -318,7 +315,7 @@ ezmk pkg install -p foo
 
 When the argument to `pkg install` is neither a local file path nor a URL containing `://`:
 
-1. Search the registry `list.toml` in **project → user → global** order
+1. Search the registry `list.json` in **project → user → global** order
 2. Within each scope, iterate repositories in registration order
 3. For each repository, read its `index.toml` (local cache for git repos, source path for local repos)
 4. Search `[[packages]]` by `name`
@@ -403,11 +400,11 @@ Repository-related security policies (no confirmation required for global regist
 
 | Path                                     | Description                  |
 | ---------------------------------------- | ---------------------------- |
-| `<ezmk_install_dir>/repo/list.toml`      | Global repo registry         |
+| `<ezmk_install_dir>/repo/list.json`      | Global repo registry         |
 | `<ezmk_install_dir>/repo/.cache/<name>/` | Global repo clone cache      |
-| `~/.local/ezmk/repo/list.toml` (Unix) · `%LOCALAPPDATA%\ezmk\repo\list.toml` (Windows) | User repo registry |
+| `~/.local/ezmk/repo/list.json` (Unix) · `%LOCALAPPDATA%\ezmk\repo\list.json` (Windows) | User repo registry |
 | `~/.local/ezmk/repo/.cache/<name>/` (Unix) · `%LOCALAPPDATA%\ezmk\repo\.cache\<name>\` (Windows) | User repo clone cache |
-| `.ezmk/repo/list.toml`                   | Project repo registry        |
+| `.ezmk/repo/list.json`                   | Project repo registry        |
 | `.ezmk/repo/.cache/<name>/`              | Project repo clone cache     |
 
 ---

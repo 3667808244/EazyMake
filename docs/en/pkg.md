@@ -265,7 +265,7 @@ ezmk pkg install -p file:///tmp/mylib.git          # local repo
   `-y`) before cloning, mirroring `http://` downloads.
 - **Integrity**: git sources are pinned by the **commit SHA**, not a sha256
   archive hash. An explicit `--sha256` prints a skip notice.
-- **Lockfile**: `ezmk.lock` records `source = "git"`, `source_url`, and the
+- **Lockfile**: `ezmk.lock.json` records `source = "git"`, `source_url`, and the
   pinned `commit`; `ezmk pkg install <url> --locked` re-clones the recorded
   commit and refuses to install if the upstream ref was force-pushed or moved
   (`lock_commit_mismatch`).
