@@ -30,13 +30,13 @@ class Ezmk < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/3667808244/EazyMake/releases/download/v1.4.5/ezmk-macos-arm64.tar.gz"
-      sha256 "4ded2624115bce2d38abf47061f4b209d0492f90093300f86e882f9efdffa4d5"
+      sha256 "66c827702c939bdb42c9e3aa1ebd758f1989970ae4f1470caaff5d89a7a2feca"
     end
   end
 
   on_linux do
     url "https://github.com/3667808244/EazyMake/releases/download/v1.4.5/ezmk-linux-x64.tar.gz"
-    sha256 "7e922199f0be9eed1e6bb8425dac7bfb7f935a5f71f42de29454ef5c77865f11"
+    sha256 "faca50230e13637d90a42078b722760db6f208a87cda580fff24c37b478db813"
   end
 
   def install

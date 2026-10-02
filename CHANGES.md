@@ -70,17 +70,21 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ### 发布（2026-10-02，tag `v1.4.5`）
 
-- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.5（实测 `./build/ezmk version` → `EazyMake 1.4.5`）；4 页 `.TH` 日期 = 2026-10-02；`docs/{en,zh}/config_file.md` 的 `EZMK_VERSION` 示例与 `README.md` / `README_ZH.md` 的 winget `-Version` 示例同步 1.4.5（对照 1.4.4 发布 commit 先例）。定稿 commit `e29ae82`，定稿后全量 `test-all` **1113 / 6491 零失败**。
-- **tag / Release**：annotated tag `v1.4.5`（tag 对象 `5ee6829`）已推送；GitHub Release 已发布，`release.yml`（run `36993548272`）**success**——`version` / `linux-x64` / `macos-arm64` / `windows-x64` 全绿，`macos-x64` **skipped**（预期，未设 `ENABLE_MACOS_X64`），产出 **7 个资产**。
+> **⚠️ tag 曾在同日回退一次（首次发布作废）**：首次定稿 commit `e29ae82` 用 PowerShell（Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8`）改 4 页 man 的 `.TH` 日期时写入了 **UTF-8 BOM**。CI 的 man 静态 lint 抓到（本地 `groff -z -ww` 与 `scripts/check_man_sync.py` 都不报），且实测 `groff -man` 渲染会在标题前多出一行 `ï»¿`——即已发布 tar 包 / pacman 包里的 `man ezmk`（及另 3 页）会带一行乱码。按 workflow §3.5「任一不满足 → 回退 tag 并修复，禁止带病发布」，删除 Release + tag，在修复 commit `65c7af3`（4 页 man 去 BOM，LF 与其他字节不变；本地按 CI 的 6 项 grep 复现全部 0 命中，CI run `36996122783` 全绿）上重建 tag 并**重做三渠道**（产物 digest 全部变化）。**下表 digest / sha 均为回退后的最终产物。**
+>
+> 根因是流程顺序：首次先建 Release、后查 CI（§3.1 要求在 tag 前确认最近一次 push 的 CI 为绿）。后续发布应把「CI 绿」作为打 tag 的前置检查。
+
+- **版本定稿**：`build.sh` 的 `EZMK_VERSION` fallback 与 `include/ezmk/version.hpp` 置 1.4.5（实测 `./build/ezmk version` → `EazyMake 1.4.5`）；4 页 `.TH` 日期 = 2026-10-02；`docs/{en,zh}/config_file.md` 的 `EZMK_VERSION` 示例与 `README.md` / `README_ZH.md` 的 winget `-Version` 示例同步 1.4.5（对照 1.4.4 发布 commit 先例）。定稿 commit `e29ae82`，定稿后全量 `test-all` **1113 / 6491 零失败**；BOM 修复 commit `65c7af3`。
+- **tag / Release（回退后）**：annotated tag `v1.4.5` 指向 `65c7af3`（tag 对象 `68e214d`）已推送；GitHub Release 已重建，`release.yml`（run `36997151873`）**success**——`version` / `linux-x64` / `macos-arm64` / `windows-x64` 全绿，`macos-x64` **skipped**（预期，未设 `ENABLE_MACOS_X64`），产出 **7 个资产**。（首次发布 run `36993548272` 亦为 success，对应已作废的 `e29ae82`。）
 - **资产核对**（`gh release download` 全量下载后逐字节核对，与 `assets[].digest` **全部一致**）：
-  - `ezmk-windows-x64.zip` `e7bb5b55a78342461d047daf8cdc8bb18761915d4e12dd7a3299808e0c17981b`（4890866 字节）
-  - `ezmk-linux-x64.tar.gz` `7e922199f0be9eed1e6bb8425dac7bfb7f935a5f71f42de29454ef5c77865f11`（5320970）
-  - `ezmk-macos-arm64.tar.gz` `4ded2624115bce2d38abf47061f4b209d0492f90093300f86e882f9efdffa4d5`（2754014）
-  - `ezmk.exe` `631f9db3ecbfc2c4db41431c37e0915183aa4ba02183c7e4e8d2815ef8ddd575` / `ezmk-lua.exe` `8c708b0aed8e63843d3a6e69c8db410cff219799210bc279e1680d1fc9cb44d1`，两个 `.sha256` 边车内容与对应 digest 一致
-  - **产物内容核对**：linux / macos 压缩包含 `ezmk`、`ezmk-lua`、`_ezmk` 与 **`man/` 4 页**（tar 内 `groff -man -Tutf8 -z -ww` 零告警；linux ELF 版本串 `1.4.5`）；**Windows zip 仅 `_ezmk` + 两个 exe，不含 `man/`**；下载的 `ezmk.exe version` → `EazyMake 1.4.5`
-- **pacman**：`publish/arch/PKGBUILD` 更新至 v1.4.5（源码 tarball 真实 digest `1ca961fc4d09a35ed94053d2e6c909e03384614f05698fe81497d425ef30452a`，1982839 字节；codeload 与 archive 两端点字节一致）；本机 MSYS2 MINGW64 `makepkg -fd` 出包 `eazymake-1.4.5-1-x86_64.pkg.tar.zst`（sha256 `25bbabf76c05839be84e8492681982da6571870eb620b46c83d4d439ef65ec22`，`sha256sums` 校验通过），包内 `usr/bin/{ezmk.exe,ezmk-lua.exe}` / `usr/share/man/man{1,5}/` 4 页（makepkg 自动 gzip，groff 零告警）/ `usr/share/zsh/site-functions/_ezmk` 落位，包内 `ezmk.exe version` → **1.4.5**。
-- **Homebrew**：tap `3667808244/homebrew-eazymake` 公式已更新至 1.4.5（commit `09b304c`；macos-arm64 `4ded2624…` / linux-x64 `7e922199…` 真实 digest，含 `man1.install` / `man5.install`），仓库副本 `publish/homebrew/ezmk.rb` 同步且内容一致；`brew install` 真机冒烟需 macOS，本机为 Windows，未执行（与 1.4.x 前例一致）。
-- **winget**：split manifests（`publish/winget/e/ezmk/1.4.5/`，`InstallerType: zip` + `NestedInstallerType: portable`，`InstallerSha256` = `e7bb5b55…`）本机 `winget validate` 通过（「清单验证成功」），已提交 `microsoft/winget-pkgs#445627`——`license/cla` **pass**、01/02/03/05/06 五项 pass，`07 Installers Scan` / `08 Installation Validation` / `09 Installer Metadata Validation` 为长跑项（约 5~40 分钟），版主审批为发布后跟进项，不阻塞发布。
+  - `ezmk-windows-x64.zip` `a2b45465e17f0889ca2a4879731cdb31111e048e7083062b3fb91d10f1abcf72`（4890864 字节）
+  - `ezmk-linux-x64.tar.gz` `faca50230e13637d90a42078b722760db6f208a87cda580fff24c37b478db813`（5320963）
+  - `ezmk-macos-arm64.tar.gz` `66c827702c939bdb42c9e3aa1ebd758f1989970ae4f1470caaff5d89a7a2feca`（2754010）
+  - `ezmk.exe` `0b2c4c4a5a71823576fc5adb5df52b4e5df725f8f7af1c88438c04ac43a9c295` / `ezmk-lua.exe` `4bdfdcf2acda9078348a648fd5c70f8ef99f5298e8ce85ffe9d774668319a1a8`，两个 `.sha256` 边车内容与对应 digest 一致
+  - **产物内容核对**：linux / macos 压缩包含 `ezmk`、`ezmk-lua`、`_ezmk` 与 **`man/` 4 页**——4 页首 3 字节均为 `2e 5c 22`（`.\"`，**无 BOM**）、`groff -man -Tutf8 -z -ww` 零告警、渲染首行即标题（`EZMK(1)`）、ELF 版本串 `1.4.5`；**Windows zip 仅 `_ezmk` + 两个 exe，不含 `man/`**；下载的 `ezmk.exe version` → `EazyMake 1.4.5`
+- **pacman（回退后重做）**：`publish/arch/PKGBUILD` 更新至 v1.4.5（**回退后**源码 tarball digest `0849809f6284596f8ab12036db8d1fde3ce0313076aea0e19046d0e3d0404458`，1985753 字节；codeload 与 archive 两端点字节一致）；本机 MSYS2 MINGW64 `makepkg -fd` 出包 `eazymake-1.4.5-1-x86_64.pkg.tar.zst`（sha256 `fb4980ebb67382f2220ee965b0e18226c3d702a3bb0f2e49dd955f722b450dc4`，`sha256sums` 校验通过），包内 `usr/bin/{ezmk.exe,ezmk-lua.exe}` / `usr/share/man/man{1,5}/` 4 页（makepkg 自动 gzip；**去 BOM 后** groff 零告警）/ `usr/share/zsh/site-functions/_ezmk` 落位，包内 `ezmk.exe version` → **1.4.5**。（首次出包 `25bbabf7…` 对应已作废的 tag。）
+- **Homebrew（回退后重做）**：tap `3667808244/homebrew-eazymake` 公式更新至 1.4.5（commit `206a4e4`；macos-arm64 `66c82770…` / linux-x64 `faca5023…` 真实 digest，含 `man1.install` / `man5.install`），仓库副本 `publish/homebrew/ezmk.rb` 同步且内容一致；`brew install` 真机冒烟需 macOS，本机为 Windows，未执行（与 1.4.x 前例一致）。（tap 的首次 1.4.5 commit `09b304c` 已作废。）
+- **winget（回退后重做）**：split manifests（`publish/winget/e/ezmk/1.4.5/`，`InstallerType: zip` + `NestedInstallerType: portable`）本机 `winget validate` 通过（「清单验证成功」），已提交 `microsoft/winget-pkgs#445627`；回退后 installer manifest 的 `InstallerSha256` 已更新为 `a2b45465…`（同分支推送，PR CI 重跑），`license/cla` **pass**；`07 Installers Scan` / `08 Installation Validation` / `09 Installer Metadata Validation` 为长跑项（约 5~40 分钟），版主审批为发布后跟进项，不阻塞发布。
 - **发布记录**：Release notes 正文见 [`publish/release-notes-1.4.5.md`](publish/release-notes-1.4.5.md)。
 
 ### 明确不做

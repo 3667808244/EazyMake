@@ -6,7 +6,7 @@ UpgradeBehavior: install
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/3667808244/EazyMake/releases/download/v1.4.5/ezmk-windows-x64.zip
-    InstallerSha256: e7bb5b55a78342461d047daf8cdc8bb18761915d4e12dd7a3299808e0c17981b
+    InstallerSha256: a2b45465e17f0889ca2a4879731cdb31111e048e7083062b3fb91d10f1abcf72
     NestedInstallerType: portable
     NestedInstallerFiles:
       - RelativeFilePath: ezmk.exe

@@ -3,8 +3,9 @@
 # 自取 PKGBUILD + makepkg -si（需 base-devel）。AUR 提交延后（账户开通后补）。
 # pkgver 指向 v1.4.5 正式 tag；sha256sums 为 v1.4.5 tag 源码 tarball 的真实 digest
 # （https://codeload.github.com/3667808244/EazyMake/tar.gz/refs/tags/v1.4.5，2026-10-02
-#  实测下载 1982839 字节；与 https://github.com/3667808244/EazyMake/archive/refs/tags/v1.4.5.tar.gz
-#  重定向后的字节一致）
+#  实测下载 1985753 字节；与 https://github.com/3667808244/EazyMake/archive/refs/tags/v1.4.5.tar.gz
+#  重定向后的字节一致。注：tag 同日回退过一次以修掉 man 源文件的 UTF-8 BOM，
+#  故该 digest 与首次发布时不同）
 #
 # 构建说明：build.sh 在 Linux 产出静态链接二进制（LDFLAGS="-static"），
 # 故 depends 为空、makedepends 仅 gcc + python；ezmk-lua 为 dev.8 新增的
@@ -20,7 +21,7 @@ url="https://github.com/3667808244/EazyMake"
 license=('MIT')
 makedepends=('gcc' 'python')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/3667808244/EazyMake/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('1ca961fc4d09a35ed94053d2e6c909e03384614f05698fe81497d425ef30452a')
+sha256sums=('0849809f6284596f8ab12036db8d1fde3ce0313076aea0e19046d0e3d0404458')
 
 build() {
   cd "EazyMake-$pkgver"
