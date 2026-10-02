@@ -24,7 +24,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
-## 1.4.5 (未发布) — 生成物格式统一（lockfile / 仓库注册表 JSON 化）
+## 1.4.5 (2026-10-02) — 生成物格式统一（lockfile / 仓库注册表 JSON 化）
 
 把两个「ezmk 全权生成、用户不该手改」的文件从 TOML 改为 JSON：`ezmk.lock` → **`ezmk.lock.json`**、`list.toml` → **`list.json`**（全局 / 用户 / 项目三作用域），并顺带把这两个仓储里少数**非原子写**的生成物升级为原子写。旧格式**继续可读**，首次成功写入时**自动迁移**（写新文件 → 删旧文件），因此**升级无感、无需手动操作**。**公共 API 无破坏性变更**（只新增函数，`repo::list_toml_path()` 保留为别名）；lockfile 的**字段语义完全不变**（`sha256` 别名继续双写、`version` 仍为 1、`--locked` / `deterministic` 判定逻辑不变）；不放宽也不移除任何弃用面。
 
