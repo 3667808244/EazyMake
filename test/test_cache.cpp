@@ -4,6 +4,7 @@
 #include "ezmk/cache.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/crypto.hpp"
+#include "ezmk/lockfile.hpp"
 #include "ezmk/util.hpp"
 #include "test_helpers.hpp"
 
@@ -725,4 +726,61 @@ TEST_CASE("parse_depfile_and_hash: escaped spaces stay in the path", "[cache][1.
     // Escaped space decoded, token not split
     REQUIRE(deps[0].path == "C:\\My Project\\include\\hdr.hpp");
     REQUIRE(deps[1].path == "C:\\Other Path\\a.hpp");
+}
+
+// ===================================================================
+// 1.4.5: the deterministic signature hashes the ACTIVE lockfile
+// ===================================================================
+
+// build.cpp (save side) and cache.cpp (check side) must hash the SAME file. The
+// old code hard-coded `proj_root / "ezmk.lock"` on both sides, which is fine
+// only until the file is renamed: after migration the hard-coded name no longer
+// resolves, that side silently drops the lock segment, and the two signatures
+// can never match again — the exact failure mode 1.4.2 had to fix (every build
+// recompiles everything). Both sides now go through lockfile::active_path().
+TEST_CASE("check_cache: deterministic signature follows the active lockfile (1.4.5)",
+          "[cache][1.4.5]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/cache/obj");
+
+    fs::path src = tmp.path / "src_file.cpp";
+    { std::ofstream(src) << "// test source"; }
+    { std::ofstream(tmp.path / ".ezmk/cache/obj/src_file.o") << "fake object"; }
+
+    CompileSection compile;
+    CacheRecord record;
+    record.deterministic = true;
+
+    FileEntry fe;
+    fe.source_hash = sha256_file(src);
+    fe.object_file = ".ezmk/cache/obj/src_file.o";
+    fe.compiler = "g++";
+    record.files["src_file.cpp"] = fe;
+
+    // Pre-1.4.5 state: a TOML lockfile is the only one on disk. The save side's
+    // signature = options + ":" + lockfile content hash.
+    fs::path legacy = ezmk::lockfile::legacy_lockfile_path(tmp.path);
+    ezmk::util::file_write(legacy, "[metadata]\nversion = 1\ndirect_deps = []\n");
+    record.compile_options_signature =
+        compile_options_signature(compile) + ":" + sha256_file(legacy);
+    REQUIRE(check_cache(src, compile, record, tmp.path).has_value());
+
+    // Migration: ezmk.lock.json lands and the legacy file is removed.
+    fs::path json_path = ezmk::lockfile::lockfile_path(tmp.path);
+    ezmk::util::file_write(json_path, "{\n  \"metadata\": {\n    \"version\": 1\n  }\n}\n");
+    REQUIRE(ezmk::util::file_exists(legacy));
+    fs::remove(legacy);
+
+    // The signature recorded against the legacy file must not hit any more:
+    // the check side now hashes the JSON file (format + name changed, so the
+    // content hash changed too). This asserts the check side FOLLOWS the active
+    // file — a hard-coded name would look up a missing file instead and drop the
+    // lock segment, which is also a mismatch, but silently.
+    REQUIRE_FALSE(check_cache(src, compile, record, tmp.path).has_value());
+
+    // Re-signing against the new file restores the hit, and it stays stable:
+    // migration costs exactly one full rebuild, not one per build.
+    record.compile_options_signature =
+        compile_options_signature(compile) + ":" + sha256_file(json_path);
+    REQUIRE(check_cache(src, compile, record, tmp.path).has_value());
 }

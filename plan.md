@@ -24,7 +24,7 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 | 注册表 JSON 化（M-03/M-08） | P0 | `list.json`（全局/用户/项目）+ 双读 + 迁移 + zsh 补全双分支 |
 | 公共 helper 与 API 兼容（M-05/M-06） | P1/P0 | `util::atomic_write_text()` 上提；`lockfile::*` 签名不变；`repo_list_path()` / `legacy_repo_list_path()` 新增、`list_toml_path()` 保留 |
 | i18n 与文档（M-07/M-10） | P0 | 5 个迁移键三向一致；docs 6 文件 + tutorial + README 中英 + man 2 页 + skills 4 处 + CHANGES 1.4.5 |
-| 测试固化（M-09） | P0 | 双格式对拍等价 + 迁移 + 缓存"仅重命名恰一次全量重编" + F-24 双路径 + 保留旧 TOML 夹具 |
+| 测试固化（M-09） | P0 | 双格式对拍等价 + 迁移 + 缓存"确定性签名跟随当前生效 lockfile" + F-24 双路径 + 保留旧 TOML 夹具 |
 | 索引与登记（M-11/M-12） | P0 | `plans/2.0.x/REMOVALS.md` 登记 R-03/R-04；索引与根 `plan.md` 状态更新；明确不做项 |
 
 ## 3 执行阶段（每阶段一个 commit，阶段间全量回归）
@@ -56,24 +56,26 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段四：i18n + man + 文档 + skill（M-07/M-10，对应设计 §3.8/§3.11）
 
-- [ ] `include/ezmk/i18n_keys.def` + `locale/en.json` + `locale/zh.json`：新增 5 键（`lock_legacy_detected` / `lock_migrated` / `lock_legacy_stale` / `repo_list_legacy_detected` / `repo_list_migrated`），键数 **406 → 411**，`python scripts/check_i18n.py` 三向一致（`zh-TW` 变体继承，无需补）
-- [ ] 可选（不计入门槛）：i18n 化两处硬编码英文解析失败消息（`src/lockfile.cpp:97`、`src/repo.cpp:116`），+2 键 → 413；若做，同批更新索引里的键数口径
-- [ ] `man/ezmk.1`（:509/:515/:732）与 `man/ezmk.toml.5`（:462/:473-474）正文文件名更新；`python scripts/check_man_sync.py` 通过 + `groff -man -Tutf8 -z -ww` 零告警
-- [ ] `docs/{en,zh}`：`config_file.md`（Lockfile 小节 + 示例块 + **迁移与降级说明**）、`cli.md`、`repo.md`（注册表路径表 + 双读/迁移）、`technical.md`（目录树）、`glossary.md`、`pkg.md`；`bash scripts/check_docs_sync.sh` 通过（en↔zh 同名同集合）
-- [ ] `tutorial/{en,zh}/packages/02-version-lockfile.md`：标题 / "(TOML)" → "(JSON)" / 代码块 / `git add ezmk.lock` → `ezmk.lock.json`
-- [ ] `README.md:198` / `README_ZH.md:197` 高级特性表行
-- [ ] skills 4 处：`ezmk-codebase`（目录树 :38、config 行 :74、lockfile 行 :113、注册表 :234-237、Lockfile 小节 :248-253）、`ezmk-repo`（:170-176）、`ezmk-user-pkg`（:75-111 lockfile 示例块 + :155 `git add`）、`ezmk-user-config`（:129）、`ezmk-test`（:70 注释）
+- [x] `include/ezmk/i18n_keys.def` + `locale/en.json` + `locale/zh.json`：迁移相关新键 **6** 个（`lock_legacy_detected` / `lock_migrated` / `lock_legacy_stale` / `repo_list_legacy_detected` / `repo_list_migrated` / `repo_list_legacy_stale`；**比计划多一个**——注册表的"双文件共存"与 lockfile 对称处理），键数 **406 → 412**，`python scripts/check_i18n.py` 三向一致（`zh-TW` 变体只翻译差异键，其**既有** lock_* 消息也同步改名）
+- [ ] （本版明确不做）i18n 化两处硬编码英文解析失败消息（`src/lockfile.cpp` / `src/repo.cpp`）：它们由两条读取路径共用且都带文件名上下文，收益低；留作后续收口（见 §6 延后项）
+- [x] `man/ezmk.1`（`--locked` / `--no-lock` / FILES 段）与 `man/ezmk.toml.5`（版本约束 / 确定性构建段）正文文件名更新 + 迁移一句；`python scripts/check_man_sync.py` 通过 + `groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警
+- [x] `docs/{en,zh}` **7 个文件**（`config_file.md`（Lockfile 小节 + JSON 示例块 + 迁移/降级说明 + 补 `scope` 语义）、`cli.md`、`repo.md`（注册表 + JSON 示例 + 迁移说明）、`technical.md`（目录树 + 补 `ezmk.lock.json` 行）、`glossary.md`、`pkg.md`、**`package_authoring.md`（计划清单遗漏，本轮补齐）**）；`bash scripts/check_docs_sync.sh` 通过（docs 15 / tutorial 16 同名同集合）
+- [x] **示例口径修正**：`source` 是**来源类型**（`repo`/`url`/`local`/`archive`/`git`）、具体来源在 `source_url`（与 `src/pkg.cpp:1601`/`:2012` 一致）——设计文档 §3.1 与 4 处文档示例同批改正
+- [x] `tutorial/{en,zh}/packages/02-version-lockfile.md`：标题 / "(TOML)" → "(JSON)" / 示例块 / `git add ezmk.lock.json`
+- [x] `README.md:198` / `README_ZH.md:197` 高级特性表行
+- [x] skills **5 个文件**：`ezmk-codebase`（目录树 / config 行 / lockfile 模块行与 API / 注册表三路径 / Lockfile 小节）、`ezmk-repo`（注册表小节）、`ezmk-user-pkg`（lockfile workflow 示例块 TOML→JSON + `git add` 行 + `source` 口径）、`ezmk-user-config`、`ezmk-test`
+- [x] 顺带（服务文档保真）：lockfile / 注册表写入改用 `nlohmann::ordered_json`，使落盘字段顺序与文档示例一致（`record.json` 保持 `json` 不变）
 
 ### 阶段五：测试固化（M-09，对应设计 §3.9）
 
-- [ ] **双格式对拍等价用例（本版最关键）**：同一份 lockfile 的 TOML 文本与 JSON 文本（取 1.4.4 真实产物裁剪）→ 两个读取路径各产出 `config::Lockfile` → `metadata` 5 字段 + `direct_deps` + 每个 package 的 11 字段 + `dependencies` **逐字段 `REQUIRE` 相等**
-- [ ] 双读回退用例（仅有旧 `ezmk.lock` 时 `load` / `verify` / `depends_changed` 与 JSON 版等价）；迁移写入用例（新文件存在且可解析 + 旧文件被删 + round-trip 相等）；双文件共存用例（JSON 生效 + 警告 + 写入后只剩 JSON）
-- [ ] 空字段不写出用例（`lib_sha256` / `archive_sha256` / `commit` 空 → JSON 无该键；`dependencies` 空 → `[]`）
-- [ ] `test_cache.cpp`：**仅重命名 lockfile（内容不变）→ 签名变化 → 全量重编一次；再次构建命中**
-- [ ] `test_repo.cpp`：注册表迁移 + 双读一致 + F-24 在**两条路径**都生效（旧 TOML 夹具与 JSON 夹具各一份）+ 路径断言改为 `repo_list_path(...).filename() == "list.json"` / `legacy_...  == "list.toml"`（旧断言 `filename() == "list.toml"` 相应改写）
-- [ ] `test_lockfile.cpp` 既有 5 处 TOML 夹具更新为新格式
-- [ ] **夹具纪律**：`test/test_integration.cpp:938-941` 的旧 TOML lockfile 夹具**保持不动**（strict 模式读旧格式的端到端回归，不得"顺手统一"）；`test/test_integration_git.cpp:225/277` 路径改新名 + 新增"旧 TOML lockfile 下 `--locked` 仍可用"用例
-- [ ] 回归：全量零失败，新增用例只增不减（实测用例/断言数写入 `plans/1.4.x/README.md` 与本版发布小节）
+- [x] **双格式对拍等价用例（本版最关键）**：同一份 lockfile 的 TOML 文本与 JSON 文本（两个包：repo 静态库 + local header-only）→ 两个读取路径各产出 `config::Lockfile` → metadata 6 字段 + 每个 package 的 12 字段**逐字段 `REQUIRE` 相等**，并对 `depends_changed` 断言行为一致
+- [x] 双读回退用例（仅有旧 `ezmk.lock` 时逐字段加载 + `active_path()` 解析：旧文件优先 → 新文件优先）；迁移写入用例（新文件存在且可解析 + 旧文件被删 + round-trip 相等）；双文件共存用例（JSON 生效 + 警告）；解析失败用例（损坏 JSON → 警告 + 视为无 lockfile）
+- [x] 空字段不写出用例（`lib_sha256` / `archive_sha256` / `commit` 空 → JSON 无该键；`dependencies` / `direct_deps` 空 → `[]`；读回仍为空）
+- [x] `test_cache.cpp`：**确定性签名跟随当前生效的 lockfile** —— 旧 TOML 状态下命中 → 迁移到 JSON 后旧签名失效（恰一次重编）→ 按新文件重新签名后再次命中
+- [x] `test_repo.cpp`：注册表迁移 + 双读一致 + F-24 在**两条路径**都生效（旧 TOML 夹具与 JSON 夹具各一份）+ 路径断言改为 `repo_list_path(...).filename() == "list.json"` 与 `list_toml_path() == legacy_repo_list_path()` + local 条目不写 `branch`
+- [x] `test_lockfile.cpp` 既有 TOML 夹具：写入侧断言改 JSON，**读取侧的两处旧 TOML 夹具按夹具纪律保留**（双读路径的覆盖）
+- [x] **夹具纪律**：`test/test_integration.cpp:938-941` 的旧 TOML lockfile 夹具**保持不动**（strict 模式读旧格式的端到端回归）；`test/test_integration_git.cpp` 路径改新名 + JSON 内容断言（`"source": "git"` / `"commit": "…"`）
+- [x] 回归：全量零失败，**1113 用例 / 6491 断言**（4 跳过；基线 1099/6349 → **+14 用例 / +142 断言**，只增不减）
 
 ### 阶段六：变更日志与收口（M-10/M-11/M-12，对应设计 §3.11/§3.12/§3.13）
 
@@ -97,7 +99,7 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 - **双读 + 单向迁移，而不是硬切换**：旧文件照读、只在新文件写入成功后删旧文件；升级无感，代价只有"降级不可读"这一条，用文档写死。硬切换（只读 JSON）属破坏性变更，按仓库惯例归 2.0.0。
 - **文件名与格式同时改**：`list.toml` 里放 JSON 名实不符；`ezmk.lock` 无扩展名，改名零阻力。文件名成为格式的唯一判别依据，老版本读新文件时表现为"文件不存在"（可理解的报错）而非"解析失败"。
 - **删旧文件必须在新文件落地之后**：任何失败路径都宁可留下双文件（下次读取走 JSON + 陈旧警告），绝不在写入未成功时丢 lockfile。
-- **缓存签名用"当前生效路径"而非"新名字"**：`deterministic` 下 lockfile 哈希是编译签名的一部分，三处（保存/校验/包缓存）必须取同一份文件，否则重演 1.4.2 的"两侧签名永不等"缺陷；迁移当天恰好一次全量重编，用测试锁定"仅此一次"。
+- **缓存签名用"当前生效路径"而非"新名字"**：`deterministic` 下 lockfile 的**内容**哈希是编译签名的一部分，三处（保存/校验/包缓存）必须取同一份文件，否则某一侧在迁移后取不到文件、签名永不等，重演 1.4.2 的缺陷；迁移因换格式改变内容而带来**恰一次**全量重编，用测试锁定"仅此一次"。
 - **回退路径不得降级安全**：1.4.2 F-24 的名字校验在旧格式读取路径上同样生效（手改的旧 `list.toml` 一样能塞 `../evil`），两条路径各有一份用例。
 - **静态补全脚本必须双分支**：`res/ezmk.zsh` 装在用户机上不会随升级更新，"只认新名"会让老用户补全直接失效。
 - **顺手升级原子写**：两个文件原本是仓储里少数非原子写的生成物；半截 lockfile 在 `deterministic = true` 下是致命错误，借写入器重写一并修掉（新 helper 上提为 `util::atomic_write_text`）。
@@ -110,7 +112,7 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 | `ezmk.lock` → `ezmk.lock.json` | 升级无感（旧文件照读）；首次写入后 git 视角为一次"删除 + 新增"重命名 | 迁移提示 + CHANGES 说明，用户只需 commit |
 | **降级 1.4.5 → ≤1.4.4** | 老版本读不到 `*.json`：`deterministic = true` **致命**；非确定性仅告警 | 文档显式写明；可从旧 commit 取回 TOML lockfile |
 | `list.toml` → `list.json` | 升级无感；降级后老版本注册表为空（已安装包不受影响，重新 `repo add` 可恢复） | 文档写明（注册表是本地状态文件） |
-| 缓存签名改用 `active_path()` | 迁移当天一次全量重编（哈希因改名而变） | 单测锁定"仅一次，之后命中" |
+| 缓存签名改用 `active_path()` | 迁移当天一次全量重编（换格式必然改变 lockfile 内容 → 内容哈希变化） | 单测锁定"仅一次，之后命中" |
 | `lockfile::load/save/verify/depends_changed` | 签名与语义不变 | 门槛② |
 | `repo::list_toml_path()` | 保留（返回旧路径）；新增 `repo_list_path()` / `legacy_repo_list_path()` | 删除归 2.0.0（R-04） |
 | `util::atomic_write_text()` | 新增公共 helper；`workspace.cpp` 行为不变 | 纯增量 |

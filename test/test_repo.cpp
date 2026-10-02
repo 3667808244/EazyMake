@@ -105,7 +105,7 @@ TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
     // 1.4.0-dev.5: the old test never called either function (it hand-wrote
     // TOML and asserted on a locally-built vector) — zero coverage of the
     // serialize/deserialize pair. Now: chdir into a temp project (project
-    // scope list.toml resolves to CWD when no ezmk.toml is found, or to the
+    // scope registry path resolves to CWD when no ezmk.toml is found, or to the
     // located root), save via the real API, load back, and compare.
     TempDir tmp;
     CwdGuard cwd;  // chdirs to a temp dir; Project scope resolves to it

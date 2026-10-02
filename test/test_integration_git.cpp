@@ -242,7 +242,7 @@ TEST_CASE("integration: pkg install git URL — --locked re-clones the recorded 
         "[project]\nname = \"proj\"\ntype = \"executable\"\nversion = \"0.1.0\"\n");
     file_write(proj / "src" / "main.cpp", "int main() { return 0; }\n");
 
-    // First install from #v1.0 (records commit A in ezmk.lock).
+    // First install from #v1.0 (records commit A in ezmk.lock.json).
     ProcResult r1 = run_ezmk("pkg install \"" + file_url(fx.repo) + "#v1.0\" -p -y", proj);
     REQUIRE(r1.exit_code == 0);
     REQUIRE(installed_version(proj) == "1.0.0");
@@ -287,7 +287,7 @@ TEST_CASE("integration: pkg install git URL — --locked rejects a tampered comm
     INFO("locked stderr: " << r2.err);
     INFO("locked stdout: " << r2.out);
     REQUIRE(r2.exit_code != 0);
-    REQUIRE((r2.out + r2.err).find("ezmk.lock") != std::string::npos);
+    REQUIRE((r2.out + r2.err).find("ezmk.lock.json") != std::string::npos);
 }
 
 TEST_CASE("integration: pkg install git URL — explicit --sha256 is skipped with a notice (1.4.1)", "[integration][1.4.1]") {

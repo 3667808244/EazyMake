@@ -430,8 +430,8 @@ TEST_CASE("lockfile load: a legacy TOML file still loads field by field (1.4.5)"
         "[[packages]]\n"
         "name = \"fmt\"\n"
         "version = \"10.2.1\"\n"
-        "source = \"ezmk-official\"\n"
-        "source_url = \"https://example.com/fmt.tar.gz\"\n"
+        "source = \"repo\"\n"
+        "source_url = \"ezmk-official\"\n"
         "sha256 = \"aa\"\n"
         "lib_sha256 = \"bb\"\n"
         "type = \"static\"\n"
@@ -452,8 +452,8 @@ TEST_CASE("lockfile load: a legacy TOML file still loads field by field (1.4.5)"
     const auto& p = loaded->packages[0];
     REQUIRE(p.name == "fmt");
     REQUIRE(p.version == "10.2.1");
-    REQUIRE(p.source == "ezmk-official");
-    REQUIRE(p.source_url == "https://example.com/fmt.tar.gz");
+    REQUIRE(p.source == "repo");
+    REQUIRE(p.source_url == "ezmk-official");
     REQUIRE(p.sha256 == "aa");
     REQUIRE(p.lib_sha256 == "bb");
     REQUIRE(p.archive_sha256.empty());
@@ -512,4 +512,134 @@ TEST_CASE("lockfile load: corrupt json is a warning, not a crash (1.4.5)", "[loc
     TempDir tmp;
     ezmk::util::file_write(ezmk::lockfile::lockfile_path(tmp.path), "{ not json");
     REQUIRE_FALSE(ezmk::lockfile::load(tmp.path).has_value());
+}
+
+// The single detector for a reader that drifts: one TOML text and one JSON text
+// carrying IDENTICAL values, loaded through the two paths, compared field by
+// field. Every field of config::Lockfile / config::LockedPackage is covered, so
+// a new field that only one reader learns about fails here instead of showing up
+// as "migration changed my lockfile".
+TEST_CASE("lockfile readers: TOML and JSON agree field by field (1.4.5)", "[lockfile][1.4.5]") {
+    TempDir legacy_dir;
+    TempDir json_dir;
+
+    // A representative lockfile written by ezmk 1.4.4: two packages (a repo
+    // static lib with both hashes + a git-style commit field, and a local
+    // header-only entry with no hashes at all).
+    ezmk::util::file_write(ezmk::lockfile::legacy_lockfile_path(legacy_dir.path), R"TOML(
+[metadata]
+version = 1
+generated_by = "ezmk 1.4.4"
+generated_at = "2026-09-26T12:00:00Z"
+toolchain = "clang"
+toolchain_version = "clang 18.1.0"
+direct_deps = ["fmt@^10.0", "zlib"]
+
+[[packages]]
+name = "fmt"
+version = "10.2.1"
+source = "repo"
+source_url = "ezmk-official"
+sha256 = "art-hash"
+lib_sha256 = "art-hash"
+archive_sha256 = "arc-hash"
+commit = "0123456789abcdef0123456789abcdef01234567"
+type = "static"
+scope = "project"
+platform = "linux_x86_64_clang"
+dependencies = ["zlib"]
+
+[[packages]]
+name = "hdr"
+version = "2.0.0"
+source = "local"
+source_url = "/pkgs/with space"
+sha256 = ""
+type = "header-only"
+scope = "project"
+platform = ""
+dependencies = []
+)TOML");
+
+    // The same values in the 1.4.5 JSON shape (optional fields absent == empty;
+    // `sha256` keeps its legacy-alias role).
+    ezmk::util::file_write(ezmk::lockfile::lockfile_path(json_dir.path), R"JSON(
+{
+  "metadata": {
+    "version": 1,
+    "generated_by": "ezmk 1.4.4",
+    "generated_at": "2026-09-26T12:00:00Z",
+    "toolchain": "clang",
+    "toolchain_version": "clang 18.1.0",
+    "direct_deps": ["fmt@^10.0", "zlib"]
+  },
+  "packages": [
+    {
+      "name": "fmt",
+      "version": "10.2.1",
+      "source": "repo",
+      "source_url": "ezmk-official",
+      "sha256": "art-hash",
+      "lib_sha256": "art-hash",
+      "archive_sha256": "arc-hash",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "type": "static",
+      "scope": "project",
+      "platform": "linux_x86_64_clang",
+      "dependencies": ["zlib"]
+    },
+    {
+      "name": "hdr",
+      "version": "2.0.0",
+      "source": "local",
+      "source_url": "/pkgs/with space",
+      "sha256": "",
+      "type": "header-only",
+      "scope": "project",
+      "platform": "",
+      "dependencies": []
+    }
+  ]
+}
+)JSON");
+
+    auto from_toml = ezmk::lockfile::load(legacy_dir.path);
+    auto from_json = ezmk::lockfile::load(json_dir.path);
+    REQUIRE(from_toml.has_value());
+    REQUIRE(from_json.has_value());
+
+    // metadata
+    REQUIRE(from_toml->version == from_json->version);
+    REQUIRE(from_toml->generated_by == from_json->generated_by);
+    REQUIRE(from_toml->generated_at == from_json->generated_at);
+    REQUIRE(from_toml->toolchain == from_json->toolchain);
+    REQUIRE(from_toml->toolchain_version == from_json->toolchain_version);
+    REQUIRE(from_toml->direct_deps == from_json->direct_deps);
+
+    // packages
+    REQUIRE(from_toml->packages.size() == from_json->packages.size());
+    REQUIRE(from_toml->packages.size() == 2);
+    for (size_t i = 0; i < from_toml->packages.size(); ++i) {
+        const auto& a = from_toml->packages[i];
+        const auto& b = from_json->packages[i];
+        REQUIRE(a.name == b.name);
+        REQUIRE(a.version == b.version);
+        REQUIRE(a.source == b.source);
+        REQUIRE(a.source_url == b.source_url);
+        REQUIRE(a.sha256 == b.sha256);
+        REQUIRE(a.lib_sha256 == b.lib_sha256);
+        REQUIRE(a.archive_sha256 == b.archive_sha256);
+        REQUIRE(a.commit == b.commit);
+        REQUIRE(a.type == b.type);
+        REQUIRE(a.scope == b.scope);
+        REQUIRE(a.platform == b.platform);
+        REQUIRE(a.dependencies == b.dependencies);
+    }
+
+    // The consumers only see the struct, so equal structs mean equal behaviour —
+    // assert that once on the real API surface.
+    EzConfig cfg;
+    cfg.depends.libs = { dep_compat("fmt", "10.0"), dep_plain("zlib") };
+    REQUIRE(ezmk::lockfile::depends_changed(cfg, *from_toml) ==
+            ezmk::lockfile::depends_changed(cfg, *from_json));
 }
