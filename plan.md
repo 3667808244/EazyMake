@@ -1,12 +1,12 @@
 # EazyMake 1.4.5 执行计划
 
-> **状态：📝 计划中（2026-09-27 起草）**——本文档把设计文档 §4 转成可勾选的七阶段清单，全部复选框初始未勾选。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项，但会**新增**两条回退供其登记消费）。
+> **状态：✅ 阶段一~六完成（2026-09-27）—— 阶段七（正式发布）待用户确认后执行**。本文档把设计文档 §4 转成可勾选的七阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)（本版**不执行**其中任何一项，但已**新增**两条回退供其登记消费 R-03/R-04）。
 >
 > 详细设计：[**1.4.5.md**](plans/1.4.x/1.4.5.md)。主题：**生成物格式统一**——把两个「ezmk 全权生成、用户不该手改」的文件从 TOML 改为 JSON：`ezmk.lock` → `ezmk.lock.json`、`list.toml` → `list.json`（三作用域）。旧格式**继续可读**，首次成功写入时**自动迁移**（写新 → 删旧）。
 >
 > **范围边界**：只有这一个变更面（两个文件 + 连带路径 / 文档 / 测试 / zsh 补全）。不改 `ezmk.toml` / `ezmk-workspace.toml`（人写配置）、不改 `index.toml`（仓库侧作者手写）、不改 lockfile 任何**字段语义**（`sha256` 别名照旧双写、`version` 仍 1、`--locked` / `deterministic` 判定逻辑不变）。**公共 API 无破坏性变更**（只新增函数，`repo::list_toml_path()` 保留为兼容别名）。明确不做项见设计 §3.13。
 >
-> **⛔ 发布门槛**：① 阶段清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 **1099 用例 / 6349 断言**，1.4.4 发布态，4 跳过）且新增用例只增不减；④ 附加门槛：`python scripts/check_man_sync.py` 通过、`groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警、i18n **406 → 411** 三向一致、`bash scripts/check_docs_sync.sh` 通过。
+> **⛔ 发布门槛**：① 阶段清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试零回归（基线 **1099 用例 / 6349 断言**，1.4.4 发布态，4 跳过）且新增用例只增不减；④ 附加门槛：`python scripts/check_man_sync.py` 通过、`groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警、i18n **406 → 412** 三向一致、`bash scripts/check_docs_sync.sh` 通过。
 >
 > **版本决策**：dev 阶段二进制版本号**保持 1.4.4**（1.2.x/1.3.x/1.4.1~1.4.4 补丁先例均不提前 bump），正式发布 commit 按 workflow §3 置 1.4.5（`build.sh` fallback + `include/ezmk/version.hpp` + 4 页 `.TH` 日期），tag `v1.4.5`。
 
@@ -79,10 +79,21 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段六：变更日志与收口（M-10/M-11/M-12，对应设计 §3.11/§3.12/§3.13）
 
-- [ ] `CHANGES.md` 新增 1.4.5 条目：变更 / **自动迁移（无需手动操作）** / **降级说明**（1.4.4 及更早读不到 `*.json`：`deterministic = true` 致命、注册表显示为空需重新 `repo add`）/ 新增 API（`lockfile::active_path` / `repo::repo_list_path` / `util::atomic_write_text`）
-- [ ] `plans/2.0.x/REMOVALS.md`：登记 **R-03**（旧格式读取回退：`ezmk.lock` TOML / `list.toml` TOML → 2.0.0 移除并给明确迁移报错）与 **R-04**（`repo::list_toml_path()` 别名 → 2.0.0 删除）；§7 边界补"1.4.5 的方向是**新增**回退，与不移除垫片的约束同向"
-- [ ] `plans/1.4.x/README.md`（版本表 + 依赖关系 + 跨版本关注点 + 回归基线）、`plans/README.md`（当前执行 / 已完成 / 目录结构 / mermaid 节点）、根 `plan.md` 状态更新
-- [ ] 门槛复核：清单完成 + API 无破坏 + **1099/6349 零回归** + `check_man_sync.py` / groff / i18n 411 / docs-sync 四项附加门槛
+- [x] `CHANGES.md` 新增 1.4.5 条目（**`(未发布)` 占位**，发布 commit 回填日期）：变更 / **自动迁移（无需手动操作）** / **降级说明**（1.4.4 及更早读不到 `*.json`：`deterministic = true` 致命、注册表显示为空需重新 `repo add`）/ 新增 API（`lockfile::active_path` / `repo::repo_list_path` / `util::atomic_write_text`）/ 测试 / 明确不做
+- [x] `plans/2.0.x/REMOVALS.md`：登记 **R-03**（旧格式读取回退：`ezmk.lock` TOML / `list.toml` TOML → 2.0.0 移除并给明确迁移报错）与 **R-04**（`repo::list_toml_path()` 别名 → 2.0.0 删除）；§7 边界补"1.4.5 的方向是**新增**回退，与不移除垫片的约束同向"（**计划阶段已随计划文档一并提交**）
+- [x] `plans/1.4.x/README.md`（版本表 + 依赖关系 + 跨版本关注点 + 回归基线 + i18n 实测 412）、`plans/README.md`（当前执行 / 目录结构 / 系列条目 / 版本表 / mermaid 节点）、根 `plan.md` 状态更新
+- [x] 门槛复核：清单完成 + API 无破坏 + 全量 **1113/6491** 零失败 + `check_man_sync.py` / groff 4 页 / i18n **412** / docs-sync 四项附加门槛（见下"阶段六门槛复核实测"）
+
+#### 阶段六门槛复核实测（2026-09-27）
+
+| 门槛 | 实测 |
+|------|------|
+| ① 清单完成/收口 | 阶段一~五全部 `[x]`；阶段四唯一未做项（两处硬编码解析消息 i18n 化）**明确不做**并记入 §6 延后项 |
+| ② API 无破坏 | 仅**新增** `lockfile::lockfile_path/legacy_lockfile_path/active_path`、`repo::repo_list_path/legacy_repo_list_path`、`util::atomic_write_text`；`lockfile::load/save/verify/depends_changed` 签名不变；`repo::list_toml_path()` 保留为旧路径别名（2.0.0 移除，REMOVALS R-04） |
+| ③ 全量零回归 | `bash build.sh test-all` → **1113 用例 / 6491 断言，0 失败**（4 跳过；基线 1.4.4 发布态 1099/6349 → +14 用例 / +142 断言） |
+| ④a man | `python scripts/check_man_sync.py` → `OK: man pages are in sync …`；`groff -man -Tutf8 -z -ww man/ezmk.1 man/ezmk-lua.1 man/ezmk.toml.5 man/ezmk-workspace.toml.5` → 退出码 0、零告警 |
+| ④b i18n | `python scripts/check_i18n.py` → `i18n_keys.def / en / zh` 各 **412** 键 + `zh-TW` 变体一致 |
+| ④c docs | `bash scripts/check_docs_sync.sh` → `docs (15 files matched)` + `tutorial (16 files matched)` + `All checks passed` |
 
 ### 阶段七：正式发布（workflow §3，对照 1.4.4 流程）
 
@@ -116,7 +127,7 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 | `lockfile::load/save/verify/depends_changed` | 签名与语义不变 | 门槛② |
 | `repo::list_toml_path()` | 保留（返回旧路径）；新增 `repo_list_path()` / `legacy_repo_list_path()` | 删除归 2.0.0（R-04） |
 | `util::atomic_write_text()` | 新增公共 helper；`workspace.cpp` 行为不变 | 纯增量 |
-| i18n | 406 → 411（en/zh/def 三向一致） | `check_i18n.py` |
+| i18n | 406 → 412（en/zh/def 三向一致） | `check_i18n.py` |
 | lockfile 字段 / `--locked` / `deterministic` / `[depends]` 语义 | **无变更** | 门槛② |
 | 公共 API / CLI 行为 / 配置语义 | 无破坏性变更（仅新增 + 生成物格式） | 门槛② |
 
@@ -128,4 +139,5 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 - **lockfile `sha256` 旧别名**（REMOVALS D-01）：本版继续双写，结论留 2.0.0 拍板。
 - **`pkg remove` 不重写 lockfile** 的既有行为：不在本版顺手扩大范围（属既有语义，非本次格式变更引入）。
 - **`repo info --json`**（`plans/0.x.x/0.2.5.md:717` 曾提出）：注册表 JSON 化后技术阻力下降，可在 2.x 重估。
-- **其余非原子写生成物的统一**（`compile_db.cpp` / `export.cpp` / `cache.cpp` 各自的 tmp → rename 手写片段）：本版只新增公共 helper 并用于两个新写入器，不做全仓替换以控制 diff。
+- **两处硬编码英文解析失败消息的 i18n 化**（`failed to parse ezmk.lock: ` / `failed to parse repo list: `）：由两条读取路径共用且都带文件名上下文，本版不做；日后若要收口，需 +2 键并同批更新索引口径。
+- **其余非原子写生成物的统一**（`compile_db.cpp` / `export.cpp` / `cache.cpp` 各自的 tmp → rename 手写片段）：本版只新增公共 helper 并用于新写入器 + `workspace.cpp`，不做全仓替换以控制 diff。

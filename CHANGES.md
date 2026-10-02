@@ -24,6 +24,58 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.5 (未发布) — 生成物格式统一（lockfile / 仓库注册表 JSON 化）
+
+把两个「ezmk 全权生成、用户不该手改」的文件从 TOML 改为 JSON：`ezmk.lock` → **`ezmk.lock.json`**、`list.toml` → **`list.json`**（全局 / 用户 / 项目三作用域），并顺带把这两个仓储里少数**非原子写**的生成物升级为原子写。旧格式**继续可读**，首次成功写入时**自动迁移**（写新文件 → 删旧文件），因此**升级无感、无需手动操作**。**公共 API 无破坏性变更**（只新增函数，`repo::list_toml_path()` 保留为别名）；lockfile 的**字段语义完全不变**（`sha256` 别名继续双写、`version` 仍为 1、`--locked` / `deterministic` 判定逻辑不变）；不放宽也不移除任何弃用面。
+
+### 变更
+
+- **`ezmk.lock` → `ezmk.lock.json`**：`lockfile::save()` 改用 `nlohmann::ordered_json`（`dump(2)` + 2 空格缩进）序列化，形状与旧 TOML 一一对应（`metadata` 对象 + `packages` 数组，键名逐字一致）；`ordered_json` 让字段顺序 = 写入顺序，便于在版本库里 review diff。空的可选字段（`lib_sha256` / `archive_sha256` / `commit`）不写出——"缺失"与"未知"仍是同一件事。
+- **`list.toml` → `list.json`**（三作用域）：`save_repo_list()` 写 `{"version": 1, "repos": [...]}`，键名与旧 `[[repos]]` 一致；`type = "local"` 的条目不写 `branch`（读取时回落到 `main`）。
+- **原子写**：两个文件此前是直写（`util::file_write`），现在走新增的 `util::atomic_write_text()`（tmp → rename，二进制模式）——半截 lockfile 在 `deterministic = true` 下是致命错误，值得防。`ezmk-workspace.toml` 的写入也收敛到同一实现。
+- **缓存签名跟随"当前生效的 lockfile"**：`deterministic = true` 时 lockfile 的**内容**哈希是编译签名的一部分，共三处（`src/build.cpp`、`src/cache.cpp`、`src/pkg.cpp`）——全部改用新增的 `lockfile::active_path()`，不再硬编码文件名。修复的是"某一侧取不到文件 → 签名缺少 lock 段 → 两侧永不等 → 每次构建全量重编"这一缺陷形态（1.4.2 曾修过同类问题）。迁移因换格式改变内容，带来**恰一次**全量重编。
+- **注册表读取的安全约束不因回退路径放宽**：两条读取路径（JSON 与旧 TOML）共用同一份入口校验，1.4.2 F-24 的"名字不得逃出缓存树"在旧格式文件上同样生效。
+- **zsh 补全**：`_ezmk_repo_names()` 同时识别 `list.json` 与旧 `list.toml`（补全脚本静态安装在用户机上，不随升级自动更新）。`--locked` / `--no-lock` 的补全描述同步改名。
+
+### 迁移
+
+- **无需手动操作**：升级后第一次读取旧文件会给出一条 info（"检测到 1.4.5 之前的 ezmk.lock（TOML）…"），下一次写入（`ezmk pkg install` / `ezmk repo add|remove|update`）即写入新文件并删除旧文件。`ezmk build` 只读校验，**不会**改盘上文件。
+- **git 视角**：`ezmk.lock` 的删除 + `ezmk.lock.json` 的新增应在同一次 commit 里完成。请勿继续保留旧文件（双文件共存时以 `ezmk.lock.json` 为准，并对陈旧文件给出警告）。
+- **降级注意**：1.4.4 及更早版本只识别 `ezmk.lock` / `list.toml`。回退到旧版本时，`deterministic = true` 的项目会因"缺少 lockfile"报**致命错误**（从版本库里取回 TOML 文件即可），注册表会显示为空（已安装的包不受影响，重新 `ezmk repo add` 可恢复）。
+
+### 新增 API
+
+- `ezmk::lockfile::lockfile_path()` / `legacy_lockfile_path()` / `active_path()`
+- `ezmk::repo::repo_list_path()` / `legacy_repo_list_path()`（`list_toml_path()` 保留为旧路径别名，2.0.0 移除）
+- `ezmk::util::atomic_write_text()`
+
+### 文档
+
+- `docs/{en,zh}` 7 个文件（`config_file.md` 的 Lockfile 小节整块换成 JSON 示例 + 迁移/降级说明 + 补 `scope` 语义、`repo.md` 注册表 JSON 示例 + 迁移说明、`cli.md`、`technical.md`、`glossary.md`、`pkg.md`、`package_authoring.md`）、`tutorial/{en,zh}/packages/02-version-lockfile.md`、`README.md` / `README_ZH.md`、`man/ezmk.1` 与 `man/ezmk.toml.5`、`.claude/skills` 5 个文件。
+- `source` 的文档口径修正为"**来源类型**（`repo` / `url` / `local` / `archive` / `git`），具体来源（仓库名或 URL）在 `source_url`"（与 `src/pkg.cpp` 实现一致）。
+- [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md) 登记 **R-03**（旧格式读取回退 → 2.0.0 移除并给明确迁移报错）与 **R-04**（`repo::list_toml_path()` → 2.0.0 删除）。
+
+### 测试
+
+- **全量回归零失败**：`bash build.sh test-all` → **1113 用例 / 6491 断言**（0 失败，4 跳过；基线 1.4.4 发布态 1099/6349 → **+14 用例 / +142 断言**）。
+- **双格式对拍（本版关键用例）**：同一份 lockfile 的 TOML 文本与 JSON 文本分别过两条读取路径，`metadata` 6 字段 + 每个 package 的 12 字段**逐字段相等**，并对 `depends_changed` 断言行为一致——任何"只有一个读取器学会的新字段"都会在这里失败。
+- **缓存签名用例**：旧 TOML 状态下命中 → 迁移到 JSON 后旧签名失效（**恰一次**重编）→ 按新文件重新签名后再次命中。
+- **双读回退 / 迁移写入 / 双文件共存 / 空字段不写出 / 损坏 JSON** 各有用例；注册表侧 F-24 在**两条路径**都有覆盖。
+- **夹具纪律**：`test/test_integration.cpp` 的旧 TOML lockfile 夹具**刻意保留**（strict 模式读旧格式的端到端回归，不得"顺手统一"为 JSON）。
+- **附加门槛**：`python scripts/check_man_sync.py` 通过；`groff -man -Tutf8 -z -ww` 4 页零告警；i18n **412** 键三向一致；`bash scripts/check_docs_sync.sh` 通过（docs 15/15、tutorial 16/16）。
+
+### 发布门槛
+
+- ⛔ ① 阶段清单全部完成或明确收口 ② 公共 API **无破坏性变更**（纯新增 + 生成物格式）③ 全量测试**零回归**（1113/6491，基线 1099/6349）④ 附加门槛：`check_man_sync.py` / groff 4 页 / i18n 412 键 / docs-sync 全通过。
+
+### 明确不做
+
+- `index.toml`（仓库侧索引，作者手写、生态已固化）、`ezmk.toml` / `ezmk-workspace.toml`（人写配置保留 TOML，`toml++` 依赖不退役）。
+- lockfile 字段语义（`sha256` 别名、`version = 1`、`lib_sha256` / `archive_sha256` 分工）——`sha256` 别名的存废仍归 2.0.0 决策（[`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md) D-01）。
+- `pkg remove` 不重写 lockfile 的既有行为；两处硬编码英文解析失败消息的 i18n 化（留作后续收口）。
+
+---
+
 ## 1.4.4 (2026-09-26) — 历史遗留清理（安装器 / 告警 / 工具链卫生）
 
 1.4.3 发布后对仓库做了一次全量「历史遗留」扫描，本版取其中**不需要新功能即可收口**的五类：用户可见缺陷（`install.ps1 -DryRun`）、质量口径缺口（`test/` 编译告警）、仓库卫生（`.gitignore`）、过期承诺（`cli.cpp` TODO）、流程僵尸与未接线检查（`macos-x64` job、`check_docs_sync`）。**零功能新增、零 CLI 行为变更、零配置语义变更、公共 API 无破坏性变更**；不放宽也不移除任何弃用面（`[test].flags` / `ezmk utils cc` 等留 2.0.0）。
