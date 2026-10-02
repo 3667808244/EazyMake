@@ -41,12 +41,12 @@ EazyMake 的内部生成物目前格式混杂：`record.json` / `links.json` / `
 
 ### 阶段二：仓库注册表 JSON 化（M-03/M-08，对应设计 §3.7）
 
-- [ ] `include/ezmk/repo.hpp` / `src/repo.cpp`：新增 `repo_list_path(scope)`（= `list.json`）与 `legacy_repo_list_path(scope)`（= `list.toml`）；`list_toml_path()` **保留**并转发到 `legacy_repo_list_path()`（删除归 2.0.0，REMOVALS R-04）
-- [ ] `save_repo_list()` 写 `list.json`（顶层 `{"version": 1, "repos": [...]}`，键名与旧 `[[repos]]` 一致；`type == "git"` 时才写 `branch`）+ 原子写 + 写后删旧 `list.toml`
-- [ ] `load_repo_list()` 双读（`list.json` 优先 → `list.toml` 回退 + 一次性 `repo_list_legacy_detected`），**两条路径共用 1.4.2 F-24 的名字安全校验**（手改旧文件不得绕过）
-- [ ] `res/ezmk.zsh:_ezmk_repo_names()` 双分支：`.ezmk/repo/list.json` 优先（`grep -E '"name"\s*:'`），文件不存在回退旧 `list.toml`（静态补全脚本装在用户机上不随升级更新，不能只认新名）
-- [ ] `repo add/remove/update` 三个调用点行为不变（只有序列化与路径改变）；`repo list/info` 读取路径同改
-- [ ] 回归：全量零失败
+- [x] `include/ezmk/repo.hpp` / `src/repo.cpp`：新增 `repo_list_path(scope)`（= `list.json`）与 `legacy_repo_list_path(scope)`（= `list.toml`）；`list_toml_path()` **保留**并转发到 `legacy_repo_list_path()`（删除归 2.0.0，REMOVALS R-04）；顺带抽出 `repo_dir(scope)`，让三个路径函数与 `cache_dir()` 不再各自复制作用域分支
+- [x] `save_repo_list()` 写 `list.json`（顶层 `{"version": 1, "repos": [...]}`，键名与旧 `[[repos]]` 一致；`type == "git"` 时才写 `branch`）+ 原子写 + 写后删旧 `list.toml`
+- [x] `load_repo_list()` 双读（`list.json` 优先 → `list.toml` 回退 + `repo_list_legacy_detected`；双文件共存 → `repo_list_legacy_stale` 警告），**两条路径共用 `admit_entry()` 的 1.4.2 F-24 名字安全校验**（手改旧文件不得绕过）
+- [x] `res/ezmk.zsh:_ezmk_repo_names()` 双分支：`.ezmk/repo/list.json` 优先（`grep -E '"name"\s*:'`），文件不存在回退旧 `list.toml`（静态补全脚本装在用户机上不随升级更新，不能只认新名）；grep/sed 提取已在两种格式上实测（zsh 本机不可用，语法未跑 `zsh -n`）
+- [x] `repo add/remove/update` 三个调用点行为不变（只有序列化与路径改变）；`repo list/info` 读取路径同改
+- [x] 回归：全量零失败（**1111 用例 / 6452 断言**，4 跳过；阶段一后 1106/6412 → +5 用例 / +40 断言）
 
 ### 阶段三：原子写 helper 上提（M-05，对应设计 §3.5）
 

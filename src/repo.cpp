@@ -5,6 +5,7 @@
 #include "ezmk/util.hpp"
 
 #include "toml.hpp"
+#include "nlohmann_json.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -23,60 +24,82 @@ namespace ezmk::repo {
 // Path resolution
 // ===================================================================
 
-fs::path list_toml_path(cli::Scope scope) {
+namespace {
+
+// Directory holding the per-scope registry file and the cloned repos
+// (1.4.5: extracted so the JSON / legacy path helpers and cache_dir cannot drift).
+fs::path repo_dir(cli::Scope scope) {
     switch (scope) {
     case cli::Scope::Project: {
         // 1.2.0-dev.7: project scope lives under the located project root
         // (upward search); falls back to CWD when no ezmk.toml is found.
         auto root = util::locate_project_root(fs::current_path());
-        return (root.value_or(fs::current_path())) / ".ezmk/repo/list.toml";
+        return root.value_or(fs::current_path()) / ".ezmk/repo";
     }
     case cli::Scope::User: {
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");
-        if (appdata) return fs::path(appdata) / "ezmk/repo/list.toml";
-        return util::get_home_dir() / "AppData/Local/ezmk/repo/list.toml";
+        if (appdata) return fs::path(appdata) / "ezmk/repo";
+        return util::get_home_dir() / "AppData/Local/ezmk/repo";
 #else
-        return util::get_home_dir() / ".local/ezmk/repo/list.toml";
+        return util::get_home_dir() / ".local/ezmk/repo";
 #endif
     }
     case cli::Scope::Global:
-        return util::get_exe_dir() / "repo/list.toml";
+        return util::get_exe_dir() / "repo";
     }
     return {};
+}
+
+} // namespace
+
+fs::path repo_list_path(cli::Scope scope) {
+    return repo_dir(scope) / "list.json";
+}
+
+fs::path legacy_repo_list_path(cli::Scope scope) {
+    return repo_dir(scope) / "list.toml";   // pre-1.4.5 TOML — read-only
+}
+
+// Historical name: always the LEGACY path (its literal contract). Callers that
+// want the active registry use repo_list_path(). Removed in 2.0.0 (R-04).
+fs::path list_toml_path(cli::Scope scope) {
+    return legacy_repo_list_path(scope);
 }
 
 fs::path cache_dir(cli::Scope scope, std::string_view repo_name) {
-    switch (scope) {
-    case cli::Scope::Project: {
-        // 1.2.0-dev.7: same located project root as list_toml_path(Project)
-        auto root = util::locate_project_root(fs::current_path());
-        return (root.value_or(fs::current_path())) / ".ezmk/repo/.cache" / repo_name;
-    }
-    case cli::Scope::User: {
-#ifdef EZMK_WIN
-        const char* appdata = std::getenv("LOCALAPPDATA");
-        if (appdata) return fs::path(appdata) / "ezmk/repo/.cache" / repo_name;
-        return util::get_home_dir() / "AppData/Local/ezmk/repo/.cache" / repo_name;
-#else
-        return util::get_home_dir() / ".local/ezmk/repo/.cache" / repo_name;
-#endif
-    }
-    case cli::Scope::Global:
-        return util::get_exe_dir() / "repo/.cache" / repo_name;
-    }
-    return {};
+    return repo_dir(scope) / ".cache" / repo_name;
 }
 
 // ===================================================================
-// list.toml read/write
+// list.json read/write (1.4.5: JSON is the written format; TOML is read-only
+// legacy — removed in 2.0.0, see plans/2.0.x/REMOVALS.md R-03)
 // ===================================================================
 
-std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
-    std::vector<RepoEntry> entries;
-    auto path = list_toml_path(scope);
-    if (!util::file_exists(path)) return entries;
+namespace {
 
+// Entry admission, shared by BOTH readers so the fallback path cannot be a
+// weaker door than the current one.
+// 1.4.2 F-24: a hand-edited registry must not smuggle a name that escapes the
+// cache tree (repo remove does remove_all(cache/name)).
+bool admit_entry(RepoEntry& e) {
+    if (e.type.empty()) e.type = "git";
+    if (e.branch.empty()) e.branch = "main";
+
+    if (!e.name.empty()) {
+        try {
+            util::validate_pkg_name(e.name);
+        } catch (const std::exception& ex) {
+            util::warn(std::string("ignoring repo list entry with unsafe name '") +
+                       e.name + "': " + ex.what());
+            return false;
+        }
+    }
+    return !e.name.empty() && !e.url.empty();
+}
+
+std::vector<RepoEntry> parse_repo_list_toml(const fs::path& path) {
+    std::vector<RepoEntry> entries;
     try {
         auto root = toml::parse_file(path.string());
         auto arr = root["repos"].as_array();
@@ -93,24 +116,7 @@ std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
             if (auto v = (*tbl)["branch"].value<std::string>()) e.branch = *v;
             if (auto v = (*tbl)["last_update"].value<std::string>()) e.last_update = *v;
 
-            if (e.type.empty()) e.type = "git";
-            if (e.branch.empty()) e.branch = "main";
-
-            // 1.4.2 F-24: a hand-edited list.toml must not smuggle a name that
-            // escapes the cache tree (repo remove does remove_all(cache/name)).
-            if (!e.name.empty()) {
-                try {
-                    util::validate_pkg_name(e.name);
-                } catch (const std::exception& ex) {
-                    util::warn(std::string("ignoring repo list entry with unsafe name '") +
-                               e.name + "': " + ex.what());
-                    continue;
-                }
-            }
-
-            if (!e.name.empty() && !e.url.empty()) {
-                entries.push_back(std::move(e));
-            }
+            if (admit_entry(e)) entries.push_back(std::move(e));
         }
     } catch (const std::exception& e) {
         util::warn(std::string("failed to parse repo list: ") + e.what());
@@ -118,25 +124,93 @@ std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
     return entries;
 }
 
-void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
-    auto path = list_toml_path(scope);
-    fs::create_directories(path.parent_path());
-
-    // 1.1.2 C5: converge on util::toml_quote (was a local esc lambda)
-    std::ostringstream out;
-    for (auto& e : entries) {
-        out << "[[repos]]\n";
-        out << "name = " << util::toml_quote(e.name) << "\n";
-        out << "url = " << util::toml_quote(e.url) << "\n";
-        out << "type = " << util::toml_quote(e.type) << "\n";
-        if (e.type == "git") {
-            out << "branch = " << util::toml_quote(e.branch) << "\n";
+std::vector<RepoEntry> parse_repo_list_json(const fs::path& path) {
+    std::vector<RepoEntry> entries;
+    try {
+        auto j = nlohmann::json::parse(util::file_read(path));
+        if (!j.is_object()) {
+            util::warn(std::string("failed to parse repo list: expected a JSON object"));
+            return entries;
         }
-        out << "last_update = " << util::toml_quote(e.last_update) << "\n";
-        out << "\n";
+        auto it = j.find("repos");
+        if (it == j.end() || !it->is_array()) return entries;
+
+        for (auto& r : *it) {
+            if (!r.is_object()) continue;
+
+            RepoEntry e;
+            e.name = r.value("name", "");
+            e.url = r.value("url", "");
+            e.type = r.value("type", "");
+            // `branch` is written only for git repos (same rule as the TOML
+            // writer); a local repo comes back with branch == "main".
+            e.branch = r.value("branch", "");
+            e.last_update = r.value("last_update", "");
+
+            if (admit_entry(e)) entries.push_back(std::move(e));
+        }
+    } catch (const std::exception& e) {
+        util::warn(std::string("failed to parse repo list: ") + e.what());
+    }
+    return entries;
+}
+
+} // namespace
+
+std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
+    auto json_path = repo_list_path(scope);
+    auto legacy = legacy_repo_list_path(scope);
+
+    if (util::file_exists(json_path)) {
+        // Both files present: the JSON one wins, the TOML one is stale. Never
+        // merge, never pick silently.
+        if (util::file_exists(legacy)) {
+            util::warn(ezmk::i18n::I18nKey::repo_list_legacy_stale);
+        }
+        return parse_repo_list_json(json_path);
     }
 
-    util::file_write(path, out.str());
+    if (util::file_exists(legacy)) {
+        util::info(ezmk::i18n::I18nKey::repo_list_legacy_detected);
+        return parse_repo_list_toml(legacy);
+    }
+
+    return {};
+}
+
+void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
+    auto path = repo_list_path(scope);
+
+    nlohmann::json j;
+    j["version"] = 1;
+    auto& repos = j["repos"] = nlohmann::json::array();
+    for (auto& e : entries) {
+        nlohmann::json r = nlohmann::json::object();
+        r["name"] = e.name;
+        r["url"] = e.url;
+        r["type"] = e.type;
+        if (e.type == "git") {
+            r["branch"] = e.branch;
+        }
+        r["last_update"] = e.last_update;
+        repos.push_back(std::move(r));
+    }
+
+    if (!util::atomic_write_text(path, j.dump(2) + "\n")) return;
+
+    // Migration: the legacy registry was read only to keep existing setups
+    // working — once list.json is on disk the old file must not linger.
+    auto legacy = legacy_repo_list_path(scope);
+    if (util::file_exists(legacy)) {
+        std::error_code ec;
+        fs::remove(legacy, ec);
+        if (ec) {
+            util::warn(std::string("could not remove the legacy repo registry: ") +
+                       legacy.filename().string() + " (" + ec.message() + ")");
+        } else {
+            util::info(ezmk::i18n::I18nKey::repo_list_migrated);
+        }
+    }
 }
 
 // ===================================================================

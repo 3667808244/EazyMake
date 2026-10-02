@@ -18,32 +18,36 @@ using namespace ezmk::cli;
 using namespace ezmk::util;
 
 // ===================================================================
-// list_toml_path() / cache_dir()
+// registry paths: repo_list_path() / legacy_repo_list_path() / cache_dir()
 // ===================================================================
 
-TEST_CASE("list_toml_path: returns non-empty paths", "[repo]") {
-    auto proj = list_toml_path(Scope::Project);
-    auto user = list_toml_path(Scope::User);
-    auto global = list_toml_path(Scope::Global);
-
-    REQUIRE_FALSE(proj.empty());
-    REQUIRE_FALSE(user.empty());
-    REQUIRE_FALSE(global.empty());
+TEST_CASE("repo_list_path: returns non-empty paths for every scope", "[repo]") {
+    REQUIRE_FALSE(repo_list_path(Scope::Project).empty());
+    REQUIRE_FALSE(repo_list_path(Scope::User).empty());
+    REQUIRE_FALSE(repo_list_path(Scope::Global).empty());
 }
 
-TEST_CASE("list_toml_path: different scopes are different paths", "[repo]") {
-    auto proj = list_toml_path(Scope::Project);
-    auto user = list_toml_path(Scope::User);
-    auto global = list_toml_path(Scope::Global);
+TEST_CASE("repo_list_path: different scopes are different paths", "[repo]") {
+    auto proj = repo_list_path(Scope::Project);
+    auto user = repo_list_path(Scope::User);
+    auto global = repo_list_path(Scope::Global);
 
     REQUIRE(proj != user);
     REQUIRE(user != global);
     REQUIRE(proj != global);
 }
 
-TEST_CASE("list_toml_path: filename is list.toml", "[repo]") {
-    auto path = list_toml_path(Scope::Project);
-    REQUIRE(path.filename() == "list.toml");
+TEST_CASE("registry paths: json is the written name, list_toml_path is the legacy alias (1.4.5)",
+          "[repo][1.4.5]") {
+    REQUIRE(repo_list_path(Scope::Project).filename() == "list.json");
+    REQUIRE(legacy_repo_list_path(Scope::Project).filename() == "list.toml");
+
+    // The historical name must keep returning the path its name promises; it is
+    // removed in 2.0.0 (REMOVALS R-04).
+    REQUIRE(list_toml_path(Scope::Project) == legacy_repo_list_path(Scope::Project));
+    // …and both live in the same per-scope directory (the migration target).
+    REQUIRE(repo_list_path(Scope::Project).parent_path() ==
+            legacy_repo_list_path(Scope::Project).parent_path());
 }
 
 TEST_CASE("cache_dir: returns non-empty paths", "[repo]") {
@@ -72,7 +76,7 @@ TEST_CASE("cache_dir: includes repo name in path", "[repo]") {
 // load_repo_list() / save_repo_list() round-trip
 // ===================================================================
 
-// Helper: create a temp scope-like directory for testing list.toml
+// Helper: create a temp scope-like directory for testing the registry
 struct TempRepoScope {
     fs::path base;
     fs::path list_path;
@@ -81,7 +85,7 @@ struct TempRepoScope {
         base = fs::temp_directory_path() / ("ezmk_repo_test_" +
             std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         fs::create_directories(base);
-        list_path = base / "list.toml";
+        list_path = base / "list.json";
     }
     ~TempRepoScope() {
         std::error_code ec;
@@ -91,8 +95,8 @@ struct TempRepoScope {
 
 TEST_CASE("load_repo_list: empty when file doesn't exist", "[repo]") {
     auto entries = load_repo_list(Scope::Project);
-    // If no list.toml exists in the project, should return empty
-    // (this test relies on the fact that there is no .ezmk/repo/list.toml
+    // If no registry exists in the project, should return empty
+    // (this test relies on the fact that there is no .ezmk/repo/list.{json,toml}
     //  in the test binary's working directory)
     REQUIRE(entries.empty());
 }
@@ -105,7 +109,7 @@ TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
     // located root), save via the real API, load back, and compare.
     TempDir tmp;
     CwdGuard cwd;  // chdirs to a temp dir; Project scope resolves to it
-    fs::path list_path = list_toml_path(Scope::Project);
+    fs::path list_path = repo_list_path(Scope::Project);
     REQUIRE_FALSE(list_path.empty());
 
     std::vector<RepoEntry> entries;
@@ -231,9 +235,9 @@ TEST_CASE("repo remove/info: reject an unsafe repo name (1.4.2 F-24)", "[repo][1
                       std::runtime_error);
 }
 
-TEST_CASE("load_repo_list: unsafe names from list.toml are skipped (1.4.2 F-24)", "[repo][1.4.2]") {
-    CwdGuard cwd;  // a hand-editable list.toml lives under the (temp) CWD
-    auto path = list_toml_path(Scope::Project);
+TEST_CASE("load_repo_list: unsafe names from a legacy list.toml are skipped (1.4.2 F-24)", "[repo][1.4.2]") {
+    CwdGuard cwd;  // a hand-editable registry lives under the (temp) CWD
+    auto path = legacy_repo_list_path(Scope::Project);
     fs::create_directories(path.parent_path());
     ezmk::util::file_write(path,
         "[[repos]]\nname = \"../evil\"\nurl = \"https://example.com/x.git\"\n"
@@ -244,4 +248,112 @@ TEST_CASE("load_repo_list: unsafe names from list.toml are skipped (1.4.2 F-24)"
     auto entries = load_repo_list(Scope::Project);
     REQUIRE(entries.size() == 1);
     REQUIRE(entries[0].name == "good");
+}
+
+// ===================================================================
+// 1.4.5: list.toml → list.json (JSON writer, dual read, migration)
+// ===================================================================
+
+TEST_CASE("load_repo_list: unsafe names from list.json are skipped too (F-24 / 1.4.5)", "[repo][1.4.5]") {
+    CwdGuard cwd;
+    auto path = repo_list_path(Scope::Project);
+    fs::create_directories(path.parent_path());
+    ezmk::util::file_write(path,
+        "{\n"
+        "  \"version\": 1,\n"
+        "  \"repos\": [\n"
+        "    { \"name\": \"../evil\", \"url\": \"https://example.com/x.git\","
+        " \"type\": \"git\", \"branch\": \"main\", \"last_update\": \"\" },\n"
+        "    { \"name\": \"good\", \"url\": \"https://example.com/y.git\","
+        " \"type\": \"git\", \"branch\": \"main\", \"last_update\": \"\" }\n"
+        "  ]\n"
+        "}\n");
+
+    auto entries = load_repo_list(Scope::Project);
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].name == "good");
+}
+
+TEST_CASE("save_repo_list: writes list.json and migrates a legacy file away (1.4.5)", "[repo][1.4.5]") {
+    CwdGuard cwd;
+    auto legacy = legacy_repo_list_path(Scope::Project);
+    fs::create_directories(legacy.parent_path());
+    ezmk::util::file_write(legacy,
+        "[[repos]]\nname = \"old\"\nurl = \"https://example.com/old.git\"\n"
+        "type = \"git\"\nbranch = \"main\"\nlast_update = \"\"\n");
+
+    std::vector<RepoEntry> entries;
+    RepoEntry e;
+    e.name = "fresh";
+    e.url = "https://example.com/fresh.git";
+    e.type = "git";
+    e.branch = "main";
+    e.last_update = "2026-09-27T00:00:00Z";
+    entries.push_back(e);
+
+    save_repo_list(Scope::Project, entries);
+
+    REQUIRE(fs::exists(repo_list_path(Scope::Project)));
+    REQUIRE_FALSE(fs::exists(legacy));
+
+    auto loaded = load_repo_list(Scope::Project);
+    REQUIRE(loaded.size() == 1);
+    REQUIRE(loaded[0].name == "fresh");
+    REQUIRE(loaded[0].branch == "main");
+}
+
+TEST_CASE("load_repo_list: a legacy list.toml still loads (1.4.5)", "[repo][1.4.5]") {
+    CwdGuard cwd;
+    auto legacy = legacy_repo_list_path(Scope::Project);
+    fs::create_directories(legacy.parent_path());
+    ezmk::util::file_write(legacy,
+        "[[repos]]\nname = \"legacy-repo\"\nurl = \"https://example.com/l.git\"\n"
+        "type = \"git\"\nbranch = \"develop\"\nlast_update = \"2026-09-26T00:00:00Z\"\n");
+
+    auto entries = load_repo_list(Scope::Project);
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].name == "legacy-repo");
+    REQUIRE(entries[0].url == "https://example.com/l.git");
+    REQUIRE(entries[0].type == "git");
+    REQUIRE(entries[0].branch == "develop");
+    REQUIRE(entries[0].last_update == "2026-09-26T00:00:00Z");
+}
+
+TEST_CASE("load_repo_list: json wins over a stale legacy file (1.4.5)", "[repo][1.4.5]") {
+    CwdGuard cwd;
+    auto legacy = legacy_repo_list_path(Scope::Project);
+    auto json_path = repo_list_path(Scope::Project);
+    fs::create_directories(json_path.parent_path());
+
+    ezmk::util::file_write(legacy,
+        "[[repos]]\nname = \"stale\"\nurl = \"https://example.com/s.git\"\n"
+        "type = \"git\"\nbranch = \"main\"\nlast_update = \"\"\n");
+    ezmk::util::file_write(json_path,
+        "{ \"version\": 1, \"repos\": [ { \"name\": \"fresh\","
+        " \"url\": \"https://example.com/f.git\", \"type\": \"git\","
+        " \"branch\": \"main\", \"last_update\": \"\" } ] }\n");
+
+    auto entries = load_repo_list(Scope::Project);
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].name == "fresh");
+}
+
+TEST_CASE("load_repo_list: local repos carry no branch in json, default on load (1.4.5)", "[repo][1.4.5]") {
+    CwdGuard cwd;
+    std::vector<RepoEntry> entries;
+    RepoEntry e;
+    e.name = "local-dev";
+    e.url = "E:/packages/local-dev";
+    e.type = "local";
+    e.last_update = "2026-09-27T00:00:00Z";
+    entries.push_back(e);
+
+    save_repo_list(Scope::Project, entries);
+    auto text = ezmk::util::file_read(repo_list_path(Scope::Project));
+    REQUIRE(text.find("branch") == std::string::npos);
+
+    auto loaded = load_repo_list(Scope::Project);
+    REQUIRE(loaded.size() == 1);
+    REQUIRE(loaded[0].type == "local");
+    REQUIRE(loaded[0].branch == "main");   // default re-applied on read
 }

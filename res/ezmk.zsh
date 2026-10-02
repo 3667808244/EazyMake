@@ -30,12 +30,16 @@ _ezmk_installed_pkgs() {
     _describe -t packages 'installed package' pkgs
 }
 
-# List registered repo names from list.toml
+# List registered repo names from the registry (list.json since 1.4.5, list.toml before).
+# NOTE: this script is installed statically into fpath — it does not update with
+# the binary, so BOTH formats must be understood: an older project may still
+# carry list.toml, and a 1.4.5+ project writes list.json.
 _ezmk_repo_names() {
     local -a repos
-    local list_file=".ezmk/repo/list.toml"
-    if [[ -f "$list_file" ]]; then
-        repos=(${(f)"$(grep -E '^name\s*=\s*"' "$list_file" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')"})
+    if [[ -f ".ezmk/repo/list.json" ]]; then
+        repos=(${(f)"$(grep -E '"name"\s*:' ".ezmk/repo/list.json" 2>/dev/null | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/')"})
+    elif [[ -f ".ezmk/repo/list.toml" ]]; then
+        repos=(${(f)"$(grep -E '^name\s*=\s*"' ".ezmk/repo/list.toml" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')"})
     fi
     _describe -t repos 'registered repo' repos
 }

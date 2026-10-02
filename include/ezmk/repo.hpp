@@ -21,16 +21,26 @@ struct RepoEntry {
 
 // ---- Path resolution ----
 
-// Get the path to list.toml for a given scope.
+// 1.4.5: registry paths. `repo_list_path` is the JSON file ezmk writes
+// (list.json); `legacy_repo_list_path` is the pre-1.4.5 TOML file (list.toml),
+// still READ so existing registries keep working — the next save() migrates it.
+fs::path repo_list_path(cli::Scope scope);
+fs::path legacy_repo_list_path(cli::Scope scope);
+
+// Deprecated alias of `legacy_repo_list_path` (the historical name). Kept so the
+// 1.4.5 format change stays API-additive; removed in 2.0.0
+// (see plans/2.0.x/REMOVALS.md R-04).
 fs::path list_toml_path(cli::Scope scope);
 
 // Get the cache directory for a repo of a given scope + name.
 // For "git" repos this is where the clone lives; irrelevant for "local".
 fs::path cache_dir(cli::Scope scope, std::string_view repo_name);
 
-// ---- list.toml read/write ----
+// ---- list.json read/write ----
 
+// Load the registry (list.json, falling back to the pre-1.4.5 list.toml).
 std::vector<RepoEntry> load_repo_list(cli::Scope scope);
+// Write list.json (atomically); a legacy list.toml is removed once it is on disk.
 void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries);
 
 // ---- Operations ----
