@@ -76,9 +76,13 @@ fs::path compile_package(const fs::path& pkg_dir,
 // 1.1.2 S2: 构造静态库归档命令（MSVC: lib.exe /OUT:，GCC/Clang: ar rcs）。
 // 所有路径经 util::escape_shell_arg 转义——对象路径源自归档内源文件名，
 // 可能含 `$`/反引号/空格等字符，裸引号在 POSIX `sh -c` 下可命令注入。
+// 1.4.7 M-03: tc supplies the (absolute) MSVC archiver; the caller's detected
+// toolchain must be passed so an is_msvc call uses lib.exe, not whatever
+// auto-detection happened to pick.
 std::string build_archive_command(bool is_msvc,
                                   const fs::path& lib_out,
-                                  const std::vector<fs::path>& objects);
+                                  const std::vector<fs::path>& objects,
+                                  const toolchain::Toolchain& tc = {});
 
 // 1.1.3 S3: URL 安装完整性前置确认。返回 false 表示用户取消（install 应中止）。
 //  - 无 sha256 → 无法校验包完整性，警告 + 确认；

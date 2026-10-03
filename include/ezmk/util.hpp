@@ -250,6 +250,13 @@ struct RunOptions {
     fs::path cwd;                              // child working directory (empty = inherit)
     std::map<std::string, std::string> env;    // extra env vars for the child (empty = inherit)
 };
+
+// 1.4.7 M-03: merge an environment overlay into a child's RunOptions (later
+// keys win). Used to hand MSVC's vcvars environment to cl/link/lib.
+inline void merge_env(RunOptions& opts,
+                      const std::map<std::string, std::string>& extra) {
+    for (const auto& kv : extra) opts.env[kv.first] = kv.second;
+}
 // Overload taking RunOptions. POSIX: cwd/env applied via chdir/setenv AFTER fork
 // (child-only, no race). Windows: lpCurrentDirectory + a built environment block.
 // NOTE: keep the int overload above — it forwards here so existing callers work.

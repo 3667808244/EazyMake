@@ -464,7 +464,8 @@ TEST_CASE("build_archive_command: escapes paths for ar/lib", "[pkg][1.1.2]") {
     SECTION("msvc lib escapes special chars") {
         auto cmd = build_archive_command(true, "lib demo.lib",
             {"build/a b$c.obj"});
-        REQUIRE(cmd.rfind("lib.exe /OUT:", 0) == 0);
+        // 1.4.7 M-03: the archiver is MSVCRT-quoted (quote_windows_arg).
+        REQUIRE(cmd.rfind("\"lib.exe\" /OUT:", 0) == 0);
         REQUIRE(cmd.find("\"lib demo.lib\"") != std::string::npos);
         REQUIRE(cmd.find("\"build/a b\\$c.obj\"") != std::string::npos);
     }

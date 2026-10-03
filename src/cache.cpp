@@ -477,7 +477,10 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
     auto rel = safe_relative(src, in.proj_root);
 
     if (is_msvc) {
-        args.push_back("cl.exe");
+        // 1.4.7 M-03: absolute cl.exe (CreateProcess does not search the child
+        // vcvars PATH); falls back to the bare name if resolution failed.
+        args.push_back(in.tc.cxx_compiler.empty() ? std::string("cl.exe")
+                                                  : in.tc.cxx_compiler.string());
         args.push_back("/c");
         // 1.1.0: deterministic build flags
         if (in.compile.deterministic) {
@@ -828,6 +831,8 @@ SingleCompileResult compile_one_source(const fs::path& src,
     // RunOptions.env reaches only the child (POSIX: setenv after fork).
     util::RunOptions opts;
     if (!sde_str.empty()) opts.env["SOURCE_DATE_EPOCH"] = sde_str;
+    // 1.4.7 M-03: give MSVC its vcvars environment (PATH/INCLUDE/LIB).
+    util::merge_env(opts, toolchain::msvc_env(in.tc));
     auto res = util::run_command(cmd, opts);
 
     // 1.3.0-dev.2: the response file is transient — remove it right after the

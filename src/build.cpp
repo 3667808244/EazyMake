@@ -335,7 +335,10 @@ static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
     // 1.4.6 Q-20: CreateProcessW parses a raw command line (no shell) — use the
     // MSVCRT quoting rule. escape_shell_arg doubles every backslash, which
     // corrupts UNC / extended-length paths.
-    cmd << "link.exe /OUT:" << util::quote_windows_arg(output.string()) << " ";
+    // 1.4.7 M-03: absolute link.exe (CreateProcess does not search the child
+    // vcvars PATH).
+    cmd << util::quote_windows_arg(toolchain::detect_toolchain().linker.string())
+        << " /OUT:" << util::quote_windows_arg(output.string()) << " ";
 
     for (auto& o : objs) {
         cmd << util::quote_windows_arg(o.string()) << " ";
@@ -377,7 +380,9 @@ static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
                                      const config::LinkSection& link) {
     std::ostringstream cmd;
     // 1.4.6 Q-20: MSVCRT quoting for CreateProcessW (see make_msvc_exe_cmd).
-    cmd << "link.exe /DLL /OUT:" << util::quote_windows_arg(output_dll.string()) << " ";
+    // 1.4.7 M-03: absolute link.exe.
+    cmd << util::quote_windows_arg(toolchain::detect_toolchain().linker.string())
+        << " /DLL /OUT:" << util::quote_windows_arg(output_dll.string()) << " ";
     cmd << "/IMPLIB:" << util::quote_windows_arg(output_implib.string()) << " ";
 
     for (auto& o : objs) {
@@ -410,7 +415,9 @@ static std::string make_msvc_lib_cmd(const std::vector<fs::path>& objs,
                                      const fs::path& output) {
     std::ostringstream cmd;
     // 1.4.6 Q-20: MSVCRT quoting for CreateProcessW (see make_msvc_exe_cmd).
-    cmd << "lib.exe /OUT:" << util::quote_windows_arg(output.string()) << " ";
+    // 1.4.7 M-03: absolute lib.exe.
+    cmd << util::quote_windows_arg(toolchain::detect_toolchain().archiver.string())
+        << " /OUT:" << util::quote_windows_arg(output.string()) << " ";
 
     for (auto& o : objs) {
         cmd << util::quote_windows_arg(o.string()) << " ";
@@ -1276,6 +1283,7 @@ static fs::path execute_link(
     ezmk::i18n::I18nKey action_key,
     const std::string& target_name,
     ezmk::i18n::I18nKey fail_key,
+    const toolchain::Toolchain& tc,
     bool show_stdout = false)
 {
     std::error_code ec;
@@ -1284,7 +1292,10 @@ static fs::path execute_link(
     util::info(action_key, {{"target", target_name}});
     if (verbose) util::info("    cmd: " + cmd);
 
-    auto res = util::run_command(cmd);
+    // 1.4.7 M-03: MSVC link/lib need the vcvars environment.
+    util::RunOptions run_opts;
+    util::merge_env(run_opts, toolchain::msvc_env(tc));
+    auto res = util::run_command(cmd, run_opts);
     if (res.exit_code != 0) {
         fs::remove(output_tmp, ec);
         util::error(fail_key, {{"code", std::to_string(res.exit_code)}});
@@ -1338,7 +1349,7 @@ fs::path link_phase(const BuildState& st,
                 fs::path lib_tmp = st.build_dir / (cfg.project.name + ".lib.tmp");
                 return execute_link(make_msvc_lib_cmd(objects, lib_tmp), lib, lib_tmp,
                                     opts.verbose, ezmk::i18n::I18nKey::archiving,
-                                    lib.filename().string(), ezmk::i18n::I18nKey::archive_failed);
+                                    lib.filename().string(), ezmk::i18n::I18nKey::archive_failed, st.tc);
             });
         } else {
             return try_link([&]() -> fs::path {
@@ -1353,7 +1364,7 @@ fs::path link_phase(const BuildState& st,
                     ar_cmd << " " << util::quote_cli_arg(o.string());
                 return execute_link(ar_cmd.str(), lib, lib_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::archiving,
-                                    lib.filename().string(), ezmk::i18n::I18nKey::archive_failed);
+                                    lib.filename().string(), ezmk::i18n::I18nKey::archive_failed, st.tc);
             });
         }
     } else if (cfg.project.type == "shared") {
@@ -1364,7 +1375,7 @@ fs::path link_phase(const BuildState& st,
                 fs::path dll_tmp = st.build_dir / (cfg.project.name + ".dll.tmp");
                 return execute_link(make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp, implib, merged_link),
                                     dll, dll_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
-                                    dll.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
+                                    dll.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         } else {
             return try_link([&]() -> fs::path {
@@ -1382,7 +1393,7 @@ fs::path link_phase(const BuildState& st,
                 RspGuard rsp_guard{jc.rsp_file};
                 return execute_link(jc.cmd, lib, lib_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::linking,
-                                    lib.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
+                                    lib.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         }
     } else {
@@ -1393,7 +1404,7 @@ fs::path link_phase(const BuildState& st,
                 fs::path exe_tmp = st.build_dir / (cfg.project.name + ".exe.tmp");
                 return execute_link(make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp, merged_link),
                                     exe, exe_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
-                                    exe.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
+                                    exe.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         } else {
             return try_link([&]() -> fs::path {
@@ -1411,7 +1422,7 @@ fs::path link_phase(const BuildState& st,
                 RspGuard rsp_guard{jc.rsp_file};
                 return execute_link(jc.cmd, exe, exe_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::linking,
-                                    exe.filename().string(), ezmk::i18n::I18nKey::link_failed, true);
+                                    exe.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         }
     }
@@ -2124,6 +2135,9 @@ struct TestRunContext {
     std::string report_fmt;
     fs::path report_path;
     bool is_msvc = false;
+    // 1.4.7 M-03: MSVC child environment (empty for MinGW), reused by the
+    // compile/link/run subprocesses.
+    std::map<std::string, std::string> msvc_env;
     config::LanguageInfo lang_info;
 };
 
@@ -2242,7 +2256,9 @@ static void run_catch2_tests(TestRunContext& ctx) {
     RspGuard rsp_guard{jc.rsp_file};
     std::string link_cmd = jc.cmd;
     if (ctx.verbose) util::info("  " + link_cmd);
-    auto link_res = util::run_command(link_cmd);
+    util::RunOptions link_opts;
+    util::merge_env(link_opts, ctx.msvc_env);
+    auto link_res = util::run_command(link_cmd, link_opts);
     if (link_res.exit_code != 0) {
         util::error("test link failed");
         if (!link_res.err.empty()) util::error(link_res.err);
@@ -2268,7 +2284,9 @@ static void run_catch2_tests(TestRunContext& ctx) {
         test_cmd += " -r \"" + util::escape_shell_arg(ctx.report_fmt) + "\"::out=\"" +
                     util::escape_shell_arg(ctx.report_path.string()) + "\"";
     }
-    auto test_res = util::run_command(test_cmd);
+    util::RunOptions test_opts;
+    util::merge_env(test_opts, ctx.msvc_env);
+    auto test_res = util::run_command(test_cmd, test_opts);
 
     // Parse the case-level summary from Catch2 console output. Two shapes:
     //   - failures present: "test cases: M | X passed | Y failed"
@@ -2437,7 +2455,9 @@ static void run_ezmk_tests(TestRunContext& ctx) {
         std::string comp_cmd = jc.cmd;
 
         if (ctx.verbose) util::info("  " + comp_cmd);
-        auto comp_res = util::run_command(comp_cmd);
+        util::RunOptions link_opts;
+        util::merge_env(link_opts, ctx.msvc_env);
+        auto comp_res = util::run_command(comp_cmd, link_opts);
         if (comp_res.exit_code != 0) {
             util::error(std::string("  link failed: ") + ts.filename().string());
             if (!comp_res.err.empty()) util::error(comp_res.err);
@@ -2449,7 +2469,10 @@ static void run_ezmk_tests(TestRunContext& ctx) {
 
         // Run test with a 30s timeout — a hung test must not block the
         // whole suite indefinitely.
-        auto run_res = util::run_command("\"" + test_exe.string() + "\"", 30);
+        util::RunOptions run_opts;
+        run_opts.timeout_sec = 30;
+        util::merge_env(run_opts, ctx.msvc_env);
+        auto run_res = util::run_command("\"" + test_exe.string() + "\"", run_opts);
         auto elapsed = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - test_start).count();
         total_time += elapsed;
@@ -2730,6 +2753,8 @@ void run_tests(const config::EzConfig& cfg,
     ctx.report_fmt = std::move(report_fmt);
     ctx.report_path = std::move(report_path);
     ctx.is_msvc = is_msvc;
+    // 1.4.7 M-03: cached vcvars environment (empty unless the toolchain is MSVC).
+    ctx.msvc_env = toolchain::msvc_env(toolchain::detect_toolchain());
     ctx.lang_info = std::move(lang_info);
 
     if (framework == "CATCH2") {

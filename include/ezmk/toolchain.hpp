@@ -28,6 +28,11 @@ struct Toolchain {
 // Respects $CXX/$CC env vars.
 Toolchain detect_toolchain();
 
+// 1.4.7 M-03: child-process environment for MSVC (PATH/INCLUDE/LIB/... captured
+// from vcvars64.bat), loaded once per process. Returns an empty map on
+// non-Windows or non-MSVC toolchains.
+const std::map<std::string, std::string>& msvc_env(const Toolchain& tc);
+
 // 1.2.0-dev.10: Precompiled-package compiler tag from a detected toolchain.
 // Returns "gcc13" / "clang18" / "msvc143" by parsing tc.version (which
 // detect_toolchain() already cached — pure function, no subprocess):

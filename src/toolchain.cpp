@@ -347,6 +347,10 @@ std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path) {
     std::istringstream stream(res.out);
     std::string line;
     while (std::getline(stream, line)) {
+        // 1.4.7 M-03: cmd's set output is CRLF; std::getline leaves the CR, and a
+        // stray CR in PATH/TMP/INCLUDE corrupts the child environment (cl then
+        // fails with D8037 on a TMP path ending in CR).
+        if (!line.empty() && line.back() == '\r') line.pop_back();
         // Skip empty lines
         if (line.empty()) continue;
 
@@ -364,6 +368,65 @@ std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path) {
 #endif
 
     return env;
+}
+
+const std::map<std::string, std::string>& msvc_env(const Toolchain& tc) {
+    static const std::map<std::string, std::string> empty;
+    static std::map<std::string, std::string> cached;
+    static std::once_flag once;
+    if (tc.family != CompilerFamily::Msvc) return empty;
+    std::call_once(once, [&] {
+        cached = load_msvc_env(tc.vcvars_path);
+#ifdef EZMK_WIN
+        // 1.4.7 M-03: cl.exe writes intermediate .il files into TMP/TEMP. When
+        // ezmk is launched from MSYS2 bash those are POSIX paths ("/tmp") that
+        // cl cannot use (error D8037); replace them with a real Windows temp.
+        auto needs_fix = [&](const char* k) {
+            auto it = cached.find(k);
+            return it == cached.end() || it->second.empty() || it->second[0] == '/';
+        };
+        if (needs_fix("TMP") || needs_fix("TEMP")) {
+            fs::path tmp;
+            const char* local = std::getenv("LOCALAPPDATA");
+            const char* prof = std::getenv("USERPROFILE");
+            if (local && *local) tmp = fs::path(local) / "Temp";
+            else if (prof && *prof) tmp = fs::path(prof) / "AppData" / "Local" / "Temp";
+            else tmp = fs::path("C:\\Windows\\Temp");
+            std::error_code ec;
+            fs::create_directories(tmp, ec);
+            cached["TMP"] = tmp.string();
+            cached["TEMP"] = tmp.string();
+        }
+#endif
+    });
+    return cached;
+}
+
+// 1.4.7 M-03: find an executable on an environment's PATH (vcvars prepends the
+// MSVC bin dirs). CreateProcessW resolves the program name against the PARENT's
+// PATH, not the child env block, so MSVC tools must be invoked by absolute path.
+static fs::path find_in_env_path(const std::map<std::string, std::string>& env,
+                                 const char* exe) {
+    for (const auto& kv : env) {
+        std::string k = kv.first;
+        for (char& c : k) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (k != "path") continue;
+        const std::string& p = kv.second;
+        size_t start = 0;
+        for (;;) {
+            size_t sep = p.find(';', start);
+            std::string dir = p.substr(
+                start, sep == std::string::npos ? std::string::npos : sep - start);
+            if (!dir.empty()) {
+                std::error_code ec;
+                fs::path cand = fs::path(dir) / exe;
+                if (fs::exists(cand, ec) && fs::is_regular_file(cand, ec)) return cand;
+            }
+            if (sep == std::string::npos) break;
+            start = sep + 1;
+        }
+    }
+    return {};
 }
 
 // ===================================================================
@@ -738,12 +801,18 @@ Toolchain detect_toolchain() {
             if (!msvc_probe_ok(cl_res.exit_code, cl_res.out)) return std::nullopt;
             Toolchain tc;
             tc.family = CompilerFamily::Msvc;
-            tc.cxx_compiler = fs::path("cl.exe");
-            tc.c_compiler = fs::path("cl.exe");
-            tc.linker = fs::path("link.exe");
-            tc.archiver = fs::path("lib.exe");
             tc.vcvars_path = vcvars;
             tc.version = parse_msvc_banner_version(cl_res.out);
+            // 1.4.7 M-03: absolute tool paths from the vcvars PATH (see
+            // find_in_env_path) so the build works without a Developer prompt.
+            const auto& env = msvc_env(tc);
+            fs::path cl = find_in_env_path(env, "cl.exe");
+            fs::path ln = find_in_env_path(env, "link.exe");
+            fs::path lb = find_in_env_path(env, "lib.exe");
+            tc.cxx_compiler = cl.empty() ? fs::path("cl.exe") : cl;
+            tc.c_compiler = tc.cxx_compiler;
+            tc.linker = ln.empty() ? fs::path("link.exe") : ln;
+            tc.archiver = lb.empty() ? fs::path("lib.exe") : lb;
             return tc;
         };
 

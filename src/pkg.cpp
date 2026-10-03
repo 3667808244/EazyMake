@@ -844,10 +844,19 @@ fs::path select_precompiled_archive(const fs::path& lib_dir,
 // POSIX `sh -c` 下可命令注入（与 util.cpp 中 git_clone/git_pull 的写法一致）。
 std::string build_archive_command(bool is_msvc,
                                   const fs::path& lib_out,
-                                  const std::vector<fs::path>& objects) {
+                                  const std::vector<fs::path>& objects,
+                                  const toolchain::Toolchain& tc) {
     std::ostringstream cmd;
-    cmd << (is_msvc ? "lib.exe /OUT:" : "ar rcs ")
-        << "\"" << util::escape_shell_arg(lib_out.string()) << "\"";
+    // 1.4.7 M-03: absolute lib.exe (CreateProcess does not search the child
+    // vcvars PATH); the ar tool stays on the parent PATH.
+    if (is_msvc) {
+        cmd << util::quote_windows_arg(tc.archiver.empty() ? std::string("lib.exe")
+                                                           : tc.archiver.string())
+            << " /OUT:";
+    } else {
+        cmd << "ar rcs ";
+    }
+    cmd << "\"" << util::escape_shell_arg(lib_out.string()) << "\"";
     for (auto& o : objects) {
         cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
     }
@@ -1005,8 +1014,11 @@ fs::path compile_package(const fs::path& pkg_dir,
     if (is_msvc) {
         // 1.1.0: MSVC — use lib.exe to create static library
         // 1.1.2 S2: 命令构造收敛到 build_archive_command()（路径转义）
+        // 1.4.7 M-03: lib.exe needs the vcvars environment.
+        util::RunOptions arch_opts;
+        util::merge_env(arch_opts, toolchain::msvc_env(tc));
         auto lib_res = util::run_command(
-            build_archive_command(is_msvc, lib_tmp, comp_result.objects));
+            build_archive_command(is_msvc, lib_tmp, comp_result.objects, tc), arch_opts);
         if (lib_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
@@ -1016,7 +1028,7 @@ fs::path compile_package(const fs::path& pkg_dir,
     } else {
         // GCC/Clang: use ar
         auto ar_res = util::run_command(
-            build_archive_command(is_msvc, lib_tmp, comp_result.objects));
+            build_archive_command(is_msvc, lib_tmp, comp_result.objects, tc));
         if (ar_res.exit_code != 0) {
             std::error_code ec;
             fs::remove(lib_tmp, ec);
