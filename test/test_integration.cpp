@@ -2305,6 +2305,74 @@ TEST_CASE("integration: mutual deps stop auto-install recursion (dev.11)", "[int
     REQUIRE((r.out + r.err).find("circular") != std::string::npos);
 }
 
+// 1.4.6 Q-02: a SUCCESSFUL directory-source install must keep the dependencies
+// it auto-installed. The directory / git / repo-dir return paths left the
+// outermost transaction uncommitted, so TxnGuard rolled the fresh deps back and
+// the lockfile listed packages that no longer existed.
+TEST_CASE("integration: dir install keeps auto-installed deps (1.4.6 Q-02)", "[integration][1.4.6]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    // 1) Dependency package packed into a local (project-scope) repo.
+    fs::path repo_dir = tmp.path / "repo";
+    fs::create_directories(repo_dir);
+    fs::path dep = tmp.path / "qd_dep";
+    fs::create_directories(dep / "src");
+    fs::create_directories(dep / "include");
+    std::ofstream(dep / "src" / "qd_dep.cpp") << "int qd_dep_f() { return 1; }\n";
+    {
+        std::ofstream of(dep / "ezmk.toml");
+        of << "[project]\nname = \"qd_dep\"\ntype = \"static\"\n"
+              "version = \"1.0.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = []\ninclude_dirs = [\"include\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = []\n";
+    }
+    ProcResult pk = run_ezmk("project pack --output \"" + repo_dir.string() + "\"", dep);
+    INFO("pack stderr: " << pk.err);
+    REQUIRE(pk.exit_code == 0);
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"q146\"\n\n"
+        "[[packages]]\nname = \"qd_dep\"\nversion = \"1.0.0\"\n"
+        "file = \"qd_dep-1.0.0.tar.gz\"\n");
+
+    // 2) Consumer project with that repo registered (project scope).
+    std::string proj_name = "qapp";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\"", proj_dir);
+    INFO("repo add stderr: " << ra.err);
+    REQUIRE(ra.exit_code == 0);
+
+    // 3) Directory-source package hard-depending on qd_dep (not yet installed).
+    fs::path pkg_dir = tmp.path / "qsrc";
+    fs::create_directories(pkg_dir / "src");
+    fs::create_directories(pkg_dir / "include");
+    std::ofstream(pkg_dir / "src" / "qsrc.cpp") << "int qsrc_f() { return 2; }\n";
+    {
+        std::ofstream of(pkg_dir / "ezmk.toml");
+        of << "[project]\nname = \"qsrc\"\ntype = \"static\"\n"
+              "version = \"1.0.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = []\ninclude_dirs = [\"include\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+              "[depends]\nlib = [\"qd_dep\"]\n";
+    }
+
+    ProcResult r = run_ezmk("pkg install \"" + pkg_dir.string() + "\" -p -y", proj_dir);
+    INFO("install stdout: " << r.out);
+    INFO("install stderr: " << r.err);
+    REQUIRE(r.exit_code == 0);
+    // The package itself and the dependency auto-installed to satisfy it.
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "qsrc"));
+    REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "qd_dep"));
+}
+
 // 1.2.0-dev.11: auto-install re-validates the freshly installed version against
 // the caller's constraint — B@^1.0 must not silently get repo B 2.0.0.
 TEST_CASE("integration: auto-install enforces version constraint (dev.11)", "[integration][1.2.0-dev.11]") {

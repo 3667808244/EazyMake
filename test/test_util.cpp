@@ -490,6 +490,25 @@ TEST_CASE("atomic_rename: missing source throws fatal_error", "[util][1.1.2]") {
     ezmk::util::remove_all(tmp);
 }
 
+// 1.4.6 Q-04: if rename fails AND the copy fallback also fails, the source must
+// survive — the old code removed it unconditionally before checking the error,
+// so the only good copy was destroyed.
+TEST_CASE("atomic_rename: copy-fallback failure keeps the source", "[util][1.4.6]") {
+    TempDir tmp;
+    auto from = tmp.path / "src.bin";
+    { std::ofstream f(from, std::ios::binary); f << "payload"; }
+    // The target is an existing non-empty DIRECTORY: fs::rename(file -> dir)
+    // fails and fs::copy_file(file -> dir, overwrite_existing) fails as well.
+    auto to = tmp.path / "target_dir";
+    fs::create_directories(to);
+    { std::ofstream f(to / "keep.txt"); f << "keep"; }
+
+    REQUIRE_THROWS_AS(ezmk::util::atomic_rename(from, to), ezmk::fatal_error);
+    REQUIRE(fs::exists(from));
+    REQUIRE(ezmk::util::file_read(from) == "payload");
+    REQUIRE(fs::exists(to / "keep.txt"));
+}
+
 // 1.1.2 C5: toml_quote — writers that interpolate user strings must escape.
 TEST_CASE("toml_quote: escapes special characters", "[util][1.1.2]") {
     REQUIRE(toml_quote("plain") == "\"plain\"");
@@ -962,6 +981,25 @@ TEST_CASE("extract_zip: valid nested entry extracts correctly", "[util]") {
     REQUIRE(fs::exists(dest / "dir" / "sub" / "file.txt"));
     REQUIRE(ezmk::util::file_read(dest / "dir" / "sub" / "file.txt") == "hello");
     ezmk::util::remove_all(tmp);
+}
+
+// 1.4.6 Q-01: an extraction failure used to fclose() the archive FILE twice
+// (the inner error branch closed it, then the enclosing catch closed it again)
+// — UB. This drives that branch: a directory blocks the entry output path, so
+// fopen("wb") fails.
+TEST_CASE("extract_zip: blocked output path fails cleanly", "[util][1.4.6]") {
+    TempDir tmp;
+    auto dest = tmp.path / "out";
+    fs::create_directories(dest);
+    auto z = tmp.path / "blocked.zip";
+    write_zip_with_entry(z, "file.txt", "data");
+    // A directory sits where the entry file would be written.
+    fs::create_directories(dest / "file.txt");
+
+    REQUIRE_THROWS_AS(ezmk::util::extract_zip(z, dest), std::runtime_error);
+    // The archive is intact and still readable afterwards (no dangling FILE).
+    REQUIRE(fs::exists(z));
+    REQUIRE(fs::file_size(z) > 0);
 }
 
 // ===================================================================

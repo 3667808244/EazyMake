@@ -1785,6 +1785,14 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         }
     } txn_guard;
     (void)outermost_txn;
+    // 1.4.6 Q-02: commit the transaction on ANY successful (Ok) return. The
+    // directory / git / repo-dir paths used to return without marking the guard,
+    // so the outermost install rolled back the dependencies it had just
+    // auto-installed. finish() is the single commit trigger.
+    auto finish = [&](InstallOutcome outcome) {
+        if (outcome == InstallOutcome::Ok) txn_guard.committed = true;
+        return outcome;
+    };
 
     // 1.1.0: --locked mode — install from lockfile only
     // 1.2.0-dev.7: lockfile + config resolved against the located project root
@@ -1877,7 +1885,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         if (!expected_sha256.empty()) {
             util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
         }
-        return install_from_directory(input, scope, assume_yes, no_lock);
+        return finish(install_from_directory(input, scope, assume_yes, no_lock));
     }
 
     // 1.4.1: --locked git source — the url+commit were resolved from ezmk.lock.json
@@ -1887,8 +1895,8 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         if (!expected_sha256.empty()) {
             util::warn(ezmk::i18n::I18nKey::pkg_git_sha256_skipped);
         }
-        return install_git_source(locked_git_url, locked_git_commit, scope,
-                                  assume_yes, no_lock, &locked_git_commit);
+        return finish(install_git_source(locked_git_url, locked_git_commit, scope,
+                                         assume_yes, no_lock, &locked_git_commit));
     }
 
     // 1.4.1: git repository URL source — clone & install via the directory
@@ -1922,7 +1930,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         if (base.find("://") == std::string::npos && base.rfind("git@", 0) != 0) {
             base = "https://" + base;
         }
-        return install_git_source(base, ref, scope, assume_yes, no_lock);
+        return finish(install_git_source(base, ref, scope, assume_yes, no_lock));
     }
 
     // Determine if it's a URL or local file
@@ -2040,7 +2048,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
                 if (!expected_sha256.empty()) {
                     util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
                 }
-                return install_from_directory(archive_path, scope, assume_yes, no_lock);
+                return finish(install_from_directory(archive_path, scope, assume_yes, no_lock));
             }
         }
     }
@@ -2175,8 +2183,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
 
     // 1.1.0: generate/update ezmk.lock.json with resolved dependency snapshot
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);
-    txn_guard.committed = true;   // 1.4.2 F-30: keep auto-installed dependencies
-    return InstallOutcome::Ok;
+    return finish(InstallOutcome::Ok);   // 1.4.2 F-30 / 1.4.6 Q-02: keep auto-installed dependencies
 }
 
 // ===================================================================

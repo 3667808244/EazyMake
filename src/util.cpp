@@ -285,14 +285,18 @@ void atomic_rename(const fs::path& from, const fs::path& to) {
     std::error_code ec;
     fs::rename(from, to, ec);
     if (!ec) return;
+    // 1.4.6 Q-04: rename failed (e.g. the target is locked by a running exe on
+    // Windows) — fall back to copy. The source must survive a failed copy:
+    // removing it before the error check left the caller with neither the
+    // original nor the artifact.
     ec.clear();
     fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
-    std::error_code rm_ec;
-    fs::remove(from, rm_ec);
     if (ec) {
         fatal("failed to move build output into place: " + to.string() +
               " (" + ec.message() + ")");
     }
+    std::error_code rm_ec;
+    fs::remove(from, rm_ec);   // copy succeeded; best-effort source cleanup
 }
 
 // 1.4.5: crash-safe text write — same temp → atomic_rename recipe the cache
@@ -1013,8 +1017,10 @@ void extract_zip(const fs::path& archive, const fs::path& dest) {
                     !mz_zip_reader_extract_to_callback(&zip, i, zip_write_cb,
                                                        out_file, 0)) {
                     if (out_file) std::fclose(out_file);
-                    mz_zip_reader_end(&zip);
-                    std::fclose(archive_file);
+                    // 1.4.6 Q-01: the enclosing catch closes the reader and the
+                    // archive FILE exactly once. Closing here too double-fclose()d
+                    // the same FILE* — UB (freed/recycled CRT stream, or an
+                    // unrelated fd reused by a -jN thread).
                     throw std::runtime_error("failed to extract: " + std::string(stat.m_filename));
                 }
                 std::fclose(out_file);
