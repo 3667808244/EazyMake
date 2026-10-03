@@ -24,6 +24,36 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ---
 
+## 1.4.6 — 代码质量审计修复（第三轮）（未发布）
+
+> **状态：实现收口（未发布）** —— 七阶段全部落地，全量 **1130 用例 / 6536 断言零失败**（基线 1.4.5 发布态 1113/6491，+17 用例 / +45 断言）；严格告警零告警；i18n **412** 键三向一致、man / groff / docs-sync 门槛通过。**公共 API 无破坏性变更，零功能新增。**
+
+### 修复
+
+- **内存/数据完整性（Q-01/Q-02/Q-04）**：`extract_zip` 错误路径对同一 `FILE*` 二次 `fclose`（UB）；`pkg install` 目录/git/仓库目录源**成功**后仍回滚自动安装的依赖（事务提交点现覆盖全部 `Ok` 返回）；`atomic_rename` 复制兜底失败仍删除源文件。
+- **编译正确性与确定性（Q-03/Q-19/Q-30/Q-31）**：GCC/Clang 响应文件参数未转义（含空格/引号/结尾反斜杠 → 参数被拆分或宏值静默改变）；目录遍历未排序导致 `-I`/链接顺序依赖文件系统；并行构建对新增文件误报 include 结构变化；仅 `[link.profile.*]` 的 profile 被误判为 unknown。
+- **归档与下载健壮性（Q-05/Q-06/Q-22/Q-24/Q-25/Q-26）**：tar size 字段非八进制/溢出绕过越界保护、截断 gzip 被当部分成功；Windows 下载查询/读取失败被当成功、`curl` 缺 `--fail`、URL 末段文件名未净化且临时归档不清理；gzip 头 FEXTRA/FNAME 越界；`create_zip` 改原子写；tar 解包检查 `ofstream` 成败；`mz_deflateInit2`/`CreatePipe` 返回值检查。
+- **pkg 事务与 lockfile 校验（Q-11~Q-13/Q-15~Q-18）**：用户取消未向上传播（误计成功并重写 lockfile）；`verify` 漏检缺失产物、header-only git 包绕过 commit 校验；`<pkg>.new` 暂存路径可能误删同名合法包；超长版本串 `std::stoul` 裸抛；注册表/lockfile 写入失败不可见；损坏 `list.json` 被当空注册表覆盖；`pkg info/update` 缺名字校验。
+- **watcher 与 workspace（Q-09/Q-10/Q-28/Q-29）**：macOS 补挂失败后重复 `close` 同一 fd；`[workspace.options].stop_on_error` 从不生效；workspace 写回边界（`[workspace]` 无结尾换行）与 `default_jobs` 无上限；Linux inotify `EAGAIN` 被当致命；Windows 清理期未排空 OVERLAPPED。
+- **导出/CLI/跨平台（Q-07/Q-08/Q-14/Q-20/Q-21/Q-23/Q-27）**：`--precompiled` 标记在带注释/其它首节的文件里落到根级；`--report` 格式串未转义（POSIX 注入面）；`detect_toolchain` 静态缓存非线程安全；Windows 路径统一 MSVCRT 引用（`quote_windows_arg`/`quote_cli_arg`）；POSIX 重定向临时路径引号化；`toml_quote` 全控制字符转义；`file_write` 目录创建异常不再违背 bool 契约。
+
+### 行为收紧（升级注意）
+
+- 损坏/截断的归档与断流的下载现在**明确报错**，不再静默产生部分结果。
+- 损坏的仓库注册表（`list.json`）现在**读取即报错**，不再被当作空注册表（此前下一次 `repo add` 会覆盖并丢失全部登记）。
+- `lockfile::verify` 对缺失产物与 header-only git 来源漂移会报 mismatch。
+
+### 测试
+
+- 全量 `bash build.sh test-all`：**1130 用例 / 6536 断言，0 失败**（4 跳过；基线 1113/6491）。
+- 每阶段新增定向回归（Q-01/Q-02/Q-03/Q-04/Q-05/Q-07/Q-12/Q-15/Q-17/Q-18/Q-19/Q-22/Q-23/Q-24/Q-25/Q-28）。
+
+### 明确不做
+
+- 破坏性 API 变更 / 弃用面移除（归 2.0.0）。
+- Linux/macOS 文件监视真递归（另立版本）。
+- `build.cpp` / `pkg.cpp` 全面重构。
+
 ## 1.4.5 (2026-10-02) — 生成物格式统一（lockfile / 仓库注册表 JSON 化）
 
 把两个「ezmk 全权生成、用户不该手改」的文件从 TOML 改为 JSON：`ezmk.lock` → **`ezmk.lock.json`**、`list.toml` → **`list.json`**（全局 / 用户 / 项目三作用域），并顺带把这两个仓储里少数**非原子写**的生成物升级为原子写。旧格式**继续可读**，首次成功写入时**自动迁移**（写新文件 → 删旧文件），因此**升级无感、无需手动操作**。**公共 API 无破坏性变更**（只新增函数，`repo::list_toml_path()` 保留为别名）；lockfile 的**字段语义完全不变**（`sha256` 别名继续双写、`version` 仍为 1、`--locked` / `deterministic` 判定逻辑不变）；不放宽也不移除任何弃用面。
