@@ -1950,6 +1950,15 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     }
 
     fs::path archive_path;
+    // 1.4.6 Q-06: URL downloads land in a temp file; remove it on every exit
+    // path (success, cancellation, or exception) so installs do not leak
+    // archives. Local-file installs are never registered here.
+    struct TempDownloadGuard {
+        std::vector<fs::path> paths;
+        ~TempDownloadGuard() {
+            for (auto& p : paths) { std::error_code ec; fs::remove(p, ec); }
+        }
+    } temp_download_guard;
 
     // 1.4.2 F-04: install-source provenance. Recorded next to the installed
     // package as `.ezmk-archive-source` (kind / source / archive hash) so the
@@ -1968,20 +1977,30 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         }
         // Download to temp
         fs::path tmp_dir = fs::temp_directory_path();
-        // Extract filename from URL
-        std::string fname = url;
-        size_t last_slash = fname.rfind('/');
-        if (last_slash != std::string::npos) fname = fname.substr(last_slash + 1);
-        if (fname.empty()) {
-            // 1.4.2 F-30: never a constant name — two concurrent downloads (or a
-            // stale file from a previous run) must not collide in the temp dir.
-            static std::atomic<uint64_t> dl_counter{0};
-            fname = "ezmk_download_" +
-                    std::to_string(std::chrono::steady_clock::now()
-                                       .time_since_epoch().count()) +
-                    "_" + std::to_string(dl_counter.fetch_add(1));
+        // 1.4.6 Q-06: never trust the URL's last segment as a path. On Windows a
+        // segment containing backslash-separated dots escaped the temp dir, and a
+        // fixed basename collided between concurrent installs and stale runs.
+        // Sanitize the segment (keeping its extension so the archive format is
+        // still detectable) and always prefix a unique token.
+        std::string base = url;
+        auto cut = base.find_first_of("?#");
+        if (cut != std::string::npos) base = base.substr(0, cut);
+        auto last_slash = base.rfind('/');
+        if (last_slash != std::string::npos) base = base.substr(last_slash + 1);
+        for (char& c : base) {
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' ||
+                c == '"' || c == '<' || c == '>' || c == '|') {
+                c = '_';
+            }
         }
+        if (base == "." || base == ".." || base.empty()) base = "download";
+        static std::atomic<uint64_t> dl_counter{0};
+        std::string fname = "ezmk_download_" +
+                std::to_string(std::chrono::steady_clock::now()
+                                   .time_since_epoch().count()) +
+                "_" + std::to_string(dl_counter.fetch_add(1)) + "_" + base;
         archive_path = tmp_dir / fname;
+        temp_download_guard.paths.push_back(archive_path);
 
         util::info(ezmk::i18n::I18nKey::downloading, {{"url", url}});
         util::download(url, archive_path);

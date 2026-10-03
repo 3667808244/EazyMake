@@ -761,8 +761,14 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
 
     z_stream strm{};
     // -MZ_DEFAULT_WINDOW_BITS = raw deflate (no zlib/adler32 wrapper)
-    mz_deflateInit2(&strm, MZ_DEFAULT_COMPRESSION, Z_DEFLATED,
-                    -MZ_DEFAULT_WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
+    // 1.4.6 Q-26: check init — a failed init leaves the stream uninitialised and
+    // the later deflate calls would operate on garbage.
+    int init_rc = mz_deflateInit2(&strm, MZ_DEFAULT_COMPRESSION, Z_DEFLATED,
+                                  -MZ_DEFAULT_WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
+    if (init_rc != MZ_OK) {
+        throw std::runtime_error("gzip compression init failed (rc=" +
+                                 std::to_string(init_rc) + ")");
+    }
 
     mz_ulong bound = mz_deflateBound(&strm, static_cast<mz_ulong>(tar.size()));
     std::vector<uint8_t> deflated(bound);
@@ -841,13 +847,21 @@ void create_zip(const fs::path& source_dir, const fs::path& output_file) {
     // --- Step 2: write the zip via miniz ---
     // 1.4.2 F-20: open the output ourselves (wide CRT on Windows) and use the
     // miniz cfile writer — its *_file variant takes a narrow path.
-    FILE* out_file = fopen_utf8(output_file, "wb");
+    // 1.4.6 Q-24: write to a temp and rename into place, matching create_targz.
+    // The old direct write truncated an existing archive before it was known
+    // whether the new one could be produced.
+    fs::path tmp_out = output_file;
+    tmp_out += ".tmp";
+    fs::create_directories(output_file.parent_path());
+    FILE* out_file = fopen_utf8(tmp_out, "wb");
     if (!out_file) {
         throw std::runtime_error("failed to create ZIP: " + output_file.string());
     }
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_cfile(&zip, out_file, 0)) {
         std::fclose(out_file);
+        std::error_code ec;
+        fs::remove(tmp_out, ec);
         throw std::runtime_error("failed to create ZIP: " + output_file.string());
     }
     bool ok = true;
@@ -868,9 +882,10 @@ void create_zip(const fs::path& source_dir, const fs::path& output_file) {
     std::fclose(out_file);
     if (!ok) {
         std::error_code rm_ec;
-        fs::remove(output_file, rm_ec);  // best-effort cleanup of a partial archive
+        fs::remove(tmp_out, rm_ec);  // best-effort cleanup of a partial archive
         throw std::runtime_error("failed to write ZIP: " + output_file.string());
     }
+    atomic_rename(tmp_out, output_file);   // publish atomically
 }
 
 // ===================================================================
@@ -1048,19 +1063,26 @@ static size_t skip_gzip_header(const uint8_t* data, size_t len) {
     if (flags & 0x04) { // FEXTRA
         if (pos + 2 > len) throw std::runtime_error("truncated gzip header");
         uint16_t xlen = data[pos] | (uint16_t(data[pos + 1]) << 8);
+        // 1.4.6 Q-22: bound the extra field — the old code let pos run past the
+        // buffer, after which decompression silently produced an empty result.
+        if (pos + 2 + xlen > len) throw std::runtime_error("truncated gzip header");
         pos += 2 + xlen;
     }
     if (flags & 0x08) { // FNAME
         while (pos < len && data[pos] != 0) ++pos;
+        if (pos >= len) throw std::runtime_error("truncated gzip header");
         ++pos; // skip null
     }
     if (flags & 0x10) { // FCOMMENT
         while (pos < len && data[pos] != 0) ++pos;
+        if (pos >= len) throw std::runtime_error("truncated gzip header");
         ++pos;
     }
     if (flags & 0x02) { // FHCRC
+        if (pos + 2 > len) throw std::runtime_error("truncated gzip header");
         pos += 2;
     }
+    if (pos > len) throw std::runtime_error("truncated gzip header");
     return pos;
 }
 
@@ -1085,6 +1107,7 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
     tinfl_decompressor inflator{};
     tinfl_init(&inflator);
 
+    bool done = false;
     size_t in_pos = data_off;
     while (in_pos < src_len) {
         size_t in_bytes = src_len - in_pos;
@@ -1108,10 +1131,17 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
         in_pos += in_bytes;
         out_pos += out_bytes;
 
-        if (st == TINFL_STATUS_DONE) break;
-        if (st == TINFL_STATUS_FAILED) {
+        if (st == TINFL_STATUS_DONE) { done = true; break; }
+        // 1.4.6 Q-05: every negative tinfl status is a hard error. The old code
+        // only caught FAILED(-1); FAILED_CANNOT_MAKE_PROGRESS(-4) — returned for
+        // a truncated stream without TINFL_FLAG_HAS_MORE_INPUT — fell through and
+        // a partial archive was parsed as if complete.
+        if (st < 0) {
             throw std::runtime_error("gzip decompression failed");
         }
+    }
+    if (!done) {
+        throw std::runtime_error("gzip decompression failed (truncated stream)");
     }
 
     out.resize(out_pos);
@@ -1123,9 +1153,14 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
     //   End of archive: two consecutive zero-filled 512-byte blocks.
 
     auto octal_to_size = [](const char* s, size_t len) -> size_t {
+        // 1.4.6 Q-05: strict octal. s[i] - '0' on a high-bit byte sign-extends
+        // to a huge value; a crafted 12-byte size field (e.g. all 0xFF) could
+        // overflow the bounds check below. Reject anything outside 0-7.
         size_t v = 0;
         for (size_t i = 0; i < len && s[i] && s[i] != ' '; ++i) {
-            v = (v << 3) | (s[i] - '0');
+            if (s[i] < '0' || s[i] > '7')
+                throw std::runtime_error("corrupt tar.gz: non-octal size field");
+            v = (v << 3) | static_cast<size_t>(s[i] - '0');
         }
         return v;
     };
@@ -1167,7 +1202,9 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
 
         // 1.2.0-dev.11: a size field beyond the remaining data means a corrupt
         // or truncated archive — fail loudly instead of silently skipping.
-        if (off + fsize > out.size()) {
+        // 1.4.6 Q-05: subtract (off <= out.size() here) so a crafted huge fsize
+        // cannot wrap the addition around the check.
+        if (fsize > out.size() - off) {
             throw std::runtime_error("corrupt tar.gz: entry '" + name +
                                      "' size exceeds archive data");
         }
@@ -1177,7 +1214,14 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
             fs::path outpath = safe_extract_path(dest, name);
             fs::create_directories(outpath.parent_path());
             std::ofstream fout(outpath, std::ios::binary);
-            fout.write(reinterpret_cast<const char*>(out.data() + off), fsize);
+            // 1.4.6 Q-25: a failed open/write must not silently produce a
+            // missing or truncated file.
+            if (!fout)
+                throw std::runtime_error("cannot write extracted file: " + outpath.string());
+            fout.write(reinterpret_cast<const char*>(out.data() + off),
+                       static_cast<std::streamsize>(fsize));
+            if (!fout)
+                throw std::runtime_error("failed writing extracted file: " + outpath.string());
         } else if (typeflag == '5') {
             // Directory
             fs::create_directories(safe_extract_path(dest, name));
@@ -1328,28 +1372,43 @@ void download(std::string_view url_sv, const fs::path& dest) {
     DWORD dwDownloaded = 0;
     char buf[8192];
     bool write_ok = fout.good();
-    do {
+    bool read_ok = true;
+    for (;;) {
         dwSize = 0;
-        if (WinHttpQueryDataAvailable(hRequest, &dwSize)) {
-            DWORD toRead = (dwSize < sizeof(buf)) ? dwSize : sizeof(buf);
-            if (WinHttpReadData(hRequest, buf, toRead, &dwDownloaded)) {
-                if (!write_ok) continue;
-                fout.write(buf, dwDownloaded);
-                write_ok = fout.good();
-                total += dwDownloaded;
-                if (total > kMaxDownloadSize) {
-                    fout.close();
-                    std::error_code ec;
-                    fs::remove(dest, ec);
-                    WinHttpCloseHandle(hRequest);
-                    WinHttpCloseHandle(hConnect);
-                    WinHttpCloseHandle(hSession);
-                    throw std::runtime_error("download exceeds size limit");
-                }
-            }
+        // 1.4.6 Q-06: a failed query/read is a real error — the old code left
+        // dwSize at 0, exited the loop and reported success on a dropped
+        // connection (truncated file accepted as a complete download).
+        if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) { read_ok = false; break; }
+        if (dwSize == 0) break;   // end of response
+        DWORD toRead = (dwSize < sizeof(buf)) ? dwSize : sizeof(buf);
+        if (!WinHttpReadData(hRequest, buf, toRead, &dwDownloaded)) { read_ok = false; break; }
+        if (dwDownloaded == 0) break;
+        // Count every received byte (even after a write failure) so the cap
+        // cannot be bypassed by a broken output stream.
+        total += dwDownloaded;
+        if (total > kMaxDownloadSize) {
+            fout.close();
+            std::error_code ec;
+            fs::remove(dest, ec);
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            throw std::runtime_error("download exceeds size limit");
         }
-    } while (dwSize > 0);
+        if (write_ok) {
+            fout.write(buf, dwDownloaded);
+            write_ok = fout.good();
+        }
+    }
     fout.close();
+    if (!read_ok) {
+        std::error_code ec;
+        fs::remove(dest, ec);
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        throw std::runtime_error("download failed while reading the response");
+    }
     if (!write_ok) {
         std::error_code ec;
         fs::remove(dest, ec);
@@ -1376,7 +1435,7 @@ void download(std::string_view url_sv, const fs::path& dest) {
     };
     std::string escaped_url = escape_sq(url);
     std::string escaped_dest = escape_sq(dest.string());
-    std::string cmd = "curl -sL --max-filesize 1073741824 -o '" + escaped_dest +
+    std::string cmd = "curl -sL --fail --max-filesize 1073741824 -o '" + escaped_dest +
                       "' '" + escaped_url + "'";
     auto res = run_command(cmd);
     if (res.exit_code != 0) {
@@ -1436,9 +1495,21 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     HANDLE hReadOut, hWriteOut, hReadErr, hWriteErr;
     SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE };
 
-    CreatePipe(&hReadOut, &hWriteOut, &sa, 0);
+    // 1.4.6 Q-26: check CreatePipe — the old code passed uninitialised HANDLEs
+    // to CreateProcess on failure.
+    if (!CreatePipe(&hReadOut, &hWriteOut, &sa, 0)) {
+        result.exit_code = 1;
+        result.err = "failed to create stdout pipe for command";
+        return result;
+    }
     SetHandleInformation(hReadOut, HANDLE_FLAG_INHERIT, 0);
-    CreatePipe(&hReadErr, &hWriteErr, &sa, 0);
+    if (!CreatePipe(&hReadErr, &hWriteErr, &sa, 0)) {
+        CloseHandle(hReadOut);
+        CloseHandle(hWriteOut);
+        result.exit_code = 1;
+        result.err = "failed to create stderr pipe for command";
+        return result;
+    }
     SetHandleInformation(hReadErr, HANDLE_FLAG_INHERIT, 0);
 
     STARTUPINFOW si{};

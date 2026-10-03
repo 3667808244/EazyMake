@@ -1002,6 +1002,77 @@ TEST_CASE("extract_zip: blocked output path fails cleanly", "[util][1.4.6]") {
     REQUIRE(fs::file_size(z) > 0);
 }
 
+// 1.4.6 Q-05: a non-octal size field (crafted all-0xFF bytes) must be rejected
+// before it can overflow the archive-bounds check.
+TEST_CASE("extract_targz: non-octal size field is rejected", "[util][1.4.6]") {
+    TempDir tmp;
+    auto dest = tmp.path / "out";
+    fs::create_directories(dest);
+    auto t = tmp.path / "badsize.tar.gz";
+    std::string entry = make_tar_entry("file.txt", '0', "data");
+    for (int i = 124; i < 136; ++i) entry[static_cast<size_t>(i)] = static_cast<char>(0xff);
+    write_gzip(t, entry + std::string(1024, '\0'));
+    REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+    REQUIRE_FALSE(fs::exists(dest / "file.txt"));
+}
+
+// 1.4.6 Q-05: a truncated deflate stream must error rather than yield a partial
+// archive.
+TEST_CASE("extract_targz: truncated gzip stream is rejected", "[util][1.4.6]") {
+    TempDir tmp;
+    auto dest = tmp.path / "out";
+    fs::create_directories(dest);
+    auto t = tmp.path / "trunc.tar.gz";
+    std::string gz = make_gzip(make_tar_entry("file.txt", '0', "data") + std::string(1024, '\0'));
+    gz.resize(gz.size() / 2);
+    { std::ofstream f(t, std::ios::binary); f.write(gz.data(), static_cast<std::streamsize>(gz.size())); }
+    REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+}
+
+// 1.4.6 Q-22: a gzip FEXTRA field longer than the file must be rejected (the old
+// code let the parse position run past the buffer).
+TEST_CASE("extract_targz: truncated gzip FEXTRA header is rejected", "[util][1.4.6]") {
+    TempDir tmp;
+    auto dest = tmp.path / "out";
+    fs::create_directories(dest);
+    auto t = tmp.path / "extra.tar.gz";
+    std::string out("\x1f\x8b\x08\x04", 4);   // FEXTRA set
+    out += std::string(6, '\0');               // mtime / xfl / os
+    out += std::string("\xff\xff", 2);         // xlen = 65535, but no extra data
+    out += "not-enough-data";
+    { std::ofstream f(t, std::ios::binary); f.write(out.data(), static_cast<std::streamsize>(out.size())); }
+    REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+}
+
+// 1.4.6 Q-25: a blocked output path (a directory where the file should go) must
+// fail loudly, not silently drop the entry.
+TEST_CASE("extract_targz: blocked output path fails cleanly", "[util][1.4.6]") {
+    TempDir tmp;
+    auto dest = tmp.path / "out";
+    fs::create_directories(dest);
+    auto t = tmp.path / "blocked.tar.gz";
+    write_gzip(t, make_tar_entry("file.txt", '0', "data") + std::string(1024, '\0'));
+    fs::create_directories(dest / "file.txt");
+    REQUIRE_THROWS_AS(ezmk::util::extract_targz(t, dest), std::runtime_error);
+}
+
+// 1.4.6 Q-24: create_zip publishes atomically and replaces a stale output.
+TEST_CASE("create_zip -> extract_zip round trip", "[util][1.4.6]") {
+    TempDir tmp;
+    auto src = tmp.path / "src";
+    fs::create_directories(src / "sub");
+    { std::ofstream f(src / "a.txt"); f << "aaa"; }
+    { std::ofstream f(src / "sub" / "b.txt"); f << "bbbb"; }
+    auto z = tmp.path / "out.zip";
+    { std::ofstream f(z, std::ios::binary); f << "stale"; }
+    ezmk::util::create_zip(src, z);
+    auto dest = tmp.path / "dest";
+    ezmk::util::extract_zip(z, dest);
+    REQUIRE(ezmk::util::file_read(dest / "a.txt") == "aaa");
+    REQUIRE(ezmk::util::file_read(dest / "sub" / "b.txt") == "bbbb");
+}
+
+
 // 1.4.6 Q-19: list_files must return a deterministic (sorted) order — callers
 // feed it into build/link inputs.
 TEST_CASE("list_files: returns a sorted, deterministic order", "[util][1.4.6]") {
