@@ -528,7 +528,10 @@ static AppliedProfile apply_profile(const config::EzConfig& cfg,
     auto it = cfg.compile_profiles.find(active_profile);
     if (it != cfg.compile_profiles.end()) {
         r.compile = merge_compile_profile(r.compile, it->second);
-    } else {
+    } else if (cfg.link_profiles.find(active_profile) == cfg.link_profiles.end()) {
+        // 1.4.6 Q-31: fatal only when NEITHER a compile nor a link profile
+        // matches. A link-only profile is valid — link profiles are listed as
+        // suggestions just below, so the bare else wrongly rejected it.
         // 0.9.4+: collect available profile names + suggest closest matches
         std::vector<std::string> profile_names;
         for (const auto& [name, _] : cfg.compile_profiles) profile_names.push_back(name);
@@ -600,6 +603,8 @@ static std::vector<fs::path> collect_package_archives(const fs::path& pkg_root,
                 archives.push_back(f.path());
             }
         }
+        // 1.4.6 Q-19: stable archive order (directory_iterator is unsorted).
+        std::sort(archives.begin(), archives.end());
     }
     // 0.9.7+: also collect precompiled archives from lib/
     // 1.1.0-dev.2: platform-aware — select only the archive for current platform
@@ -787,7 +792,16 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     std::map<std::string, std::string> installed_versions;
     fs::path pkg_dir = st.proj_root / ".ezmk/pkg";
     if (util::file_exists(pkg_dir)) {
+        // 1.4.6 Q-19: deterministic order — the scan appends package -I dirs,
+        // link flags and archives, so filesystem order decided which package's
+        // headers won and the static-lib link order.
+        std::vector<fs::path> pkg_entries;
         for (auto& entry : fs::directory_iterator(pkg_dir)) {
+            if (entry.is_directory()) pkg_entries.push_back(entry.path());
+        }
+        std::sort(pkg_entries.begin(), pkg_entries.end());
+        for (auto& pkg_path : pkg_entries) {
+            fs::directory_entry entry(pkg_path);
             if (!entry.is_directory()) continue;
             auto pkg_toml = entry.path() / "ezmk.toml";
             if (util::file_exists(pkg_toml)) {
@@ -1145,14 +1159,17 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
                 // 1.4.2 F-09: --disable-cache must not merge entries into the
                 // in-memory record either (an emptied record is saved below).
                 if (!opts.disable_cache) {
-                    auto& entry = record.files[sr.rel_src];
+                    // 1.4.6 Q-30: look up BEFORE inserting. operator[] default-
+                    // inserts, which made old_it != end() unconditionally true
+                    // and reported a bogus include-structure change for every
+                    // brand-new file (the serial path did the find first).
                     auto old_it = record.files.find(sr.rel_src);
                     if (old_it != record.files.end() &&
                         !cache::same_dependency_paths(old_it->second.dependencies, sr.new_deps)) {
                         util::info(ezmk::i18n::I18nKey::include_structure_changed,
                                    {{"file", sr.rel_src}});
                     }
-                    entry = std::move(sr.record_entry);
+                    record.files[sr.rel_src] = std::move(sr.record_entry);
                 }
             } else {
                 has_failure = true;

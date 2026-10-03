@@ -351,6 +351,9 @@ std::vector<fs::path> list_files(const fs::path& dir,
             }
         }
     }
+    // 1.4.6 Q-19: directory_iterator order is filesystem-dependent; callers feed
+    // the result into build/link inputs, so make it deterministic.
+    std::sort(result.begin(), result.end());
     return result;
 }
 

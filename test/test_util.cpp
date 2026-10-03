@@ -1002,6 +1002,21 @@ TEST_CASE("extract_zip: blocked output path fails cleanly", "[util][1.4.6]") {
     REQUIRE(fs::file_size(z) > 0);
 }
 
+// 1.4.6 Q-19: list_files must return a deterministic (sorted) order — callers
+// feed it into build/link inputs.
+TEST_CASE("list_files: returns a sorted, deterministic order", "[util][1.4.6]") {
+    TempDir tmp;
+    for (const char* n : {"c.cpp", "a.cpp", "b.cpp"}) {
+        std::ofstream(tmp.path / n) << "x";
+    }
+    std::ofstream(tmp.path / "ignore.txt") << "x";
+    auto files = ezmk::util::list_files(tmp.path, {".cpp"});
+    REQUIRE(files.size() == 3);
+    REQUIRE(files[0].filename().string() == "a.cpp");
+    REQUIRE(files[1].filename().string() == "b.cpp");
+    REQUIRE(files[2].filename().string() == "c.cpp");
+}
+
 // ===================================================================
 // Archive extraction security — 1.1.2 S1 (zip-bomb / size limit)
 // ===================================================================

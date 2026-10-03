@@ -297,15 +297,18 @@ TEST_CASE("response file: command over 16K becomes compiler @<rsp>", "[workspace
     REQUIRE(jc.cmd.find('@') != std::string::npos);
     REQUIRE(jc.cmd.size() < 4096);
 
-    // Content: one literal arg per line (args[0] = compiler stays on the line).
+    // Content: one quoted arg per line (args[0] = compiler stays on the line).
     std::string content = ezmk::util::file_read(jc.rsp_file);
     std::vector<std::string> lines;
     std::istringstream ss(content);
     std::string line;
     while (std::getline(ss, line)) lines.push_back(line);
     REQUIRE(lines.size() == args.size() - 1);
+    // 1.4.6 Q-03: arguments are quoted for the GCC/Clang @file grammar. These
+    // args contain no quote/backslash, so quoting is the only change; escaping
+    // of quotes/backslashes is covered by the next test.
     for (size_t i = 1; i < args.size(); ++i) {
-        REQUIRE(lines[i - 1] == args[i]);
+        REQUIRE(lines[i - 1] == "\"" + args[i] + "\"");
     }
 
     // Caller removes the response file after the run.
@@ -330,11 +333,32 @@ TEST_CASE("response file: rsp path with spaces is quoted, one arg per line", "[w
     REQUIRE(jc.cmd == ezmk::cache::join_shell_args(
                           {args[0], "@" + jc.rsp_file.string()}));
     REQUIRE(jc.cmd.find('"') != std::string::npos);
-    // The rsp contains the raw "src with space/main.cpp" as ONE line (no
-    // shell quoting — a response-file line IS the literal arg).
+    // 1.4.6 Q-03: @file splits on whitespace and honours quotes/backslash
+    // escapes, so the argument MUST be quoted here — the old test asserted the
+    // opposite (the buggy behavior).
     std::string content = ezmk::util::file_read(jc.rsp_file);
-    REQUIRE(content.find("\"src with space/main.cpp\"") == std::string::npos);
-    REQUIRE(content.find("src with space/main.cpp") != std::string::npos);
+    REQUIRE(content.find("\"src with space/main.cpp\"") != std::string::npos);
+    std::error_code ec;
+    fs::remove(jc.rsp_file, ec);
+}
+
+// 1.4.6 Q-03: spaces survive, embedded quotes are escaped, and a trailing
+// backslash cannot escape the closing quote.
+TEST_CASE("response file: spaces, quotes and trailing backslash are escaped", "[workspace][1.4.6]") {
+    TempDir tmp;
+    std::vector<std::string> args = {"clang++"};
+    std::string pad(2000, 'y');
+    for (int i = 0; i < 10; ++i) args.push_back("-I" + pad);
+    args.push_back("C:/My Project/include");
+    args.push_back("a\"b");
+    args.push_back("trailing\\");
+
+    auto jc = ezmk::cache::join_args_with_response_file(args, tmp.path);
+    REQUIRE_FALSE(jc.rsp_file.empty());
+    std::string content = ezmk::util::file_read(jc.rsp_file);
+    REQUIRE(content.find("\"C:/My Project/include\"\n") != std::string::npos);
+    REQUIRE(content.find("\"a\\\"b\"\n") != std::string::npos);
+    REQUIRE(content.find("\"trailing\\\\\"\n") != std::string::npos);
     std::error_code ec;
     fs::remove(jc.rsp_file, ec);
 }

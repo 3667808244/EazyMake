@@ -574,6 +574,24 @@ std::string join_shell_args(const std::vector<std::string>& args) {
     return r;
 }
 
+// 1.4.6 Q-03: GCC/Clang @file parsing splits on whitespace and honours both
+// quotes and backslash escapes. Writing arguments verbatim split args that
+// contain spaces and stripped embedded quotes — silently changing macro values
+// or failing the compile. Quote every argument and escape backslash + double
+// quote; escaping the backslash first keeps a trailing backslash from escaping
+// the closing quote.
+static std::string escape_response_file_arg(const std::string& a) {
+    std::string out;
+    out.reserve(a.size() + 2);
+    out += '"';
+    for (char c : a) {
+        if (c == '\\' || c == '"') out += '\\';
+        out += c;
+    }
+    out += '"';
+    return out;
+}
+
 JoinedCommand join_args_with_response_file(const std::vector<std::string>& args,
                                            const fs::path& rsp_dir) {
     std::string joined = join_shell_args(args);
@@ -590,7 +608,7 @@ JoinedCommand join_args_with_response_file(const std::vector<std::string>& args,
     fs::create_directories(rsp_dir, ec);
     std::string content;
     for (size_t i = 1; i < args.size(); ++i) {
-        content += args[i];
+        content += escape_response_file_arg(args[i]);
         content += '\n';
     }
     if (!util::file_write(rsp, content)) {
