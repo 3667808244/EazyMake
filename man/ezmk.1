@@ -693,6 +693,14 @@ is left at
 .B CXX ", " CC
 Override the detected C++ and C compiler.
 .TP
+.B EZMK_TOOLCHAIN
+Force the toolchain:
+.BR gcc ,
+.B clang
+or
+.BR msvc .
+Unset means automatic detection (GCC/Clang when present, MSVC as a fallback).
+.TP
 .B SOURCE_DATE_EPOCH
 Timestamp used by deterministic builds. Resolution order:
 .BR "[compile].source_date_epoch" ,

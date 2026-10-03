@@ -77,7 +77,7 @@ bash build.sh test -v
 
 ## 编译器支持
 
-EazyMake 在构建时自动检测编译器（优先级：`$CXX` / `$CC` → 平台默认）。同一份 `ezmk.toml` 可在不同编译器下使用。
+EazyMake 在构建时自动检测编译器（优先级：`$CXX` / `$CC` → 系统 GCC/Clang → MSVC 回退）。可用 `EZMK_TOOLCHAIN=gcc|clang|msvc` 显式指定。同一份 `ezmk.toml` 可在不同编译器下使用。
 
 > **为什么要自动检测而不是让用户指定？** 自动探测工具链意味着项目用平台已有的编译器即可构建，
 > 一份 `ezmk.toml` 在 Linux、macOS、Windows 之间保持可移植，无需为每种环境重写配置。
@@ -86,11 +86,11 @@ EazyMake 在构建时自动检测编译器（优先级：`$CXX` / `$CC` → 平�
 |--------|------|----------|
 | **GCC**（g++/gcc） | Linux、macOS、MSYS2 | 各平台默认 |
 | **Clang**（clang++/clang） | Linux、macOS | `$CXX=clang++` 或自动回退 |
-| **MSVC**（`cl.exe`） | Windows | 通过 `vcvars64.bat` 自动检测（Visual Studio 2019+） |
+| **MSVC**（`cl.exe`） | Windows | 回退——通过 `vcvars64.bat` 自动检测（VS 2019+ 或 Build Tools）；`PATH` 上有 GCC/Clang 时优先 |
 
 ### 使用 MSVC
 
-在安装了 Visual Studio 的 Windows 上，EazyMake 通过加载 `vcvars64.bat` 环境自动检测 MSVC。无需额外配置——直接运行 `ezmk build` 即可。
+在安装了 Visual Studio（或 **Build Tools**）的 Windows 上，EazyMake 可以使用 MSVC：它定位 `vcvars64.bat`，自行加载该环境供 `cl.exe`/`link.exe`/`lib.exe` 使用（无需“开发者命令行”），并以绝对路径调用它们。`PATH` 上的 GCC/Clang 仍然优先；用 `EZMK_TOOLCHAIN=msvc` 可强制使用 MSVC。
 
 `ezmk.toml` 中的 **MSVC 专用标志**：
 

@@ -2373,6 +2373,70 @@ TEST_CASE("integration: dir install keeps auto-installed deps (1.4.6 Q-02)", "[i
     REQUIRE(fs::exists(proj_dir / ".ezmk" / "pkg" / "qd_dep"));
 }
 
+
+// ===================================================================
+// 1.4.7 M-04/M-06: EZMK_TOOLCHAIN explicit toolchain selection
+// ===================================================================
+
+TEST_CASE("integration: EZMK_TOOLCHAIN rejects an invalid value (1.4.7)", "[integration][1.4.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    EnvGuard tool_guard("EZMK_TOOLCHAIN", "bogus");
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src");
+    file_write(tmp.path / "src" / "main.cpp", "int main() { return 0; }\n");
+    write_minimal_config(tmp.path, "t147bad");
+    ProcResult r = run_ezmk("build", tmp.path);
+    REQUIRE(r.exit_code != 0);
+    REQUIRE((r.out + r.err).find("invalid EZMK_TOOLCHAIN") != std::string::npos);
+}
+
+TEST_CASE("integration: EZMK_TOOLCHAIN=gcc builds with g++ (1.4.7)", "[integration][1.4.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    EnvGuard tool_guard("EZMK_TOOLCHAIN", "gcc");
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src");
+    file_write(tmp.path / "src" / "main.cpp", "int main() { return 0; }\n");
+    write_minimal_config(tmp.path, "t147gcc");
+    ProcResult r = run_ezmk("build", tmp.path);
+    std::string all = r.out + r.err;
+    if (r.exit_code != 0 && all.find("was not found") != std::string::npos) {
+        SKIP("g++ is not available in this environment");
+    }
+    INFO(all);
+    REQUIRE(r.exit_code == 0);
+}
+
+TEST_CASE("integration: EZMK_TOOLCHAIN=msvc builds with cl/link (1.4.7)", "[integration][1.4.7]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    EnvGuard tool_guard("EZMK_TOOLCHAIN", "msvc");
+    TempDir tmp;
+    // A path with a space also exercises the MSVCRT quoting (Q-20).
+    fs::path proj = tmp.path / "with space";
+    fs::create_directories(proj / "src");
+    file_write(proj / "src" / "main.cpp",
+               "#include <iostream>\nint main() { std::cout << \"ok\"; return 0; }\n");
+    write_minimal_config(proj, "t147msvc");
+    ProcResult r = run_ezmk("build", proj);
+    std::string all = r.out + r.err;
+    if (r.exit_code != 0 &&
+        (all.find("was not found") != std::string::npos ||
+         all.find("only supported on Windows") != std::string::npos)) {
+        SKIP("MSVC (vcvars64.bat + cl) is not available in this environment");
+    }
+    INFO(all);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(fs::exists(proj / "build" / ("t147msvc" EZMK_EXE_SUFFIX)));
+}
+
 // 1.2.0-dev.11: auto-install re-validates the freshly installed version against
 // the caller's constraint — B@^1.0 must not silently get repo B 2.0.0.
 TEST_CASE("integration: auto-install enforces version constraint (dev.11)", "[integration][1.2.0-dev.11]") {

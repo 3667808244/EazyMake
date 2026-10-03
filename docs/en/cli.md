@@ -596,6 +596,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | `EZMK_LANG` | runtime | UI language (`en` / `zh` / variant tags like `zh-TW`, 1.3.0+), overrides system detection (`src/i18n.cpp`) |
 | `NO_COLOR` | runtime | Disable colored output (honored only by `--color=auto`) (`src/util.cpp`) |
 | `CXX` / `CC` | runtime + build | Override compiler detection (0.1.8+) |
+| `EZMK_TOOLCHAIN` | runtime + build | Force the toolchain: `gcc` / `clang` / `msvc` (1.4.7+); unset = auto (GCC/Clang first, MSVC fallback) (`src/toolchain.cpp`) |
 | `CXXFLAGS` | build | Extra compiler flags, passed through by `build.sh` |
 | `SOURCE_DATE_EPOCH` | build | Deterministic-build timestamp for `[compile] deterministic = true`. Resolution order: `[compile].source_date_epoch` → this variable → git HEAD commit time → `ezmk.toml` mtime (`src/cache.cpp`) |
 | `EDITOR` / `VISUAL` | runtime | Editor opened to review legacy **shell** install hooks (`[utils.permissions]`-gated Lua hooks are never opened; `-y` skips the editor entirely) |

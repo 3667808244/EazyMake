@@ -492,6 +492,7 @@ include_dirs = ["include", "@link:shared/include"]
 | `EZMK_LANG` | 运行时 | 界面语言（`en` / `zh` / 变体标签如 `zh-TW`，1.3.0+），覆盖系统检测（`src/i18n.cpp`） |
 | `NO_COLOR` | 运行时 | 禁用彩色输出（仅 `--color=auto` 时遵守）（`src/util.cpp`） |
 | `CXX` / `CC` | 运行时 + 构建 | 覆盖编译器检测（0.1.8+） |
+| `EZMK_TOOLCHAIN` | 运行时 + 构建 | 强制选择工具链：`gcc` / `clang` / `msvc`（1.4.7+）；不设置=自动（GCC/Clang 优先，MSVC 回退）（`src/toolchain.cpp`） |
 | `CXXFLAGS` | 构建 | 额外编译器标志，由 `build.sh` 透传 |
 | `SOURCE_DATE_EPOCH` | 构建 | `[compile] deterministic = true` 时的确定性构建时间戳。优先级：`[compile].source_date_epoch` → 本变量 → git HEAD 提交时间 → `ezmk.toml` mtime（`src/cache.cpp`） |
 | `EDITOR` / `VISUAL` | 运行时 | 审查**旧式 shell** 安装钩子时打开的编辑器（受 `[utils.permissions]` 门控的 Lua 钩子从不打开；`-y` 完全跳过编辑器） |

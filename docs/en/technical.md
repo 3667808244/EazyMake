@@ -82,7 +82,7 @@ bash build.sh test -v
 
 ## Compiler Support
 
-EazyMake auto-detects your compiler at build time (priority: `$CXX` / `$CC` → platform defaults). The same `ezmk.toml` works across compilers.
+EazyMake auto-detects your compiler at build time (priority: `$CXX` / `$CC` → system GCC/Clang → MSVC fallback). Set `EZMK_TOOLCHAIN=gcc|clang|msvc` to force one. The same `ezmk.toml` works across compilers.
 
 > **Why auto-detect instead of asking?** Detecting the toolchain means a project
 > builds on whatever compiler the platform already has — one `ezmk.toml` stays
@@ -92,11 +92,11 @@ EazyMake auto-detects your compiler at build time (priority: `$CXX` / `$CC` → 
 |---|---|---|
 | **GCC** (g++/gcc) | Linux, macOS, MSYS2 | Default on all platforms |
 | **Clang** (clang++/clang) | Linux, macOS | `$CXX=clang++` or auto-fallback |
-| **MSVC** (`cl.exe`) | Windows | Auto-detected via `vcvars64.bat` (Visual Studio 2019+) |
+| **MSVC** (`cl.exe`) | Windows | Fallback — auto-detected via `vcvars64.bat` (VS 2019+ or Build Tools); GCC/Clang on `PATH` win |
 
 ### Using MSVC
 
-On Windows with Visual Studio installed, EazyMake automatically detects MSVC by loading the `vcvars64.bat` environment. No extra configuration needed — just run `ezmk build`.
+On Windows with Visual Studio (or **Build Tools**) installed, EazyMake can use MSVC: it locates `vcvars64.bat`, loads that environment for `cl.exe`/`link.exe`/`lib.exe` itself (no "Developer Command Prompt" needed), and invokes them by absolute path. GCC/Clang on `PATH` still take priority; force MSVC with `EZMK_TOOLCHAIN=msvc`.
 
 **MSVC-only flags** in `ezmk.toml`:
 

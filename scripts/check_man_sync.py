@@ -104,6 +104,7 @@ ENV_DOCUMENTED = {
     "NO_COLOR",
     "CXX",
     "CC",
+    "EZMK_TOOLCHAIN",
     "SOURCE_DATE_EPOCH",
     "EDITOR",
     "VISUAL",

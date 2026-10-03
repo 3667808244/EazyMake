@@ -1,6 +1,6 @@
 # EazyMake 1.4.7 执行计划
 
-> **状态：📝 计划待执行**——本文档把设计文档 §4 转成可勾选的三阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
+> **状态：✅ 实现收口（未发布）**——本文档把设计文档 §4 转成可勾选的三阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.7.md**](plans/1.4.x/1.4.7.md)。主题：**MSVC 工具链支持修复 + 工具链优先级调整**——修好 Build Tools 探测、vcvars cmd 引用、MSVC 环境注入，并把**优先级改为 g++/clang++ 优先、MSVC 回退**。
 >
@@ -29,24 +29,24 @@
 
 ### 阶段一：探测与引用（M-01/M-02/M-04/M-06）
 
-- [ ] M-01 `find_vcvars64`：vswhere 加 `-products *`、回退补 `2022\BuildTools`
-- [ ] M-02 探测与 `load_msvc_env` 的 `cmd /c call` 引用修复
-- [ ] M-04 优先级：g++/clang++ 优先、MSVC 回退
-- [ ] M-06 新增 `EZMK_TOOLCHAIN`（msvc/gcc/clang；不可用明确报错）
-- [ ] 回归：全量零失败
+- [x] M-01 `find_vcvars64`：vswhere 加 `-products *`、回退补 `2022\BuildTools`
+- [x] M-02 探测与 `load_msvc_env` 的 `cmd /c call` 引用修复
+- [x] M-04 优先级：g++/clang++ 优先、MSVC 回退
+- [x] M-06 新增 `EZMK_TOOLCHAIN`（msvc/gcc/clang；不可用明确报错）
+- [x] 回归：全量零失败
 
 ### 阶段二：MSVC 环境注入（M-03/M-05）
 
-- [ ] M-03 `msvc_env()`（缓存一次）+ `apply_msvc_env()`；注入 compile / link / ar / test / pkg
-- [ ] M-05 工具链切换的缓存失效确认 + 用例
-- [ ] 回归：全量零失败
+- [x] M-03 `msvc_env()`（缓存一次）+ `apply_msvc_env()`；注入 compile / link / ar / test / pkg
+- [x] M-05 工具链切换的缓存失效确认 + 用例
+- [x] 回归：全量零失败
 
 ### 阶段三：测试/文档/收口
 
-- [ ] MSVC 定向集成用例（`EZMK_TOOLCHAIN=msvc` 守卫，不可用 SKIP）+ 本机实测复现
-- [ ] docs 补“Windows 工具链选择 / MSVC 回退 / `EZMK_TOOLCHAIN`”；`CHANGES.md` 新增 1.4.7 条目
-- [ ] i18n 三向一致（如需新增键）+ 索引状态（`plans/1.4.x/README.md` / `plans/README.md` / 根 `plan.md`）
-- [ ] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
+- [x] MSVC 定向集成用例（`EZMK_TOOLCHAIN=msvc` 守卫，不可用 SKIP）+ 本机实测复现
+- [x] docs 补“Windows 工具链选择 / MSVC 回退 / `EZMK_TOOLCHAIN`”；`CHANGES.md` 新增 1.4.7 条目
+- [x] i18n 三向一致（如需新增键）+ 索引状态（`plans/1.4.x/README.md` / `plans/README.md` / 根 `plan.md`）
+- [x] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
 
 ## 4 关键设计决策
 
