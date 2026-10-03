@@ -3,10 +3,26 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <string_view>
 
 namespace ezmk::util {
+
+// 1.4.6 Q-15: parse one numeric version component. The config validator accepts
+// arbitrarily long digit runs, so a raw std::stoul can throw out_of_range and
+// abort with a non-diagnostic message. Saturates at ULONG_MAX instead.
+unsigned long parse_version_component(std::string_view s) {
+    unsigned long v = 0;
+    const unsigned long max = std::numeric_limits<unsigned long>::max();
+    for (char c : s) {
+        if (c < '0' || c > '9') break;
+        unsigned long d = static_cast<unsigned long>(c - '0');
+        if (v > (max - d) / 10) return max;
+        v = v * 10 + d;
+    }
+    return v;
+}
 
 // Compare two semantic version strings (major.minor.patch).
 // Strips pre-release tags (-alpha, -rc1) and build metadata (+build).

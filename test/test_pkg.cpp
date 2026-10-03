@@ -293,6 +293,24 @@ TEST_CASE("satisfies_version_constraint: Compatible (^) matches within major", "
     REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("5.0.0", c));
 }
 
+// 1.4.6 Q-15: an over-long component must not abort with out_of_range.
+TEST_CASE("satisfies_version_constraint: over-long component does not throw", "[pkg][1.4.6]") {
+    using namespace ezmk::config;
+    VersionConstraint c;
+    c.op = VersionConstraint::Compatible;
+    c.version = "999999999999999999999999999999";
+    REQUIRE_NOTHROW(ezmk::pkg::satisfies_version_constraint("1.0.0", c));
+}
+
+// 1.4.6 Q-18: info/update must reject a path-traversal name before joining it
+// onto the install directory.
+TEST_CASE("pkg info/update reject traversal names", "[pkg][1.4.6]") {
+    REQUIRE_THROWS_AS(ezmk::pkg::info("../evil", {ezmk::cli::Scope::Project}),
+                      std::runtime_error);
+    REQUIRE_THROWS_AS(ezmk::pkg::update("../evil", {ezmk::cli::Scope::Project}, true),
+                      std::runtime_error);
+}
+
 TEST_CASE("satisfies_version_constraint: Approx (~) matches within minor", "[pkg][0.9.6]") {
     using namespace ezmk::config;
     VersionConstraint c;

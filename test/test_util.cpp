@@ -1088,6 +1088,16 @@ TEST_CASE("list_files: returns a sorted, deterministic order", "[util][1.4.6]") 
     REQUIRE(files[2].filename().string() == "c.cpp");
 }
 
+// 1.4.6 Q-15: an over-long numeric version component saturates instead of
+// throwing out_of_range.
+TEST_CASE("parse_version_component: saturates on overflow", "[util][1.4.6]") {
+    REQUIRE(ezmk::util::parse_version_component("17") == 17);
+    REQUIRE(ezmk::util::parse_version_component("") == 0);
+    REQUIRE(ezmk::util::parse_version_component("12a") == 12);
+    REQUIRE(ezmk::util::parse_version_component("999999999999999999999999999999") ==
+            std::numeric_limits<unsigned long>::max());
+}
+
 // ===================================================================
 // Archive extraction security — 1.1.2 S1 (zip-bomb / size limit)
 // ===================================================================

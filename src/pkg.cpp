@@ -87,8 +87,8 @@ bool satisfies_version_constraint(std::string_view version,
         // Parse the major version of the constraint and bump it
         auto dot = constraint.version.find('.');
         unsigned long major = dot == std::string::npos
-            ? std::stoul(std::string(constraint.version))
-            : std::stoul(std::string(constraint.version.substr(0, dot)));
+            ? util::parse_version_component(constraint.version)
+            : util::parse_version_component(constraint.version.substr(0, dot));
         std::string next_major = std::to_string(major + 1) + ".0.0";
         return util::compare_version(version, next_major) < 0;
     }
@@ -99,9 +99,9 @@ bool satisfies_version_constraint(std::string_view version,
         auto dot1 = constraint.version.find('.');
         if (dot1 == std::string::npos) return cmp >= 0; // ~X → >= X
         auto dot2 = constraint.version.find('.', dot1 + 1);
-        unsigned long major = std::stoul(std::string(constraint.version.substr(0, dot1)));
-        unsigned long minor = std::stoul(
-            std::string(constraint.version.substr(dot1 + 1, dot2 - dot1 - 1)));
+        unsigned long major = util::parse_version_component(constraint.version.substr(0, dot1));
+        unsigned long minor = util::parse_version_component(
+            constraint.version.substr(dot1 + 1, dot2 - dot1 - 1));
         std::string next_minor = std::to_string(major) + "." +
                                  std::to_string(minor + 1) + ".0";
         return util::compare_version(version, next_minor) < 0;
@@ -1113,12 +1113,12 @@ std::vector<fs::path> resolve_dependency_order(const std::vector<fs::path>& pkg_
 // directory (archive: extracted staging dir; directory: the source dir itself).
 // `stage` is the archive staging area to clean up on user-cancel (empty for
 // directory installs, where the source dir is never removed).
-static void process_installed_pkg(const fs::path& pkg_root,
-                                  const fs::path& dest_dir,
-                                  cli::Scope scope,
-                                  bool assume_yes,
-                                  const toolchain::Toolchain& tc,
-                                  const fs::path& stage) {
+static InstallOutcome process_installed_pkg(const fs::path& pkg_root,
+                                            const fs::path& dest_dir,
+                                            cli::Scope scope,
+                                            bool assume_yes,
+                                            const toolchain::Toolchain& tc,
+                                            const fs::path& stage) {
     validate_pkg(pkg_root);
 
     auto pkg_cfg = config::parse_config(pkg_root / "ezmk.toml");
@@ -1141,7 +1141,7 @@ static void process_installed_pkg(const fs::path& pkg_root,
             util::info(ezmk::i18n::I18nKey::install_cancelled_user,
                        {{"hook", "preinstall"}});
             if (!stage.empty()) util::remove_all(stage);
-            return;
+            return InstallOutcome::Cancelled;
         }
     }
 
@@ -1156,7 +1156,7 @@ static void process_installed_pkg(const fs::path& pkg_root,
                      {{"pkg", pkg_name}, {"path", install_path.string()}}), assume_yes)) {
             util::info(ezmk::i18n::I18nKey::install_cancelled);
             if (!stage.empty()) util::remove_all(stage);
-            return;
+            return InstallOutcome::Cancelled;
         }
     }
 
@@ -1432,8 +1432,14 @@ static void process_installed_pkg(const fs::path& pkg_root,
     // it was moved to a backup first, so a crash stranded the old version with
     // no install in place). The backup name is hidden and collision-free
     // (a real package could legitimately be named "foo.old").
-    fs::path new_path = install_path;
-    new_path += ".new";
+    // 1.4.6 Q-13: a hidden, unique staging name. "<pkg>.new" is a legal package
+    // name (validate_pkg_name allows dots), so the old staging path could
+    // silently delete an unrelated installed package; a leading-dot name can
+    // never be a valid package (validate_pkg_name rejects it).
+    static std::atomic<uint64_t> stage_counter{0};
+    fs::path new_path = dest_dir / (".ezmk-stage-" + pkg_name + "-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+        "-" + std::to_string(stage_counter.fetch_add(1)));
     fs::path backup = dest_dir / (".ezmk-backup-" + pkg_name);
     { std::error_code ec; fs::remove_all(new_path, ec); }   // stale staging
     { std::error_code ec; fs::remove_all(backup, ec); }     // stale crash backup
@@ -1499,6 +1505,7 @@ static void process_installed_pkg(const fs::path& pkg_root,
     }
 
     util::info(ezmk::i18n::I18nKey::installed, {{"pkg", pkg_name}});
+    return InstallOutcome::Ok;
 }
 
 // 1.1.0: generate/update ezmk.lock.json with resolved dependency snapshot.
@@ -1656,7 +1663,12 @@ static InstallOutcome install_from_directory(const fs::path& dir, cli::Scope sco
 
     // No staging: the source directory IS the package root, so it is never
     // removed. Shares validate → hooks → deps → compile → copy → postinstall.
-    process_installed_pkg(dir, dest_dir, scope, assume_yes, tc, {});
+    // 1.4.6 Q-11: a user cancellation inside process_installed_pkg must not be
+    // reported as a successful install (which also rewrote the lockfile).
+    if (process_installed_pkg(dir, dest_dir, scope, assume_yes, tc, {}) ==
+        InstallOutcome::Cancelled) {
+        return InstallOutcome::Cancelled;
+    }
 
     // Lockfile generation (project scope only, unless --no-lock)
     maybe_write_lockfile(scope, no_lock, tc, dest_dir);
@@ -2167,8 +2179,16 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
 
         // Shared post-validate processing: validate → hooks → deps → compile →
         // copy → postinstall (1.2.0-dev.7). Also shared by directory installs.
-        process_installed_pkg(pkg_root, dest_dir, scope, assume_yes, tc, stage);
+        InstallOutcome po =
+            process_installed_pkg(pkg_root, dest_dir, scope, assume_yes, tc, stage);
         staged_pkg_root = pkg_root;
+        if (po == InstallOutcome::Cancelled) {
+            // 1.4.6 Q-11: user cancelled (overwrite/preinstall prompt) — do not
+            // write provenance or the lockfile, and let the transaction roll back.
+            std::error_code ec;
+            fs::remove_all(stage, ec);
+            return InstallOutcome::Cancelled;
+        }
     } catch (...) {
         // Clean up staging on error (best-effort — a cleanup failure must not
         // mask the original error)
@@ -2279,6 +2299,9 @@ namespace {
 }
 
 void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
+    // 1.4.6 Q-18: validate the user-supplied name before joining it onto the
+    // install dir (info/update previously skipped this, unlike remove/search).
+    util::validate_pkg_name(pkg_name);
     auto none_str = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_none);
     for (auto scope : scopes) {
         fs::path dir = pkg_install_dir(scope);
@@ -2504,6 +2527,8 @@ void list(const std::vector<cli::Scope>& scopes) {
 // 0.2.3+
 void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes,
             bool assume_yes) {
+    // 1.4.6 Q-18: validate the user-supplied name (same gate as remove/search).
+    util::validate_pkg_name(pkg_name);
     // Find installed package in specified scopes (first match wins)
     cli::Scope found_scope = cli::Scope::Project;
     fs::path found_pkg_path;

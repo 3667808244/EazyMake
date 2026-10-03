@@ -320,6 +320,11 @@ int compare_version(std::string_view a, std::string_view b);
 // ordered lexicographically.
 int compare_version_precedence(std::string_view a, std::string_view b);
 
+// 1.4.6 Q-15: parse one numeric version component. The config validator accepts
+// arbitrarily long digit runs, so a raw std::stoul can throw out_of_range and
+// abort with a non-diagnostic message. Saturates at ULONG_MAX instead.
+unsigned long parse_version_component(std::string_view s);
+
 // ---- Shell safety ----
 // Escape a string for safe use inside double-quoted shell arguments.
 // Escapes: " \ ` $

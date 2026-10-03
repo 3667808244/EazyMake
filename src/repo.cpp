@@ -150,7 +150,11 @@ std::vector<RepoEntry> parse_repo_list_json(const fs::path& path) {
             if (admit_entry(e)) entries.push_back(std::move(e));
         }
     } catch (const std::exception& e) {
-        util::warn(std::string("failed to parse repo list: ") + e.what());
+        // 1.4.6 Q-17: a corrupt registry must not be treated as an empty one —
+        // the next add would silently overwrite it and lose every entry. Fail
+        // loudly instead; the legacy TOML fallback keeps its tolerant read.
+        throw std::runtime_error(std::string("failed to parse repo registry ") +
+                                 path.string() + ": " + e.what());
     }
     return entries;
 }
@@ -198,7 +202,10 @@ void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
         repos.push_back(std::move(r));
     }
 
-    if (!util::atomic_write_text(path, j.dump(2) + "\n")) return;
+    // 1.4.6 Q-16: a failed registry write must not look like success.
+    if (!util::atomic_write_text(path, j.dump(2) + "\n")) {
+        util::fatal("failed to write the repository registry: " + path.string());
+    }
 
     // Migration: the legacy registry was read only to keep existing setups
     // working — once list.json is on disk the old file must not linger.
@@ -911,8 +918,8 @@ PkgSearchResult search_package(std::string_view pkg_name,
             if (cmp >= 0) {
                 auto dot = constraint.version.find('.');
                 unsigned long major = dot == std::string::npos
-                    ? std::stoul(std::string(constraint.version))
-                    : std::stoul(std::string(constraint.version.substr(0, dot)));
+                    ? util::parse_version_component(constraint.version)
+                    : util::parse_version_component(constraint.version.substr(0, dot));
                 ok = util::compare_version(m.version,
                        std::to_string(major + 1) + ".0.0") < 0;
             }
@@ -923,11 +930,10 @@ PkgSearchResult search_package(std::string_view pkg_name,
                 auto dot1 = constraint.version.find('.');
                 if (dot1 == std::string::npos) { ok = true; break; }
                 auto dot2 = constraint.version.find('.', dot1 + 1);
-                unsigned long major = std::stoul(
-                    std::string(constraint.version.substr(0, dot1)));
-                unsigned long minor = std::stoul(
-                    std::string(constraint.version.substr(dot1 + 1,
-                        dot2 - dot1 - 1)));
+                unsigned long major = util::parse_version_component(
+                    constraint.version.substr(0, dot1));
+                unsigned long minor = util::parse_version_component(
+                    constraint.version.substr(dot1 + 1, dot2 - dot1 - 1));
                 ok = util::compare_version(m.version,
                        std::to_string(major) + "." + std::to_string(minor + 1) + ".0") < 0;
             }

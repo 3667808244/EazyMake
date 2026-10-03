@@ -101,6 +101,16 @@ TEST_CASE("load_repo_list: empty when file doesn't exist", "[repo]") {
     REQUIRE(entries.empty());
 }
 
+// 1.4.6 Q-17: a corrupt registry must fail loudly instead of loading as empty
+// (which let the next add overwrite it and lose every entry).
+TEST_CASE("load_repo_list: corrupt list.json throws (1.4.6 Q-17)", "[repo][1.4.6]") {
+    TempDir tmp;
+    CwdGuard cwd;
+    fs::create_directories(repo_list_path(Scope::Project).parent_path());
+    ezmk::util::file_write(repo_list_path(Scope::Project), "{ not valid json");
+    REQUIRE_THROWS_AS(load_repo_list(Scope::Project), std::runtime_error);
+}
+
 TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
     // 1.4.0-dev.5: the old test never called either function (it hand-wrote
     // TOML and asserted on a locally-built vector) — zero coverage of the

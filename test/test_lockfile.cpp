@@ -365,6 +365,37 @@ TEST_CASE("lockfile verify: git source checks the commit marker (F-28)", "[lockf
     REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"gitpkg"});
 }
 
+// 1.4.6 Q-12: a non-empty recorded hash with a missing built artifact must be a
+// mismatch (previously it silently passed).
+TEST_CASE("lockfile verify: missing built artifact is a mismatch (1.4.6 Q-12)", "[lockfile][1.4.6]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/pkg/greet");   // no build/lib*.a
+    Lockfile lf;
+    LockedPackage p;
+    p.name = "greet";
+    p.scope = "project";
+    p.type = "static";
+    p.lib_sha256 = std::string(64, 'a');
+    lf.packages = { p };
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"greet"});
+}
+
+// 1.4.6 Q-12: a header-only package installed from git must still verify its
+// commit provenance (the header-only branch used to short-circuit it).
+TEST_CASE("lockfile verify: header-only git source checks the marker (1.4.6 Q-12)", "[lockfile][1.4.6]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / ".ezmk/pkg/hgit");
+    Lockfile lf;
+    LockedPackage p;
+    p.name = "hgit";
+    p.scope = "project";
+    p.type = "header-only";
+    p.source = "git";
+    p.commit = "0123456789abcdef0123456789abcdef01234567";
+    lf.packages = { p };
+    REQUIRE(ezmk::lockfile::verify(tmp.path, lf) == std::vector<std::string>{"hgit"});
+}
+
 // ===================================================================
 // 1.4.5: ezmk.lock → ezmk.lock.json (JSON writer, dual read, migration)
 // ===================================================================

@@ -254,7 +254,11 @@ void save(const fs::path& proj_root, const config::Lockfile& lf) {
         pkgs.push_back(std::move(p));
     }
 
-    if (!util::atomic_write_text(path, j.dump(2) + "\n")) return;
+    // 1.4.6 Q-16: surface a failed write. Callers that treat lockfile
+    // generation as non-fatal already guard this call with try/catch.
+    if (!util::atomic_write_text(path, j.dump(2) + "\n")) {
+        throw std::runtime_error("failed to write lockfile: " + path.string());
+    }
 
     // Migration: a legacy ezmk.lock was only ever read to keep existing projects
     // working. Now that ezmk.lock.json is on disk it must not linger — two copies
@@ -351,7 +355,10 @@ std::vector<std::string> verify(const fs::path& proj_root,
         // include/ payload against the pinned manifest hash. Legacy lockfiles
         // recorded no hash for them → keep the old "verified at install time"
         // behavior instead of failing every entry.
-        if (pkg.type == "header-only") {
+        // 1.4.6 Q-12: a header-only package installed from git is pinned by its
+        // commit, so it must fall through to the git marker check below instead
+        // of being "verified" (and passing) via the header-only branch.
+        if (pkg.type == "header-only" && pkg.source != "git") {
             const std::string recorded = artifact_hash(pkg);
             if (!recorded.empty()) {
                 std::string actual = payload_manifest_hash(pkg_path);
@@ -395,7 +402,11 @@ std::vector<std::string> verify(const fs::path& proj_root,
                        "' has no content hash to verify — reinstall it to pin one");
             continue;
         }
-        if (!lib_file.empty()) {
+        // 1.4.6 Q-12: a non-empty recorded hash with no built archive means the
+        // artifact is missing — previously this silently passed verification.
+        if (lib_file.empty()) {
+            mismatches.push_back(pkg.name);
+        } else {
             std::string actual = crypto::sha256_file(lib_file);
             if (actual != recorded) {
                 mismatches.push_back(pkg.name);
