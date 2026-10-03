@@ -8,6 +8,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -335,7 +336,9 @@ std::map<std::string, std::string> load_msvc_env(const fs::path& vcvars_path) {
     std::ostringstream cmd;
     // 1.1.3 S5: vcvars 路径转义后拼入 cmd /c（1.2.0-dev.11: 改用 cmd 专用转义，
     // escape_shell_arg 不覆盖 cmd 的 % & | < > ^）
-    cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars_path.string()) << "\\\" > NUL && set\"";
+    // 1.4.7 M-02: plain quotes for cmd.exe. The escaped form reached cmd with
+    // the backslashes intact ("\"C:\...\vcvars64.bat\"" is not recognized).
+    cmd << "cmd /c call \"" << util::escape_cmd_arg(vcvars_path.string()) << "\" > NUL && set";
 
     auto res = util::run_command(cmd.str());
     if (res.exit_code != 0) return env;
@@ -425,8 +428,11 @@ static fs::path find_vcvars64() {
     for (auto* vsw : vswhere_paths) {
         if (!util::file_exists(fs::path(vsw))) continue;
 
+        // 1.4.7 M-01: -products * is required — the default vswhere filter
+        // excludes Visual Studio Build Tools (the headless/CI layout), so
+        // vswhere printed nothing and MSVC was never detected.
         std::string cmd = std::string("\"") + vsw +
-            "\" -latest -property installationPath";
+            "\" -latest -products * -property installationPath";
         auto res = util::run_command(cmd);
         if (res.exit_code != 0 || res.out.empty()) continue;
 
@@ -445,6 +451,9 @@ static fs::path find_vcvars64() {
 
     // 2. Check common installation paths
     const char* common_paths[] = {
+        // 1.4.7 M-01: Build Tools installs (no IDE) — absent from the list before.
+        "C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
         "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
         "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
         "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
@@ -691,59 +700,91 @@ Toolchain detect_toolchain() {
                    "' but it is not executable — falling back to auto-detect");
     }
 
+    // 1.4.7 M-06: explicit toolchain override, shared by both platforms.
+    // Empty = automatic detection. Validated once so a typo fails loudly.
+    std::string forced;
+    if (const char* tool_env = std::getenv("EZMK_TOOLCHAIN")) {
+        for (const char* p = tool_env; *p; ++p)
+            forced += static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
+    }
+    if (!forced.empty() && forced != "msvc" && forced != "gcc" && forced != "clang") {
+        util::fatal(std::string("invalid EZMK_TOOLCHAIN '") + forced +
+                    "' (expected msvc|gcc|clang)");
+    }
+
 #ifdef EZMK_WIN
-    // 2. Windows: try MSVC first, then MinGW
+    // 1.4.7 M-04: prefer g++/clang++ (MinGW / system PATH); MSVC is the
+    // fallback, so MinGW machines (and CI) stay on g++ even when Visual Studio
+    // Build Tools are installed.
     {
-        // Try to find vcvars64.bat
-        fs::path vcvars = find_vcvars64();
-        if (!vcvars.empty()) {
-            // Build a command that runs cl within the vcvars environment.
-            // 1.2.0-dev.11: run ONCE and reuse the output for both the
-            // availability probe and the version capture — previously the
-            // probe ran twice (sourcing vcvars twice) and the load_msvc_env
-            // result was never used (dead code).
-            // 1.4.2 F-22: probe with `cl /Bv` (banner + version table, exit 0).
-            // A bare `cl` exits non-zero with D8003 even on a healthy install,
-            // which made the old exit==0 judgement reject installed MSVC.
+        auto try_gcc_like = [&](const std::vector<std::string>& cxxs,
+                                const std::vector<std::string>& ccs,
+                                const std::string& only) -> std::optional<Toolchain> {
+            for (size_t i = 0; i < cxxs.size(); ++i) {
+                if (!only.empty() && cxxs[i] != only) continue;
+                auto res = util::run_command(cxxs[i] + " --version 2>&1");
+                if (res.exit_code == 0) return detect_gcc_like(cxxs[i], ccs[i]);
+            }
+            return std::nullopt;
+        };
+        auto try_msvc = [&]() -> std::optional<Toolchain> {
+            fs::path vcvars = find_vcvars64();
+            if (vcvars.empty()) return std::nullopt;
+            // 1.4.7 M-02: plain quotes for cmd.exe (the escaped form failed).
             std::ostringstream test_cmd;
-            test_cmd << "cmd /c \"call \\\"" << util::escape_cmd_arg(vcvars.string()) << "\\\" > NUL && cl /Bv 2>&1\"";
+            test_cmd << "cmd /c call \"" << util::escape_cmd_arg(vcvars.string())
+                     << "\" > NUL && cl /Bv 2>&1";
             auto cl_res = util::run_command(test_cmd.str());
-            if (msvc_probe_ok(cl_res.exit_code, cl_res.out)) {
-                // MSVC is available
-                Toolchain tc;
-                tc.family = CompilerFamily::Msvc;
-                tc.cxx_compiler = fs::path("cl.exe");
-                tc.c_compiler = fs::path("cl.exe");
-                tc.linker = fs::path("link.exe");
-                tc.archiver = fs::path("lib.exe");
-                tc.vcvars_path = vcvars;
-                // 1.1.0: capture MSVC version from the cl banner
-                tc.version = parse_msvc_banner_version(cl_res.out);
-                cached = tc;
-                cached_valid = true;
-                util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);
-                return cached;
-            }
+            if (!msvc_probe_ok(cl_res.exit_code, cl_res.out)) return std::nullopt;
+            Toolchain tc;
+            tc.family = CompilerFamily::Msvc;
+            tc.cxx_compiler = fs::path("cl.exe");
+            tc.c_compiler = fs::path("cl.exe");
+            tc.linker = fs::path("link.exe");
+            tc.archiver = fs::path("lib.exe");
+            tc.vcvars_path = vcvars;
+            tc.version = parse_msvc_banner_version(cl_res.out);
+            return tc;
+        };
+
+        if (forced == "msvc") {
+            auto tc = try_msvc();
+            if (!tc) util::fatal("EZMK_TOOLCHAIN=msvc requested but MSVC (vcvars64.bat + cl) was not found");
+            cached = *tc;
+            cached_valid = true;
+            util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);
+            return cached;
+        }
+        if (forced == "gcc" || forced == "clang") {
+            const std::string only = (forced == "gcc") ? "g++" : "clang++";
+            const std::string cc = (forced == "gcc") ? "gcc" : "clang";
+            auto tc = try_gcc_like({only}, {cc}, only);
+            if (!tc) util::fatal("EZMK_TOOLCHAIN=" + forced + " requested but " + only + " was not found");
+            cached = *tc;
+            cached_valid = true;
+            return cached;
         }
 
-        // 3. Fall back to MinGW (g++ / clang++)
-        std::vector<std::string> cxx_candidates = {"g++", "clang++"};
-        std::vector<std::string> c_candidates = {"gcc", "clang"};
-
-        for (size_t i = 0; i < cxx_candidates.size(); ++i) {
-            auto res = util::run_command(cxx_candidates[i] + " --version 2>&1");
-            if (res.exit_code == 0) {
-                cached = detect_gcc_like(cxx_candidates[i], c_candidates[i]);
-                cached_valid = true;
-                return cached;
-            }
+        // Auto: MinGW first...
+        if (auto tc = try_gcc_like({"g++", "clang++"}, {"gcc", "clang"}, "")) {
+            cached = *tc;
+            cached_valid = true;
+            return cached;
+        }
+        // ...then MSVC as the fallback.
+        if (auto tc = try_msvc()) {
+            cached = *tc;
+            cached_valid = true;
+            util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);
+            return cached;
         }
 
-        // 4. Nothing found
+        // Nothing found
         std::string msg = "no C/C++ compiler found.\n\n";
         msg += "  Option A: Install MSYS2 MinGW — https://www.msys2.org/\n";
         msg += "    Then: pacman -S mingw-w64-x86_64-gcc\n";
         msg += "  Option B: Install Visual Studio Build Tools — https://visualstudio.microsoft.com/downloads/\n";
+        msg += "    (MSVC is used only as a fallback, or with EZMK_TOOLCHAIN=msvc)\n";
         util::fatal(msg);
     }
 #else
@@ -751,12 +792,18 @@ Toolchain detect_toolchain() {
     std::vector<std::string> cxx_candidates;
     std::vector<std::string> c_candidates;
 
+    // 1.4.7 M-06: honour EZMK_TOOLCHAIN on POSIX too.
+    if (forced == "msvc") {
+        util::fatal("EZMK_TOOLCHAIN=msvc is only supported on Windows");
+    }
 #ifdef EZMK_MACOS
-    cxx_candidates = {"g++", "clang++", "c++"};
-    c_candidates   = {"gcc", "clang",   "cc"};
+    if (forced == "gcc")        { cxx_candidates = {"g++"};     c_candidates = {"gcc"}; }
+    else if (forced == "clang") { cxx_candidates = {"clang++"}; c_candidates = {"clang"}; }
+    else { cxx_candidates = {"g++", "clang++", "c++"}; c_candidates = {"gcc", "clang", "cc"}; }
 #else
-    cxx_candidates = {"g++", "clang++"};
-    c_candidates   = {"gcc", "clang"};
+    if (forced == "gcc")        { cxx_candidates = {"g++"};     c_candidates = {"gcc"}; }
+    else if (forced == "clang") { cxx_candidates = {"clang++"}; c_candidates = {"clang"}; }
+    else { cxx_candidates = {"g++", "clang++"}; c_candidates = {"gcc", "clang"}; }
 #endif
 
     for (size_t i = 0; i < cxx_candidates.size(); ++i) {
@@ -775,6 +822,9 @@ Toolchain detect_toolchain() {
     }
 
     // Nothing found
+    if (!forced.empty()) {
+        util::fatal("EZMK_TOOLCHAIN=" + forced + " requested but the compiler was not found");
+    }
     std::string msg = "no C";
     msg += "++ compiler found.\n\n";
 #ifdef EZMK_MACOS
