@@ -1,30 +1,32 @@
-# Changelog
+# 更新日志
 
-## API Stability
+<a name="api-stability"></a>
 
-As of v1.1.0, the following public APIs are **permanently stable**:
+## API 稳定性
 
-**Commands:** `build`, `run`, `clean`, `watch`, `install`, `test`, `pack` (top-level) and their `project <action>` equivalents; `pkg install/remove/search/info/list/update`; `repo add/remove/update/list/info`.
+自 v1.1.0 起，以下公共 API **永久稳定**：
 
-**Configuration:** `[project]`, `[compile]`, `[link]`, `[depends]`, `[test]`, `[install]` core fields in `ezmk.toml`.
+**命令：** `build`、`run`、`clean`、`watch`、`install`、`test`、`pack`（顶层）及其 `project <action>` 等价形式；`pkg install/remove/search/info/list/update`；`repo add/remove/update/list/info`。
 
-**Extended in v1.3.0 (1.3.0-pre.1):**
+**配置：** `ezmk.toml` 中的 `[project]`、`[compile]`、`[link]`、`[depends]`、`[test]`、`[install]` 核心字段。
 
-- **Commands:** `workspace list/build/test/clean` (with `-w` / `--workspace` redirect on `build`/`test`/`clean`, `--member` including the dependency closure, `--stop-on-error`, `-j` / `--jobs`).
-- **Configuration:** `ezmk-workspace.toml` (`[workspace]` `name`/`members`, `[workspace.options]` `default_jobs`/`stop_on_error`); the `workspace` field of `[depends]` in member `ezmk.toml` files.
-- **Environment:** `EZMK_LANG` variant tags — BCP 47 normalization (`zh_CN`/`zh-CN`/`zh_CN.UTF-8` → canonical) and the variant → base → English fallback chain.
+**v1.3.0 扩展（1.3.0-pre.1）：**
 
-**Extended in v1.4.0 (1.4.0-pre.1):**
+- **命令：** `workspace list/build/test/clean`（`build`/`test`/`clean` 支持 `-w` / `--workspace` 重定向；`--member` 含依赖闭包；`--stop-on-error`；`-j` / `--jobs`）。
+- **配置：** `ezmk-workspace.toml`（`[workspace]` 的 `name`/`members`、`[workspace.options]` 的 `default_jobs`/`stop_on_error`）；成员 `ezmk.toml` 中 `[depends]` 的 `workspace` 字段。
+- **环境：** `EZMK_LANG` 变体标签——BCP 47 归一化（`zh_CN`/`zh-CN`/`zh_CN.UTF-8` → 规范形式）与「变体 → 基础语言 → 英文」回退链。
 
-- **Commands:** `project export vscode` (with `--overwrite` / `--profile`) — generates the `.vscode/` debug trio (launch/tasks/settings) with per-platform debuggers; `watch --run -- <args>` argument passthrough; `workspace watch` (with `-w` redirect on `watch` — `ezmk watch -w` ≡ `ezmk workspace watch`; `--member`, `--stop-on-error`, `-j`, `--run` forwarded to executable members; `ww` shorthand); `workspace scan` (with `[<dir>]`, `--dry-run`, `-y`; `ws` shorthand) — scan a directory tree for ezmk projects and create / merge-update `ezmk-workspace.toml`; `pack --format tgz` alias (case-insensitive `tar.gz`).
-- **Configuration:** `[pkg] strict_std_check` (default `false`; `true` upgrades the 1.3.1 standard-compatibility check from warning to hard failure).
-- **Behavior semantics:** source-package compile negotiation — a source package recompiles at `max(pkg_min, consumer_min)`, capped by the toolchain capability table (`max_supported_std`) and the package's declared range upper bound; `project import` preserves CMake `CXX_STANDARD` / `C_STANDARD` as range language (`">=CPP<N>"` / `">=C<N>"`); `pkg install` sha256 sidecar auto-verification for local archives (explicit `--sha256` / index hashes take priority; URL installs do not trust sidecars).
+**v1.4.0 扩展（1.4.0-pre.1）：**
 
-Breaking changes are introduced only in `2.0.0`, preceded by deprecation warnings in at least one minor version (`1.x.0`).
+- **命令：** `project export vscode`（`--overwrite` / `--profile`）——生成 `.vscode/` 调试三件套（launch/tasks/settings），按平台选择调试器；`watch --run -- <args>` 参数透传；`workspace watch`（`watch` 的 `-w` 重定向——`ezmk watch -w` ≡ `ezmk workspace watch`；`--member`、`--stop-on-error`、`-j`、`--run` 转发给可执行成员；`ww` 简写）；`workspace scan`（`[<dir>]`、`--dry-run`、`-y`；`ws` 简写）——扫描目录树中的 ezmk 项目并创建 / 合并更新 `ezmk-workspace.toml`；`pack --format tgz` 别名（大小写不敏感，等价 `tar.gz`）。
+- **配置：** `[pkg] strict_std_check`（默认 `false`；`true` 时把 1.3.1 的标准兼容检查从警告升级为硬失败）。
+- **行为语义：** 源码包编译协商——源码包以 `max(pkg_min, consumer_min)` 重编，受工具链能力表（`max_supported_std`）与包声明区间的上界约束；`project import` 把 CMake 的 `CXX_STANDARD` / `C_STANDARD` 保留为区间语言（`">=CPP<N>"` / `">=C<N>"`）；`pkg install` 对本地归档做 sha256 边车自动校验（显式 `--sha256` / 索引哈希优先；URL 安装不信任边车）。
+
+破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
 ---
 
-## 1.4.7 — MSVC 工具链支持修复 + 工具链优先级调整 (2026-10-03)
+## 1.4.7 (2026-10-03) — MSVC 工具链支持修复 + 工具链优先级调整
 
 > **状态：已发布（2026-10-03，tag `v1.4.7`）** —— 三阶段全部落地，全量 **1133 用例 / 6541 断言零失败**（基线 1.4.6 收口态 1130/6536，+3 用例 / +5 断言）；i18n 412 键三向一致、man / groff / docs-sync 门槛通过。**公共 API 无破坏性变更**（仅新增 `toolchain::msvc_env` / `util::merge_env`）；唯一“新面”是验证用环境变量 `EZMK_TOOLCHAIN`。
 >
@@ -55,7 +57,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 - MSVC 开发者命令行的完整文档重写（仅补“Windows 工具链选择与 MSVC 回退”一段）。
 
 
-## 1.4.6 — 代码质量审计修复（第三轮）(2026-10-03)
+## 1.4.6 (2026-10-03) — 代码质量审计修复（第三轮）
 
 > **状态：已发布（2026-10-03，tag `v1.4.6`）** —— 七阶段全部落地，全量 **1130 用例 / 6536 断言零失败**（基线 1.4.5 发布态 1113/6491，+17 用例 / +45 断言）；严格告警零告警；i18n **412** 键三向一致、man / groff / docs-sync 门槛通过。**公共 API 无破坏性变更，零功能新增。**
 
@@ -1244,7 +1246,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.11 (2026-08-15) — 代码质量审查与改进（全库审查 + P0/P1 收口）
 
-1.2.0 系列第十一个开发子版本，**系统性质量收口**：6 个并行审查代理按模块精读全库（配置/CLI、构建/缓存、包/仓库、Lua/异步、工具、测试），共发现 68 条问题（high 13 / medium ~40 / low ~15）+ 30 条值得保留的设计。本版落地 **P0 全部 + P1 大部**，分 9 个阶段逐项修复并带验收测试；P2（大规模拆分、`compare_version` 预发布语义、测试卫生、macOS FSEvents 逐文件重写）明确收口到后续子版本。公共 API 无破坏性变更（`load_msvc_env` 等公共声明保留；全部为内部重构 + 新增 i18n key；见文首 API Stability）。
+1.2.0 系列第十一个开发子版本，**系统性质量收口**：6 个并行审查代理按模块精读全库（配置/CLI、构建/缓存、包/仓库、Lua/异步、工具、测试），共发现 68 条问题（high 13 / medium ~40 / low ~15）+ 30 条值得保留的设计。本版落地 **P0 全部 + P1 大部**，分 9 个阶段逐项修复并带验收测试；P2（大规模拆分、`compare_version` 预发布语义、测试卫生、macOS FSEvents 逐文件重写）明确收口到后续子版本。公共 API 无破坏性变更（`load_msvc_env` 等公共声明保留；全部为内部重构 + 新增 i18n key；见文首 API 稳定性）。
 
 ### 新增 / 行为变更
 
@@ -1282,7 +1284,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.9 (2026-08-15) — 包构建配置收敛（`src_dirs` / `include_dirs` 对包生效）
 
-1.2.0 系列第九个开发子版本，**dev.7 的延伸**：让包的 `[compile]` 配置与项目语义对齐——`src_dirs` 从「被静默忽略」变为「真正生效」（复用 `build::collect_sources` 多目录收集 + 文件名去重 + 缺失目录 warn），`include_dirs` 自编译与消费者两侧行为固化（相对包根解析、与默认 `include/` 保序去重），包不再受 `[project].type` 的 `main.cpp` 校验影响。公共 API 无破坏性变更（`collect_sources` 新增默认参数 `require_main = true`，项目路径零变化；见文首 API Stability）。
+1.2.0 系列第九个开发子版本，**dev.7 的延伸**：让包的 `[compile]` 配置与项目语义对齐——`src_dirs` 从「被静默忽略」变为「真正生效」（复用 `build::collect_sources` 多目录收集 + 文件名去重 + 缺失目录 warn），`include_dirs` 自编译与消费者两侧行为固化（相对包根解析、与默认 `include/` 保序去重），包不再受 `[project].type` 的 `main.cpp` 校验影响。公共 API 无破坏性变更（`collect_sources` 新增默认参数 `require_main = true`，项目路径零变化；见文首 API 稳定性）。
 
 ### 新增 / 行为变更
 
@@ -1313,7 +1315,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.10 (2026-08-15) — 平台标识符扩展（工具链/ABI）
 
-1.2.0 系列第十个开发子版本，**承接 package_authoring §3.3 多平台共包**：现有命名 `lib<name>.<os>-<arch>.<ext>` 刻意省略工具链，这对 C ABI 成立、对 **C++ ABI 不成立**（GCC/Clang/MSVC 互不兼容，同平台同架构也可能链接失败）。本版把平台标识符扩展为 `os-arch[-compiler][-abi]`，`select_precompiled_archive()` 按 **ABI 安全的 4 级匹配优先级**选择，降级匹配（可能跨工具链）显式警告，可选 `[project].precompiled_strict = true` fail-fast。公共 API 无破坏性变更（`select_precompiled_archive` 签名不变、两处调用点零改动；新增纯函数与可选字段；见文首 API Stability）。
+1.2.0 系列第十个开发子版本，**承接 package_authoring §3.3 多平台共包**：现有命名 `lib<name>.<os>-<arch>.<ext>` 刻意省略工具链，这对 C ABI 成立、对 **C++ ABI 不成立**（GCC/Clang/MSVC 互不兼容，同平台同架构也可能链接失败）。本版把平台标识符扩展为 `os-arch[-compiler][-abi]`，`select_precompiled_archive()` 按 **ABI 安全的 4 级匹配优先级**选择，降级匹配（可能跨工具链）显式警告，可选 `[project].precompiled_strict = true` fail-fast。公共 API 无破坏性变更（`select_precompiled_archive` 签名不变、两处调用点零改动；新增纯函数与可选字段；见文首 API 稳定性）。
 
 ### 新增 / 行为变更
 
@@ -1341,7 +1343,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.12 (2026-08-15) — 测试配置收口（`[test].default_profile` / `include_dirs` / `link_targets`）
 
-1.2.0 系列第十二个开发子版本，**dev.3 的延伸**：`ezmk test` 引入 profile 支持——`[test].default_profile` + `ezmk test --profile`（复用 `[compile.profile.*]` / `[link.profile.*]`，与 `ezmk build` 完全对称），并补齐测试专属 include / 链接目标（`[test].include_dirs` / `[test].link_targets`），弃用与 `[compile].flags` 重叠的 `[test].flags`（使用点 warn，2.0.0 移除）。公共 API 无破坏性变更（纯新增可选字段 + CLI 选项；见文首 API Stability）。
+1.2.0 系列第十二个开发子版本，**dev.3 的延伸**：`ezmk test` 引入 profile 支持——`[test].default_profile` + `ezmk test --profile`（复用 `[compile.profile.*]` / `[link.profile.*]`，与 `ezmk build` 完全对称），并补齐测试专属 include / 链接目标（`[test].include_dirs` / `[test].link_targets`），弃用与 `[compile].flags` 重叠的 `[test].flags`（使用点 warn，2.0.0 移除）。公共 API 无破坏性变更（纯新增可选字段 + CLI 选项；见文首 API 稳定性）。
 
 ### 新增 / 行为变更
 
@@ -1369,7 +1371,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.8 (2026-08-15) — CMake 导出钩子运行时（`ezmk-lua`）
 
-1.2.0 系列第八个开发子版本，**dev.2 的范围收口**：为 `export cmake` 补上 `[hooks]` 钩子映射——新增**独立、无黑白名单的 Lua 运行时二进制 `ezmk-lua`**，由导出的 CMake 在构建节点调用它复现 `ezmk build` 的钩子后处理，消除导出产物与本体构建的行为漂移。**`ezmk` 本体沙箱/黑白名单零改动**（纯新增产物 + 导出文本变化，见文首 API Stability）。
+1.2.0 系列第八个开发子版本，**dev.2 的范围收口**：为 `export cmake` 补上 `[hooks]` 钩子映射——新增**独立、无黑白名单的 Lua 运行时二进制 `ezmk-lua`**，由导出的 CMake 在构建节点调用它复现 `ezmk build` 的钩子后处理，消除导出产物与本体构建的行为漂移。**`ezmk` 本体沙箱/黑白名单零改动**（纯新增产物 + 导出文本变化，见文首 API 稳定性）。
 
 ### 新增
 
@@ -1394,7 +1396,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.7 (2026-08-15) — 本地包源 + 项目向上查找
 
-1.2.0 系列第七个开发子版本：聚合两个相互独立的改进——① **`ezmk pkg install <dir>` 从文件夹安装包**（开发/调试本地包免打包归档）；② **`ezmk.toml` 向上查找**（进入项目子目录直接 `ezmk build` / `ezmk test`，如同 `git`）。**纯增量、不破坏任何公共 API**（新增目录入参形态 + 内部项目根定位，见文首 API Stability）。
+1.2.0 系列第七个开发子版本：聚合两个相互独立的改进——① **`ezmk pkg install <dir>` 从文件夹安装包**（开发/调试本地包免打包归档）；② **`ezmk.toml` 向上查找**（进入项目子目录直接 `ezmk build` / `ezmk test`，如同 `git`）。**纯增量、不破坏任何公共 API**（新增目录入参形态 + 内部项目根定位，见文首 API 稳定性）。
 
 ### 新增
 
@@ -1419,7 +1421,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.6 (2026-08-14) — 各源文件构建耗时统计
 
-1.2.0 系列第六个开发子版本：为 `ezmk build` 并行编译路径补上 **per-file 编译耗时明细**，让"慢在哪一步"一目了然——`-v` 时始终按耗时降序打印本次实际编译（非缓存命中）的源文件，默认构建总耗时超过 5 秒时自动打印最慢的 10 个 + 汇总行。**纯诊断增强、零配置、不新增 flag**（见文首 API Stability）。
+1.2.0 系列第六个开发子版本：为 `ezmk build` 并行编译路径补上 **per-file 编译耗时明细**，让"慢在哪一步"一目了然——`-v` 时始终按耗时降序打印本次实际编译（非缓存命中）的源文件，默认构建总耗时超过 5 秒时自动打印最慢的 10 个 + 汇总行。**纯诊断增强、零配置、不新增 flag**（见文首 API 稳定性）。
 
 ### 新增
 
@@ -1442,7 +1444,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.4 (2026-08-13) — CMake 项目导入（实验性）
 
-1.2.0 系列第四个开发子版本：新增 **`ezmk project import --from cmake`**，把标准 CMake 项目的 `CMakeLists.txt` **单向转换**为 `ezmk.toml`（与 dev.2 的 `export cmake` 反向互补）。**实验性**——转换 best-effort，非标准写法明确拒绝且事务性中止。**不破坏任何公共 API**（纯新增命令 + flag，见文首 API Stability）。
+1.2.0 系列第四个开发子版本：新增 **`ezmk project import --from cmake`**，把标准 CMake 项目的 `CMakeLists.txt` **单向转换**为 `ezmk.toml`（与 dev.2 的 `export cmake` 反向互补）。**实验性**——转换 best-effort，非标准写法明确拒绝且事务性中止。**不破坏任何公共 API**（纯新增命令 + flag，见文首 API 稳定性）。
 
 ### 新增
 
@@ -1469,7 +1471,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.5 (2026-08-14) — catch2 v3 测试主程序兼容
 
-1.2.0 系列第五个开发子版本：修复 `ezmk test` 在 catch2 v3（官方仓库当前版本 3.6.0）下无法链接的问题。catch2 v3 已移除 `CATCH_CONFIG_MAIN` 宏，`ezmk test` 原先固定生成的 `#define CATCH_CONFIG_MAIN` + `#include <catch2/catch_all.hpp>` 在 v3 下**不产生任何 `main`**，测试链接无入口点（本机表现为 mingw 报 `undefined reference to WinMain`）。**不破坏任何公共 API**（纯内部 test_main 生成逻辑，见文首 API Stability）。
+1.2.0 系列第五个开发子版本：修复 `ezmk test` 在 catch2 v3（官方仓库当前版本 3.6.0）下无法链接的问题。catch2 v3 已移除 `CATCH_CONFIG_MAIN` 宏，`ezmk test` 原先固定生成的 `#define CATCH_CONFIG_MAIN` + `#include <catch2/catch_all.hpp>` 在 v3 下**不产生任何 `main`**，测试链接无入口点（本机表现为 mingw 报 `undefined reference to WinMain`）。**不破坏任何公共 API**（纯内部 test_main 生成逻辑，见文首 API 稳定性）。
 
 ### 修复
 
@@ -1489,7 +1491,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.3 (2026-08-12) — 默认模板内建 Debug/Release Profile
 
-1.2.0 系列第三个开发子版本：把 Debug/Release profile 固化进 `ezmk project new` 的默认模板，基准 `[compile].flags` 收敛为警告-only（优化归 profile），并新增 `[compile].default_profile` 配置项（模板内建 `"debug"`）——无 `--profile` 的默认构建开箱即可调试（`-g -O0`、断言开启），需优化时显式 `--profile release`。**不破坏任何公共 API**（纯模板变更 + 可选字段，见文首 API Stability）。
+1.2.0 系列第三个开发子版本：把 Debug/Release profile 固化进 `ezmk project new` 的默认模板，基准 `[compile].flags` 收敛为警告-only（优化归 profile），并新增 `[compile].default_profile` 配置项（模板内建 `"debug"`）——无 `--profile` 的默认构建开箱即可调试（`-g -O0`、断言开启），需优化时显式 `--profile release`。**不破坏任何公共 API**（纯模板变更 + 可选字段，见文首 API 稳定性）。
 
 ### 新增
 
@@ -1509,7 +1511,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.2 (2026-08-11) — CMakeLists.txt 导出
 
-1.2.0 系列第二个开发子版本：新增 **`ezmk project export cmake`**，从 `ezmk.toml` 一键生成 `CMakeLists.txt`（单向快照——`ezmk.toml` 为事实源，重新生成勿手改），让同一项目既可用 `ezmk build` 也可被 CMake 生态构建/索引。**不破坏任何公共 API**（纯新增命令，见文首 API Stability）。
+1.2.0 系列第二个开发子版本：新增 **`ezmk project export cmake`**，从 `ezmk.toml` 一键生成 `CMakeLists.txt`（单向快照——`ezmk.toml` 为事实源，重新生成勿手改），让同一项目既可用 `ezmk build` 也可被 CMake 生态构建/索引。**不破坏任何公共 API**（纯新增命令，见文首 API 稳定性）。
 
 ### 新增
 
@@ -1526,7 +1528,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.2.0-dev.1 (2026-08-11) — `ezmk project cc` 命令
 
-1.2.0 系列首个开发子版本：基于 1.1.1 的编译命令单一事实源（`build_compile_args()` + `compile_db`）新增**正式命令** `ezmk project cc`，并把 `ezmk utils cc` 从「拦截」过渡为「弃用提示」。**不破坏任何公共 API**（见文首 API Stability）。
+1.2.0 系列首个开发子版本：基于 1.1.1 的编译命令单一事实源（`build_compile_args()` + `compile_db`）新增**正式命令** `ezmk project cc`，并把 `ezmk utils cc` 从「拦截」过渡为「弃用提示」。**不破坏任何公共 API**（见文首 API 稳定性）。
 
 ### 新增
 
@@ -1540,7 +1542,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.1.3 (2026-08-10) — 补丁发布
 
-1.1.x 稳定线补丁。基于第二轮多模块安全与质量审计，修复 **5 处安全缺口**与 **5 处健壮性问题**，并收敛代码质量与测试质量问题。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
+1.1.x 稳定线补丁。基于第二轮多模块安全与质量审计，修复 **5 处安全缺口**与 **5 处健壮性问题**，并收敛代码质量与测试质量问题。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API 稳定性）。
 
 ### 安全收敛（二轮）
 
@@ -1574,7 +1576,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.1.2 (2026-08-08) — 补丁发布
 
-1.1.x 稳定线补丁。基于多模块代码质量评审，修复 **4 处安全漏洞**与 **7 处静默产出错误结果的正确性 bug**。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
+1.1.x 稳定线补丁。基于多模块代码质量评审，修复 **4 处安全漏洞**与 **7 处静默产出错误结果的正确性 bug**。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API 稳定性）。
 
 ### 安全加固
 
@@ -1601,7 +1603,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.1.1 (2026-08-08) — 补丁发布
 
-1.1.x 稳定线补丁。优化 `compile_commands.json`（clangd 索引）的生成算法，并新增构建后自动生成配置项。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API Stability）。
+1.1.x 稳定线补丁。优化 `compile_commands.json`（clangd 索引）的生成算法，并新增构建后自动生成配置项。**不新增命令、不弃用任何接口**，公共 API 保持不变（见文首 API 稳定性）。
 
 ### 优化 compile_commands.json 生成算法
 
@@ -1626,7 +1628,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 
 ## 1.1.0 (2026-08-07) — 正式版发布
 
-合并 `1.1.0-dev.1` ~ `dev.7` 与 `1.1.0-pre.1` ~ `pre.3` 的正式版：包编译与开发体验（dev）+ 用户触达改善（pre.1）+ 文档检查（pre.2）+ 缺陷收集与 CI（pre.3）。**公共 API 自此永久稳定**（见文首 API Stability）。
+合并 `1.1.0-dev.1` ~ `dev.7` 与 `1.1.0-pre.1` ~ `pre.3` 的正式版：包编译与开发体验（dev）+ 用户触达改善（pre.1）+ 文档检查（pre.2）+ 缺陷收集与 CI（pre.3）。**公共 API 自此永久稳定**（见文首 API 稳定性）。
 
 ### 里程碑
 
@@ -1743,7 +1745,7 @@ Breaking changes are introduced only in `2.0.0`, preceded by deprecation warning
 ### API 稳定性承诺
 
 - **v1.1.0 起公共 API 永久稳定**：命令与 `ezmk.toml` 核心配置节（`[project]` / `[compile]` / `[link]` / `[depends]` / `[test]` / `[install]`）不再破坏性变更
-- 破坏性变更仅在 `2.0.0` 引入，并提前至少一个次版本发出弃用警告（CHANGES.md `## API Stability`）
+- 破坏性变更仅在 `2.0.0` 引入，并提前至少一个次版本发出弃用警告（CHANGES.md `## API 稳定性`）
 
 ### zsh 补全
 
