@@ -332,36 +332,38 @@ static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
                                      const fs::path& output,
                                      const config::LinkSection& link) {
     std::ostringstream cmd;
-    cmd << "link.exe /OUT:\"" << util::escape_shell_arg(output.string()) << "\" ";
+    // 1.4.6 Q-20: CreateProcessW parses a raw command line (no shell) — use the
+    // MSVCRT quoting rule. escape_shell_arg doubles every backslash, which
+    // corrupts UNC / extended-length paths.
+    cmd << "link.exe /OUT:" << util::quote_windows_arg(output.string()) << " ";
 
     for (auto& o : objs) {
-        cmd << "\"" << util::escape_shell_arg(o.string()) << "\" ";
+        cmd << util::quote_windows_arg(o.string()) << " ";
     }
     for (auto& a : archives) {
-        cmd << "\"" << util::escape_shell_arg(a.string()) << "\" ";
+        cmd << util::quote_windows_arg(a.string()) << " ";
     }
 
     // Translate and add link flags
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
     for (auto& f : translated.translated) {
-        // 1.1.3 S4: 双引号包裹（CreateProcessA 无 shell，但与 GCC 侧统一转义无害）
-        cmd << "\"" << util::escape_shell_arg(f) << "\" ";
+        cmd << util::quote_windows_arg(f) << " ";
     }
 
     // MSVC-specific link flags
     for (auto& f : link.msvc_flags) {
-        cmd << "\"" << util::escape_shell_arg(f) << "\" ";
+        cmd << util::quote_windows_arg(f) << " ";
     }
 
     // Link dirs → /LIBPATH
     for (auto& d : link.link_dirs) {
-        cmd << "/LIBPATH:\"" << util::escape_shell_arg(d) << "\" ";
+        cmd << "/LIBPATH:" << util::quote_windows_arg(d) << " ";
     }
 
     // System targets: -l<name> → <name>.lib
     for (auto& t : link.system_targets) {
-        cmd << "\"" << util::escape_shell_arg(t) << ".lib\" ";
+        cmd << util::quote_windows_arg(t + ".lib") << " ";
     }
 
     return cmd.str();
@@ -374,29 +376,30 @@ static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
                                      const fs::path& output_implib,
                                      const config::LinkSection& link) {
     std::ostringstream cmd;
-    cmd << "link.exe /DLL /OUT:\"" << util::escape_shell_arg(output_dll.string()) << "\" ";
-    cmd << "/IMPLIB:\"" << util::escape_shell_arg(output_implib.string()) << "\" ";
+    // 1.4.6 Q-20: MSVCRT quoting for CreateProcessW (see make_msvc_exe_cmd).
+    cmd << "link.exe /DLL /OUT:" << util::quote_windows_arg(output_dll.string()) << " ";
+    cmd << "/IMPLIB:" << util::quote_windows_arg(output_implib.string()) << " ";
 
     for (auto& o : objs) {
-        cmd << "\"" << util::escape_shell_arg(o.string()) << "\" ";
+        cmd << util::quote_windows_arg(o.string()) << " ";
     }
     for (auto& a : archives) {
-        cmd << "\"" << util::escape_shell_arg(a.string()) << "\" ";
+        cmd << util::quote_windows_arg(a.string()) << " ";
     }
 
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
     for (auto& f : translated.translated) {
-        cmd << util::escape_shell_arg(f) << " ";
+        cmd << util::quote_windows_arg(f) << " ";
     }
     for (auto& f : link.msvc_flags) {
-        cmd << util::escape_shell_arg(f) << " ";
+        cmd << util::quote_windows_arg(f) << " ";
     }
     for (auto& d : link.link_dirs) {
-        cmd << "/LIBPATH:\"" << util::escape_shell_arg(d) << "\" ";
+        cmd << "/LIBPATH:" << util::quote_windows_arg(d) << " ";
     }
     for (auto& t : link.system_targets) {
-        cmd << "\"" << util::escape_shell_arg(t) << ".lib\" ";
+        cmd << util::quote_windows_arg(t + ".lib") << " ";
     }
 
     return cmd.str();
@@ -406,10 +409,11 @@ static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
 static std::string make_msvc_lib_cmd(const std::vector<fs::path>& objs,
                                      const fs::path& output) {
     std::ostringstream cmd;
-    cmd << "lib.exe /OUT:\"" << util::escape_shell_arg(output.string()) << "\" ";
+    // 1.4.6 Q-20: MSVCRT quoting for CreateProcessW (see make_msvc_exe_cmd).
+    cmd << "lib.exe /OUT:" << util::quote_windows_arg(output.string()) << " ";
 
     for (auto& o : objs) {
-        cmd << "\"" << util::escape_shell_arg(o.string()) << "\" ";
+        cmd << util::quote_windows_arg(o.string()) << " ";
     }
 
     return cmd.str();
@@ -1341,9 +1345,12 @@ fs::path link_phase(const BuildState& st,
                 fs::path lib = st.build_dir / ("lib" + cfg.project.name + ".a");
                 fs::path lib_tmp = st.build_dir / ("lib" + cfg.project.name + ".a.tmp");
                 std::ostringstream ar_cmd;
-                ar_cmd << "ar rcs \"" << util::escape_shell_arg(lib_tmp.string()) << "\"";
+                // 1.4.6 Q-20: platform-correct quoting — quote_cli_arg picks
+                // MSVCRT quoting on Windows (CreateProcess) and shell quoting on
+                // POSIX.
+                ar_cmd << "ar rcs " << util::quote_cli_arg(lib_tmp.string());
                 for (auto& o : objects)
-                    ar_cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
+                    ar_cmd << " " << util::quote_cli_arg(o.string());
                 return execute_link(ar_cmd.str(), lib, lib_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::archiving,
                                     lib.filename().string(), ezmk::i18n::I18nKey::archive_failed);
@@ -1709,12 +1716,30 @@ std::string inject_precompiled_marker(const std::string& toml) {
     const std::string eol = toml.find("\r\n") != std::string::npos ? "\r\n" : "\n";
     const std::string marker =
         "precompiled = true  # added by ezmk project pack --precompiled — archive ships include/ + lib/ only";
-    auto next_section = toml.find("\n[", 1);  // header after [project]
+    // 1.4.6 Q-07: locate the [project] header itself. The old splice inserted
+    // before the first "\n[" after index 1, assuming [project] was the first
+    // section — a leading comment or section put the marker at the document
+    // root, where config parsing (project["precompiled"]) never sees it.
+    size_t proj = std::string::npos;
+    for (size_t pos = 0;;) {
+        size_t p = toml.find("[project]", pos);
+        if (p == std::string::npos) break;
+        if (p == 0 || toml[p - 1] == '\n') { proj = p; break; }
+        pos = p + 1;
+    }
+    if (proj == std::string::npos) {
+        if (!out.empty() && out.back() != '\n') out += eol;
+        out += marker + eol;
+        return out;
+    }
+    // Insert at the END of the [project] block (before the next section header,
+    // or at EOF when [project] is the last section) — the same placement the
+    // original splice produced for a first-position [project].
+    auto next_section = toml.find("\n[", proj + 1);
     if (next_section == std::string::npos) {
         if (!out.empty() && out.back() != '\n') out += eol;
         out += marker + eol;
     } else {
-        // Insert at the start of that header's own line ("\n" at idx, so idx+1).
         out.insert(next_section + 1, marker + eol);
     }
     return out;
@@ -2238,7 +2263,9 @@ static void run_catch2_tests(TestRunContext& ctx) {
     // machinery (`-r <fmt>::out=<file>`). The console reporter stays
     // default, so the summary-text parsing below is untouched (坑 1).
     if (!ctx.report_fmt.empty()) {
-        test_cmd += " -r " + ctx.report_fmt + "::out=\"" +
+        // 1.4.6 Q-08: escape the reporter name like the path (it is user input
+        // interpolated into a shell command on POSIX).
+        test_cmd += " -r \"" + util::escape_shell_arg(ctx.report_fmt) + "\"::out=\"" +
                     util::escape_shell_arg(ctx.report_path.string()) + "\"";
     }
     auto test_res = util::run_command(test_cmd);

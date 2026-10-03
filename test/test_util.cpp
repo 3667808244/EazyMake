@@ -516,6 +516,9 @@ TEST_CASE("toml_quote: escapes special characters", "[util][1.1.2]") {
     REQUIRE(toml_quote("a\\b") == "\"a\\\\b\"");
     REQUIRE(toml_quote("line\nbreak") == "\"line\\nbreak\"");
     REQUIRE(toml_quote("tab\there") == "\"tab\\there\"");
+    // 1.4.6 Q-23: remaining control characters are escaped as U+XXXX.
+    REQUIRE(toml_quote(std::string(1, '\x01')) == "\"\\u0001\"");
+    REQUIRE(toml_quote(std::string(1, '\x7f')) == "\"\\u007F\"");
 }
 
 // 1.1.2 C6: filesystem helpers must surface real failures (a swallowed

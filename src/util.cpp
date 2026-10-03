@@ -237,7 +237,14 @@ std::string file_read(const fs::path& p) {
 }
 
 bool file_write(const fs::path& p, std::string_view content) {
-    fs::create_directories(p.parent_path());
+    // 1.4.6 Q-27: create_directories can throw despite the bool contract.
+    try {
+        fs::create_directories(p.parent_path());
+    } catch (const std::exception& e) {
+        error(std::string("cannot create directory for: ") + p.string() +
+              " (" + e.what() + ")");
+        return false;
+    }
     std::ofstream f(p, std::ios::binary | std::ios::trunc);
     if (!f) {
         error(std::string("cannot write: ") + p.string());
@@ -330,7 +337,19 @@ std::string toml_quote(std::string_view s) {
             case '\n': r += "\\n";  break;
             case '\t': r += "\\t";  break;
             case '\r': r += "\\r";  break;
-            default:   r += c;      break;
+            default:
+                // 1.4.6 Q-23: TOML forbids raw U+0000..U+001F / U+007F in a
+                // basic string; escape the remaining control characters.
+                if (static_cast<unsigned char>(c) < 0x20 ||
+                    static_cast<unsigned char>(c) == 0x7f) {
+                    char esc[8];
+                    std::snprintf(esc, sizeof(esc), "\\u%04X",
+                                  static_cast<unsigned char>(c));
+                    r += esc;
+                } else {
+                    r += c;
+                }
+                break;
         }
     }
     r += '"';
@@ -1625,7 +1644,11 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     // incorrectly with any fd redirection inside `cmd` (e.g. `echo x >&2` would
     // otherwise land in the stdout capture because the later `1>out` overrides
     // the user's `>&2`). The group makes the outer redirections authoritative.
-    std::string cmd2 = "{ " + cmd + " ; } 1>" + out_tmpl + " 2>" + err_tmpl;
+    // 1.4.6 Q-21: quote the redirect targets — TMPDIR may contain spaces or
+    // shell metacharacters.
+    std::string cmd2 = "{ " + cmd + " ; } 1>\"" +
+                       escape_shell_arg(out_tmpl) + "\" 2>\"" +
+                       escape_shell_arg(err_tmpl) + "\"";
 
     pid_t pid = fork();
     if (pid == 0) {

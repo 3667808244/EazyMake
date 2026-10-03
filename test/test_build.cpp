@@ -854,6 +854,34 @@ TEST_CASE("inject_precompiled_marker: [project] is the last section", "[build][1
     }
 }
 
+// 1.4.6 Q-07: the marker must land inside [project] even when the file starts
+// with a comment or another section — the old splice assumed [project] was the
+// first section and wrote the marker at the document root.
+TEST_CASE("inject_precompiled_marker: leading comment/section still lands in [project]",
+          "[build][1.4.6][pack]") {
+    SECTION("leading comment") {
+        std::string toml = "# a comment\n[project]\nname = \"foo\"\n\n[compile]\nflags = []\n";
+        auto out = inject_precompiled_marker(toml);
+        REQUIRE(out.find("precompiled = true") > out.find("[project]"));
+        REQUIRE(out.find("precompiled = true") < out.find("[compile]"));
+    }
+    SECTION("leading section") {
+        std::string toml = "[meta]\nx = 1\n\n[project]\nname = \"foo\"\n\n[compile]\nflags = []\n";
+        auto out = inject_precompiled_marker(toml);
+        REQUIRE(out.find("precompiled = true") > out.find("[project]"));
+        REQUIRE(out.find("precompiled = true") < out.find("[compile]"));
+    }
+    SECTION("parses after a leading comment") {
+        TempDir tmp;
+        std::string toml = "# leading\n[project]\nname = \"foo\"\ntype = \"static\"\n"
+                           "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n[compile]\nflags = []\n";
+        auto path = tmp.path / "ezmk.toml";
+        std::ofstream(path) << inject_precompiled_marker(toml);
+        auto cfg = ezmk::config::parse_config(path);
+        REQUIRE(cfg.project.precompiled);
+    }
+}
+
 TEST_CASE("inject_precompiled_marker: result parses and sets precompiled",
           "[build][1.4.2][pack]") {
     TempDir tmp;

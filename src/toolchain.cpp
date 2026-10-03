@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <string>
 
@@ -662,9 +663,14 @@ std::string max_supported_c_std(CompilerFamily family, const std::string& versio
 }
 
 Toolchain detect_toolchain() {
-    // Cache the result — detect only once per process
+    // Cache the result — detect only once per process.
+    // 1.4.6 Q-14: guard the cache. Two threads could observe cached_valid false
+    // and race the writes to cached; the lock is held for the whole detection
+    // (which runs once and does not re-enter detect_toolchain).
+    static std::mutex cache_mutex;
     static Toolchain cached;
     static bool cached_valid = false;
+    std::lock_guard<std::mutex> cache_lock(cache_mutex);
     if (cached_valid) return cached;
 
     // 1. Check $CXX/$CC environment variable override
