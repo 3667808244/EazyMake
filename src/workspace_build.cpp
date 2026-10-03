@@ -201,6 +201,9 @@ int run_workspace_action(const workspace::Workspace& ws,
                          const std::string& action,
                          const cli::WorkspaceOptions& opts) {
     int jobs = resolve_jobs(opts.jobs, ws);
+    // 1.4.6 Q-10: the config value is the default when the CLI flag is absent;
+    // an explicit CLI flag wins.
+    const bool stop_on_err = opts.stop_on_error || ws.options.stop_on_error;
 
     auto layers = workspace::topo_layers(ws);
     auto sel = select_layers(ws, layers, opts.members);
@@ -254,7 +257,7 @@ int run_workspace_action(const workspace::Workspace& ws,
             }
             futures.push_back(pool.submit([&ws, idx, &action, &stop, &print_mutex,
                                            &succeeded, &failed, &skipped,
-                                           &opts]() {
+                                           &opts, stop_on_err]() {
                 // --stop-on-error fired while this task was queued → skipped
                 // (never started), not failed.
                 if (stop.load()) {
@@ -267,7 +270,7 @@ int run_workspace_action(const workspace::Workspace& ws,
                     succeeded.fetch_add(1);
                 } else {
                     failed.fetch_add(1);
-                    if (opts.stop_on_error) stop.store(true);
+                    if (stop_on_err) stop.store(true);
                 }
             }));
         }
@@ -419,6 +422,8 @@ int run_clean(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
 // in topological order to minimize the window (dependencies build first).
 int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts) {
     int jobs = resolve_jobs(opts.jobs, ws);
+    // 1.4.6 Q-10: config default, CLI flag wins.
+    const bool stop_on_err = opts.stop_on_error || ws.options.stop_on_error;
     auto layers = workspace::topo_layers(ws);
     auto sel = select_layers(ws, layers, opts.members);
 
@@ -471,7 +476,7 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
             continue;
         }
         threads.emplace_back([&ws, idx, &stop, &print_mutex,
-                              &failed, &opts]() {
+                              &failed, &opts, stop_on_err]() {
             const auto& m = ws.members[idx];
             // 1.4.0-dev.5: `workspace watch --run` forwards --run to member
             // watchers — but only for executable members (1.3.4 config-time
@@ -482,7 +487,7 @@ int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
                                  extra);
             if (!ok) {
                 failed.fetch_add(1);
-                if (opts.stop_on_error) stop.store(true);
+                if (stop_on_err) stop.store(true);
             }
             // A clean exit (SIGINT) records nothing.
         });

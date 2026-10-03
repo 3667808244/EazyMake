@@ -270,13 +270,21 @@ std::optional<Workspace> load_from(const fs::path& start_dir) {
             (void)val;
         }
         if (auto jobs = (*opts)["default_jobs"]) {
-            if (!jobs.is_integer() || jobs.as_integer()->get() < 0) {
+            // 1.4.6 Q-28: bound the value. A raw cast of a huge int64 truncated
+            // to a large positive int and ThreadPool would spawn that many
+            // threads.
+            if (!jobs.is_integer()) {
                 throw std::runtime_error(
                     i18n::fmt(I18nKey::workspace_err_default_jobs,
                               {{"file", file.string()}}));
             }
-            ws.options.default_jobs =
-                static_cast<int>(jobs.as_integer()->get());
+            auto j = jobs.as_integer()->get();
+            if (j < 0 || j > 1024) {
+                throw std::runtime_error(
+                    i18n::fmt(I18nKey::workspace_err_default_jobs,
+                              {{"file", file.string()}}));
+            }
+            ws.options.default_jobs = static_cast<int>(j);
         }
         if (auto stop = (*opts)["stop_on_error"]) {
             if (!stop.is_boolean()) {
@@ -698,6 +706,11 @@ std::string replace_members_in_text(const std::string& text,
                       {{"file", file_str}}));
     }
     // No members key yet — insert right after the [workspace] header.
+    // 1.4.6 Q-28: a final [workspace] header without a trailing newline would
+    // concatenate with the inserted key ("[workspace]members = ...").
+    if (lines[ws_header].empty() || lines[ws_header].back() != '\n') {
+        lines[ws_header] += eol;
+    }
     lines.insert(lines.begin() + ws_header + 1, new_line);
     std::string out;
     for (const auto& l : lines) out += l;

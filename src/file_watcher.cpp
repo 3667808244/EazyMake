@@ -470,6 +470,21 @@ void FileWatcher::win32_cleanup() {
             CloseHandle(static_cast<HANDLE>(w.dir_handle));
         }
     }
+    // 1.4.6 Q-29: drain pending cancellation completions before freeing the
+    // OVERLAPPED objects — the kernel can still complete a cancelled read into
+    // one of them after CancelIo.
+    if (iocp_) {
+        const size_t n = watches_.size();
+        for (size_t i = 0; i < n; ++i) {
+            DWORD bytes = 0;
+            ULONG_PTR key = 0;
+            OVERLAPPED* ov = nullptr;
+            if (!GetQueuedCompletionStatus(static_cast<HANDLE>(iocp_), &bytes,
+                                           &key, &ov, 100)) {
+                break;
+            }
+        }
+    }
     watches_.clear();
     // 1.1.3 C3: 释放本实例持有的 OVERLAPPED（仅清理自己的，不影响其他实例）
     for (void* p : overlapped_pool_) delete static_cast<OVERLAPPED*>(p);
@@ -508,7 +523,9 @@ void FileWatcher::linux_worker() {
 
         ssize_t len = read(inotify_fd_, buf, sizeof(buf));
         if (len < 0) {
-            if (errno == EINTR) continue;
+            // 1.4.6 Q-29: the fd is non-blocking — a spurious poll wakeup can
+            // yield EAGAIN; retry instead of killing the watch.
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
             report_worker_error("inotify read failed (errno " + std::to_string(errno) + ")");
             break;
         }
@@ -676,7 +693,9 @@ void FileWatcher::macos_repair_watches() {
         fs::path dir(w.path);
         if (!util::file_exists(dir)) continue;  // still gone — keep waiting
 
-        if (w.fd >= 0) close(w.fd);
+        // 1.4.6 Q-09: reset the descriptor after closing it. Without this the
+        // next repair pass closed the same (possibly recycled) fd again.
+        if (w.fd >= 0) { close(w.fd); w.fd = -1; }
         int fd = open(w.path.c_str(), O_RDONLY);
         if (fd < 0) {
             if (repair_warned_.insert(w.path).second) {

@@ -204,6 +204,12 @@ TEST_CASE("workspace parse: invalid options types throw", "[workspace][1.3.0-dev
                       "[workspace.options]\ndefault_jobs = -1\n");
         REQUIRE_THROWS_AS(load_from(tmp.path), std::runtime_error);
     }
+    SECTION("default_jobs too large (1.4.6 Q-28)") {
+        write_ws_toml(tmp.path,
+                      "[workspace]\nmembers = [\"a\"]\n"
+                      "[workspace.options]\ndefault_jobs = 4294967296\n");
+        REQUIRE_THROWS_AS(load_from(tmp.path), std::runtime_error);
+    }
     SECTION("default_jobs not an integer") {
         write_ws_toml(tmp.path,
                       "[workspace]\nmembers = [\"a\"]\n"
