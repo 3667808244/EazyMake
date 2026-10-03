@@ -74,7 +74,7 @@ EazyMake/
 | **config** | `src/config.cpp` | Parses `ezmk.toml`. Defines all config structs (`ProjectSection`, `CompileSection`, `LinkSection`, `DependsSection`, `InstallSection`, etc.). Also parses `ezmk.lock.json` (via `lockfile::load()`). |
 | **build** | `src/build.cpp` | Build orchestration: source collection, compilation scheduling (via `ThreadPool`), linking, `ezmk project install`. Calls into `cache.cpp` and `toolchain.cpp`. Also owns `pack_project()` — `ezmk project pack` archive creation (there is **no** `src/pack.cpp`). |
 | **cache** | `src/cache.cpp` | Content-hash-based incremental compilation. Reads/writes `record.json` (v2: includes `compiler`, `compiler_version`, `deterministic` fields). Atomic writes via temp → rename. |
-| **toolchain** | `src/toolchain.cpp` | Compiler auto-detection (GCC/Clang/MSVC). `Toolchain` struct captures family, path, flags, and version. GCC→MSVC flag translation layer. |
+| **toolchain** | `src/toolchain.cpp` | Compiler auto-detection and toolchain descriptor: `detect_toolchain()` (`$CXX`/`$CC` → system g++/clang++ → MSVC fallback; `EZMK_TOOLCHAIN=gcc\|clang\|msvc` override), the MSVC child environment (`msvc_env()` from `vcvars64.bat` + `find_in_env_path()` for absolute cl/link/lib), GCC→MSVC flag translation, and the compiler capability table. **Contract:** the MSVC environment must be injected via `util::merge_env(RunOptions&, …)` at every subprocess site — `run_command()` never reads it implicitly, and `CreateProcessW` resolves the executable with the parent `PATH`, so MSVC tools are addressed by absolute path. |
 
 ### Interop & examples
 

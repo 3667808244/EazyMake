@@ -112,6 +112,24 @@ Set `CXX` and `CC` environment variables before running `build.sh`:
 CXX=clang++ CC=clang bash build.sh
 ```
 
+## Toolchain detection (Windows / MSVC)
+
+`ezmk` detects the toolchain at build time, in this order:
+
+1. `CXX` / `CC` environment override.
+2. System `g++` / `clang++` on `PATH` (MinGW on Windows).
+3. **MSVC as a fallback** — locates `vcvars64.bat` (VS 2019+ **or Build Tools**), loads that environment itself, and invokes `cl.exe` / `link.exe` / `lib.exe` by **absolute path**.
+
+Force a toolchain with `EZMK_TOOLCHAIN=gcc|clang|msvc` (unset = auto; an invalid or unavailable value fails loudly rather than silently falling back). MSVC does **not** need a "Developer Command Prompt".
+
+Three Windows/CRT traps that are easy to re-introduce:
+
+- **`CreateProcessW` resolves the program name with the PARENT's `PATH`**, not the child `RunOptions.env` block — so MSVC tools must be invoked by an absolute path (resolved from the vcvars `PATH`); injecting the environment alone is not enough.
+- **`cmd /c ... set` output is CRLF** — `std::getline` keeps the `\r`, so every env value gets a trailing CR and `TMP` becomes an invalid path (`cl` fails with `D8037`). Strip the CR.
+- **`vswhere -latest -property installationPath` excludes VS Build Tools** — add `-products *`, or a Build Tools-only machine is never detected.
+
+Full root-cause chain: `plans/1.4.x/1.4.7.md` §3.7.
+
 ## Common issues
 
 1. **"Python not found" warning** — locale data, logo, and example data will be empty stubs. Install Python 3 and rebuild.
@@ -119,3 +137,6 @@ CXX=clang++ CC=clang bash build.sh
 3. **Missing `-lwinhttp`** on MSYS2 — install `mingw-w64-x86_64-libwinhttp` or use the full MSYS2 toolchain.
 4. **Duplicate `main()` at link time** — the manual command listed `src/*.cpp`, which pulls in both `src/main.cpp` and `src/ezmk_lua_main.cpp`. Use the explicit `SRC` list above (or run `bash build.sh`).
 5. **`build/` directory missing** — `build.sh` creates it automatically; for manual builds, run `mkdir -p build` first.
+6. **`cl : error D8037` (cannot create temporary il file)** — the child environment's `TMP`/`TEMP` is invalid (a POSIX `/tmp` from MSYS2, or a value with a trailing `\r`). `ezmk` normalizes both; if it persists, check `TMP`/`TEMP` in the invoking shell.
+7. **`'"C:\...\vcvars64.bat"' is not recognized`** — the vcvars probe used escaped quotes; it must be `cmd /c call "..."` (fixed in 1.4.7).
+8. **MSVC selected when you wanted MinGW** — GCC/Clang on `PATH` win in auto mode; set `EZMK_TOOLCHAIN=gcc` to force MinGW.
