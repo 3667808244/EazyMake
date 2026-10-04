@@ -53,10 +53,11 @@
 
 ### 阶段三：Catch2 3.16.0（D-03）
 
-- [ ] `catch_amalgamated.hpp` → `include/vendor/catch2.hpp`；`catch_amalgamated.cpp` → `src/vendor/catch2_impl.cpp`（保留 `#include "catch2.hpp"` 与 amalgamated `main()`）
-- [ ] `build/test_ezmk --help` 确认 `--verbosity high` 等旗标仍在
-- [ ] `ezmk test` 摘要解析（`src/build.cpp:2292-2352` 两条格式）端到端
-- [ ] 回归：全量零失败（若断言统计口径变化，收口时说明来源）
+- [x] `catch_amalgamated.hpp` → `include/vendor/catch2.hpp`；`catch_amalgamated.cpp` → `src/vendor/catch2_impl.cpp`（保留 `#include "catch2.hpp"` 与 amalgamated `main()`）
+- [x] `build/test_ezmk --help` 确认 `--verbosity high` 等旗标仍在
+- [x] `ezmk test` 摘要解析（`src/build.cpp:2292-2352` 两条格式）端到端（集成套件通过）
+- [x] **默认顺序变更处置**：Catch2 ≥ 3.16 `--order` 默认 `rand`（3.8 为 `decl`）→ `build.sh` 两个测试调用补 `--order decl` 恢复确定性（设计 §3.3 第 5 条）
+- [x] 回归：全量 1133 用例 / 6525 断言，失败集合与基线完全一致（9 个 git 集成环境失败，无新增）
 
 ### 阶段四：CI action 主版本（D-04）
 

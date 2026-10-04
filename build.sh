@@ -274,12 +274,17 @@ if $BUILD_TEST; then
         # Propagate the test-suite exit code so `build.sh test*` can gate CI:
         # a failing test must fail the script (pre.3, 3.2.1 CI workflow).
         TEST_RC=0
+        # 1.4.8: Catch2 >= 3.16 defaults `--order` to `rand`. Several [lua] cases
+        # share the process-global lua_State (and the unrestricted path loads
+        # io/os into it), so their result depends on execution order — a random
+        # order makes the regression run non-deterministic. Pin declaration
+        # order to keep the pre-3.16 behaviour and a reproducible gate.
         if [ -n "$TEST_FILTER" ]; then
             echo "=== Running tests (filter: $TEST_FILTER) ==="
-            ./"$TEST_OUTPUT" --verbosity high "$TEST_FILTER" || TEST_RC=$?
+            ./"$TEST_OUTPUT" --order decl --verbosity high "$TEST_FILTER" || TEST_RC=$?
         else
             echo "=== Running all tests ==="
-            ./"$TEST_OUTPUT" --verbosity high || TEST_RC=$?
+            ./"$TEST_OUTPUT" --order decl --verbosity high || TEST_RC=$?
         fi
         echo ""
         echo "=== Tests complete (exit code: $TEST_RC) ==="
