@@ -2,6 +2,7 @@
 src/locale_data.cpp
 src/example_data.cpp
 include/ezmk/logo.gen.h
+include/ezmk/version.hpp
 
 # ── Build artifacts ─────────────────────────────────────────────────────────
 build/
