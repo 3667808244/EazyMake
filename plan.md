@@ -61,11 +61,11 @@
 
 ### 阶段四：CI action 主版本（D-04）
 
-- [ ] `actions/checkout@v4` → `@v7`（`ci.yml` 4 处 + `release.yml` 4 处）
-- [ ] `actions/upload-artifact@v4` → `@v7`（`ci.yml:165` / `ci.yml:233`）
-- [ ] `softprops/action-gh-release@v2` → `@v3`（`release.yml` 4 处）
-- [ ] push 触发 `ci.yml` 全绿；确认未误动 `ci.yml:347` 断言的 `cp -r man` 行
-- [ ] 复核 `macos-13` 支持状态（P2，不改行为）
+- [x] `actions/checkout@v4` → `@v7`（`ci.yml` 4 处 + `release.yml` 4 处）
+- [x] `actions/upload-artifact@v4` → `@v7`（`ci.yml:165` / `ci.yml:233`）
+- [x] `softprops/action-gh-release@v2` → `@v3`（`release.yml` 4 处）
+- [ ] push 触发 `ci.yml` 全绿 —— **本地不可验证**（需推送；变更仅版本串、工作流结构未动，`ci.yml:347` 的 `cp -r man` 断言行未触碰）
+- [x] 复核 `macos-13`：官方 2025-09-19 公告该镜像关闭（retired）；该 job 默认 `if: vars.ENABLE_MACOS_X64` 跳过，本版不改行为，登记为延后项
 
 ### 阶段五：文档 / 版本串 / 收口（D-05 / D-06）
 

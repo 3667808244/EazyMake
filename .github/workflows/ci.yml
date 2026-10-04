@@ -29,7 +29,7 @@ jobs:
     name: Ubuntu (g++) — test-all
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -162,7 +162,7 @@ jobs:
 
       - name: Upload test report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-ubuntu
           path: test-report.log
@@ -172,7 +172,7 @@ jobs:
     name: Windows (MSYS2 g++) — test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -230,7 +230,7 @@ jobs:
 
       - name: Upload test report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-windows
           path: test-report.log
@@ -243,7 +243,7 @@ jobs:
     name: zsh completions (install.sh 3.2.3)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install zsh
         run: |
@@ -298,7 +298,7 @@ jobs:
     name: man pages (1.4.3)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install groff + man-db
         run: |
