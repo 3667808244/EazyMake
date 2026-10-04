@@ -45,11 +45,11 @@
 
 ### 阶段二：Lua 5.4.9（D-02）
 
-- [ ] `src/vendor/lua/*.c`（32）替换（不含 `lua.c` / `luac.c`）
-- [ ] `include/vendor/lua/*.h`（27）替换（含 `ljumptab.h` / `lopnames.h`）
-- [ ] 重新施加 `src/vendor/lua/linit.c` 的 `io` / `os` 移除补丁
-- [ ] `build/ezmk-lua` 冒烟 + Lua 钩子 / `ezmk utils` 用例 + 沙箱用例
-- [ ] 回归：全量零失败
+- [x] `src/vendor/lua/*.c`（32）替换（不含 `lua.c` / `luac.c`）
+- [x] `include/vendor/lua/*.h`（27）替换（含 `ljumptab.h` / `lopnames.h`）
+- [x] 重新施加 `src/vendor/lua/linit.c` 的 `io` / `os` 移除补丁（逐字保留原注释）
+- [x] `build/ezmk-lua` 冒烟（Lua 5.4 正常执行）+ Lua 钩子 / `ezmk utils` / 沙箱用例（集成套件全通过）
+- [x] 回归：全量 1133 用例 / 6525 断言，失败集合与基线完全一致（无新增）
 
 ### 阶段三：Catch2 3.16.0（D-03）
 
