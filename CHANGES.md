@@ -26,6 +26,46 @@
 
 ---
 
+## 1.4.8 (2026-10-04) — 内嵌依赖与 CI 依赖更新
+
+> **状态：✅ 实现收口（未发布）** —— 阶段零~五全部落地；全量 **1133 用例 / 6525 断言**，失败集合与立项基线**完全一致**（9 个 `test_integration_git.cpp` 环境性失败：ezmk 生成的 `file:///D:/...` URL 被 MSYS2 git 当 POSIX 路径，与本版无关）；`check_man_sync.py` 通过、groff 4 页零告警、i18n **412** 键三向一致、docs-sync（en↔zh 文件配对）通过。**零功能新增、公共 API 无破坏性变更。**
+>
+> 来源：1.4.7 发布后的依赖盘点——内嵌库普遍落后上游，CI action 落后 3 个大版本（Node 20 → Node 24 运行时迁移）。
+
+### 内嵌依赖
+
+- **miniz 2.2.0 → 3.1.2**（`src/vendor/miniz*.c` 4 个 + `include/vendor/miniz*.h` 5 个；保持既有 CRLF 与手写 `miniz_export.h` 静态桩）。跨 3.0.x / 3.1.x 两条线，落地了与 ezmk 直接相关的修复：读 zip 头时中央目录偏移溢出、`tinfl_decompress` 的 `code_len==0` 死循环、Windows `mz_utf8z_to_widechar` 缓冲区溢出、`MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_UTF8` 未设置、MinGW32 Unicode 路径、`miniz_tdef.c` 强制 C++ 编译（本仓用 g++ 编译 `.c`）。相较 2.2.0，解包对外部归档更健壮（`pkg install` 解 zip 的路径）。
+- **Lua 5.4.7 → 5.4.9**（32 个 `.c` + 27 个 `.h`）。5.4 线的终版（官网明确不再发 5.4）：修 5.4.7 中的 4 个 bug（含 `Wrong code generation for indices with comparisons`、panic 状态缺失）与 5.4.8 中的 2 个（all-weak 表新元表可骗过 GC 等）。**重新施加 `src/vendor/lua/linit.c` 的 `io`/`os` 移除沙箱补丁**（本仓对 vendor 的唯一本地改动）。Lua 5.5（破坏性变更）不在本版。
+- **Catch2 3.8.0 → 3.16.0**（官方 `catch_amalgamated.hpp/.cpp` → `include/vendor/catch2.hpp` / `src/vendor/catch2_impl.cpp`；仅测试依赖，不进 `ezmk` 产物）。
+
+### CI
+
+- `actions/checkout` v4 → **v7**（8 处）、`actions/upload-artifact` v4 → **v7**（2 处）、`softprops/action-gh-release` v2 → **v3**（4 处）；`msys2/setup-msys2@v2` 保持浮点主标签。三者主版本升级的实质是 **Node 20 → Node 24** 运行时（+ESM），入参 schema 未变；`release.yml` 的运行验证随正式发布进行。
+
+### 行为收紧 / 变更
+
+- **Catch2 ≥ 3.16 的 `--order` 默认值从 `decl` 改为 `rand`**：本套件多个 `[lua]` 用例共享进程级 `lua_State`（unrestricted 路径会把 `io`/`os` 载入同一状态），随机顺序下实测 10 个用例失败。`build.sh` 的两个测试调用补 `--order decl`，恢复 3.16 之前的确定性与可复现门槛。
+- miniz 3.x 会为 zip 设置 UTF-8 general purpose flag → `project pack --format zip` 的产物字节与 1.4.7 不同（`.sha256` 边车按产物现算，不受影响）；解包对畸形归档更严格。
+- `docs/{zh,en}/technical.md` 依赖表版本串同步（Lua 5.4.9 / miniz 3.1.2 + `MZ_VERSION` 11.3.2 / Catch2 v3.16）。
+
+### 测试
+
+- 全量 `bash build.sh test-all`：**1133 用例 / 6525 断言**，失败集合与基线逐一比对且完全一致（9 个 git 集成环境失败，无新增）；`[lua]` 在 `--order decl` 下 110 用例全过。
+- 每阶段一次全量回归（miniz / Lua / Catch2 各一次），失败集合逐一与基线比对。
+
+### 已知限制 / 延后项
+
+- `test_integration_git.cpp` 的 9 个用例在本机 MSYS2 环境失败（`file:///D:/...` 被当 POSIX 路径）——环境问题，非本版引入；CI（ubuntu）不受影响。
+- `[lua]` 用例的顺序独立性（共享全局 `lua_State`）未重构，本版以 `--order decl` 固定顺序；顺序独立性重构归后续代码质量审计。
+- `release.yml` 的 `macos-x64` job 仍用 `macos-13`（官方 2025-09-19 公告该镜像关闭）；该 job 默认由 `ENABLE_MACOS_X64` 跳过，本版未改行为。
+- Lua 5.5 与官方仓库 `ezmk-repo` 的 `packages/` 版本更新不在本版范围。
+
+### 明确不做
+
+- 破坏性 API 变更 / 弃用面移除（归 2.0.0）。
+- `ezmk-repo` 的包版本更新（分发内容，另立计划）。
+
+
 ## 1.4.7 (2026-10-03) — MSVC 工具链支持修复 + 工具链优先级调整
 
 > **状态：已发布（2026-10-03，tag `v1.4.7`）** —— 三阶段全部落地，全量 **1133 用例 / 6541 断言零失败**（基线 1.4.6 收口态 1130/6536，+3 用例 / +5 断言）；i18n 412 键三向一致、man / groff / docs-sync 门槛通过。**公共 API 无破坏性变更**（仅新增 `toolchain::msvc_env` / `util::merge_env`）；唯一“新面”是验证用环境变量 `EZMK_TOOLCHAIN`。

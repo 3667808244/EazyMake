@@ -1,6 +1,6 @@
 # EazyMake 1.4.8 执行计划
 
-> **状态：📋 已立项（2026-10-04，未开始）**——本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
+> **状态：✅ 实现收口（2026-10-04，未发布；阶段零~五完成，发布阶段未执行）**——本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.8.md**](plans/1.4.x/1.4.8.md)。主题：**内嵌依赖与 CI 依赖更新**——miniz 2.2.0 → 3.1.2、Lua 5.4.7 → 5.4.9、Catch2 3.8.0 → 3.16.0，以及 GitHub Actions 主版本（checkout / upload-artifact → v7，action-gh-release → v3）。
 >
@@ -30,9 +30,9 @@
 
 ### 阶段零：基线落库与上游拉取（D-00）
 
-- [ ] 记录当前 vendor 文件清单与 sha256（miniz 9 / lua 59 / catch2 2）
-- [ ] 拉取上游 miniz `3.1.2`、Lua `5.4.9`、Catch2 `v3.16.0`；另拉 Lua `5.4.7` 原版用于 diff
-- [ ] `diff -r` 现有 vendor vs 上游同版本，确认本地改动仅 `src/vendor/lua/linit.c`
+- [x] 记录当前 vendor 文件清单与 sha256（清单落盘 `build/upstream/vendor-baseline.sha256`）
+- [x] 拉取上游 miniz `3.1.2`、Lua `5.4.9`、Catch2 `v3.16.0`；另拉 Lua `5.4.7` 原版用于 diff
+- [x] 上游逐文件比对（本机 MSYS2 缺 diffutils，用 Python 等价实现）：Lua **仅 `linit.c` 一处本地改动**；miniz 与 2.2.0 内容相同（仅 CRLF）；upstream-only 文件 `lua.c` / `luac.c` / `lua.hpp` / `Makefile`
 - [x] 回归：建立本机基线（1133 用例 / 6525 断言 / 9 个 git 集成环境失败，已登记 `build/upstream/BASELINE-NOTES.md`）
 
 ### 阶段一：miniz 3.1.2（D-01）
@@ -69,11 +69,11 @@
 
 ### 阶段五：文档 / 版本串 / 收口（D-05 / D-06）
 
-- [ ] `docs/zh/technical.md:13,17` + `docs/en/technical.md:13,17` 三处版本串同步（Lua 5.4.9 / miniz 3.1.2 + 11.3.2 / Catch2 v3.16）
-- [ ] `CHANGES.md` 新增 1.4.8 条目
-- [ ] 计划索引状态（`plans/1.4.x/README.md` / `plans/README.md` / 根 `plan.md`）
-- [ ] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向一致（412 键）+ `check_docs_sync.sh`
-- [ ] 回归：全量零失败
+- [x] `docs/zh/technical.md:13,17` + `docs/en/technical.md:13,17` 三处版本串同步（Lua 5.4.9 / miniz 3.1.2 + 11.3.2 / Catch2 v3.16）
+- [x] `CHANGES.md` 新增 1.4.8 条目
+- [x] 计划索引状态（`plans/1.4.x/README.md` / `plans/README.md` / 根 `plan.md`）
+- [x] 门槛复核：`check_man_sync.py` 通过、groff 4 页零告警、i18n 412 键三向一致、docs-sync（本机缺 MSYS `diff`/`find` → 用 Python 等价校验 en↔zh 文件配对，通过；CI 跑脚本）
+- [x] 回归：全量 1133 用例 / 6525 断言，失败集合与基线完全一致（9 个 git 集成环境失败，无新增）
 
 ### 发布阶段：1.4.8 正式发布
 

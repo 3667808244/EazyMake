@@ -10,11 +10,11 @@ All dependencies below, except for the compiler and MSYS2, are embedded and do n
 | -------------------------------------- | ---------------- | ------------------- | ------------------------------------------------- |
 | GCC (g++/gcc) or Clang (clang++/clang) | ≥ 8.0            | **Build & runtime** | C++17 support required                            |
 | MSVC (Visual Studio)                   | ≥ 2019           | **Optional**        | `cl.exe` + `link.exe`; auto-detected via `vcvars64.bat` |
-| Lua                                    | 5.4.7            | **Embedded**        | Statically linked into `ezmk`                     |
+| Lua                                    | 5.4.9            | **Embedded**        | Statically linked into `ezmk`                     |
 | nlohmann/json                          | header-only      | **Embedded**        | JSON support (`include/vendor/nlohmann_json.hpp`) |
 | toml++                                 | header-only      | **Embedded**        | TOML parsing (`include/vendor/toml.hpp`)          |
-| Catch2                                 | v3               | **Test only**       | Unit test framework                               |
-| miniz                                  | embedded (vendor version string 2.2.0 / `MZ_VERSION` 10.2.0) | **Embedded**        | ZIP extraction (`src/vendor/miniz*.c` + `include/vendor/miniz*.h`) |
+| Catch2                                 | v3.16            | **Test only**       | Unit test framework                               |
+| miniz                                  | embedded (vendor version string 3.1.2 / `MZ_VERSION` 11.3.2) | **Embedded**        | ZIP extraction (`src/vendor/miniz*.c` + `include/vendor/miniz*.h`) |
 | Python                                 | ≥ 3.6            | **Build only**      | Locale data embedding (`scripts/embed_locale.py`) |
 | MSYS2 (Windows)                        | —                | **Build & runtime** | Provides g++ and bash environment                 |
 

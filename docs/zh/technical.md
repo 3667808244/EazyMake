@@ -10,11 +10,11 @@
 | --------------------------------------- | ---------------- | -------------------- | ----------------------------------------------------------- |
 | GCC（g++/gcc）或 Clang（clang++/clang） | ≥ 8.0            | **构建与运行时**     | 需要 C++17 支持                                             |
 | MSVC（Visual Studio）                   | ≥ 2019           | **可选**             | `cl.exe` + `link.exe`；通过 `vcvars64.bat` 自动检测          |
-| Lua                                     | 5.4.7            | **内嵌**             | 静态链接进 `ezmk`                                           |
+| Lua                                     | 5.4.9            | **内嵌**             | 静态链接进 `ezmk`                                           |
 | nlohmann/json                           | 仅头文件         | **内嵌**             | JSON 支持（`include/vendor/nlohmann_json.hpp`）              |
 | toml++                                  | 仅头文件         | **内嵌**             | TOML 解析（`include/vendor/toml.hpp`）                      |
-| Catch2                                  | v3               | **仅测试**           | 单元测试框架                                                |
-| miniz                                   | 内嵌（vendor 内版本串 2.2.0 / `MZ_VERSION` 10.2.0） | **内嵌**             | ZIP 解压（`src/vendor/miniz*.c` + `include/vendor/miniz*.h`） |
+| Catch2                                  | v3.16            | **仅测试**           | 单元测试框架                                                |
+| miniz                                   | 内嵌（vendor 内版本串 3.1.2 / `MZ_VERSION` 11.3.2） | **内嵌**             | ZIP 解压（`src/vendor/miniz*.c` + `include/vendor/miniz*.h`） |
 | Python                                  | ≥ 3.6            | **仅构建**           | locale 数据嵌入（`scripts/embed_locale.py`）                |
 | MSYS2（Windows）                        | —                | **构建与运行时**     | 提供 g++ 与 bash 环境                                       |
 
