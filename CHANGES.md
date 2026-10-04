@@ -28,7 +28,7 @@
 
 ## 1.4.8 (2026-10-04) — 内嵌依赖与 CI 依赖更新
 
-> **状态：✅ 实现收口（未发布）** —— 阶段零~五全部落地；全量 **1133 用例 / 6525 断言**，失败集合与立项基线**完全一致**（9 个 `test_integration_git.cpp` 环境性失败：ezmk 生成的 `file:///D:/...` URL 被 MSYS2 git 当 POSIX 路径，与本版无关）；`check_man_sync.py` 通过、groff 4 页零告警、i18n **412** 键三向一致、docs-sync（en↔zh 文件配对）通过。**零功能新增、公共 API 无破坏性变更。**
+> **状态：已发布（2026-10-04，tag `v1.4.8`；Release run `37165812937` success，7 资产 digest 核对一致，`macos-x64` skipped）** —— 阶段零~五全部落地；全量 **1133 用例 / 6525 断言**，失败集合与立项基线**完全一致**（9 个 `test_integration_git.cpp` 环境性失败：ezmk 生成的 `file:///D:/...` URL 被 MSYS2 git 当 POSIX 路径，与本版无关）；`check_man_sync.py` 通过、groff 4 页零告警、i18n **412** 键三向一致、docs-sync（en↔zh 文件配对）通过。**零功能新增、公共 API 无破坏性变更。**
 >
 > 来源：1.4.7 发布后的依赖盘点——内嵌库普遍落后上游，CI action 落后 3 个大版本（Node 20 → Node 24 运行时迁移）。
 

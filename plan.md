@@ -1,6 +1,6 @@
 # EazyMake 1.4.8 执行计划
 
-> **状态：✅ 实现收口（2026-10-04，未发布；阶段零~五完成，发布阶段未执行）**——本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
+> **状态：✅ 已发布（2026-10-04，tag `v1.4.8`；Release run `37165812937` success）**——本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [`plans/1.4.x/README.md`](plans/1.4.x/README.md)；2.0.0 的移除清单见 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.8.md**](plans/1.4.x/1.4.8.md)。主题：**内嵌依赖与 CI 依赖更新**——miniz 2.2.0 → 3.1.2、Lua 5.4.7 → 5.4.9、Catch2 3.8.0 → 3.16.0，以及 GitHub Actions 主版本（checkout / upload-artifact → v7，action-gh-release → v3）。
 >
@@ -77,10 +77,10 @@
 
 ### 发布阶段：1.4.8 正式发布
 
-- [ ] 版本号 `1.4.8`（`build.sh:74` 的 `EZMK_VERSION` fallback）
-- [ ] `git tag v1.4.8` → Release；核对 7 资产（`macos-x64` skipped）
+- [x] 版本号 `1.4.8`（`build.sh:74` 的 `EZMK_VERSION` fallback）
+- [x] `git tag v1.4.8` → Release（run `37165812937` success）；7 资产 digest 与 `assets[].digest` 逐一一致，Linux/macOS tar 含 `man/` 4 页、Windows zip 不含，`ezmk.exe.sha256` 与 `ezmk.exe` digest 一致，`ezmk.exe version` → 1.4.8
 - [ ] 三渠道分发（Homebrew / pacman / winget，加载 `ezmk-publish` skill）
-- [ ] Release 侧 action 升级（checkout v7 / action-gh-release v3）在本次发布验证
+- [x] Release 侧 action 升级（checkout v7 / action-gh-release v3）在本次发布验证（release run success）
 
 ## 4 关键设计决策
 
