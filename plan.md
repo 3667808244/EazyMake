@@ -64,7 +64,7 @@
 - [x] `actions/checkout@v4` → `@v7`（`ci.yml` 4 处 + `release.yml` 4 处）
 - [x] `actions/upload-artifact@v4` → `@v7`（`ci.yml:165` / `ci.yml:233`）
 - [x] `softprops/action-gh-release@v2` → `@v3`（`release.yml` 4 处）
-- [ ] push 触发 `ci.yml` 全绿 —— **本地不可验证**（需推送；变更仅版本串、工作流结构未动，`ci.yml:347` 的 `cp -r man` 断言行未触碰）
+- [x] push 触发 `ci.yml` 全绿 —— run `37166102625` success（Windows / Ubuntu / man pages / zsh completions 全绿，含升级后的 `actions/checkout@v7`；`ci.yml:347` 的 `cp -r man` 断言行未触碰）
 - [x] 复核 `macos-13`：官方 2025-09-19 公告该镜像关闭（retired）；该 job 默认 `if: vars.ENABLE_MACOS_X64` 跳过，本版不改行为，登记为延后项
 
 ### 阶段五：文档 / 版本串 / 收口（D-05 / D-06）
@@ -79,7 +79,7 @@
 
 - [x] 版本号 `1.4.8`（`build.sh:74` 的 `EZMK_VERSION` fallback）
 - [x] `git tag v1.4.8` → Release（run `37165812937` success）；7 资产 digest 与 `assets[].digest` 逐一一致，Linux/macOS tar 含 `man/` 4 页、Windows zip 不含，`ezmk.exe.sha256` 与 `ezmk.exe` digest 一致，`ezmk.exe version` → 1.4.8
-- [ ] 三渠道分发（Homebrew / pacman / winget，加载 `ezmk-publish` skill）
+- [x] 三渠道分发（Homebrew tap `e02f45f`（真实 digest）/ pacman `makepkg -fd` 出包 `ea9c8839…`（包内 version 1.4.8、man 4 页）/ winget PR [#446349](https://github.com/microsoft/winget-pkgs/pull/446349)，其 CI 与版主审批为发布后跟进项）
 - [x] Release 侧 action 升级（checkout v7 / action-gh-release v3）在本次发布验证（release run success）
 
 ## 4 关键设计决策

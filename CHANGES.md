@@ -65,6 +65,14 @@
 - 破坏性 API 变更 / 弃用面移除（归 2.0.0）。
 - `ezmk-repo` 的包版本更新（分发内容，另立计划）。
 
+### 发布与分发（2026-10-04）
+
+- **Release**：tag `v1.4.8`（`b2903f2`），Release run `37165812937` success（`macos-x64` skipped）；7 资产、digest 与 `assets[].digest` 逐一一致；Linux/macOS tar 含 `man/` 4 页且无 BOM、Windows zip 不含；`ezmk.exe.sha256` 与 `ezmk.exe` digest 一致，产物 `ezmk.exe version` → 1.4.8。
+- **CI**：push 触发的 CI run `37166102625` success（Windows / Ubuntu / man pages / zsh completions 全绿，含升级后的 `actions/checkout@v7`）。
+- **Homebrew**：tap `3667808244/homebrew-eazymake` commit `e02f45f`（`Formula/ezmk.rb` version 1.4.8 + 真实 digest：macos-arm64 `82d64632…`、linux-x64 `8647c6e6…`）。
+- **pacman**：`publish/arch/PKGBUILD` pkgver 1.4.8 + tag 源码 tarball digest `a86e96a4…`；本机 MSYS2 `makepkg -fd` 出包 `eazymake-1.4.8-1-x86_64.pkg.tar.zst`（sha256 `ea9c8839…`；含 `ezmk.exe` / `ezmk-lua.exe` / `_ezmk` / man 4 页，包内 `ezmk.exe version` → 1.4.8）。
+- **winget**：`microsoft/winget-pkgs#446349`（3 个 split manifest，`InstallerSha256` = `ezmk-windows-x64.zip` digest `5c49c84c…`；本机 `winget validate` 通过；其 CI 与版主审批为发布后跟进项）。
+
 
 ## 1.4.7 (2026-10-03) — MSVC 工具链支持修复 + 工具链优先级调整
 

@@ -61,7 +61,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 
 - **1.4.7 为 MSVC 工具链支持修复 + 优先级调整补丁**（✅ 已发布（2026-10-03））：承接 1.4.6 Q-20 的真实 MSVC 验证——修 Build Tools 探测、vcvars cmd 引用、MSVC 环境注入，并把优先级改为 g++/clang++ 优先、MSVC 回退；新增 `EZMK_TOOLCHAIN` 显式覆盖用于验证。设计见 [1.4.7.md](1.4.7.md)，阶段见根 [`plan.md`](../../plan.md)。
 
-- **1.4.8 为内嵌依赖与 CI 依赖更新补丁**（✅ 已发布 2026-10-04，tag `v1.4.8`）：承接 1.4.7 发布后的依赖盘点——miniz 2.2.0 → 3.1.2（4 `.c` + 5 `.h`，保留手写 `miniz_export.h` 静态桩）、Lua 5.4.7 → 5.4.9（32 `.c` + 27 `.h`，重新施加 `linit.c` 的 `io`/`os` 沙箱补丁）、Catch2 3.8.0 → 3.16.0（官方 amalgamation 覆盖），以及 GitHub Actions 主版本（`checkout`/`upload-artifact` → `@v7`、`action-gh-release` → `@v3`，Node 20 → Node 24 运行时）。零功能新增、公共 API 无破坏性变更；Lua 5.5 与官方仓库包版本更新不在本版范围。设计见 [1.4.8.md](1.4.8.md)，阶段见根 [`plan.md`](../../plan.md)。
+- **1.4.8 为内嵌依赖与 CI 依赖更新补丁**（✅ 已发布 2026-10-04，tag `v1.4.8`）：承接 1.4.7 发布后的依赖盘点——miniz 2.2.0 → 3.1.2（4 `.c` + 5 `.h`，保留手写 `miniz_export.h` 静态桩）、Lua 5.4.7 → 5.4.9（32 `.c` + 27 `.h`，重新施加 `linit.c` 的 `io`/`os` 沙箱补丁）、Catch2 3.8.0 → 3.16.0（官方 amalgamation 覆盖），以及 GitHub Actions 主版本（`checkout`/`upload-artifact` → `@v7`、`action-gh-release` → `@v3`，Node 20 → Node 24 运行时）。零功能新增、公共 API 无破坏性变更；Lua 5.5 与官方仓库包版本更新不在本版范围。三渠道：Homebrew tap `e02f45f` / pacman `makepkg -fd` 出包 `ea9c8839…` / winget PR [#446349](https://github.com/microsoft/winget-pkgs/pull/446349)（winget CI/版主审批为发布后跟进项）。设计见 [1.4.8.md](1.4.8.md)，阶段见根 [`plan.md`](../../plan.md)。
 
 ## 跨版本关注点
 
