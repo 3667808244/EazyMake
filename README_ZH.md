@@ -97,27 +97,27 @@ irm https://raw.githubusercontent.com/3667808244/EazyMake/main/install.ps1 | iex
 
 ### 安装选项
 
-| 变量 / 参数 | 作用 | 默认值 |
-|-------------|------|--------|
-| `PREFIX` | 安装前缀（二进制 → `$PREFIX/bin`） | `$HOME/.local` |
-| `EZMK_REF` | 要构建的 git tag/分支/提交 | 默认分支 |
-| `EZMK_VERSION` | 编译进二进制的版本号 | 检出目录的 `git describe --tags` |
-| `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册 | （注册） |
-| `EZMK_NO_COMPLETIONS` | 设为 `1` 跳过 zsh 补全安装 | （有 zsh 时安装） |
-| `EZMK_NO_MAN` | 设为 `1` 跳过手册页安装 | （安装 `man ezmk` / `man 5 ezmk.toml`） |
-| `-Version`（PS） | 要安装的版本标签——**必须带 `v` 前缀**，如 `"v1.4.5"` | `"latest"` |
-| `-InstallDir`（PS） | 安装根目录（二进制 → `<InstallDir>\bin`） | `$env:LOCALAPPDATA\ezmk` |
-| `-NoPath`（PS） | 不修改用户 `PATH` | （配置 PATH） |
-| `-DryRun`（PS） | 预览操作，不做实际更改 | （关闭） |
+| 变量 / 参数            | 作用                                                 | 默认值                                  |
+| ---------------------- | ---------------------------------------------------- | --------------------------------------- |
+| `PREFIX`               | 安装前缀（二进制 → `$PREFIX/bin`）                   | `$HOME/.local`                          |
+| `EZMK_REF`             | 要构建的 git tag/分支/提交                           | 默认分支                                |
+| `EZMK_VERSION`         | 编译进二进制的版本号                                 | 检出目录的 `git describe --tags`        |
+| `EZMK_NO_DEFAULT_REPO` | 设为 `1` 跳过官方仓库预注册                          | （注册）                                |
+| `EZMK_NO_COMPLETIONS`  | 设为 `1` 跳过 zsh 补全安装                           | （有 zsh 时安装）                       |
+| `EZMK_NO_MAN`          | 设为 `1` 跳过手册页安装                              | （安装 `man ezmk` / `man 5 ezmk.toml`） |
+| `-Version`（PS）       | 要安装的版本标签——**必须带 `v` 前缀**，如 `"v1.4.5"` | `"latest"`                              |
+| `-InstallDir`（PS）    | 安装根目录（二进制 → `<InstallDir>\bin`）            | `$env:LOCALAPPDATA\ezmk`                |
+| `-NoPath`（PS）        | 不修改用户 `PATH`                                    | （配置 PATH）                           |
+| `-DryRun`（PS）        | 预览操作，不做实际更改                               | （关闭）                                |
 
 ## 与 CMake 对比
 
-| EazyMake | CMake |
-|----------|-------|
+| EazyMake                                       | CMake                                         |
+| ---------------------------------------------- | --------------------------------------------- |
 | `ezmk project new app && cd app && ezmk build` | `mkdir build && cd build && cmake .. && make` |
-| `ezmk pkg install fmt` | `find_package(fmt)` + 手动安装 |
-| 1 个 TOML 文件 | 1+ 个 `CMakeLists.txt` |
-| 自动检测编译器 | `-DCMAKE_CXX_COMPILER=...` |
+| `ezmk pkg install fmt`                         | `find_package(fmt)` + 手动安装                |
+| 1 个 TOML 文件                                 | 1+ 个 `CMakeLists.txt`                        |
+| 自动检测编译器                                 | `-DCMAKE_CXX_COMPILER=...`                    |
 
 ## 配置
 
@@ -191,31 +191,31 @@ ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-worksp
 
 ## 高级特性
 
-| 特性 | 一句话 | 链接 |
-|------|--------|------|
-| 语义化版本约束 | `[depends]` 中用 `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md) |
-| `ezmk.lock.json` 确定性构建 | 锁定依赖版本与内容哈希，`--locked` 下 CI 可复现构建 | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md) |
-| 多平台多工具链预编译共包 | 同一包携带 `win-x64-msvc143` / `linux-x64-gcc13-abi11` 等多份产物，按当前工具链自动选择 | [`docs/zh/package_authoring.md`](docs/zh/package_authoring.md) · 教程 [互操作 02](tutorial/zh/interop/02-precompiled-packages.md) |
-| 第三方 / 私有仓库 | `ezmk repo add <url>` 接入 git 仓库形式的第三方源 | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [包 03](tutorial/zh/packages/03-third-party-repos.md) |
-| CMake 互操作 | `project export cmake` 导出 / `project import --from cmake` 导入（实验性） | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [互操作 01](tutorial/zh/interop/01-import-cmake.md) |
-| compile_commands | `project cc` 为 clangd/IDE 生成 compile_commands.json | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 02](tutorial/zh/dev/02-utils.md) |
-| 工作区批量管理（1.3.0+） | `ezmk-workspace.toml` 声明成员集合；`workspace build/test/watch/clean`（watch: 1.4.0-dev.5+）拓扑排序 + 并行；成员间单向非循环依赖、静态库产物自动注入 | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 05](tutorial/zh/dev/05-workspace.md) |
+| 特性                        | 一句话                                                                                                                                                 | 链接                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 语义化版本约束              | `[depends]` 中用 `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本                                                                              | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md)                    |
+| `ezmk.lock.json` 确定性构建 | 锁定依赖版本与内容哈希，`--locked` 下 CI 可复现构建                                                                                                    | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md)                    |
+| 多平台多工具链预编译共包    | 同一包携带 `win-x64-msvc143` / `linux-x64-gcc13-abi11` 等多份产物，按当前工具链自动选择                                                                | [`docs/zh/package_authoring.md`](docs/zh/package_authoring.md) · 教程 [互操作 02](tutorial/zh/interop/02-precompiled-packages.md) |
+| 第三方 / 私有仓库           | `ezmk repo add <url>` 接入 git 仓库形式的第三方源                                                                                                      | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [包 03](tutorial/zh/packages/03-third-party-repos.md)                                 |
+| CMake 互操作                | `project export cmake` 导出 / `project import --from cmake` 导入（实验性）                                                                             | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [互操作 01](tutorial/zh/interop/01-import-cmake.md)                                     |
+| compile_commands            | `project cc` 为 clangd/IDE 生成 compile_commands.json                                                                                                  | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 02](tutorial/zh/dev/02-utils.md)                                                  |
+| 工作区批量管理（1.3.0+）    | `ezmk-workspace.toml` 声明成员集合；`workspace build/test/watch/clean`（watch: 1.4.0-dev.5+）拓扑排序 + 并行；成员间单向非循环依赖、静态库产物自动注入 | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [开发 05](tutorial/zh/dev/05-workspace.md)                                              |
 
 ## 文档
 
-| 文档 | 内容 |
-|------|------|
-| [教程](tutorial/zh/) | 手把手上手教程 |
-| [CLI 参考](docs/zh/cli.md) | 命令行与环境变量完整参考 |
-| [配置文件](docs/zh/config_file.md) | `ezmk.toml` 完整格式说明 |
-| [包管理](docs/zh/pkg.md) | 包格式与生命周期 |
-| [仓库系统](docs/zh/repo.md) | 基于 git 的仓库系统 |
-| [Lua 插件](docs/zh/utils.md) | 插件系统与 API 参考 |
-| [FAQ / 故障排除](docs/zh/faq.md) | 常见问题与修复 |
-| [技术细节](docs/zh/technical.md) | 依赖、源码构建、编译器支持 |
-| [术语表](docs/zh/glossary.md) | 术语参考 |
-| [不会设计的功能](docs/zh/non-goals.md) | 刻意不做、也不会做的功能 |
-| [更新日志](CHANGES.md) | 版本历史 |
+| 文档                                   | 内容                       |
+| -------------------------------------- | -------------------------- |
+| [教程](tutorial/zh/)                   | 手把手上手教程             |
+| [CLI 参考](docs/zh/cli.md)             | 命令行与环境变量完整参考   |
+| [配置文件](docs/zh/config_file.md)     | `ezmk.toml` 完整格式说明   |
+| [包管理](docs/zh/pkg.md)               | 包格式与生命周期           |
+| [仓库系统](docs/zh/repo.md)            | 基于 git 的仓库系统        |
+| [Lua 插件](docs/zh/utils.md)           | 插件系统与 API 参考        |
+| [FAQ / 故障排除](docs/zh/faq.md)       | 常见问题与修复             |
+| [技术细节](docs/zh/technical.md)       | 依赖、源码构建、编译器支持 |
+| [术语表](docs/zh/glossary.md)          | 术语参考                   |
+| [不会设计的功能](docs/zh/non-goals.md) | 刻意不做、也不会做的功能   |
+| [更新日志](CHANGES.md)                 | 版本历史                   |
 
 ## 相关链接
 
