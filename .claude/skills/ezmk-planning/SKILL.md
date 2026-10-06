@@ -10,9 +10,9 @@ description: How to work with EazyMake version plans — plans/ directory struct
 ```
 plans/
 ├── README.md              # Version index + roadmap + dependency graph (series-level)
-├── 0.x.x/                 # Early development version plans (0.1.6 ~ 0.2.6) — flat
+├── 0.x.x/                 # Early development version plans (0.1.1 ~ 0.2.6) — flat
 │   ├── README.md          #   series version index
-│   └── 0.1.6.md ~ 0.2.6.md
+│   └── 0.1.1.md ~ 0.2.6.md
 ├── 1.0.0/                 # Plans leading to 1.0.0 (0.9.0 ~ 1.0.0) — flat
 │   ├── README.md          #   series version index
 │   └── 0.9.0.md ~ 0.9.10.md, 1.0.0.md
@@ -120,7 +120,7 @@ As each phase is completed:
 
 | Pattern | Meaning |
 |---------|---------|
-| `0.1.6` ~ `0.2.6` | Early development (0.x.x/ folder) |
+| `0.1.1` ~ `0.2.6` | Early development (0.x.x/ folder) |
 | `0.9.0` ~ `1.0.0` | Release candidates and stable release (1.0.0/ folder) |
 | `1.x.0-dev.N` (e.g. `1.2.0-dev.N`, `1.3.0-dev.N`, `1.4.0-dev.N`) | Development sub-versions — incremental development |
 | `1.x.0-pre.N` (e.g. `1.2.0-pre.N`, `1.3.0-pre.N`, `1.4.0-pre.N`) | Pre-releases — release-phase closing (documentation/checkpoints) |

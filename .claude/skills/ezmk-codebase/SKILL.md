@@ -44,7 +44,7 @@ EazyMake/
 │   ├── en/               # English user documentation
 │   └── zh/               # Chinese user documentation
 ├── plans/                # Version plans, one directory per series (flat layout)
-│   ├── 0.x.x/            # Early development plans (0.1.6~0.2.6)
+│   ├── 0.x.x/            # Early development plans (0.1.1~0.2.6)
 │   ├── 1.0.0/            # 0.9.x release-candidate plans + 1.0.0
 │   ├── 1.1.x/            # 1.1.0 dev/pre plans + 1.1.x patches
 │   ├── 1.2.x/            # 1.2.x plans (examples 1.2.3, source-pack 1.2.5, etc.)
