@@ -101,4 +101,4 @@ $ ezmk build
 - **约束在构建期校验，而非在安装时解析**：只有 `--locked` 会读取 `ezmk.lock.json` 并钉住版本；普通的 `ezmk pkg install <name>`（及其背后的仓库查找）取可用**最高**版本，`pkg update` 也会更新到最新。`[depends]` 中的版本约束在 `ezmk build` 期间校验（`lib` 不满足**致命**，`want` 不满足仅警告），且 `ezmk build` 从不写 lockfile。
 - **不带运算符的条目保持"取最新"**：`"fmt"` 与 `"fmt@10.2.1"` 语义不同——前者在 `pkg update` 时可能跳到新版本。
 
-> 💡 想直接跑完整示例？运行 `ezmk example with-packages` 生成带 `fmt^10.0` 约束 + lockfile 的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
+> 💡 想直接跑完整示例？运行 `ezmk example with-packages` 生成带 `fmt^12.0` 约束 + lockfile 的项目（示例列表见 [`examples/README.md`](../../../examples/README.md)）。
