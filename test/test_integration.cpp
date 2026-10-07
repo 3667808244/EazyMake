@@ -1393,6 +1393,92 @@ post_build = "scripts/post.lua"
     REQUIRE(hook_profile(bare_dir) == "[]");
 }
 
+// 1.4.9: [compile.profile.<name>].export_objs packs all project objects into
+// an archive (default build/obj_files.zip; the path suffix selects zip/tar.gz).
+// The archive is written after compiling (link failure must not discard it) and
+// contains exactly the current source set — stale objects never leak in.
+TEST_CASE("integration: profile export_objs archive (1.4.9)", "[integration][1.4.9]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "objexport";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    auto object_present = [](const fs::path& extracted) {
+        return fs::exists(extracted / "src" / "main.o") ||
+               fs::exists(extracted / "src" / "main.obj");
+    };
+
+    // The default profile (debug) does not opt in → no archive.
+    ProcResult dbg = run_ezmk("build", proj_dir);
+    INFO("stderr: " << dbg.err);
+    REQUIRE(dbg.exit_code == 0);
+    REQUIRE(!fs::exists(proj_dir / "build" / "obj_files.zip"));
+
+    // The generated release profile enables export_objs → build/obj_files.zip.
+    ProcResult rel = run_ezmk("build --profile release", proj_dir);
+    INFO("stderr: " << rel.err);
+    REQUIRE(rel.exit_code == 0);
+    fs::path zip = proj_dir / "build" / "obj_files.zip";
+    REQUIRE(fs::exists(zip));
+    fs::path unzip_dir = tmp.path / "unzip";
+    REQUIRE_NOTHROW(ezmk::util::extract_archive(zip, unzip_dir));
+    REQUIRE(object_present(unzip_dir));
+    // Linking still produced the executable.
+    REQUIRE((fs::exists(proj_dir / "build" / (proj_name + ".exe")) ||
+             fs::exists(proj_dir / "build" / proj_name)));
+
+    // Explicit .tar.gz path + stale-object removal across rebuilds.
+    fs::path proj2 = tmp.path / "objexport2";
+    fs::create_directories(proj2 / "src");
+    file_write(proj2 / "src" / "main.cpp", R"(int main() { return 0; }
+)");
+    file_write(proj2 / "src" / "extra.cpp", R"(int helper() { return 1; }
+)");
+    file_write(proj2 / "ezmk.toml", R"EZT([project]
+name = "objexport2"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+default_profile = "rel"
+
+[compile.profile.rel]
+export_objs = "dist/objs.tar.gz"
+)EZT");
+    ProcResult t = run_ezmk("build", proj2);
+    INFO("stderr: " << t.err);
+    REQUIRE(t.exit_code == 0);
+    fs::path tgz = proj2 / "dist" / "objs.tar.gz";
+    REQUIRE(fs::exists(tgz));
+    fs::path untar_dir = tmp.path / "untar";
+    REQUIRE_NOTHROW(ezmk::util::extract_archive(tgz, untar_dir));
+    REQUIRE((fs::exists(untar_dir / "src" / "main.o") ||
+             fs::exists(untar_dir / "src" / "main.obj")));
+    REQUIRE((fs::exists(untar_dir / "src" / "extra.o") ||
+             fs::exists(untar_dir / "src" / "extra.obj")));
+
+    // Drop a source and rebuild: the archive must contain only the current set.
+    fs::remove(proj2 / "src" / "extra.cpp");
+    ProcResult t2 = run_ezmk("build", proj2);
+    INFO("stderr: " << t2.err);
+    REQUIRE(t2.exit_code == 0);
+    fs::path untar_dir2 = tmp.path / "untar2";
+    REQUIRE_NOTHROW(ezmk::util::extract_archive(tgz, untar_dir2));
+    REQUIRE(!fs::exists(untar_dir2 / "src" / "extra.o"));
+    REQUIRE(!fs::exists(untar_dir2 / "src" / "extra.obj"));
+    REQUIRE((fs::exists(untar_dir2 / "src" / "main.o") ||
+             fs::exists(untar_dir2 / "src" / "main.obj")));
+}
+
 // 1.2.0-dev.5: ezmk test links catch2 v3 (multi-header). The project has no
 // include/vendor/catch2.hpp single-header, so run_tests takes the multi-header
 // path and emits a v3-compatible main (`Catch::Session().run(argc, argv)`)

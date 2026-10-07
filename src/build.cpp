@@ -1280,6 +1280,105 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     return comp_result.objects;
 }
 
+// 1.4.9: profile-driven object export. When the active profile opted into
+// `export_objs`, pack every project object file into an archive. Runs after a
+// successful compile and before linking, so the archive is a pure compile
+// product (a link failure must not discard it). Staging holds exactly this
+// build's objects, so stale objects from deleted sources can never leak in.
+void export_object_archive(const config::EzConfig& cfg,
+                           const BuildState& st,
+                           const std::vector<fs::path>& objects) {
+    if (st.active_profile.empty()) return;
+    auto it = cfg.compile_profiles.find(st.active_profile);
+    if (it == cfg.compile_profiles.end() || !it->second.export_objs) return;
+
+    // Resolve the output archive: explicit path, else build/obj_files.zip.
+    fs::path out;
+    const std::string& configured = it->second.export_objs_path;
+    if (configured.empty()) {
+        out = st.proj_root / "build" / "obj_files.zip";
+    } else {
+        out = configured;
+        if (out.is_relative()) out = st.proj_root / out;
+    }
+
+    // Format by (case-insensitive) suffix — parsing already rejected others,
+    // but resolve defensively so a hand-edited config cannot pick neither.
+    auto ends_with_ci = [](const std::string& s, const std::string& suffix) {
+        if (s.size() < suffix.size()) return false;
+        size_t off = s.size() - suffix.size();
+        for (size_t i = 0; i < suffix.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>(s[off + i])) !=
+                std::tolower(static_cast<unsigned char>(suffix[i])))
+                return false;
+        }
+        return true;
+    };
+    const std::string out_str = out.string();
+    const bool as_zip = !ends_with_ci(out_str, ".tar.gz") && !ends_with_ci(out_str, ".tgz");
+
+    auto fail = [&](const std::string& msg) {
+        util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::obj_export_failed,
+                                    {{"file", out_str}, {"msg", msg}}));
+    };
+
+    // Fresh staging dir under the build temp dir (mirrors the source tree).
+    fs::path stage = st.temp_dir / "obj_export_stage";
+    std::error_code ec;
+    fs::remove_all(stage, ec);
+    fs::create_directories(stage, ec);
+    if (ec) fail(ec.message());
+
+    size_t copied = 0;
+    for (const auto& obj : objects) {
+        std::error_code rel_ec;
+        fs::path rel = fs::relative(obj, st.temp_dir, rel_ec);
+        if (rel_ec || rel.empty() || rel.is_absolute() ||
+            *rel.begin() == "..") {
+            // Sources outside the project root fall back to an absolute object
+            // path (cache.cpp safe_relative); skip them rather than escaping.
+            util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::obj_export_skipped_outside_root,
+                                       {{"path", obj.string()}}));
+            continue;
+        }
+        fs::path dest = stage / rel;
+        std::error_code cec;
+        fs::create_directories(dest.parent_path(), cec);
+        fs::copy_file(obj, dest, fs::copy_options::overwrite_existing, cec);
+        if (cec) {
+            fs::remove_all(stage, ec);
+            fail(cec.message());
+        }
+        ++copied;
+    }
+
+    if (copied == 0) {
+        util::warn(ezmk::i18n::fmt(ezmk::i18n::I18nKey::obj_export_empty,
+                                   {{"profile", st.active_profile}}));
+        fs::remove_all(stage, ec);
+        return;
+    }
+
+    fs::create_directories(out.parent_path(), ec);
+    if (ec) {
+        fs::remove_all(stage, ec);
+        fail(ec.message());
+    }
+
+    try {
+        if (as_zip) util::create_zip(stage, out);
+        else        util::create_targz(stage, out);
+    } catch (const std::exception& e) {
+        fs::remove_all(stage, ec);
+        fail(e.what());
+    }
+
+    fs::remove_all(stage, ec);
+    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::obj_export_written,
+                               {{"count", std::to_string(copied)},
+                                {"file", out_str}}));
+}
+
 // Execute a link/archive command with standard error handling and atomic rename.
 // Returns the final output path on success; throws fatal_error on failure.
 static fs::path execute_link(
@@ -1518,6 +1617,10 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
 
     // Phase 2: Compile all sources
     auto objects = compile_phase(st, opts);
+
+    // 1.4.9: profile-driven object archive — export after compiling, before
+    // linking, so the objects survive a link failure.
+    export_object_archive(cfg, st, objects);
 
     // Phase 3: Link
     auto output = link_phase(st, objects, opts, cfg);

@@ -56,12 +56,12 @@
 
 ### 阶段三：归档导出执行（O-02 / O-03 / O-04）
 
-- [ ] `build_project`（`src/build.cpp:1501`）在 `compile_phase` 之后、`link_phase` 之前导出
-- [ ] staging（`<temp_dir>/obj_export_stage`）只复制本次 `objects` → 按扩展名调 `create_zip` / `create_targz` → 移除 staging
-- [ ] 目标路径解析（默认 `build/obj_files.zip` / 相对 proj_root / 绝对原样）+ 父目录创建 + 覆盖
-- [ ] 日志 / 错误处理 + i18n（汇总 info、空集 warn、项目外源文件 warn、失败 fatal）
-- [ ] 集成用例：zip / tar.gz / `.tgz` / 默认 / 关闭 / 缓存命中 / `--disable-cache` / 陈旧对象只剩本次 / 链接产物仍在 / 默认模板 release 产出、debug 不产出
-- [ ] 回归：全量零新增失败
+- [x] `build_project` 在 `compile_phase` 之后、`link_phase` 之前调用 `export_object_archive()`（`src/build.cpp`）
+- [x] staging（`<temp_dir>/obj_export_stage`）只复制本次 `objects` → 按扩展名调 `create_zip` / `create_targz` → 移除 staging
+- [x] 目标路径解析（默认 `build/obj_files.zip` / 相对 proj_root / 绝对原样）+ 父目录创建 + 覆盖
+- [x] 日志 / 错误处理 + i18n（汇总 info、空集 warn、项目外源文件 warn、失败 fatal）
+- [x] 集成用例：zip 默认 / tar.gz 自定义 / 关闭 / 陈旧对象只剩本次 / 二次构建缓存命中 / 链接产物仍在 / 默认模板 release 产出、debug 不产出（`.tgz` 别名由配置单测覆盖）
+- [x] 回归：全量 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**
 
 ### 阶段四：文档与收口（O-05）
 
