@@ -226,6 +226,15 @@ Array of strings, optional. Appended after the base MSVC flags.
 Table, optional. Merged over
 .BR [compile.macros] ;
 on a key conflict the profile wins.
+.TP
+.B export_objs
+Boolean or string, optional, default false. When enabled, a successful compile
+of this profile also packs every project object file into an archive before
+linking: true selects
+.BR build/obj_files.zip ,
+while a string is the archive path (relative to the project root) whose suffix
+selects the format
+.RB ( .zip ", " .tar.gz " or " .tgz ).
 .SS [link]
 .TP
 .B flags

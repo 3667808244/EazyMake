@@ -1,6 +1,6 @@
 # EazyMake 1.4.9 执行计划
 
-> **状态：📋 计划（未开工）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
+> **状态：✅ 实现收口（未发布，待发布 v1.4.9）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.9.md**](plans/1.4.x/1.4.9.md)。主题：**构建钩子 profile 解析修复 + 按 profile 导出对象归档**。
 >
@@ -65,11 +65,11 @@
 
 ### 阶段四：文档与收口（O-05）
 
-- [ ] `docs/zh/config_file.md` + `docs/en/config_file.md` profile 章节补 `export_objs`（语法、格式判定、默认路径、覆盖语义），release profile 示例含 `export_objs = true`
-- [ ] 钩子 `ctx.profile` 语义说明（`docs/*/config_file.md` 钩子节）
-- [ ] `man/ezmk.toml.5`（如含相关字段）+ `CHANGES.md` 1.4.9
-- [ ] i18n 三向 + `check_i18n.py`；索引（`plans/1.4.x/README.md` / `plans/README.md` / 本文件）
-- [ ] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
+- [x] `docs/zh/config_file.md` + `docs/en/config_file.md` profile 字段表 + 说明 + 示例补 `export_objs`，release 示例含 `export_objs = true`
+- [x] 钩子 `ctx.profile` 语义说明（`docs/*/config_file.md` 钩子节）
+- [x] `man/ezmk.toml.5` + `CHANGES.md` 1.4.9 + `docs/*/default_create.md` + `docs/*/cli.md` 模板同步
+- [x] i18n 三向（**418**）+ `check_i18n.py`；索引已更新
+- [x] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
 
 ### 发布阶段：1.4.9 正式发布
 

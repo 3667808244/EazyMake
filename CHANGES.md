@@ -26,6 +26,25 @@
 
 ---
 
+## 1.4.9 (2026-10-07) — 构建钩子 profile 解析修复 + 按 profile 导出对象归档
+
+> **状态：✅ 实现收口（未发布）** —— 阶段零~四落地；全量 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**（立项基线 1133/6541）；i18n **418** 键三向一致；`check_man_sync.py` + groff 零告警 + docs-sync 通过。**零命令新增、公共 API 无破坏性变更。**
+
+### 构建钩子
+
+- **`ctx.profile` 现在返回解析后的生效 profile**（`src/build.cpp`）：`pre_build` / `post_build` / `on_failure` 三钩子此前只拿到 CLI 原始 `--profile`，未回填 `[compile].default_profile`——无 `-p` 时钩子看到空串而实际按默认 profile 编译。现在解析结果经 `AppliedProfile::active_profile` → `BuildState::active_profile` 传递，与 `project export cmake` 传给 `ezmk-lua` 的值一致；新增共享 `config::resolve_profile_name()`（CLI > default）供 `apply_profile` / `export` / 测试共用，消除重复兜底。
+- **行为修正**：依赖 `ctx.profile == ""` 判断“未指定 profile”的既有钩子应改为判断具体文件名。
+
+### 对象归档导出（`[compile.profile.<name>].export_objs`，1.4.9+）
+
+- **新配置项** `export_objs`（bool 或归档路径字符串）：该 profile 构建在编译成功后、链接之前，把项目全部源文件对象打包为单个归档。`true` → 默认 `build/obj_files.zip`；字符串路径的后缀决定格式（`.zip` / `.tar.gz` / `.tgz`），非法后缀配置期报错。
+- **实现**（`src/build.cpp` `export_object_archive()`）：临时 staging 只收录本次 `compile_phase` 的对象 → 复用 `util::create_zip` / `create_targz`（1.3.5/1.3.6，原子写）→ 移除 staging。归档条目镜像源码目录结构（`src/main.o`）；因只收录本次对象，已删除源文件的陈旧对象不会残留。
+- **默认模板启用**：`ezmk project new`（`write_default_config`）与 `project import` 生成的 `release` profile 默认 `export_objs = true`——`ezmk build --profile release` 即产出 `build/obj_files.zip`；`default_profile = "debug"` 不变，裸构建不导出。
+- **i18n**：新增 6 键（`obj_export_written` / `obj_export_failed` / `obj_export_empty` / `obj_export_skipped_outside_root` / `config_err_profile_export_objs_{type,ext}`）→ 412 → **418**。
+
+### 文档
+
+- `docs/{zh,en}/config_file.md`（profile 字段表 + 说明 + 示例 + 钩子 `ctx.profile` 语义）、`docs/{zh,en}/default_create.md`、`docs/{zh,en}/cli.md`、`man/ezmk.toml.5`。
 ## 1.4.8 (2026-10-04) — 内嵌依赖与 CI 依赖更新
 
 > **状态：已发布（2026-10-04，tag `v1.4.8`；Release run `37165812937` success，7 资产 digest 核对一致，`macos-x64` skipped）** —— 阶段零~五全部落地；全量 **1133 用例 / 6525 断言**，失败集合与立项基线**完全一致**（9 个 `test_integration_git.cpp` 环境性失败：ezmk 生成的 `file:///D:/...` URL 被 MSYS2 git 当 POSIX 路径，与本版无关）；`check_man_sync.py` 通过、groff 4 页零告警、i18n **412** 键三向一致、docs-sync（en↔zh 文件配对）通过。**零功能新增、公共 API 无破坏性变更。**

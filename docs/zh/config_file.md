@@ -287,10 +287,13 @@ lockfile **仍会**包含 `sha256` 别名，并非"仅 pre-1.4.2 文件"才有�
 | `flags` | string[] | 否 | `[]` | 追加到 `[compile].flags` 之后的编译标志 |
 | `msvc_flags` | string[] | 否 | `[]` | 追加到 `[compile].msvc_flags` 之后的 MSVC 专用标志 |
 | `macros` | table | 否 | `{}` | 合并到 `[compile.macros]` 的宏定义，同名 key 覆盖 |
+| `export_objs` | bool \| string | 否 | `false` | **1.4.9+** 对象归档导出：`true` 用默认 `build/obj_files.zip`；字符串为归档路径（相对项目根），后缀决定格式（`.zip` / `.tar.gz` / `.tgz`）；其它后缀在配置期报错 |
 
 合并规则：
 - `flags` / `msvc_flags`：profile 标志**追加**到基础标志之后（GCC/Clang 行为：后面的覆盖前面的）
 - `macros`：合并到基础宏表，**profile 的 key 覆盖同名基础 key**
+
+**对象归档导出（1.4.9+）：** `export_objs` 开启后，该 profile 的构建在编译成功、链接之前，把项目全部源文件的 `.o`/`.obj` 打包为单个归档（归档内条目镜像源码目录结构，如 `src/main.o`）。默认路径 `build/obj_files.zip`；字符串值给出自定义路径，后缀 `.zip` / `.tar.gz` / `.tgz` 决定格式。归档文件存在时覆盖；因为每次只收录本次编译的对象，已删除源文件的陈旧对象不会残留。`ezmk project new` 生成的模板在 `release` profile 默认启用（`export_objs = true`）。
 
 示例：
 
@@ -305,6 +308,7 @@ DEBUG = "1"
 [compile.profile.release]
 flags = ["-O3", "-DNDEBUG"]
 msvc_flags = ["/O2", "/DNDEBUG"]
+export_objs = true
 ```
 
 Profile 默认**不会**自动应用——没有 `default_profile` 时，用户必须显式传 `--profile <name>`。
@@ -349,7 +353,7 @@ flags = ["-flto"]
 
 ## `hooks` 节（0.2.3+）
 
-构建生命周期钩子——在编译/链接的关键节点执行 Lua 脚本。钩子脚本接收 `ctx` 表（`ctx.output`、`ctx.project_root`、`ctx.profile`），运行在沙箱 Lua 环境中。脚本不存在 → warn + 跳过（非致命）。仅对用户项目生效，包编译时不执行。
+构建生命周期钩子——在编译/链接的关键节点执行 Lua 脚本。钩子脚本接收 `ctx` 表（`ctx.output`、`ctx.project_root`、`ctx.profile`），运行在沙箱 Lua 环境中。`ctx.profile` 为**解析后的生效 profile**（显式 `--profile` 优先，否则 `[compile].default_profile`；两者皆无时为空串）。脚本不存在 → warn + 跳过（非致命）。仅对用户项目生效，包编译时不执行。
 
 > **为什么沙箱化且非致命？** 钩子会在构建过程中执行任意代码，沙箱（以及包编译时不执行）限制了第三方钩子的破坏范围。脚本缺失只是配置疏漏而非构建失败，因此 warn 后继续。
 
@@ -507,6 +511,7 @@ DEBUG = "1"
 
 [compile.profile.release]
 flags = ["-O3", "-DNDEBUG"]
+export_objs = true
 
 [link]
 flags = []

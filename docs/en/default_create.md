@@ -48,6 +48,7 @@ msvc_flags = ["/Zi", "/Od"]
 [compile.profile.release]
 flags = ["-O2", "-DNDEBUG"]
 msvc_flags = ["/O2", "/DNDEBUG"]
+export_objs = true
 
 [link]
 flags = []

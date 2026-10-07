@@ -203,7 +203,7 @@ has no CMake equivalent and is not exported. See the `hooks` section in
 `[compile.profile.debug]` (`-g -O0` / `/Zi /Od`) and `[compile.profile.release]`
 (`-O2 -DNDEBUG` / `/O2 /DNDEBUG`) profiles and sets `default_profile = "debug"` — so a
 plain `ezmk build` is debuggable out of the box, and `ezmk build --profile release`
-switches to the optimized build. Base `[compile].flags` are warnings-only (`-Wall -Wextra`).
+switches to the optimized build. Base `[compile].flags` are warnings-only (`-Wall -Wextra`). **1.4.9+:** the `release` profile also enables `export_objs = true`, so `ezmk build --profile release` additionally produces `build/obj_files.zip`.
 
 **Per-type source templates (1.2.1+):** `project new` now generates sources
 differently depending on `--type`:

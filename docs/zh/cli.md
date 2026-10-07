@@ -163,7 +163,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 | `--disable-git-init` | 跳过 `git init` |
 | `--disable-gitignore` | 跳过 `.gitignore` 生成 |
 
-**生成的模板（1.2.0+）：** `project new` 生成的模板内建 `[compile.profile.debug]`（`-g -O0` / `/Zi /Od`）与 `[compile.profile.release]`（`-O2 -DNDEBUG` / `/O2 /DNDEBUG`）两个 profile，并设置 `default_profile = "debug"`——裸 `ezmk build` 开箱即可调试，`ezmk build --profile release` 切换到优化构建。基准 `[compile].flags` 仅为警告标志（`-Wall -Wextra`）。
+**生成的模板（1.2.0+）：** `project new` 生成的模板内建 `[compile.profile.debug]`（`-g -O0` / `/Zi /Od`）与 `[compile.profile.release]`（`-O2 -DNDEBUG` / `/O2 /DNDEBUG`）两个 profile，并设置 `default_profile = "debug"`——裸 `ezmk build` 开箱即可调试，`ezmk build --profile release` 切换到优化构建。基准 `[compile].flags` 仅为警告标志（`-Wall -Wextra`）。**1.4.9+：** `release` profile 还默认启用 `export_objs = true`，`ezmk build --profile release` 会额外产出 `build/obj_files.zip`。
 
 **按类型生成的源码模板（1.2.1+）：** `project new` 按 `--type` 差异化生成源码：
 
