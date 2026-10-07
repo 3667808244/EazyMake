@@ -6,7 +6,7 @@
 >
 > **范围边界**：修 profile 传递链 + 新增一个 `[compile.profile.<name>]` 配置项及其归档导出行为；零命令新增、零弃用面变动；公共 API 无破坏性变更（`ProfileConfig` 仅追加字段）。
 >
-> **⛔ 发布门槛**：① 阶段清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试**无新增失败**（立项基线 **1133 用例 / 6525 断言 / 9 个 `test_integration_git.cpp` 环境性失败**；用例数只增不减）；④ 附加门槛：`python scripts/check_man_sync.py` 通过、`groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警、i18n 三向一致（**412** 键 + 本版新增）、`bash scripts/check_docs_sync.sh` 通过；⑤ `ci.yml` 在 push 上全绿。
+> **⛔ 发布门槛**：① 阶段清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试**无新增失败**（立项基线 **1133 用例 / 6541 断言 / 4 跳过 / 0 失败**（2026-10-07 本机 `bash build.sh test-all` 实测；1.4.8 发布态记录为 6525 + 9 个 `test_integration_git.cpp` 环境性失败，本机当前 git 集成全通过；用例/断言数只增不减））；④ 附加门槛：`python scripts/check_man_sync.py` 通过、`groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警、i18n 三向一致（**412** 键 + 本版新增）、`bash scripts/check_docs_sync.sh` 通过；⑤ `ci.yml` 在 push 上全绿。
 
 ---
 
@@ -32,9 +32,9 @@
 
 ### 阶段零：立项基线与缺陷复现（H-00）
 
-- [ ] 记录基线：全量 1133 / 6525（9 个 git 环境失败）、i18n 412 键
-- [ ] 复现钩子缺陷（`default_profile` + 钩子写 `ctx.profile` → 空），证据落设计 §3.1
-- [ ] 提交 `docs(1.4.9): 新增 1.4.9 执行计划`
+- [x] 记录基线（2026-10-07）：全量 **1133 用例 / 6541 断言 / 4 跳过 / 0 失败**，i18n 412 键
+- [x] 复现钩子缺陷（`default_profile` + 钩子写 `ctx.profile`：无 `-p` → `[]`、`-p release` → `[release]`），证据落设计 §3.1
+- [x] 提交计划与阶段零证据（`121d214` + 本阶段）
 
 ### 阶段一：钩子 profile 解析修复（H-01 / H-02 / H-03）
 
