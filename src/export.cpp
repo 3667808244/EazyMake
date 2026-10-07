@@ -115,7 +115,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
 
     // 1.2.0-dev.3: no --profile → fall back to [compile].default_profile (if set)
     const std::string profile =
-        opts.profile.empty() ? cfg.compile.default_profile : opts.profile;
+        config::resolve_profile_name(opts.profile, cfg.compile.default_profile);
     auto compile = effective_compile(cfg, profile);
     auto link = effective_link(cfg, profile);
 
@@ -544,7 +544,7 @@ VscodeFiles build_vscode_files(const config::EzConfig& cfg,
     // [compile].default_profile. Unknown profile → fatal (same as
     // effective_compile, so tasks never reference a nonexistent profile).
     const std::string profile =
-        opts.profile.empty() ? cfg.compile.default_profile : opts.profile;
+        config::resolve_profile_name(opts.profile, cfg.compile.default_profile);
     if (!profile.empty() &&
         cfg.compile_profiles.find(profile) == cfg.compile_profiles.end()) {
         util::fatal(std::string("unknown profile: '") + profile +

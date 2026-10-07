@@ -220,4 +220,12 @@ struct LanguageInfo {
 };
 LanguageInfo parse_language(std::string_view language);
 
+// 1.4.9: Single source of truth for "which profile is active" — an explicit
+// CLI --profile wins, otherwise the supplied default (compile.default_profile
+// for builds/exports, test.default_profile for tests). Empty means no profile
+// applies. Shared by apply_profile / project export / run_tests so the value
+// seen by build hooks and the compiler can never drift.
+std::string resolve_profile_name(const std::string& cli_profile,
+                                 const std::string& default_profile);
+
 } // namespace ezmk::config

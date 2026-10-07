@@ -38,12 +38,12 @@
 
 ### 阶段一：钩子 profile 解析修复（H-01 / H-02 / H-03）
 
-- [ ] `AppliedProfile::active_profile`（`src/build.cpp:524`）
-- [ ] `BuildState::active_profile`（`src/build.cpp:478`）+ `prepare_build_state` 赋值（`src/build.cpp:727`）
-- [ ] 三处 `run_hook` 改用 `st.active_profile`（`:996` / `:1339` / `:1533`）
-- [ ] H-02 共享 profile 取名 helper；`export.cpp` `:117-118` / `:546-547` 去重
-- [ ] H-03 单测（CLI / default / 皆空 / link-only）+ 集成用例（`default_profile` / `--profile` / 无 profile）
-- [ ] 回归：全量零新增失败
+- [x] `AppliedProfile::active_profile`（`src/build.cpp:524`）
+- [x] `BuildState::active_profile`（`src/build.cpp:478`）+ `prepare_build_state` 赋值（`src/build.cpp:727`）
+- [x] 三处 `run_hook` 改用 `st.active_profile`（`:996` / `:1339` / `:1533`）
+- [x] H-02 新增 `config::resolve_profile_name()`（`src/config.cpp` + `include/ezmk/config.hpp`）；`export.cpp` `:117-118` / `:546-547` 去重
+- [x] H-03 单测 `resolve_profile_name`（CLI / default / 皆空）+ 集成用例（`default_profile` / `--profile` / 无 profile）
+- [x] 回归：全量 **1135 用例 / 6551 断言 / 4 跳过 / 0 失败**（+2 用例 / +10 断言，无新增失败）
 
 ### 阶段二：profile 导出配置解析 + 默认模板（O-01 / O-06）
 

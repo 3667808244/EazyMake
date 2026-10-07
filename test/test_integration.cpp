@@ -1308,6 +1308,89 @@ TEST_CASE("integration: default template profiles + default_profile fallback", "
     }
 }
 
+// 1.4.9: build hooks must observe the RESOLVED active profile (CLI --profile >
+// [compile].default_profile), not the raw CLI option. Regression: with only
+// default_profile set, ctx.profile used to be "" even though the compiler
+// applied that profile.
+TEST_CASE("integration: build hooks receive the resolved profile (1.4.9)", "[integration][1.4.9]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+
+    TempDir tmp;
+    std::string proj_name = "hookprofile";
+    ProcResult new_r = run_ezmk(
+        "project new " + proj_name + " --disable-git-init --disable-gitignore",
+        tmp.path);
+    REQUIRE(new_r.exit_code == 0);
+    fs::path proj_dir = tmp.path / proj_name;
+
+    auto hook_profile = [](const fs::path& dir) {
+        std::string s = file_read(dir / "hook_profile.txt");
+        while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' '))
+            s.pop_back();
+        return s;
+    };
+
+    // post_build hook records ctx.profile into the project root.
+    fs::create_directories(proj_dir / "scripts");
+    file_write(proj_dir / "scripts" / "post.lua", R"(
+function run(ctx)
+    ezmk.file_write(ctx.project_root .. "/hook_profile.txt", "[" .. tostring(ctx.profile) .. "]")
+    return 0
+end
+)");
+    {
+        std::ifstream in(proj_dir / "ezmk.toml");
+        std::string content((std::istreambuf_iterator<char>(in)),
+                            std::istreambuf_iterator<char>());
+        content += "\n[hooks]\npost_build = \"scripts/post.lua\"\n";
+        file_write(proj_dir / "ezmk.toml", content);
+    }
+
+    // The generated template ships default_profile = "debug".
+    ProcResult d = run_ezmk("build", proj_dir);
+    INFO("stderr: " << d.err);
+    REQUIRE(d.exit_code == 0);
+    REQUIRE(hook_profile(proj_dir) == "[debug]");
+
+    // An explicit --profile overrides the default.
+    ProcResult rel = run_ezmk("build --profile release", proj_dir);
+    INFO("stderr: " << rel.err);
+    REQUIRE(rel.exit_code == 0);
+    REQUIRE(hook_profile(proj_dir) == "[release]");
+
+    // A project with no profiles at all keeps the empty string.
+    fs::path bare_dir = tmp.path / "hooknoprofile";
+    fs::create_directories(bare_dir / "src");
+    fs::create_directories(bare_dir / "scripts");
+    file_write(bare_dir / "src" / "main.cpp", R"(int main() { return 0; }
+)");
+    file_write(bare_dir / "scripts" / "post.lua", R"(
+function run(ctx)
+    ezmk.file_write(ctx.project_root .. "/hook_profile.txt", "[" .. tostring(ctx.profile) .. "]")
+    return 0
+end
+)");
+    file_write(bare_dir / "ezmk.toml", R"EZT([project]
+name = "hooknoprofile"
+type = "executable"
+version = "0.1.0"
+language = "C++17"
+
+[compile]
+src_dirs = ["src"]
+
+[hooks]
+post_build = "scripts/post.lua"
+)EZT");
+    ProcResult none = run_ezmk("build", bare_dir);
+    INFO("stderr: " << none.err);
+    REQUIRE(none.exit_code == 0);
+    REQUIRE(hook_profile(bare_dir) == "[]");
+}
+
 // 1.2.0-dev.5: ezmk test links catch2 v3 (multi-header). The project has no
 // include/vendor/catch2.hpp single-header, so run_tests takes the multi-header
 // path and emits a v3-compatible main (`Catch::Session().run(argc, argv)`)

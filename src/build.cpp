@@ -485,6 +485,7 @@ struct BuildState {
     config::LanguageInfo lang;
     toolchain::Toolchain tc;
     std::string stdlib;  // 1.1.0-dev.4: standard library (libstdc++ / libc++)
+    std::string active_profile;  // 1.4.9: resolved profile name ("" = none)
     bool is_msvc = false;
     bool use_pic = false;
     std::vector<fs::path> pkg_archives;
@@ -524,6 +525,10 @@ void run_hook(const std::string& hook_path_cfg, const fs::path& proj_root,
 struct AppliedProfile {
     config::CompileSection compile;
     config::LinkSection link;
+    // 1.4.9: resolved profile name ("" = no profile applies). Consumers that
+    // need to report/act on the active profile (build hooks, object export)
+    // must use this, not the raw CLI value in opts.profile.
+    std::string active_profile;
 };
 
 static AppliedProfile apply_profile(const config::EzConfig& cfg,
@@ -532,8 +537,9 @@ static AppliedProfile apply_profile(const config::EzConfig& cfg,
     AppliedProfile r;
     r.compile = cfg.compile;
     r.link = cfg.link;
-    std::string active_profile = cli_profile;
-    if (active_profile.empty()) active_profile = default_profile;
+    std::string active_profile =
+        config::resolve_profile_name(cli_profile, default_profile);
+    r.active_profile = active_profile;
     if (active_profile.empty()) return r;
 
     auto it = cfg.compile_profiles.find(active_profile);
@@ -725,6 +731,7 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     // CLI --profile > [compile].default_profile; test path uses the same logic)
     {
         auto applied = apply_profile(cfg, opts.profile, cfg.compile.default_profile);
+        st.active_profile = std::move(applied.active_profile);
         st.compile_cfg = std::move(applied.compile);
         st.link_cfg = std::move(applied.link);
     }
@@ -994,7 +1001,7 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
 
     // Pre-build hook
     run_hook(cfg.hooks.pre_build, st.proj_root, "" /* no output yet */,
-             opts.profile, ezmk::i18n::I18nKey::pre_build_hook);
+             st.active_profile, ezmk::i18n::I18nKey::pre_build_hook);
 
     return st;
 }
@@ -1337,7 +1344,7 @@ fs::path link_phase(const BuildState& st,
             return link_fn();
         } catch (...) {
             run_hook(cfg.hooks.on_failure, st.proj_root, "" /* no output */,
-                     opts.profile, ezmk::i18n::I18nKey::on_failure_hook);
+                     st.active_profile, ezmk::i18n::I18nKey::on_failure_hook);
             throw;
         }
     };
@@ -1530,7 +1537,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     }
 
     // Post-build hook
-    run_hook(cfg.hooks.post_build, st.proj_root, output, opts.profile,
+    run_hook(cfg.hooks.post_build, st.proj_root, output, st.active_profile,
              ezmk::i18n::I18nKey::post_build_hook);
 
     return output;

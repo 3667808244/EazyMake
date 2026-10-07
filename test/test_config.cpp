@@ -1787,6 +1787,23 @@ TEST_CASE("write_default_config: built-in profiles + default_profile", "[config]
     REQUIRE(cfg.hooks.on_failure.empty());
 }
 
+// 1.4.9: shared "CLI > default" profile resolver — the single source of truth
+// for apply_profile / project export / run_tests, and therefore for the
+// profile build hooks observe.
+TEST_CASE("config: resolve_profile_name precedence", "[config][1.4.9]") {
+    using namespace ezmk::config;
+
+    SECTION("explicit CLI profile wins over the default") {
+        REQUIRE(resolve_profile_name("release", "debug") == "release");
+    }
+    SECTION("empty CLI falls back to the given default") {
+        REQUIRE(resolve_profile_name("", "debug") == "debug");
+    }
+    SECTION("empty when neither is set") {
+        REQUIRE(resolve_profile_name("", "").empty());
+    }
+}
+
 // 1.1.3 C2: install prefix `~` expansion must be bounded — only `~/`, `~\` or a
 // bare `~` expand; `"~abc"` must not be truncated to `"c"`.
 TEST_CASE("parse_config: install prefix ~ expansion is bounded", "[config][1.1.3]") {

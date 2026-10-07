@@ -210,6 +210,12 @@ static std::vector<DependsEntry> extract_depends_array(const toml::node* node) {
 
 } // anonymous namespace
 
+// 1.4.9: shared "CLI > default" profile resolution (see config.hpp).
+std::string resolve_profile_name(const std::string& cli_profile,
+                                 const std::string& default_profile) {
+    return cli_profile.empty() ? default_profile : cli_profile;
+}
+
 // 1.1.0-dev.4: Normalize a language/stdlib string (upper-case, trim).
 // Used as a shared helper — language-specific C++/CXX → CPP is done in parse_language().
 std::string normalize_lang(const std::string& input) {
