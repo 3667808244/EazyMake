@@ -1,6 +1,6 @@
 # EazyMake 1.4.9 执行计划
 
-> **状态：✅ 实现收口（未发布，待发布 v1.4.9）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
+> **状态：✅ 版本定稿 1.4.9（未发布，待 tag `v1.4.9`）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.9.md**](plans/1.4.x/1.4.9.md)。主题：**构建钩子 profile 解析修复 + 按 profile 导出对象归档**。
 >
@@ -73,7 +73,8 @@
 
 ### 发布阶段：1.4.9 正式发布
 
-- [ ] 版本号 `1.4.9`（`build.sh` 的 `EZMK_VERSION` fallback + `include/ezmk/version.hpp`）
+- [x] 版本定稿 `1.4.9`（`build.sh` 的 `EZMK_VERSION` fallback；`include/ezmk/version.hpp` 由构建生成）
+- [x] `publish/release-notes-1.4.9.md` 草稿
 - [ ] `git tag v1.4.9` + push 触发 Release，核对 7 资产
 - [ ] 三渠道：Homebrew / winget PR / pacman `makepkg -fd`
 - [ ] `plans/README.md` 移入「已完成」，`CHANGES.md` 定稿
