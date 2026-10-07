@@ -38,7 +38,7 @@ plans/
 
 ## 当前执行
 
-当前进行中版本：**1.4.9（构建钩子 profile 解析修复 + 按 profile 导出对象归档）** —— ✅ 实现收口（未发布；全量 1137/6622 零失败），设计见 [1.4.x/1.4.9.md](1.4.x/1.4.9.md)，阶段见根 [`plan.md`](../plan.md)。上一版本 1.4.8 已发布（2026-10-04，tag `v1.4.8`；全量 1133/6525，失败集合与基线一致）。下一破坏性窗口 **2.0.0**（破坏性变更）见「未来规划」——其移除清单已含 1.4.5 新增的 R-03/R-04 两条回退。
+当前进行中版本：**无**（1.4.9 已发布，2026-10-07，tag `v1.4.9`；全量 1137/6622 零失败；三渠道：Homebrew tap `d839e9d` / pacman `eazymake-1.4.9-1-x86_64.pkg.tar.zst` / winget PR [#448100](https://github.com/microsoft/winget-pkgs/pull/448100)（CI/版主审批为发布后跟进项））。设计见 [1.4.x/1.4.9.md](1.4.x/1.4.9.md)，阶段见根 [`plan.md`](../plan.md)。下一破坏性窗口 **2.0.0**（破坏性变更）见「未来规划」——其移除清单已含 1.4.5 新增的 R-03/R-04 两条回退。
 
 ## 未来规划
 
@@ -46,6 +46,7 @@ plans/
 
 ## 已完成
 
+- **[1.4.9](1.4.x/1.4.9.md)** — 构建钩子 profile 解析修复 + 按 profile 导出对象归档：`ctx.profile` 改为解析后的生效 profile（显式 `--profile` 优先，否则 `[compile].default_profile`，经 `AppliedProfile` → `BuildState.active_profile` 传递）；新增 `[compile.profile.<name>].export_objs`（bool 或归档路径，`.zip` / `.tar.gz` / `.tgz`），编译后、链接前把全部源文件对象打包（staging 只含本次对象，不含陈旧对象）；默认模板 release profile 默认启用。全量 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**；i18n 412 → **418** 键。**2026-10-07 已打 tag `v1.4.9`**（Release run `37591083442` success，7 资产 digest 核对一致、`macos-x64` skipped）。三渠道：Homebrew tap `d839e9d`（真实 digest）/ pacman `makepkg -fd` 出包 `eazymake-1.4.9-1-x86_64.pkg.tar.zst`（sha256 `2f14ce05…`）/ winget PR [#448100](https://github.com/microsoft/winget-pkgs/pull/448100)（CI/版主审批为发布后跟进项）。执行计划见根 [`plan.md`](../plan.md)。
 - **[1.4.8](1.4.x/1.4.8.md)** — 内嵌依赖与 CI 依赖更新：miniz 2.2.0 → 3.1.2、Lua 5.4.7 → 5.4.9、Catch2 3.8.0 → 3.16.0，Actions `checkout`/`upload-artifact` → v7、`action-gh-release` → v3；`build.sh` 补 `--order decl`（Catch2 ≥ 3.16 默认 `rand`）。零功能新增、公共 API 无破坏性变更。**2026-10-04 已打 tag `v1.4.8`**（Release run `37165812937` success，7 资产 digest 核对一致、`macos-x64` skipped；全量 1133/6525，失败集合与基线一致；CI run `37166102625` success）。三渠道：Homebrew tap `e02f45f` / pacman `makepkg -fd` 出包 `ea9c8839…` / winget PR [#446349](https://github.com/microsoft/winget-pkgs/pull/446349)。执行计划见根 [`plan.md`](../plan.md)。
 - **[1.4.5](1.4.x/1.4.5.md)** — 生成物格式统一（lockfile / 仓库注册表 JSON 化）：`ezmk.lock` → **`ezmk.lock.json`**、`list.toml` → **`list.json`**（全局/用户/项目三作用域），两个文件改由 `nlohmann::ordered_json` 写入并升级为**原子写**（新增公共 `util::atomic_write_text()`）；**旧格式继续可读**（新名优先 → 旧名 TOML 回退 → 首次成功写入后写新删旧），升级无感。确定性构建的缓存签名（`build.cpp` / `cache.cpp` / `pkg.cpp` 三处）改用新增的 `lockfile::active_path()`——修复"某一侧取不到文件 → 签名永不等 → 每次全量重编"的缺陷形态；注册表两条读取路径共用 1.4.2 F-24 名字校验；zsh 补全双分支。**公共 API 纯增量**（`lockfile::*` 签名不变，`repo::list_toml_path()` 保留为别名）。阶段一~六逐 commit（`368323a` → `8c5a2f0`）+ 版本定稿 `e29ae82`，全量 **1113 用例 / 6491 断言零失败**（基线 1099/6349，+14 用例 / +142 断言，4 跳过），关键用例为**双格式对拍**与**确定性签名跟随 `active_path()`**；`check_man_sync.py` + groff 4 页零告警、i18n **412** 键三向一致、docs-sync 通过。**2026-10-02 已打 tag `v1.4.5`**；Release（run `36997151873`）success、`macos-x64` skipped、7 资产 digest 与 `assets[].digest` 逐一一致（tar 含 `man/` 4 页且无 BOM、Windows zip 不含）；**tag 同日回退一次**（首次定稿 commit 的 man 源文件被写入 UTF-8 BOM，CI man 静态 lint 抓到并由 `65c7af3` 修复后重建 tag + 重做三渠道）；三渠道：Homebrew tap `206a4e4`（真实 digest）/ pacman `makepkg -fd` 出包 `eazymake-1.4.5-1-x86_64.pkg.tar.zst`（sha256 `fb4980eb…`）/ winget PR [#445627](https://github.com/microsoft/winget-pkgs/pull/445627)（`InstallerSha256` 已更新；长跑 check 与版主审批为发布后跟进项）。执行计划见根 [`plan.md`](../plan.md)。
 - **[1.4.4](1.4.x/1.4.4.md)** — 历史遗留清理：`install.ps1 -DryRun` 缺陷根因修复（预览契约：退出码 0 + 零副作用 + 零网络 + 完整计划）+ windows CI 冒烟锁定；`test/` 7 条编译告警清零（严格旗标下首方代码零告警）；`.gitignore` 卫生（删已跟踪/已消失条目、去重、分组）；过期 TODO（`cli.cpp`）改为不挂版本的已知限制；`release.yml` 的 `macos-x64` job 默认跳过（`if: vars.ENABLE_MACOS_X64`，Release run 不再长期 `queued`——本版 Release run 中该 job **skipped 0s**，v1.2.x~v1.4.3 均曾 24h 后被取消）；`scripts/check_docs_sync.sh` 接入 CI。阶段一~六逐 commit + 每阶段回归，全量 **1099/6349 零回归**（4 跳过）、首方代码零告警、i18n 406 键三向一致。**2026-09-26 已打 tag `v1.4.4`**；Release 7 资产核对（linux/macos 含 `man/` 4 页、Windows zip 不含、digest 与 `assets[].digest` 逐一一致）；三渠道：Homebrew tap 1.4.4（commit `1128c8b`）/ pacman `makepkg -fd` 出包（包内 `ezmk.exe version` → 1.4.4）/ winget PR `microsoft/winget-pkgs#441646`（CI/版主审批为发布后跟进项）。执行计划见根 [`plan.md`](../plan.md)。
@@ -70,7 +71,7 @@ plans/
 | 1.1.x | 正式版 + 补丁 | 1.1.0 包编译与开发体验 + 1.1.1 cc 拦截 + 1.1.2 安全与正确性 + 1.1.3 安全收敛二轮/健壮性收口 | [1.1.x/README.md](1.1.x/README.md) |
 | 1.2.x | 正式版 + 补丁 | 1.2.0 工具链互操作与开箱工程化 + 1.2.1 模板差异化（库骨架 .hpp/.cpp）+ 1.2.2 教程分类重组 + 1.2.3 `ezmk example` 命令组与内置示例 + 1.2.4 仓库文件夹包支持 + 1.2.5 测试缓存修复与默认源码包（已发布） | [1.2.x/README.md](1.2.x/README.md) |
 | 1.3.x | 功能版本 | 1.3.0 Workspace 工作区（`ezmk workspace` 命令组 + `ezmk-workspace.toml`；批量 + 并行）+ i18n 语言变体（dev.4，`zh-TW` 继承式变体）+ 消费命令总是自动构建（dev.5）（**已发布**，2026-08-21，tag `v1.3.0`）；1.3.1 区间语言标准 + 标准兼容校验（**已完成**，2026-08-24）；1.3.2 单元测试机器可读报告（**已完成**，2026-08-24）；1.3.3 workspace 双字母命令简写（**已发布**，2026-08-25，tag `v1.3.3`）；1.3.4 watch 重建后自动运行（**已完成**，2026-08-25）；1.3.5 pack 多格式输出（**已完成**，2026-08-25）；1.3.6 代码质量收口（**已发布**，2026-08-26，tag `v1.3.6`） | [1.3.x/README.md](1.3.x/README.md) |
-| 1.4.x | 功能版本 | 1.4.0 调试配置自动化（`project export vscode` 三件套，per-platform 调试器）+ 语言标准收尾（工具链能力表 `max_supported_std` + 校验严格化开关 + 编译协商语义 B + CMake `CXX_STANDARD` 导入映射）+ 功能收口（watch `--` 透传 / `workspace watch` / `tgz` 别名 / sha256 边车自动校验）+ 代码质量审计（8 P0 + 高价值 P1 + 4 恒真测试）+ workspace scan（用户确认插队：现有目录树一键采纳）（**2026-08-30 已发布**，tag `v1.4.0`）；1.4.1 `pkg install` 支持 git 仓库 URL（**2026-09-03 已发布**，tag `v1.4.1`）；1.4.2 代码质量审计修复第二轮（✅ 已发布，2026-09-13，tag `v1.4.2`）；1.4.3 man 手册 4 页（`ezmk.1`/`ezmk-lua.1`/`ezmk.toml.5`/`ezmk-workspace.toml.5` + 防漂移校验 + 三渠道分发；✅ 已发布，2026-09-19，tag `v1.4.3`）；1.4.4 历史遗留清理（`install.ps1 -DryRun` / 测试告警 / `.gitignore` / 过期 TODO / `macos-x64` job / docs-sync 接线；✅ 已发布 2026-09-26，tag `v1.4.4`，全量 1099/6349 零回归）；1.4.5 生成物格式统一（`ezmk.lock` → `ezmk.lock.json`、`list.toml` → `list.json`（三作用域）+ 旧格式双读 + 自动迁移 + 原子写 + `active_path()` 缓存签名 + i18n 6 键（406→412）+ REMOVALS R-03/R-04；✅ 已发布 2026-10-02，tag `v1.4.5`，全量 1113/6491 零回归）；1.4.6 代码质量审计修复（第三轮）✅ 已发布（2026-10-03，tag `v1.4.6`）；1.4.7 MSVC 工具链支持修复 + 优先级调整 ✅ 已发布（2026-10-03，tag `v1.4.7`，三渠道分发）；1.4.8 内嵌依赖与 CI 依赖更新（miniz 3.1.2 / Lua 5.4.9 / Catch2 3.16.0 / Actions 主版本；✅ 已发布 2026-10-04，tag `v1.4.8`）；1.4.9 构建钩子 profile 解析修复 + 按 profile 导出对象归档（✅ 实现收口，未发布） | [1.4.x/README.md](1.4.x/README.md) |
+| 1.4.x | 功能版本 | 1.4.0 调试配置自动化（`project export vscode` 三件套，per-platform 调试器）+ 语言标准收尾（工具链能力表 `max_supported_std` + 校验严格化开关 + 编译协商语义 B + CMake `CXX_STANDARD` 导入映射）+ 功能收口（watch `--` 透传 / `workspace watch` / `tgz` 别名 / sha256 边车自动校验）+ 代码质量审计（8 P0 + 高价值 P1 + 4 恒真测试）+ workspace scan（用户确认插队：现有目录树一键采纳）（**2026-08-30 已发布**，tag `v1.4.0`）；1.4.1 `pkg install` 支持 git 仓库 URL（**2026-09-03 已发布**，tag `v1.4.1`）；1.4.2 代码质量审计修复第二轮（✅ 已发布，2026-09-13，tag `v1.4.2`）；1.4.3 man 手册 4 页（`ezmk.1`/`ezmk-lua.1`/`ezmk.toml.5`/`ezmk-workspace.toml.5` + 防漂移校验 + 三渠道分发；✅ 已发布，2026-09-19，tag `v1.4.3`）；1.4.4 历史遗留清理（`install.ps1 -DryRun` / 测试告警 / `.gitignore` / 过期 TODO / `macos-x64` job / docs-sync 接线；✅ 已发布 2026-09-26，tag `v1.4.4`，全量 1099/6349 零回归）；1.4.5 生成物格式统一（`ezmk.lock` → `ezmk.lock.json`、`list.toml` → `list.json`（三作用域）+ 旧格式双读 + 自动迁移 + 原子写 + `active_path()` 缓存签名 + i18n 6 键（406→412）+ REMOVALS R-03/R-04；✅ 已发布 2026-10-02，tag `v1.4.5`，全量 1113/6491 零回归）；1.4.6 代码质量审计修复（第三轮）✅ 已发布（2026-10-03，tag `v1.4.6`）；1.4.7 MSVC 工具链支持修复 + 优先级调整 ✅ 已发布（2026-10-03，tag `v1.4.7`，三渠道分发）；1.4.8 内嵌依赖与 CI 依赖更新（miniz 3.1.2 / Lua 5.4.9 / Catch2 3.16.0 / Actions 主版本；✅ 已发布 2026-10-04，tag `v1.4.8`）；1.4.9 构建钩子 profile 解析修复 + 按 profile 导出对象归档（✅ 已发布 2026-10-07，tag `v1.4.9`；三渠道） | [1.4.x/README.md](1.4.x/README.md) |
 
 ## 依赖关系图
 
@@ -104,7 +105,7 @@ graph TD
     v146p["1.4.6 代码质量审计修复第三轮（已发布 2026-10-03）"]
     v147p["1.4.7 MSVC 工具链支持修复 + 优先级（已发布 2026-10-03）"]
     v148p["1.4.8 内嵌依赖与 CI 依赖更新（已发布 2026-10-04）"]
-    v149p["1.4.9 钩子 profile 解析修复 + 按 profile 导出对象归档（实现收口，未发布）"]
+    v149p["1.4.9 钩子 profile 解析修复 + 按 profile 导出对象归档（已发布 2026-10-07）"]
     v200["2.0.0 (未来，破坏性变更：见 2.0.x/REMOVALS.md)"]
 
     v0xx --> v100
@@ -170,7 +171,7 @@ graph TD
     class v146p done;
     class v147p done;
     class v148p done;
-    class v149p active;
+    class v149p done;
     class v200 todo;
 ```
 

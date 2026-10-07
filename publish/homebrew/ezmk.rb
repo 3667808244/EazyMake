@@ -6,8 +6,8 @@
 # `_ezmk` (zsh completion) and `man/` (ezmk(1), ezmk-lua(1), ezmk.toml(5),
 # ezmk-workspace.toml(5); 1.4.3+).
 #
-# NOTE 1.4.8: version/url/sha256 are filled from the v1.4.8 Release asset digests
-# (`gh api repos/3667808244/EazyMake/releases/tags/v1.4.8`) — assets carry man/.
+# NOTE 1.4.9: version/url/sha256 are filled from the v1.4.9 Release asset digests
+# (`gh api repos/3667808244/EazyMake/releases/tags/v1.4.9`) — assets carry man/.
 #
 #   brew tap 3667808244/eazymake
 #   brew install ezmk
@@ -24,19 +24,19 @@
 class Ezmk < Formula
   desc "A simple C/C++ build tool (GCC/Clang/MSVC)"
   homepage "https://github.com/3667808244/EazyMake"
-  version "1.4.8"
+  version "1.4.9"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/3667808244/EazyMake/releases/download/v1.4.8/ezmk-macos-arm64.tar.gz"
-      sha256 "82d6463212487de723b916b0acd1009fe0f47585f4cf17c09455bd958b6b44f4"
+      url "https://github.com/3667808244/EazyMake/releases/download/v1.4.9/ezmk-macos-arm64.tar.gz"
+      sha256 "255ce965992f348ffd5c31a763709028be98f3dd9853e343c605f117704c2071"
     end
   end
 
   on_linux do
-    url "https://github.com/3667808244/EazyMake/releases/download/v1.4.8/ezmk-linux-x64.tar.gz"
-    sha256 "8647c6e61a600127f57830322e785a7e339ead33cd82cb525cf9c4ef79de7488"
+    url "https://github.com/3667808244/EazyMake/releases/download/v1.4.9/ezmk-linux-x64.tar.gz"
+    sha256 "18ffecb7fb550b625baf6e90f5b86f81cc43175200a5061c6e39380813fd7c6e"
   end
 
   def install

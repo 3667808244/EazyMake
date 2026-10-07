@@ -28,7 +28,7 @@
 
 ## 1.4.9 (2026-10-07) — 构建钩子 profile 解析修复 + 按 profile 导出对象归档
 
-> **状态：✅ 版本定稿 1.4.9（未发布，待 tag `v1.4.9`）** —— 阶段零~四落地；全量 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**（立项基线 1133/6541）；i18n **418** 键三向一致；`check_man_sync.py` + groff 零告警 + docs-sync 通过。**零命令新增、公共 API 无破坏性变更。**
+> **状态：✅ 已发布（2026-10-07，tag `v1.4.9`；Release run `37591083442` success，7 资产 digest 核对一致、`macos-x64` skipped）** —— 阶段零~四落地；全量 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**（立项基线 1133/6541）；i18n **418** 键三向一致；`check_man_sync.py` + groff 零告警 + docs-sync 通过。**零命令新增、公共 API 无破坏性变更。** 三渠道：Homebrew tap `d839e9d` / winget PR [#448100](https://github.com/microsoft/winget-pkgs/pull/448100) / pacman `eazymake-1.4.9-1-x86_64.pkg.tar.zst`（sha256 `2f14ce05…`）。
 
 ### 构建钩子
 
