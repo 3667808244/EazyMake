@@ -72,6 +72,10 @@ EZMK_I18N_KEY(export_exists_refuse)     // 1.2.0
 EZMK_I18N_KEY(export_written)           // 1.2.0
 EZMK_I18N_KEY(export_hook_note)         // 1.2.0-dev.8
 EZMK_I18N_KEY(export_flag_target_mismatch) // 1.4.0-dev.1
+EZMK_I18N_KEY(obj_export_written)         // 1.4.9
+EZMK_I18N_KEY(obj_export_failed)          // 1.4.9
+EZMK_I18N_KEY(obj_export_empty)           // 1.4.9
+EZMK_I18N_KEY(obj_export_skipped_outside_root) // 1.4.9
 EZMK_I18N_KEY(ezmk_lua_usage)           // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_missing_script)  // 1.2.0-dev.8
 EZMK_I18N_KEY(ezmk_lua_need_value)      // 1.2.0-dev.8
@@ -192,6 +196,8 @@ EZMK_I18N_KEY(config_err_ezmk_macros_type)
 EZMK_I18N_KEY(config_err_macros_val_type)
 EZMK_I18N_KEY(config_err_empty_profile)
 EZMK_I18N_KEY(config_err_invalid_profile)
+EZMK_I18N_KEY(config_err_profile_export_objs_type) // 1.4.9
+EZMK_I18N_KEY(config_err_profile_export_objs_ext)  // 1.4.9
 EZMK_I18N_KEY(config_err_empty_depends_entry)
 EZMK_I18N_KEY(config_err_version_missing)
 EZMK_I18N_KEY(config_err_array_type)              // 1.2.0-dev.11

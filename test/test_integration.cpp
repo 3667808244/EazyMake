@@ -1279,6 +1279,8 @@ TEST_CASE("integration: default template profiles + default_profile fallback", "
         REQUIRE(toml.find("default_profile = \"debug\"") != std::string::npos);
         REQUIRE(toml.find("[compile.profile.debug]") != std::string::npos);
         REQUIRE(toml.find("[compile.profile.release]") != std::string::npos);
+        // 1.4.9: the release profile enables object export by default.
+        REQUIRE(toml.find("export_objs = true") != std::string::npos);
         // base [compile].flags is warnings-only — no -O* in the base line
         REQUIRE(toml.find("flags = [\"-Wall\", \"-Wextra\"]") != std::string::npos);
     }

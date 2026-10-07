@@ -47,12 +47,12 @@
 
 ### 阶段二：profile 导出配置解析 + 默认模板（O-01 / O-06）
 
-- [ ] `ProfileConfig`（`include/ezmk/config.hpp:84`）追加 `export_objs` / `export_objs_path`
-- [ ] `parse_profiles()`（`src/config.cpp:707`）bool / string 分支 + 类型与扩展名校验（`.zip` / `.tar.gz` / `.tgz`）
-- [ ] 默认模板启用：`write_default_config()`（`src/config.cpp:993`）release profile 加 `export_objs = true`；`import.cpp`（`src/import.cpp:714-716`）对齐
-- [ ] i18n 新键（en / zh / zh-TW 三向）
-- [ ] `test/test_config.cpp` 用例
-- [ ] 回归：全量零新增失败
+- [x] `ProfileConfig` 追加 `export_objs` / `export_objs_path`
+- [x] `parse_profiles()` bool / string 分支 + 类型与扩展名校验（`.zip` / `.tar.gz` / `.tgz`）
+- [x] 默认模板启用：`write_default_config()` release profile 加 `export_objs = true`；`import.cpp` 模板对齐
+- [x] i18n 新键 6 个（412 → **418**）三向一致
+- [x] `test/test_config.cpp` 用例（true / 路径 / 后缀 / false / 空串 / 非法扩展名 / 非法类型）+ 模板断言
+- [x] 回归：全量 **1136 用例 / 6604 断言 / 4 跳过 / 0 失败**
 
 ### 阶段三：归档导出执行（O-02 / O-03 / O-04）
 

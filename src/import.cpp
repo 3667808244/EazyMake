@@ -713,7 +713,8 @@ std::string build_toml(const ImportedProject& p) {
     t += "msvc_flags = [\"/Zi\", \"/Od\"]\n\n";
     t += "[compile.profile.release]\n";
     t += "flags = [\"-O2\", \"-DNDEBUG\"]\n";
-    t += "msvc_flags = [\"/O2\", \"/DNDEBUG\"]\n\n";
+    t += "msvc_flags = [\"/O2\", \"/DNDEBUG\"]\n";
+    t += "export_objs = true\n\n";
 
     if (!p.macros.empty()) {
         t += "[compile.macros]\n";

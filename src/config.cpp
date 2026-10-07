@@ -710,6 +710,21 @@ static void parse_depends(const toml::table& root, EzConfig& cfg) {
     }
 }
 
+// 1.4.9: accepted object-archive paths — the suffix selects the archiver.
+static bool is_obj_archive_path(const std::string& path) {
+    auto ends_with_ci = [&](const std::string& suffix) {
+        if (path.size() < suffix.size()) return false;
+        size_t off = path.size() - suffix.size();
+        for (size_t i = 0; i < suffix.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>(path[off + i])) !=
+                std::tolower(static_cast<unsigned char>(suffix[i])))
+                return false;
+        }
+        return true;
+    };
+    return ends_with_ci(".zip") || ends_with_ci(".tar.gz") || ends_with_ci(".tgz");
+}
+
 static void parse_profiles(const toml::table& root, EzConfig& cfg) {
     // 0.2.3+: [compile.profile.<name>] — build configuration profiles
     if (auto comp = root["compile"].as_table()) {
@@ -752,6 +767,28 @@ static void parse_profiles(const toml::table& root, EzConfig& cfg) {
                                                     {{"key", macro_key}}));
                             }
                             pc.macros[macro_key] = macro_val;
+                        }
+                    }
+
+                    // 1.4.9: export_objs — boolean (default archive) or archive path.
+                    if (auto en = (*prof_table)["export_objs"]) {
+                        if (en.is_boolean()) {
+                            pc.export_objs = en.as_boolean()->get();
+                        } else if (en.is_string()) {
+                            std::string v = en.as_string()->get();
+                            if (!v.empty()) {
+                                if (!is_obj_archive_path(v)) {
+                                    throw std::runtime_error(
+                                        ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_profile_export_objs_ext,
+                                                        {{"name", profile_name}, {"value", v}}));
+                                }
+                                pc.export_objs = true;
+                                pc.export_objs_path = v;
+                            }
+                        } else {
+                            throw std::runtime_error(
+                                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_profile_export_objs_type,
+                                                {{"name", profile_name}}));
                         }
                     }
                 }
@@ -1023,6 +1060,7 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     content += "[compile.profile.release]\n";
     content += "flags = [\"-O2\", \"-DNDEBUG\"]\n";
     content += "msvc_flags = [\"/O2\", \"/DNDEBUG\"]\n";
+    content += "export_objs = true              # 1.4.9+：release 构建额外产出 build/obj_files.zip\n";
     content += "\n";
     content += "[link]\n";
     content += "flags = []\n";

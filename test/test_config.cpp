@@ -1781,6 +1781,10 @@ TEST_CASE("write_default_config: built-in profiles + default_profile", "[config]
             std::vector<std::string>{"-O2", "-DNDEBUG"});
     REQUIRE(cfg.compile_profiles["release"].msvc_flags ==
             std::vector<std::string>{"/O2", "/DNDEBUG"});
+    // 1.4.9: the generated release profile opts into object export.
+    REQUIRE(cfg.compile_profiles["release"].export_objs == true);
+    REQUIRE(cfg.compile_profiles["release"].export_objs_path.empty());
+    REQUIRE(cfg.compile_profiles["debug"].export_objs == false);
     REQUIRE(cfg.link_profiles.empty());
     REQUIRE(cfg.hooks.pre_build.empty());
     REQUIRE(cfg.hooks.post_build.empty());
@@ -1801,6 +1805,48 @@ TEST_CASE("config: resolve_profile_name precedence", "[config][1.4.9]") {
     }
     SECTION("empty when neither is set") {
         REQUIRE(resolve_profile_name("", "").empty());
+    }
+}
+
+// 1.4.9: [compile.profile.<name>].export_objs — boolean or archive path.
+TEST_CASE("parse_config: profile export_objs", "[config][1.4.9]") {
+    using namespace ezmk::config;
+
+    auto parse_profile = [](const std::string& line) {
+        auto toml = write_temp_toml(
+            "[project]\nname = \"t\"\ntype = \"executable\"\n"
+            "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+            "[compile.profile.rel]\n" + line + "\n");
+        return parse_config(toml);
+    };
+
+    SECTION("true enables the default archive") {
+        auto cfg = parse_profile("export_objs = true");
+        REQUIRE(cfg.compile_profiles.count("rel") == 1);
+        REQUIRE(cfg.compile_profiles["rel"].export_objs == true);
+        REQUIRE(cfg.compile_profiles["rel"].export_objs_path.empty());
+    }
+    SECTION("string sets an explicit archive path") {
+        auto cfg = parse_profile("export_objs = \"dist/objs.tar.gz\"");
+        REQUIRE(cfg.compile_profiles["rel"].export_objs == true);
+        REQUIRE(cfg.compile_profiles["rel"].export_objs_path == "dist/objs.tar.gz");
+    }
+    SECTION(".zip / .tgz / case-insensitive suffixes are accepted") {
+        REQUIRE(parse_profile("export_objs = \"a.zip\"").compile_profiles["rel"].export_objs);
+        REQUIRE(parse_profile("export_objs = \"a.tgz\"").compile_profiles["rel"].export_objs);
+        REQUIRE(parse_profile("export_objs = \"A.TAR.GZ\"").compile_profiles["rel"].export_objs);
+    }
+    SECTION("false and empty string disable") {
+        REQUIRE(parse_profile("export_objs = false").compile_profiles["rel"].export_objs == false);
+        auto cfg = parse_profile("export_objs = \"\"");
+        REQUIRE(cfg.compile_profiles["rel"].export_objs == false);
+        REQUIRE(cfg.compile_profiles["rel"].export_objs_path.empty());
+    }
+    SECTION("unsupported extension is rejected") {
+        REQUIRE_THROWS(parse_profile("export_objs = \"objs.7z\""));
+    }
+    SECTION("non-boolean non-string is rejected") {
+        REQUIRE_THROWS(parse_profile("export_objs = 5"));
     }
 }
 

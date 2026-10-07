@@ -85,6 +85,12 @@ struct ProfileConfig {
     std::vector<std::string> flags;
     std::vector<std::string> msvc_flags;
     std::map<std::string, std::string> macros;
+    // 1.4.9: profile-driven object export (opt-in). When true, a successful
+    // compile of this profile also packs every project object file into an
+    // archive; export_objs_path empty = default build/obj_files.zip, otherwise
+    // the path suffix selects .zip / .tar.gz / .tgz.
+    bool export_objs = false;
+    std::string export_objs_path;
 };
 
 // 0.2.3+ — Link profile configuration
