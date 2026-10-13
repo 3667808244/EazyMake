@@ -1135,7 +1135,8 @@ TEST_CASE("integration: project export cmake generates CMakeLists.txt", "[integr
         std::string content = file_read(out);
         REQUIRE(content.find("project(" + proj_name) != std::string::npos);
         REQUIRE(content.find("add_executable") != std::string::npos);
-        REQUIRE(content.find("file(GLOB_RECURSE") != std::string::npos);
+        // 1.4.10: the template's src_dirs is flat, so the export uses GLOB.
+        REQUIRE(content.find("file(GLOB exp_cmake_SOURCES") != std::string::npos);
     }
 
     SECTION("refuses overwrite without --overwrite") {

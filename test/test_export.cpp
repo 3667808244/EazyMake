@@ -154,8 +154,61 @@ TEST_CASE("export cmake: exact language export unchanged (1.3.1)", "[export][1.3
 TEST_CASE("export cmake: source glob default", "[export]") {
     auto cfg = make_exe_config();
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    // 1.4.10: a flat src_dirs entry (the default) is a non-recursive GLOB.
+    REQUIRE(t.find("file(GLOB demo_SOURCES CONFIGURE_DEPENDS") != std::string::npos);
+    REQUIRE(t.find("${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp") != std::string::npos);
+}
+
+TEST_CASE("export cmake: /** recursive entry uses GLOB_RECURSE", "[export][1.4.10]") {
+    auto cfg = make_exe_config();
+    // Config parsing strips the marker: the path is plain, the flag carries it.
+    cfg.compile.src_dirs = {"src"};
+    cfg.compile.src_dirs_recursive = {true};
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
     REQUIRE(t.find("file(GLOB_RECURSE demo_SOURCES CONFIGURE_DEPENDS") != std::string::npos);
     REQUIRE(t.find("${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp") != std::string::npos);
+    REQUIRE(t.find("file(GLOB demo_SOURCES") == std::string::npos);
+}
+
+TEST_CASE("export cmake: mixed flat and /** entries", "[export][1.4.10]") {
+    auto cfg = make_exe_config();
+    cfg.compile.src_dirs = {"src", "gen"};
+    cfg.compile.src_dirs_recursive = {false, true};
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("file(GLOB demo_SOURCES CONFIGURE_DEPENDS") != std::string::npos);
+    REQUIRE(t.find("file(GLOB_RECURSE _ezmk_recursive_sources CONFIGURE_DEPENDS") != std::string::npos);
+    REQUIRE(t.find("list(APPEND demo_SOURCES ${_ezmk_recursive_sources})") != std::string::npos);
+}
+
+TEST_CASE("export cmake: --no-glob walks /** entries only", "[export][1.4.10]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src" / "sub");
+    fs::create_directories(tmp.path / "lib");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main(){}\n";
+    std::ofstream(tmp.path / "src" / "sub" / "deep.cpp") << "void d(){}\n";
+    std::ofstream(tmp.path / "lib" / "flat.cpp") << "void f(){}\n";
+    auto cfg = make_exe_config();
+    cfg.compile.src_dirs = {"src", "lib"};
+    cfg.compile.src_dirs_recursive = {true, false};
+    ExportOptions opts;
+    opts.use_glob = false;
+    auto t = build_cmake_text(cfg, tmp.path, opts);
+    REQUIRE(t.find("main.cpp") != std::string::npos);
+    REQUIRE(t.find("deep.cpp") != std::string::npos);   // "/**" walks subdirs
+    REQUIRE(t.find("flat.cpp") != std::string::npos);
+}
+
+TEST_CASE("export cmake: --no-glob flat entry skips subdirectories", "[export][1.4.10]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src" / "sub");
+    std::ofstream(tmp.path / "src" / "top.cpp") << "void t(){}\n";
+    std::ofstream(tmp.path / "src" / "sub" / "deep.cpp") << "void d(){}\n";
+    auto cfg = make_exe_config();
+    ExportOptions opts;
+    opts.use_glob = false;
+    auto t = build_cmake_text(cfg, tmp.path, opts);
+    REQUIRE(t.find("top.cpp") != std::string::npos);
+    REQUIRE(t.find("deep.cpp") == std::string::npos);
 }
 
 TEST_CASE("export cmake: --no-glob emits explicit source list", "[export]") {

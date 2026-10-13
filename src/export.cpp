@@ -153,34 +153,74 @@ std::string build_cmake_text(const config::EzConfig& cfg,
     // ---- Sources ----
     os << "\n# --- Sources ---\n";
     if (opts.use_glob) {
-        os << "file(GLOB_RECURSE " << src_var << " CONFIGURE_DEPENDS\n";
         std::vector<std::string> src_dirs = compile.src_dirs;
+        std::vector<bool> src_rec = compile.src_dirs_recursive;
         if (src_dirs.empty()) src_dirs.push_back("src");
-        for (const auto& d : src_dirs) {
-            bool outside = false;
-            std::string expr = cmake_path(d, project_root, outside);
-            for (const auto& ext : extensions) {
-                os << "    " << expr << "/*." << ext << "\n";
-            }
+
+        // 1.4.10: a flat entry (no "/**") gets a non-recursive GLOB so the
+        // exported CMake collects the same sources as `ezmk build`; a "/**"
+        // entry keeps GLOB_RECURSE. Mixed lists emit both and append.
+        std::vector<size_t> flat_idx, rec_idx;
+        for (size_t i = 0; i < src_dirs.size(); ++i) {
+            if (i < src_rec.size() && src_rec[i]) rec_idx.push_back(i);
+            else flat_idx.push_back(i);
         }
-        os << ")\n";
+        auto emit_exprs = [&](const std::vector<size_t>& idxs) {
+            for (size_t i : idxs) {
+                bool outside = false;
+                std::string expr = cmake_path(src_dirs[i], project_root, outside);
+                for (const auto& ext : extensions) {
+                    os << "    " << expr << "/*." << ext << "\n";
+                }
+            }
+        };
+        if (rec_idx.empty()) {
+            os << "file(GLOB " << src_var << " CONFIGURE_DEPENDS\n";
+            emit_exprs(flat_idx);
+            os << ")\n";
+        } else if (flat_idx.empty()) {
+            os << "file(GLOB_RECURSE " << src_var << " CONFIGURE_DEPENDS\n";
+            emit_exprs(rec_idx);
+            os << ")\n";
+        } else {
+            os << "file(GLOB " << src_var << " CONFIGURE_DEPENDS\n";
+            emit_exprs(flat_idx);
+            os << ")\n";
+            os << "file(GLOB_RECURSE _ezmk_recursive_sources CONFIGURE_DEPENDS\n";
+            emit_exprs(rec_idx);
+            os << ")\n";
+            os << "list(APPEND " << src_var << " ${_ezmk_recursive_sources})\n";
+        }
     } else {
         // --no-glob: explicit, deterministic file list.
         std::vector<std::string> src_dirs = compile.src_dirs;
+        std::vector<bool> src_rec = compile.src_dirs_recursive;
         if (src_dirs.empty()) src_dirs.push_back("src");
         os << "set(" << src_var << "\n";
-        for (const auto& d : src_dirs) {
+        auto emit_file = [&](const fs::path& p) {
+            std::string ext = p.extension().string();
+            if (ext.size() > 1) ext = ext.substr(1);  // strip leading '.'
+            if (std::find(extensions.begin(), extensions.end(), ext) == extensions.end())
+                return;
+            bool outside = false;
+            os << "    " << cmake_path(p, project_root, outside) << "\n";
+        };
+        for (size_t i = 0; i < src_dirs.size(); ++i) {
+            const bool rec = i < src_rec.size() && src_rec[i];
+            const std::string& d = src_dirs[i];
             fs::path dir = fs::path(d).is_relative() ? (project_root / d) : fs::path(d);
             std::error_code ec;
-            for (auto it = fs::recursive_directory_iterator(dir, ec);
-                 !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
-                if (!it->is_regular_file()) continue;
-                std::string ext = it->path().extension().string();
-                if (ext.size() > 1) ext = ext.substr(1);  // strip leading '.'
-                if (std::find(extensions.begin(), extensions.end(), ext) == extensions.end())
-                    continue;
-                bool outside = false;
-                os << "    " << cmake_path(it->path(), project_root, outside) << "\n";
+            // 1.4.10: only a "/**" entry walks subdirectories.
+            if (rec) {
+                for (auto it = fs::recursive_directory_iterator(dir, ec);
+                     !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+                    if (it->is_regular_file()) emit_file(it->path());
+                }
+            } else {
+                for (auto it = fs::directory_iterator(dir, ec);
+                     !ec && it != fs::directory_iterator(); it.increment(ec)) {
+                    if (it->is_regular_file()) emit_file(it->path());
+                }
             }
         }
         os << ")\n";
