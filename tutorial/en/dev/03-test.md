@@ -17,7 +17,7 @@ include_dirs = ["test/helpers"] # test-only -I
 link_targets = ["pthread"]      # test-only -l
 ```
 
-(`dirs` is **not recursive** either — like `src_dirs` it scans only the listed directories; list subdirectories explicitly.)
+(`dirs` is flat by default like `src_dirs`; append `/**` to recurse, e.g. `test/**`.)
 
 (`[test] flags` — deprecated since 1.2.0-dev.12, removed in 2.0.0 — still works but prints a deprecation warning.)
 

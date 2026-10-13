@@ -40,7 +40,7 @@ Standardized English terminology for EazyMake documentation. Maintainers and tra
 | macro | A preprocessor definition, either via `-D` flags, `[compile.macros]`, or auto-injected `EZMK_*` macros. |
 | flag | A compiler or linker command-line option (e.g. `-Wall`, `-O2`). |
 | include directory | A search path for `#include` headers, configured in `[compile].include_dirs`. |
-| source directory | A directory scanned for source files, configured in `[compile].src_dirs`; the directory itself only — subdirectories are not scanned recursively. |
+| source directory | A directory scanned for source files, configured in `[compile].src_dirs`; the directory itself by default — append `/**` (1.4.10+) to scan the whole subtree recursively. |
 | link directory | A search path for libraries at link time, configured in `[link].link_dirs`. |
 | system target | A system library to link against (e.g. `pthread`, `m`), declared in `[link].system_target`. |
 

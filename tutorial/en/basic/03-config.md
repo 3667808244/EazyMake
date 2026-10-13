@@ -64,7 +64,7 @@ fill them in to use `ezmk test`; pure comments have zero parse impact.
 | `flags` | Compiler flags (GCC/Clang) | — |
 | `msvc_flags` | Extra flags when using MSVC | — |
 | `include_dirs` | Header search dirs | `["include"]` |
-| `src_dirs` | Source dirs to scan (not recursive — list subdirectories explicitly) | `["src"]` |
+| `src_dirs` | Source dirs to scan (flat by default; append `/**` to recurse, e.g. `src/**`) | `["src"]` |
 | `ezmk_macros` | Define built-in `EZMK_*` macros | `true` |
 
 Semantic macros go in `[compile.macros]`:

@@ -136,7 +136,7 @@ directory is always added when it exists, whether or not it is listed here.
 .B src_dirs
 Array of strings, optional, default
 .BR ["src"] .
-Directories scanned for source files. An explicitly empty array is an error. Only files directly inside each directory are scanned: the search is not recursive, so subdirectories must be listed explicitly.
+Directories scanned for source files. An explicitly empty array is an error. Only files directly inside each directory are scanned by default; an entry ending in /** is searched recursively.
 .TP
 .B ezmk_macros
 Boolean, optional, default
@@ -299,7 +299,7 @@ See
 .B dirs
 Array of strings, optional, default
 .BR ["test"] .
-Directories holding test sources. An empty array falls back to the default. Like src_dirs, this search is not recursive: only files directly inside each listed directory are used.
+Directories holding test sources. An empty array falls back to the default. Like src_dirs, the search is flat by default; an entry ending in /** is searched recursively.
 .TP
 .B framework
 String, optional, default

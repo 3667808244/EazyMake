@@ -141,19 +141,25 @@ src_dirs = ["src", "lib", "vendor"]
 
 ### Q: Source files in subdirectories are not compiled
 
-**Cause**: source-directory scanning is **not recursive** — `[compile].src_dirs` (and `[test].dirs`) only collect the files **directly inside** each listed directory. Files in subdirectories are never discovered.
+**Cause**: `[compile].src_dirs` (and `[test].dirs`) collect only the files **directly inside** each listed directory by default. Files in subdirectories are never discovered.
 
-**Solution**: list each subdirectory explicitly:
+**Solution** (either works):
+1. **1.4.10+**: append `/**` to recurse into the whole subtree:
 ```toml
 [compile]
-src_dirs = ["src", "src/core", "src/ui", "lib/util"]
+src_dirs = ["src/**", "lib"]
+```
+2. List each subdirectory explicitly (works on older versions too), or let `ezmk project import --from cmake` flatten them for you:
+```toml
+[compile]
+src_dirs = ["src", "src/core", "src/ui"]
 ```
 
 Two traps:
-1. `src_dirs` is a list of directories, not a glob — `"src/**"` is treated as a literal directory name (a missing directory only warns).
-2. Collection deduplicates by **filename**: two same-named files in different directories (e.g. `src/a/util.cpp` and `src/b/util.cpp`) compile only the first one, with a duplicate warning — rename them or adjust the directory split.
+1. `/**` is a directory-level switch, not a glob — `"src/**/*.cpp"` is treated as a literal directory name (a missing directory only warns).
+2. Flat mode deduplicates by **filename** (only the first same-named file compiles, with a warning); recursive mode deduplicates by project-root-relative path, so same-named files all compile.
 
-Recursive discovery is a candidate feature and is not supported yet.
+> On Linux/macOS `ezmk watch` watches only the directory itself, so newly added nested files under a recursive entry do not trigger a rebuild.
 
 ---
 

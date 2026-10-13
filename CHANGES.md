@@ -24,6 +24,29 @@
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
+## 1.4.10 (未发布) — 可选递归源文件查找（`src_dirs` / `[test].dirs` 的 `/**`）
+
+> **状态：🚧 开发中（阶段一~五实现与文档已落地，未发布）** —— 设计见 [plans/1.4.x/1.4.10.md](plans/1.4.x/1.4.10.md)，阶段见根 [plan.md](plan.md)。**默认行为零变化；公共 API 无破坏性变更。**
+
+### 新增
+
+- **`[compile].src_dirs` / `[test].dirs` 支持 `/**` 后缀**：条目以 `/**` 结尾即递归收录该目录整棵子树（逐条目生效、可混用）；不带后缀的条目保持原有「只扫描顶层」语义。
+  - 不是 glob：`src/**/*.cpp`、`src/**/` 之类按字面目录名处理（缺失时仅告警）。
+  - 递归模式按**项目根相对路径**去重（不同子目录的同名文件都会编译）；非递归模式沿用按**文件名**去重 + 重复告警。
+  - 递归扫描跳过 `.` 前缀目录与任意深度的 `build/`（与 `project pack` 的剪枝集一致），不跟随目录符号链接，结果按路径排序（承接 1.4.6 Q-19）。
+- **底层原语 `util::list_files_recursive()`**（`include/ezmk/util.hpp` / `src/util.cpp`）；`build::collect_sources` 新增 index-aligned flags 重载，旧签名保留（等价全 flat）。
+- **全路径统一走递归感知收集**：项目 build、`ezmk test`、包编译、`utils` 包门控、Lua `ezmk.list_sources()`、workspace 测试探测、`compile_commands.json`。
+- **`project export cmake` 对齐**：flat 条目改用 `GLOB`、`/**` 条目用 `GLOB_RECURSE`；混合时输出 `GLOB` + `GLOB_RECURSE` + `list(APPEND ...)`。此前所有条目一律 `GLOB_RECURSE`，导出的 CMake 会编译 `ezmk build` 不编译的子目录文件——本版消除该分叉。
+
+### 已知限制
+
+- **Linux/macOS 的 `ezmk watch` 仍只监视目录自身**：递归目录里新增的嵌套文件不会触发重建（Windows 走子树监视，正常）。文件监视真递归沿用 1.4.2 §3.9 / 1.4.7 §3.6 的裁定，另立版本。
+- **降级不兼容**：≤1.4.9 读到 `"src/**"` 会把它当字面目录名（缺失时 warn，最终可能 `no_source_files` fatal）。
+
+### 文档
+
+- `docs/{zh,en}/config_file.md`（递归语法 + 规则边界）、`docs/{zh,en}/faq.md`（子目录源文件未编译）、`docs/{zh,en}/glossary.md`、`tutorial/{zh,en}/basic/03-config.md` + `tutorial/{zh,en}/dev/03-test.md`、`man/ezmk.toml.5`。
+
 ---
 
 ## 1.4.9 (2026-10-07) — 构建钩子 profile 解析修复 + 按 profile 导出对象归档

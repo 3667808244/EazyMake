@@ -113,7 +113,7 @@ code supports a baseline standard (optionally up to a documented upper bound):
 | `flags` | string[] | No | `[]` | Compile flags (e.g. `-Wall`, `-O2`). GCC/Clang format, auto-translated under MSVC |
 | `msvc_flags` | string[] | No | `[]` | **0.2.1+** MSVC-specific compile flags (not translated, only appended when using MSVC toolchain) |
 | `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root; also honored for packages (1.2.0-dev.9+, resolved relative to the package root, order-preserving dedup against the default `include/`). `<proj_root>/include` is always added to `-I` whenever it exists, whether or not `include_dirs` lists it; an explicit `include_dirs = []` silently falls back to `["include"]` (asymmetric with `src_dirs = []`, which errors) |
-| `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error; also honored for packages (1.2.0-dev.9+, package sources are collected from these directories, missing dirs warn + skip). **Not recursive** — only files **directly inside** each directory are collected; subdirectories are not scanned (see the note below) |
+| `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error; also honored for packages (1.2.0-dev.9+, package sources are collected from these directories, missing dirs warn + skip). **Flat by default** — only files **directly inside** each directory are collected; an entry ending in `/**` (e.g. `["src/**"]`) is searched recursively (see the note below) |
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
 | `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
@@ -122,14 +122,19 @@ code supports a baseline standard (optionally up to a documented upper bound):
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
 
-> **Source-directory scanning is not recursive (since 0.2.2):** `src_dirs` (and `[test].dirs`) collect only the source files **directly inside** each listed directory; files in subdirectories are not picked up. To compile a subdirectory, list it explicitly:
+> **Source-directory recursion (1.4.10+):** `src_dirs` (and `[test].dirs`) collect only the source files **directly inside** each listed directory by default; an entry ending in `/**` is searched **recursively**:
 >
 > ```toml
 > [compile]
-> src_dirs = ["src", "src/core", "src/ui", "lib/util"]
+> src_dirs = ["src/**", "lib"]   # src is recursive; lib stays top-level only
 > ```
 >
-> Two traps: (1) `src_dirs` is a list of directories, not a glob — `"src/**"` is treated as a literal directory name (a missing directory only warns); (2) collection deduplicates by **filename**, so two same-named files in different directories (`src/a/util.cpp` and `src/b/util.cpp`) compile only the first one, with a duplicate warning. Recursive discovery is a candidate feature and is not supported yet.
+> Rules and boundaries:
+> - Per entry, and freely mixable. `/**` is a **directory-level switch**, not a glob — `src/**/*.cpp` or `src/**/` is treated as a literal directory name (a missing directory only warns).
+> - Recursive entries deduplicate by **project-root-relative path**, so same-named files in different subdirectories all compile; flat entries keep **filename** dedup (the first one wins, with a duplicate warning).
+> - Recursive scanning prunes `.`-prefixed directories (`.git` / `.ezmk`, ...) and any directory named `build`, never follows directory symlinks, and returns sorted paths.
+> - On Linux/macOS `ezmk watch` still watches only the directory itself: newly added nested files under a recursive entry do not trigger a rebuild (Windows watches the subtree and is fine).
+> - `ezmk project pack` always copies the whole `src_dirs` subtree into a source package (regardless of `/**`); which files a consumer compiles is decided by that consumer own `src_dirs`.
 
 > **`source_date_epoch` resolution priority (only when `deterministic = true`):**
 > `[compile].source_date_epoch` → environment variable `SOURCE_DATE_EPOCH` →

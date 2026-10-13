@@ -86,7 +86,7 @@
 | `flags` | string[] | 否 | `[]` | 编译时添加的标志（如 `-Wall`、`-O2`）。GCC/Clang 格式，MSVC 下自动翻译 |
 | `msvc_flags` | string[] | 否 | `[]` | **0.2.1+** MSVC 专用编译标志（不翻译，仅 MSVC 工具链时追加） |
 | `include_dirs` | string[] | 否 | `["include"]` | 编译时 `-I` 搜索路径，相对于项目根目录；对包同样生效（1.2.0-dev.9+，相对包根解析，与默认 `include/` 保序去重）。`<proj_root>/include` 只要存在就恒被加入 `-I`（与 `include_dirs` 是否包含它无关）；显式 `include_dirs = []` 会静默回落为 `["include"]`（与 `src_dirs = []` 报错的行为不对称） |
-| `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错；对包同样生效（1.2.0-dev.9+，包编译按此收集源文件，缺失目录 warn+跳过）。**非递归**——只扫描该目录**直接包含**的源文件，子目录不会被收录（见下方说明） |
+| `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错；对包同样生效（1.2.0-dev.9+，包编译按此收集源文件，缺失目录 warn+跳过）。**默认非递归**——只扫描该目录**直接包含**的源文件；条目以 `/**` 结尾（如 `["src/**"]`）则递归收录整棵子树（见下方说明） |
 | `ezmk_macros` | bool | 否 | `true` | **0.2.2+** 是否自动注入 `EZMK_*` 标准预处理器宏（`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`） |
 | `compile_commands` | bool | 否 | `false` | **1.1.1+** 构建成功后自动生成 `compile_commands.json`（clangd 索引） |
 | `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
@@ -95,14 +95,19 @@
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
 
-> **源文件目录扫描是「非递归」的（0.2.2 至今）：** `src_dirs`（以及 `[test].dirs`）只收录所列目录**直接包含**的源文件，子目录中的文件不会自动参与编译。要编译子目录，需把子目录逐个写进列表：
+> **源文件目录的递归语义（1.4.10+）：** `src_dirs`（以及 `[test].dirs`）默认只收录所列目录**直接包含**的源文件；条目以 `/**` 结尾则**递归**收录该目录整棵子树：
 >
 > ```toml
 > [compile]
-> src_dirs = ["src", "src/core", "src/ui", "lib/util"]
+> src_dirs = ["src/**", "lib"]   # src 递归收录；lib 只看顶层
 > ```
 >
-> 两个易踩的坑：① `src_dirs` 是目录列表而非 glob——`"src/**"` 会被当作字面目录名（找不到时仅告警）；② 采集按**文件名**去重，两个不同目录下的同名文件（`src/a/util.cpp` 与 `src/b/util.cpp`）只会编译先出现的那个并打印重复告警。递归查找为候选功能，尚未支持。
+> 规则与边界：
+> - 逐条目生效、可混用；`/**` 是**目录级开关**而不是 glob——`src/**/*.cpp`、`src/**/` 之类按字面目录名处理（缺失时仅告警）。
+> - 递归时按**项目根相对路径**去重，不同子目录的同名文件都会编译；非递归时仍按**文件名**去重（同名只编先出现的那个并告警）。
+> - 递归扫描跳过 `.` 前缀目录（`.git` / `.ezmk` 等）与任意深度的 `build/`，且不跟随目录符号链接；结果按路径排序。
+> - Linux/macOS 的 `ezmk watch` 仍只监视目录自身：递归目录里**新增**的嵌套文件不会触发重建（Windows 为子树监视，正常）。
+> - `ezmk project pack` 的源码包**总是**递归收录 `src_dirs` 整棵子树（与是否写 `/**` 无关）；消费侧编译哪些文件由它自己的 `src_dirs` 配置决定。
 
 > **`source_date_epoch` 解析优先级（仅当 `deterministic = true` 时）：**
 > `[compile].source_date_epoch` → 环境变量 `SOURCE_DATE_EPOCH` → git HEAD 提交时间

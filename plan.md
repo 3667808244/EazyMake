@@ -1,6 +1,6 @@
 # EazyMake 1.4.10 执行计划
 
-> **状态：🚧 已立项（2026-10-13，语法 A 冻结），未开始实现** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
+> **状态：🚧 开发中（2026-10-13 立项，语法 A 冻结；阶段一~五已落地，未发布）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.10.md**](plans/1.4.x/1.4.10.md)。主题：**可选递归源文件查找（语法 A：条目后缀 `/**`）**。
 >
@@ -57,17 +57,17 @@
 
 ### 阶段四：互操作（R-06）
 
-- [ ] export：flat 条目 `GLOB`、递归条目 `GLOB_RECURSE`（`--glob` / `--no-glob` 两条分支）
-- [ ] 文档写明 pack「总是递归收录」与 watch 的 POSIX 非递归限制
-- [ ] 集成：`export cmake` 的文件集合与 `ezmk build` 一致
-- [ ] 回归：全量零失败
+- [x] export：flat 条目 `GLOB`、递归条目 `GLOB_RECURSE`（`--glob` / `--no-glob` 两条分支）；混合时 `GLOB` + `GLOB_RECURSE` + `list(APPEND ...)`（`src/export.cpp`）
+- [x] 文档写明 pack「总是递归收录」与 watch 的 POSIX 非递归限制（`docs/{zh,en}/config_file.md` 规则块 + FAQ + man）
+- [x] 单测 / 集成：`test_export.cpp` +4（`/**` 用 `GLOB_RECURSE`、混合、`--no-glob` 递归、flat 跳过子目录）；既有集成断言改为默认模板导出 `file(GLOB exp_cmake_SOURCES`
+- [x] 回归：全量 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**（阶段三 1152/6664 → +4 用例 / +11 断言；`bash build.sh test-all` exit 0）
 
 ### 阶段五：测试 / 文档 / 收口（R-07 / R-08）
 
-- [ ] 配置文档（递归语法 + 跳过规则 + 与 flat 差异）、FAQ、`CHANGES.md`、man（如涉及）
-- [ ] i18n 三向一致（若有新键）
-- [ ] 索引：`plans/1.4.x/README.md` / `plans/README.md` / 本文件
-- [ ] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
+- [x] 配置文档（递归语法 + 规则边界 + 与 flat 差异）、FAQ、`glossary`、`tutorial`、`man/ezmk.toml.5`、`CHANGES.md`（1.4.10 未发布条目）
+- [x] i18n 三向一致：本版**零新增键**，键数与 1.4.9 发布态一致（`check_i18n.py` 通过）
+- [x] 索引：`plans/1.4.x/README.md` / `plans/README.md` / 本文件（阶段一~五状态）
+- [x] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
 
 ### 发布阶段：1.4.10（正式发布时）
 
