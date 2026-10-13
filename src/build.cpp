@@ -139,16 +139,28 @@ std::string want_to_macro_name(const std::string& pkg_name) {
 // Throws if no source files found across all directories.
 // 1.2.0-dev.9: `require_main` — only enforce the main.cpp requirement for
 // executables when true (packages pass false; they are always static libs).
+// 1.4.10: `recursive` is index-aligned with `src_dirs` (missing/short = flat).
 std::vector<fs::path> collect_sources(
     const std::vector<std::string>& src_dirs,
+    const std::vector<bool>& recursive,
     const fs::path& proj_root,
     const std::string& project_type,
     bool require_main) {
+    static const std::vector<std::string> kSourceExts = {".c", ".cc", ".cpp", ".cxx"};
     std::vector<fs::path> result;
-    std::set<std::string> seen_names; // filename stem for dedup
+    std::set<std::string> seen_names;  // flat mode: filename dedup (0.2.2+ semantics)
+    std::set<std::string> seen_paths;  // 1.4.10: project-root-relative path dedup
     bool any_dir_exists = false;
 
-    for (auto& d : src_dirs) {
+    auto rel_key = [&](const fs::path& f) {
+        std::error_code ec;
+        fs::path rel = fs::relative(f, proj_root, ec);
+        return ec ? f.lexically_normal().string() : rel.generic_string();
+    };
+
+    for (size_t i = 0; i < src_dirs.size(); ++i) {
+        const std::string& d = src_dirs[i];
+        const bool rec = i < recursive.size() && recursive[i];
         fs::path dir = d;
         if (dir.is_relative()) dir = proj_root / dir;
 
@@ -158,15 +170,23 @@ std::vector<fs::path> collect_sources(
         }
         any_dir_exists = true;
 
-        auto files = util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
+        auto files = rec ? util::list_files_recursive(dir, kSourceExts)
+                         : util::list_files(dir, kSourceExts);
         for (auto& f : files) {
+            if (rec) {
+                // 1.4.10: recursive entries dedup by project-root-relative path
+                // — same-named files in different subdirectories all compile.
+                if (seen_paths.insert(rel_key(f)).second) result.push_back(f);
+                continue;
+            }
+            // Flat entries keep the 0.2.2 filename dedup + warning verbatim.
             std::string fname = f.filename().string();
             if (!seen_names.insert(fname).second) {
                 util::warn(std::string("duplicate source filename '") + fname +
                           "' — using first occurrence");
                 continue;
             }
-            result.push_back(f);
+            if (seen_paths.insert(rel_key(f)).second) result.push_back(f);
         }
     }
 
@@ -195,6 +215,15 @@ std::vector<fs::path> collect_sources(
     }
 
     return result;
+}
+
+// 1.4.10: backwards-compatible entry point — every entry is scanned flat.
+std::vector<fs::path> collect_sources(
+    const std::vector<std::string>& src_dirs,
+    const fs::path& proj_root,
+    const std::string& project_type,
+    bool require_main) {
+    return collect_sources(src_dirs, {}, proj_root, project_type, require_main);
 }
 
 std::string detect_compiler(const std::string& language) {
@@ -782,7 +811,8 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     }
 
     // Collect sources + validate
-    collect_sources(st.compile_cfg.src_dirs, st.proj_root, cfg.project.type);
+    collect_sources(st.compile_cfg.src_dirs, st.compile_cfg.src_dirs_recursive,
+                    st.proj_root, cfg.project.type);
 
     fs::create_directories(st.temp_dir);
     fs::create_directories(st.build_dir);
@@ -1011,7 +1041,8 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
 // (prepare_compile_input), so the index can never drift from a real build.
 cache::CompileInput make_compile_input(BuildState& st, const cli::BuildOptions& opts) {
     cache::CompileInput cin;
-    cin.sources = collect_sources(st.compile_cfg.src_dirs, st.proj_root,
+    cin.sources = collect_sources(st.compile_cfg.src_dirs,
+                                  st.compile_cfg.src_dirs_recursive, st.proj_root,
                                   "utils" /* skip main.cpp check — already done */);
     cin.obj_dir = st.temp_dir;
     cin.dep_dir = st.temp_dir;

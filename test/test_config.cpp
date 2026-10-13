@@ -933,6 +933,93 @@ src_dirs = []
     fs::remove(toml);
 }
 
+// 1.4.10: a trailing "/**" opts a source directory into recursive discovery.
+TEST_CASE("parse_config: src_dirs /** recursive marker", "[config][1.4.10]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+src_dirs = ["src/**", "lib", "gen/**"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.src_dirs.size() == 3);
+    REQUIRE(cfg.compile.src_dirs[0] == "src");
+    REQUIRE(cfg.compile.src_dirs[1] == "lib");
+    REQUIRE(cfg.compile.src_dirs[2] == "gen");
+    REQUIRE(cfg.compile.src_dirs_recursive.size() == 3);
+    REQUIRE(cfg.compile.src_dirs_recursive[0] == true);
+    REQUIRE(cfg.compile.src_dirs_recursive[1] == false);
+    REQUIRE(cfg.compile.src_dirs_recursive[2] == true);
+}
+
+// 1.4.10: any shape other than a trailing "/**" stays a literal directory path.
+TEST_CASE("parse_config: src_dirs non-marker shapes stay literal", "[config][1.4.10]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[compile]
+src_dirs = ["src/**/", "src/**x"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.src_dirs.size() == 2);
+    REQUIRE(cfg.compile.src_dirs[0] == "src/**/");
+    REQUIRE(cfg.compile.src_dirs[1] == "src/**x");
+    REQUIRE(cfg.compile.src_dirs_recursive.size() == 2);
+    REQUIRE(cfg.compile.src_dirs_recursive[0] == false);
+    REQUIRE(cfg.compile.src_dirs_recursive[1] == false);
+}
+
+// 1.4.10: the default src_dirs stays flat.
+TEST_CASE("parse_config: src_dirs default has no recursive flags", "[config][1.4.10]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.compile.src_dirs_recursive.size() == 1);
+    REQUIRE(cfg.compile.src_dirs_recursive[0] == false);
+}
+
+// 1.4.10: [test].dirs accepts the same "/**" marker.
+TEST_CASE("parse_config: test.dirs /** recursive marker", "[config][1.4.10]") {
+    using namespace ezmk::config;
+
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[test]
+dirs = ["test/**", "extra"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.test.dirs.size() == 2);
+    REQUIRE(cfg.test.dirs[0] == "test");
+    REQUIRE(cfg.test.dirs[1] == "extra");
+    REQUIRE(cfg.test.dirs_recursive.size() == 2);
+    REQUIRE(cfg.test.dirs_recursive[0] == true);
+    REQUIRE(cfg.test.dirs_recursive[1] == false);
+}
+
 // ===================================================================
 // 0.2.2+: compile.macros parsing
 // ===================================================================

@@ -46,6 +46,34 @@ std::vector<std::string> extract_string_array(const toml::node* node,
     return result;
 }
 
+// 1.4.10: opt-in recursive source directories. An entry ending in "/**" means
+// "scan this directory subtree"; the marker is stripped and recorded in the
+// parallel `recursive` vector. This is a directory-level switch, not a glob:
+// any other shape ("src/**/", "src/**x", a Windows "src\**") is left verbatim
+// and scanned flat, matching the "paths are literal" config semantics.
+bool split_recursive_marker(const std::string& entry, std::string& path) {
+    static const std::string kMarker = "/**";
+    if (entry.size() > kMarker.size() &&
+        entry.compare(entry.size() - kMarker.size(), kMarker.size(), kMarker) == 0) {
+        path = entry.substr(0, entry.size() - kMarker.size());
+        return true;
+    }
+    return false;
+}
+
+// Split every entry of `dirs` in place; `recursive` ends up index-aligned.
+void split_source_dir_specs(std::vector<std::string>& dirs,
+                            std::vector<bool>& recursive) {
+    recursive.assign(dirs.size(), false);
+    for (size_t i = 0; i < dirs.size(); ++i) {
+        std::string path;
+        if (split_recursive_marker(dirs[i], path)) {
+            dirs[i] = path;
+            recursive[i] = true;
+        }
+    }
+}
+
 // Validate that a macro name is a legal C identifier: [A-Za-z_][A-Za-z0-9_]*
 static bool is_valid_macro_name(std::string_view name) {
     if (name.empty()) return false;
@@ -648,6 +676,9 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
     if (cfg.compile.src_dirs.empty()) {
         cfg.compile.src_dirs = {"src"};
     }
+    // 1.4.10: strip the opt-in "/**" recursive marker — before the @link:
+    // resolution below, so "@link:shared/src/**" resolves the stripped path.
+    split_source_dir_specs(cfg.compile.src_dirs, cfg.compile.src_dirs_recursive);
 
     // 0.2.2+: validate src_dirs is not explicitly set to empty
     // (check the raw TOML to distinguish "not set" from "set to []")
@@ -894,6 +925,8 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
+    // 1.4.10: same "/**" opt-in for test source directories.
+    split_source_dir_specs(cfg.test.dirs, cfg.test.dirs_recursive);
     // 1.4.2 F-06: normalize the framework even when the key is absent. The
     // built-in default is lowercase "catch2" while dispatch compares uppercase
     // names, so omitting [test].framework made `ezmk test` fatal with

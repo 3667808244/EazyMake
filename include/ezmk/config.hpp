@@ -42,6 +42,7 @@ struct CompileSection {
     std::vector<std::string> msvc_flags;       // 0.2.1+ MSVC-only compile flags
     std::vector<std::string> include_dirs;     // -I paths (default ["include"])
     std::vector<std::string> src_dirs;         // 0.2.2+ source dirs (default ["src"])
+    std::vector<bool> src_dirs_recursive;      // 1.4.10: parallel to src_dirs — entry ended in "/**"
     std::map<std::string, std::string> macros; // 0.2.2+ [compile.macros] key→value
     bool ezmk_macros = true;                   // 0.2.2+ inject EZMK_* standard macros
     bool deterministic = false;                // 1.1.0: reproducible builds
@@ -118,6 +119,7 @@ struct InstallSection {
 // 1.1.0-dev.6: Test configuration section ([test] in ezmk.toml)
 struct TestConfig {
     std::vector<std::string> dirs = {"test"};       // test source directories
+    std::vector<bool> dirs_recursive;               // 1.4.10: parallel to dirs — entry ended in "/**"
     std::string framework = "catch2";                // "catch2" | "ezmk"
     std::vector<std::string> flags = {};             // DEPRECATED (1.2.0-dev.12, removed in 2.0.0) — use default_profile / include_dirs / link_targets
     std::string default_profile = "";                // 1.2.0-dev.12: profile applied when no --profile given

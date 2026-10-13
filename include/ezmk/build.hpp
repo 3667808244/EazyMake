@@ -46,6 +46,18 @@ std::vector<fs::path> collect_sources(
     const std::string& project_type,
     bool require_main = true);
 
+// 1.4.10: per-entry recursion flags (index-aligned with `src_dirs`; a missing or
+// shorter vector means "flat"). Recursive entries are discovered with
+// util::list_files_recursive and deduplicated by project-root-relative path, so
+// same-named files in different subdirectories all compile; flat entries keep
+// the 0.2.2 filename-dedup semantics unchanged.
+std::vector<fs::path> collect_sources(
+    const std::vector<std::string>& src_dirs,
+    const std::vector<bool>& recursive,
+    const fs::path& proj_root,
+    const std::string& project_type,
+    bool require_main = true);
+
 // 0.2.3+: Merge a compile profile into the base compile section.
 // Profile flags are appended to base flags; profile macros override base macros.
 config::CompileSection merge_compile_profile(

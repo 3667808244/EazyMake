@@ -44,10 +44,10 @@
 
 ### 阶段二：配置解析 + 项目构建（R-03 / R-04）
 
-- [ ] `[compile].src_dirs` 识别并剥离尾部 `/**`；`[test].dirs` 同步；非 glob，非法形态按字面目录名处理
-- [ ] `collect_sources` 按条目标记分派；递归模式按项目根相对路径去重（flat 模式语义不变）
-- [ ] 单测：解析（递归 / flat / 混合 / 边界形态）、递归收集、嵌套同名文件都参与编译、flat 行为不变
-- [ ] 回归：全量零失败
+- [x] `[compile].src_dirs` 识别并剥离尾部 `/**`；`[test].dirs` 同步；非 glob，非法形态按字面目录名处理（`split_recursive_marker` / `split_source_dir_specs`，`src/config.cpp`）
+- [x] `collect_sources` 按条目标记分派（新重载，旧签名保留为全 flat）；递归模式按项目根相对路径去重，flat 模式按文件名去重不变（`include/ezmk/build.hpp` / `src/build.cpp`）
+- [x] 单测：`test/test_config.cpp` +4（标记解析 / 非标记字面 / 默认 flat / `test.dirs`）、`test/test_build.cpp` +4（递归子树 / 同名保留 / 混合 / 短 flags 视为 flat）
+- [x] 回归：全量 **1149 用例 / 6654 断言 / 5 跳过 / 0 失败**（阶段一 1141/6627 → +8 用例 / +27 断言；`bash build.sh test-all` exit 0）
 
 ### 阶段三：全路径对齐（R-05）
 

@@ -483,6 +483,68 @@ TEST_CASE("collect_sources: require_main=false multi-directory collection", "[bu
 }
 
 // ===================================================================
+// 1.4.10: collect_sources() recursive entries
+// ===================================================================
+
+TEST_CASE("collect_sources: recursive entry walks subdirectories", "[build][1.4.10]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_recursive_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src" / "core");
+    std::ofstream(tmp / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp / "src" / "core" / "a.cpp") << "void a() {}\n";
+
+    auto flat = collect_sources({"src"}, tmp, "executable");
+    auto deep = collect_sources({"src"}, {true}, tmp, "executable");
+    fs::remove_all(tmp);
+
+    REQUIRE(flat.size() == 1);   // flat: only main.cpp at the top level
+    REQUIRE(deep.size() == 2);
+}
+
+TEST_CASE("collect_sources: recursive entries keep same-named files", "[build][1.4.10]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_recursive_dup_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src" / "a");
+    fs::create_directories(tmp / "src" / "b");
+    std::ofstream(tmp / "src" / "a" / "util.cpp") << "void au() {}\n";
+    std::ofstream(tmp / "src" / "b" / "util.cpp") << "void bu() {}\n";
+
+    auto sources = collect_sources({"src"}, {true}, tmp, "static");
+    fs::remove_all(tmp);
+
+    // 1.4.10: recursive mode dedups by project-root-relative path.
+    REQUIRE(sources.size() == 2);
+}
+
+TEST_CASE("collect_sources: mixed flat and recursive entries", "[build][1.4.10]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_recursive_mix_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src" / "sub");
+    fs::create_directories(tmp / "lib");
+    std::ofstream(tmp / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp / "src" / "sub" / "deep.cpp") << "void d() {}\n";
+    std::ofstream(tmp / "lib" / "helper.cpp") << "void h() {}\n";
+
+    auto sources = collect_sources({"src", "lib"}, {true, false}, tmp, "executable");
+    fs::remove_all(tmp);
+
+    REQUIRE(sources.size() == 3);  // main.cpp + sub/deep.cpp + lib/helper.cpp
+}
+
+TEST_CASE("collect_sources: shorter flag vector means flat", "[build][1.4.10]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_recursive_empty_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src" / "sub");
+    std::ofstream(tmp / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp / "src" / "sub" / "deep.cpp") << "void d() {}\n";
+
+    auto sources = collect_sources({"src"}, {}, tmp, "executable");
+    fs::remove_all(tmp);
+
+    REQUIRE(sources.size() == 1);
+}
+
+// ===================================================================
 // 0.2.2+: CompileSection new fields
 // ===================================================================
 
