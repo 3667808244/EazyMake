@@ -10,6 +10,7 @@ extern "C" {
 #include "miniz.h"
 }
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -17,6 +18,7 @@ extern "C" {
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -235,6 +237,77 @@ TEST_CASE("list_files: extension filtering", "[util]") {
         ezmk::util::remove_all(dir);
     }
 }
+
+// ===================================================================
+// list_files_recursive() (1.4.10)
+// ===================================================================
+
+namespace {
+std::set<std::string> rel_set(const std::vector<fs::path>& files,
+                             const fs::path& root) {
+    std::set<std::string> out;
+    for (auto& f : files) out.insert(fs::relative(f, root).generic_string());
+    return out;
+}
+}  // namespace
+
+TEST_CASE("list_files_recursive: walks the whole subtree", "[util][1.4.10]") {
+    TempDir tmp;
+    ezmk::util::create_directories(tmp.path / "core" / "detail");
+    std::ofstream(tmp.path / "main.cpp") << "x";
+    std::ofstream(tmp.path / "core" / "a.cpp") << "x";
+    std::ofstream(tmp.path / "core" / "detail" / "b.c") << "x";
+    std::ofstream(tmp.path / "core" / "note.txt") << "x";
+
+    auto files = list_files_recursive(tmp.path, {".cpp", ".c"});
+    REQUIRE(files.size() == 3);
+    REQUIRE(rel_set(files, tmp.path) ==
+            std::set<std::string>{"core/a.cpp", "core/detail/b.c", "main.cpp"});
+    REQUIRE(std::is_sorted(files.begin(), files.end()));
+}
+
+TEST_CASE("list_files_recursive: prunes hidden and build directories", "[util][1.4.10]") {
+    TempDir tmp;
+    ezmk::util::create_directories(tmp.path / ".secret");
+    ezmk::util::create_directories(tmp.path / "build" / "obj");
+    ezmk::util::create_directories(tmp.path / "src" / ".git");
+    ezmk::util::create_directories(tmp.path / "src" / "build");
+    std::ofstream(tmp.path / "keep.cpp") << "x";
+    std::ofstream(tmp.path / ".secret" / "hidden.cpp") << "x";
+    std::ofstream(tmp.path / "build" / "gen.cpp") << "x";
+    std::ofstream(tmp.path / "build" / "obj" / "gen2.cpp") << "x";
+    std::ofstream(tmp.path / "src" / "ok.cpp") << "x";
+    std::ofstream(tmp.path / "src" / ".git" / "x.cpp") << "x";
+    std::ofstream(tmp.path / "src" / "build" / "y.cpp") << "x";
+
+    auto files = list_files_recursive(tmp.path, {".cpp"});
+    REQUIRE(rel_set(files, tmp.path) ==
+            std::set<std::string>{"keep.cpp", "src/ok.cpp"});
+}
+
+TEST_CASE("list_files_recursive: missing directory yields empty", "[util][1.4.10]") {
+    auto missing = fs::temp_directory_path() / "ezmk_missing_recursive_54321";
+    std::error_code ec;
+    fs::remove_all(missing, ec);
+    REQUIRE(list_files_recursive(missing, {".cpp"}).empty());
+}
+
+TEST_CASE("list_files_recursive: does not follow directory symlinks", "[util][1.4.10]") {
+    TempDir tmp;
+    ezmk::util::create_directories(tmp.path / "real");
+    std::ofstream(tmp.path / "real" / "a.cpp") << "x";
+    std::ofstream(tmp.path / "top.cpp") << "x";
+    std::error_code ec;
+    fs::create_directory_symlink(tmp.path / "real", tmp.path / "link", ec);
+    if (ec) {
+        SUCCEED("directory symlinks are unavailable on this host");
+        return;
+    }
+    auto files = list_files_recursive(tmp.path, {".cpp"});
+    REQUIRE(rel_set(files, tmp.path) ==
+            std::set<std::string>{"real/a.cpp", "top.cpp"});
+}
+
 
 // ===================================================================
 // get_home_dir() / get_exe_dir()

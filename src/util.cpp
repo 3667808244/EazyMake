@@ -376,6 +376,40 @@ std::vector<fs::path> list_files(const fs::path& dir,
     return result;
 }
 
+// 1.4.10: recursive variant backing the opt-in "/**" source-dir syntax.
+// Prunes hidden ('.'-prefixed) directories and any directory named "build" at
+// every depth — the same prune set copy_pack_source_dir uses — so recursively
+// scanning "." cannot pull build output or internal state into the source set.
+// Directory symlinks are not followed (recursive_directory_iterator default),
+// which also makes self-referential links harmless. Sorted for determinism
+// (1.4.6 Q-19).
+std::vector<fs::path> list_files_recursive(const fs::path& dir,
+                                           const std::vector<std::string>& exts) {
+    std::vector<fs::path> result;
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec);
+         !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        const fs::path& p = it->path();
+        std::string name = p.filename().string();
+        if (it->is_directory(ec)) {
+            if ((!name.empty() && name[0] == '.') || name == "build") {
+                it.disable_recursion_pending();
+            }
+            continue;  // symlinked dirs are not descended into by default
+        }
+        if (!it->is_regular_file(ec)) continue;
+        std::string ext = p.extension().string();
+        for (auto& e : exts) {
+            if (ext == e) {
+                result.push_back(p);
+                break;
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
 // 1.2.0-dev.7: Upward project-root search. `start` is level 0; checks at most
 // `max_up` parent directories (max_up+1 candidates total) for an ezmk.toml.
 // Stops at the filesystem root to avoid looping forever.

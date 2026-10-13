@@ -131,6 +131,14 @@ bool is_path_within(const fs::path& child, const fs::path& parent);
 std::vector<fs::path> list_files(const fs::path& dir,
                                  const std::vector<std::string>& exts);
 
+// 1.4.10: collect matching files under `dir` recursively. Backing primitive for
+// the opt-in "/**" source-directory syntax. Hidden ('.'-prefixed) directories
+// and any directory named "build" are pruned at every depth (the same prune set
+// copy_pack_source_dir uses), directory symlinks are never followed, and the
+// result is sorted so object / link / cache ordering stays deterministic.
+std::vector<fs::path> list_files_recursive(const fs::path& dir,
+                                           const std::vector<std::string>& exts);
+
 // ---- Project root (1.2.0-dev.7) ----
 // Upward project-root search limit — prevents scanning up to the filesystem
 // root / user home when no ezmk.toml exists anywhere above the start point.

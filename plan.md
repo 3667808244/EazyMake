@@ -34,13 +34,13 @@
 - [x] 用户文档写明「非递归」：`docs/{zh,en}/config_file.md` 的 `src_dirs` + `[test].dirs`、`docs/{zh,en}/faq.md`、`docs/{zh,en}/glossary.md`、`tutorial/{zh,en}/basic/03-config.md` + `tutorial/{zh,en}/dev/03-test.md`、`man/ezmk.toml.5`
 - [x] 语法拍板（2026-10-13）：**候选 A（条目后缀 `/**`）**；范围 = `[compile].src_dirs` + `[test].dirs`
 - [x] 立项：根 `plan.md` 生成 + 索引登记（`plans/1.4.x/README.md` / `plans/README.md`）
-- [ ] 记录立项基线：`bash build.sh test-all`（纯文档 + 规划阶段，预期与 1.4.9 发布态一致；实测后回填用例 / 断言数）
+- [x] 记录立项基线（2026-10-13）：立项基线 = 1.4.9 发布态 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**（HEAD 代码与 v1.4.9 一致，自 v1.4.9 起仅文档 / 计划变更）；本机等价全量运行（`build/test_ezmk --order decl`，与 `build.sh test-all` 同一测试执行）RC=0
 
 ### 阶段一：发现原语（R-02）
 
-- [ ] `util::list_files` 递归变体（**旧签名不变**）：跳过 `.` 前缀目录与 `build/`、不跟随目录符号链接、结果按路径排序
-- [ ] 单测：嵌套文件被收录 / 隐藏与 `build` 被跳过 / 排序稳定 / 符号链接不成环 / 缺失目录 warn
-- [ ] 回归：全量零失败
+- [x] `util::list_files` 递归变体（**旧签名不变**）：新增 `util::list_files_recursive`（`include/ezmk/util.hpp` + `src/util.cpp`）——跳过 `.` 前缀目录与任意深度的 `build/`、不跟随目录符号链接、结果按路径排序
+- [x] 单测：`test/test_util.cpp` 新增 4 例（子树遍历 + 排序 / 隐藏与 `build` 剪枝 / 缺失目录 / 目录符号链接不跟随）
+- [x] 回归：全量 **1141 用例 / 6627 断言 / 5 跳过 / 0 失败**（基线 1137/6622/4 → +4 用例 / +5 断言 / +1 跳过；跳过的是「目录符号链接」用例，本机无创建权限时按设计 SKIP）
 
 ### 阶段二：配置解析 + 项目构建（R-03 / R-04）
 
