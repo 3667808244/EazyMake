@@ -42,7 +42,7 @@ plans/
 
 ## 未来规划
 
-- **2.0.0** —— 破坏性变更窗口（`CHANGES.md` API 稳定性承诺：破坏性变更仅在 2.0.0 引入，且至少提前 1 个 minor 版本给出 deprecation warning）。系列占位与目录说明见 [2.0.x/README.md](2.0.x/README.md)；**弃用面移除清单 + 决策台**见 [2.0.x/REMOVALS.md](2.0.x/REMOVALS.md)——已登记**四项**确定移除（`[test].flags`、`ezmk utils cc`、R-03 旧格式 lockfile/注册表读取回退、R-04 `repo::list_toml_path()` 别名）与十项待拍板决策（lockfile `sha256` 别名、`[compile].include_dir` 单数、`-V`、`util::run_executable(int)`、`[utils.permissions]` 缺省、旧式 shell 钩子、`[install].sharedir`、repo `[platform]` 缺省、未知键策略、D-10 默认创建 / 递归默认化）；**1.4.5 新增的两条兼容回退**（旧 lockfile / 旧注册表格式读取 → 2.0.0 移除；`repo::list_toml_path()` 别名 → 2.0.0 删除）以 **R-03 / R-04** 登记，待 2.0.0 计划消费。
+- **2.0.0** —— 破坏性变更窗口（`CHANGES.md` API 稳定性承诺：破坏性变更仅在 2.0.0 引入，且至少提前 1 个 minor 版本给出 deprecation warning）。系列占位与目录说明见 [2.0.x/README.md](2.0.x/README.md)；**弃用面移除清单 + 决策台**见 [2.0.x/REMOVALS.md](2.0.x/REMOVALS.md)——已登记**四项**确定移除（`[test].flags`、`ezmk utils cc`、R-03 旧格式 lockfile/注册表读取回退、R-04 `repo::list_toml_path()` 别名）与十项待拍板决策（lockfile `sha256` 别名、`[compile].include_dir` 单数、`-V`、`util::run_executable(int)`、`[utils.permissions]` 缺省、旧式 shell 钩子、`[install].sharedir`、repo `[platform]` 缺省、未知键策略、D-10 默认创建 / 递归默认化（已定向：2.0.0 起默认创建改 `src/**`））；**1.4.5 新增的两条兼容回退**（旧 lockfile / 旧注册表格式读取 → 2.0.0 移除；`repo::list_toml_path()` 别名 → 2.0.0 删除）以 **R-03 / R-04** 登记，待 2.0.0 计划消费。
 
 ## 已完成
 

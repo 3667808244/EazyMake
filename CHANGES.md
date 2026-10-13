@@ -43,6 +43,10 @@
 - **Linux/macOS 的 `ezmk watch` 仍只监视目录自身**：递归目录里新增的嵌套文件不会触发重建（Windows 走子树监视，正常）。文件监视真递归沿用 1.4.2 §3.9 / 1.4.7 §3.6 的裁定，另立版本。
 - **降级不兼容**：≤1.4.9 读到 `"src/**"` 会把它当字面目录名（缺失时 warn，最终可能 `no_source_files` fatal）。
 
+### 后续（2.0.0）
+
+- 默认创建（`ezmk project new` 的 `write_default_config()`）与默认扫描语义在 1.x 保持 `src` **扁平**，本版不改；**2.0.0 起改为 `src/**`（递归默认化）**——已登记为 [`plans/2.0.x/REMOVALS.md`](plans/2.0.x/REMOVALS.md) 的决策项 **D-10**（方向已定）。
+
 ### 文档
 
 - `docs/{zh,en}/config_file.md`（递归语法 + 规则边界）、`docs/{zh,en}/faq.md`（子目录源文件未编译）、`docs/{zh,en}/glossary.md`、`tutorial/{zh,en}/basic/03-config.md` + `tutorial/{zh,en}/dev/03-test.md`、`man/ezmk.toml.5`。
