@@ -26,7 +26,7 @@
 
 ## 1.4.10 (2026-10-13) — 可选递归源文件查找（`src_dirs` / `[test].dirs` 的 `/**`）
 
-> **状态：🚧 待发布（2026-10-13 版本定稿；阶段一~五实现与文档全部落地）** —— 设计见 [plans/1.4.x/1.4.10.md](plans/1.4.x/1.4.10.md)，阶段见根 [plan.md](plan.md)。**默认行为零变化；公共 API 无破坏性变更。**
+> **状态：✅ 已发布（2026-10-13，tag `v1.4.10`；Release run `38416035316` success，7 资产 digest 核对一致、`macos-x64` skipped）。** 阶段一~五实现与文档全部落地；全量 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**。三渠道：Homebrew tap `4a3ff91` / pacman `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`，含 4 页 man + `_ezmk`，`ezmk version` → 1.4.10）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)（CI/版主审批为发布后跟进项）。 —— 设计见 [plans/1.4.x/1.4.10.md](plans/1.4.x/1.4.10.md)，阶段见根 [plan.md](plan.md)。**默认行为零变化；公共 API 无破坏性变更。**
 
 ### 新增
 

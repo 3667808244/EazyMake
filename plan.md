@@ -1,6 +1,6 @@
 # EazyMake 1.4.10 执行计划
 
-> **状态：🚧 待发布（2026-10-13 版本定稿；语法 A，阶段一~五完成）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
+> **状态：✅ 已发布（2026-10-13，tag `v1.4.10`；Release run `38416035316` success，7 资产 digest 核对一致、`macos-x64` skipped）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
 >
 > 详细设计：[**1.4.10.md**](plans/1.4.x/1.4.10.md)。主题：**可选递归源文件查找（语法 A：条目后缀 `/**`）**。
 >
@@ -72,8 +72,8 @@
 ### 发布阶段：1.4.10（正式发布时）
 
 - [x] 版本号置为 `1.4.10`（`build.sh:74` 的 `EZMK_VERSION` fallback；`include/ezmk/version.hpp` 由构建生成）
-- [ ] `git tag v1.4.10` → Release；核对 7 资产（`macos-x64` skipped）
-- [ ] 三渠道（Homebrew / pacman / winget）随发布跟进（加载 `ezmk-publish` skill）
+- [x] `git tag v1.4.10` → Release run `38416035316` success；7 资产（`macos-x64` skipped）digest 与 `assets[].digest` 逐一核对一致
+- [x] 三渠道完成：Homebrew tap `4a3ff91`（真实 digest）/ pacman `makepkg -fd` 出包 `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`，含 4 页 man + `_ezmk`，`ezmk.exe version` → 1.4.10）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)（CI/版主审批为发布后跟进项）
 
 ## 4 关键设计决策
 
