@@ -1206,6 +1206,31 @@ TEST_CASE("lua: list_sources respects src_dirs config", "[lua][api][0.2.3]") {
     lua_pop(L, 1);
 }
 
+// 1.4.10: src_dirs "src/**" discovers nested sources.
+TEST_CASE("lua: list_sources honors /** recursive src_dirs", "[lua][api][1.4.10]") {
+    TempDir tmp;
+    write_minimal_config(tmp.path);
+    {
+        std::ofstream of(tmp.path / "ezmk.toml");
+        of << "[project]\nname = \"testproj\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+           << "[compile]\nflags = [\"-Wall\"]\ninclude_dirs = [\"include\"]\nsrc_dirs = [\"src/**\"]\n\n"
+           << "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n\n"
+           << "[depends]\nlib = []\n";
+    }
+    fs::create_directories(tmp.path / "src" / "core");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+    std::ofstream(tmp.path / "src" / "core" / "nested.cpp") << "void n() {}\n";
+
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, tmp.path);
+
+    int rc = luaL_dostring(L, "local s = ezmk.list_sources(); return #s");
+    REQUIRE(rc == 0);
+    REQUIRE(static_cast<int>(lua_tointeger(L, -1)) == 2);
+    lua_pop(L, 1);
+}
+
 TEST_CASE("lua: list_sources default to src only", "[lua][api][0.2.3]") {
     TempDir tmp;
     write_minimal_config(tmp.path);

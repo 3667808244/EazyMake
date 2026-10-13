@@ -91,6 +91,33 @@ TEST_CASE("integration: create project, build, and run (end-to-end)", "[integrat
     }
 }
 
+// 1.4.10: a "src/**" entry compiles files in subdirectories, and
+// compile_commands.json lists the nested translation unit.
+TEST_CASE("integration: recursive src_dirs compiles nested sources (1.4.10)", "[integration][1.4.10]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src" / "core");
+    std::ofstream(tmp.path / "ezmk.toml") <<
+        "[project]\nname = \"nested_app\"\ntype = \"executable\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+        "[compile]\nsrc_dirs = [\"src/**\"]\ncompile_commands = true\n";
+    std::ofstream(tmp.path / "src" / "main.cpp") <<
+        "int deep();\nint main() { return deep() == 2 ? 0 : 1; }\n";
+    std::ofstream(tmp.path / "src" / "core" / "deep.cpp") << "int deep() { return 2; }\n";
+
+    ProcResult r = run_ezmk("project build", tmp.path);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE(fs::exists(tmp.path / "build" / ("nested_app" EZMK_EXE_SUFFIX)));
+
+    REQUIRE(fs::exists(tmp.path / "compile_commands.json"));
+    auto cc = ezmk::util::file_read(tmp.path / "compile_commands.json");
+    REQUIRE(cc.find("core") != std::string::npos);
+}
+
 // Scenario 2: Incremental build — cache hit on second build
 // ==============================================================
 TEST_CASE("integration: incremental build cache hit", "[integration]") {

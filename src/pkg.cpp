@@ -907,7 +907,8 @@ fs::path compile_package(const fs::path& pkg_dir,
     // result is a fatal error (no_source_files / src_dir_missing) — aligned
     // with project semantics: all three no-source short-circuits
     // (precompiled / header_only / utils gate) run before this point.
-    auto sources = build::collect_sources(cfg.compile.src_dirs, pkg_dir,
+    auto sources = build::collect_sources(cfg.compile.src_dirs,
+                                          cfg.compile.src_dirs_recursive, pkg_dir,
                                           cfg.project.type,
                                           /*require_main=*/false);
 
@@ -1388,11 +1389,17 @@ static InstallOutcome process_installed_pkg(const fs::path& pkg_root,
         // to avoid missing-directory warning noise for utils-only packages.
         if (cfg.project.type == "utils") {
             bool has_sources = false;
-            for (auto& d : cfg.compile.src_dirs) {
+            for (size_t i = 0; i < cfg.compile.src_dirs.size(); ++i) {
+                const std::string& d = cfg.compile.src_dirs[i];
+                const bool rec = i < cfg.compile.src_dirs_recursive.size() &&
+                                 cfg.compile.src_dirs_recursive[i];
                 fs::path sdir = d;
                 if (sdir.is_relative()) sdir = dir / sdir;
-                if (util::file_exists(sdir) &&
-                    !util::list_files(sdir, {".c", ".cc", ".cpp", ".cxx"}).empty()) {
+                if (!util::file_exists(sdir)) continue;
+                auto files = rec
+                    ? util::list_files_recursive(sdir, {".c", ".cc", ".cpp", ".cxx"})
+                    : util::list_files(sdir, {".c", ".cc", ".cpp", ".cxx"});
+                if (!files.empty()) {
                     has_sources = true;
                     break;
                 }

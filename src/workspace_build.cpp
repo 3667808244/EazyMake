@@ -146,13 +146,16 @@ bool confirm(std::string_view msg, bool assume_yes) {
 // by `workspace test` — running `ezmk test` on them would fatal on "no test
 // source files".
 bool member_has_tests(const fs::path& member_dir, const config::EzConfig& cfg) {
-    for (const auto& d : cfg.test.dirs) {
+    for (size_t i = 0; i < cfg.test.dirs.size(); ++i) {
+        const std::string& d = cfg.test.dirs[i];
+        const bool rec = i < cfg.test.dirs_recursive.size() && cfg.test.dirs_recursive[i];
         fs::path dir = d;
         if (dir.is_relative()) dir = member_dir / dir;
-        if (util::file_exists(dir)) {
-            auto files = util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
-            if (!files.empty()) return true;
-        }
+        if (!util::file_exists(dir)) continue;
+        // 1.4.10: a "/**" test dir may hold its sources in subdirectories.
+        auto files = rec ? util::list_files_recursive(dir, {".c", ".cc", ".cpp", ".cxx"})
+                         : util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
+        if (!files.empty()) return true;
     }
     return false;
 }

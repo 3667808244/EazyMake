@@ -605,6 +605,26 @@ TEST_CASE("compile_package: multi src_dirs compile, require_main=false", "[pkg][
     REQUIRE(lib_exists);
 }
 
+// 1.4.10: [compile].src_dirs "/**" collects nested package sources too.
+TEST_CASE("compile_package: /** recursive src_dirs compiles nested sources", "[pkg][1.4.10]") {
+    auto pkg = dev9_pkg_dir("nested");
+    fs::create_directories(pkg / "include");
+    fs::create_directories(pkg / "src" / "core");
+    std::ofstream(pkg / "ezmk.toml") <<
+        "[project]\nname = \"nested\"\ntype = \"static\"\nversion = \"1.0.0\"\n\n"
+        "[compile]\nsrc_dirs = [\"src/**\"]\n";
+    std::ofstream(pkg / "src" / "top.cpp") << "int top() { return 1; }\n";
+    std::ofstream(pkg / "src" / "core" / "deep.cpp") << "int deep() { return 2; }\n";
+
+    auto result = compile_package(pkg, {}, ezmk::toolchain::Toolchain{});
+    bool lib_exists = fs::exists(pkg / "build" / "libnested.a");
+    fs::remove_all(pkg);
+
+    REQUIRE(!result.empty());
+    REQUIRE(result.filename() == "libnested.a");
+    REQUIRE(lib_exists);
+}
+
 // 自定义 include_dirs 自编译生效：源文件引用非默认 include/ 目录的头文件，
 // 依赖 include_dirs 相对包根解析出 -I。
 TEST_CASE("compile_package: custom include_dirs resolve for self-compile", "[pkg][1.2.0-dev.9]") {

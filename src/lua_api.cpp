@@ -531,37 +531,51 @@ static int ezmk_list_sources(lua_State* L) {
     check_arg_count(L, 0);
 
     // 0.2.3+: Read src_dirs from ezmk.toml instead of hardcoding "src/"
+    // 1.4.10: honor the per-entry "/**" recursion flag (index-aligned).
     std::vector<std::string> src_dirs = {"src"}; // default
+    std::vector<bool> recursive;
     auto* cfg = get_config();
     if (cfg && !cfg->compile.src_dirs.empty()) {
         src_dirs = cfg->compile.src_dirs;
+        recursive = cfg->compile.src_dirs_recursive;
     }
 
     std::vector<fs::path> result;
-    std::set<std::string> seen;
-    for (auto& d : src_dirs) {
+    std::set<std::string> seen;        // flat: filename dedup (0.2.3+)
+    std::set<std::string> seen_paths;  // 1.4.10: project-root-relative path dedup
+    for (size_t i = 0; i < src_dirs.size(); ++i) {
+        const std::string& d = src_dirs[i];
+        const bool rec = i < recursive.size() && recursive[i];
         fs::path dir = g_project_root / d;
         if (!util::file_exists(dir)) continue;
-        auto files = util::list_files(dir, {".c", ".cpp", ".cxx", ".cc"});
+        auto files = rec ? util::list_files_recursive(dir, {".c", ".cpp", ".cxx", ".cc"})
+                         : util::list_files(dir, {".c", ".cpp", ".cxx", ".cc"});
         for (auto& f : files) {
-            std::string fname = f.filename().string();
-            if (seen.insert(fname).second) {
-                fs::path abs = fs::absolute(f);
-                // 1.4.2 F-18: list_sources must honour the same read policy as
-                // file_read — a denied source is filtered out (no ask is
-                // popped; targets that are neither allowed nor denied keep
-                // being listed, content access stays gated at file_read).
-                if (g_in_script_context && g_current_perms) {
-                    fs::path abs_norm(norm_path(abs));
-                    if (check_read_permission(abs_norm, g_current_perms,
-                                              g_project_root,
-                                              g_current_script_pkg_root)
-                        == PermResult::Deny) {
-                        continue;
-                    }
-                }
-                result.push_back(abs);
+            if (rec) {
+                // 1.4.10: recursive entries dedup by project-root-relative path,
+                // so same-named files in different subdirectories are all listed.
+                std::error_code ec;
+                fs::path rel = fs::relative(f, g_project_root, ec);
+                std::string key = ec ? f.lexically_normal().string() : rel.generic_string();
+                if (!seen_paths.insert(key).second) continue;
+            } else if (!seen.insert(f.filename().string()).second) {
+                continue;
             }
+            fs::path abs = fs::absolute(f);
+            // 1.4.2 F-18: list_sources must honour the same read policy as
+            // file_read — a denied source is filtered out (no ask is
+            // popped; targets that are neither allowed nor denied keep
+            // being listed, content access stays gated at file_read).
+            if (g_in_script_context && g_current_perms) {
+                fs::path abs_norm(norm_path(abs));
+                if (check_read_permission(abs_norm, g_current_perms,
+                                          g_project_root,
+                                          g_current_script_pkg_root)
+                    == PermResult::Deny) {
+                    continue;
+                }
+            }
+            result.push_back(abs);
         }
     }
     push_path_array(L, result);

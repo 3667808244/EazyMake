@@ -51,9 +51,9 @@
 
 ### 阶段三：全路径对齐（R-05）
 
-- [ ] test / 包编译 / utils 门控 / Lua `ezmk.list_sources()` / workspace 测试探测统一走递归感知 helper
-- [ ] 集成：嵌套源的 `build` + `test` + `compile_commands`；嵌套源的包安装
-- [ ] 回归：全量零失败
+- [x] test / 包编译 / utils 门控 / Lua `ezmk.list_sources()` / workspace 测试探测统一走递归感知 helper（`collect_test_sources` 加 flags；`pkg.cpp` compile_package + utils 门控；`lua_api.cpp` `list_sources`；`workspace_build.cpp` `member_has_tests`）
+- [x] 集成 / 单测：`test_lua.cpp` `list_sources` 递归、`test_pkg.cpp` 嵌套源包编译、`test_integration.cpp` 嵌套 `src/**` 的 `ezmk build` + `compile_commands.json` 断言
+- [x] 回归：全量 **1152 用例 / 6664 断言 / 5 跳过 / 0 失败**（阶段二 1149/6654 → +3 用例 / +10 断言；`bash build.sh test-all` exit 0）
 
 ### 阶段四：互操作（R-06）
 

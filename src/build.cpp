@@ -2134,19 +2134,33 @@ bool has_user_main(const fs::path& src_path) {
 }
 
 // Collect test source files from test directories.
+// 1.4.10: `recursive` is index-aligned with `test_dirs` (missing/short = flat);
+// recursive entries dedup by project-root-relative path, flat entries keep the
+// previous append-only behaviour.
 std::vector<fs::path> collect_test_sources(
     const std::vector<std::string>& test_dirs,
+    const std::vector<bool>& recursive,
     const fs::path& proj_root) {
     std::vector<fs::path> result;
-    for (auto& d : test_dirs) {
+    std::set<std::string> seen_paths;
+    for (size_t i = 0; i < test_dirs.size(); ++i) {
+        const std::string& d = test_dirs[i];
+        const bool rec = i < recursive.size() && recursive[i];
         fs::path dir = d;
         if (dir.is_relative()) dir = proj_root / dir;
         if (!util::file_exists(dir)) {
             util::warn(std::string("test directory not found, skipping: ") + d);
             continue;
         }
-        auto files = util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
+        auto files = rec ? util::list_files_recursive(dir, {".c", ".cc", ".cpp", ".cxx"})
+                         : util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
         for (auto& f : files) {
+            if (rec) {
+                std::error_code ec;
+                fs::path rel = fs::relative(f, proj_root, ec);
+                std::string key = ec ? f.lexically_normal().string() : rel.generic_string();
+                if (!seen_paths.insert(key).second) continue;
+            }
             result.push_back(f);
         }
     }
@@ -2744,7 +2758,8 @@ void run_tests(const config::EzConfig& cfg,
     }
 
     // Collect test sources
-    auto test_sources = collect_test_sources(cfg.test.dirs, proj_root);
+    auto test_sources = collect_test_sources(cfg.test.dirs, cfg.test.dirs_recursive,
+                                              proj_root);
     if (test_sources.empty()) {
         util::fatal("no test source files found in test directories. "
                      "Configure test.dirs in ezmk.toml.");
@@ -2766,7 +2781,7 @@ void run_tests(const config::EzConfig& cfg,
     }
     if (cfg.project.type != "utils") {  // utils projects produce no objects
         try {
-            auto proj_sources = collect_sources(cfg.compile.src_dirs, proj_root,
+            auto proj_sources = collect_sources(cfg.compile.src_dirs, cfg.compile.src_dirs_recursive, proj_root,
                                                 cfg.project.type);
             fs::path temp_dir = proj_root / ".ezmk/temp";
             for (auto& s : proj_sources) {
