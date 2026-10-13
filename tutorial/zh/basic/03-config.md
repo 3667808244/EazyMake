@@ -62,7 +62,7 @@ lib = []
 | `flags` | 编译器标志（GCC/Clang） | — |
 | `msvc_flags` | 使用 MSVC 时的额外标志 | — |
 | `include_dirs` | 头文件搜索目录 | `["include"]` |
-| `src_dirs` | 要扫描的源文件目录 | `["src"]` |
+| `src_dirs` | 要扫描的源文件目录（非递归，子目录需另行列出） | `["src"]` |
 | `ezmk_macros` | 是否定义内置 `EZMK_*` 宏 | `true` |
 
 语义化宏放在 `[compile.macros]` 中：

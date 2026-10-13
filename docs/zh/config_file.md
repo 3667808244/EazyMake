@@ -86,7 +86,7 @@
 | `flags` | string[] | 否 | `[]` | 编译时添加的标志（如 `-Wall`、`-O2`）。GCC/Clang 格式，MSVC 下自动翻译 |
 | `msvc_flags` | string[] | 否 | `[]` | **0.2.1+** MSVC 专用编译标志（不翻译，仅 MSVC 工具链时追加） |
 | `include_dirs` | string[] | 否 | `["include"]` | 编译时 `-I` 搜索路径，相对于项目根目录；对包同样生效（1.2.0-dev.9+，相对包根解析，与默认 `include/` 保序去重）。`<proj_root>/include` 只要存在就恒被加入 `-I`（与 `include_dirs` 是否包含它无关）；显式 `include_dirs = []` 会静默回落为 `["include"]`（与 `src_dirs = []` 报错的行为不对称） |
-| `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错；对包同样生效（1.2.0-dev.9+，包编译按此收集源文件，缺失目录 warn+跳过） |
+| `src_dirs` | string[] | 否 | `["src"]` | **0.2.2+** 源文件搜索目录，支持多个目录（如 `["src", "lib"]`）。显式设为 `[]` 会报错；对包同样生效（1.2.0-dev.9+，包编译按此收集源文件，缺失目录 warn+跳过）。**非递归**——只扫描该目录**直接包含**的源文件，子目录不会被收录（见下方说明） |
 | `ezmk_macros` | bool | 否 | `true` | **0.2.2+** 是否自动注入 `EZMK_*` 标准预处理器宏（`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`） |
 | `compile_commands` | bool | 否 | `false` | **1.1.1+** 构建成功后自动生成 `compile_commands.json`（clangd 索引） |
 | `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
@@ -94,6 +94,15 @@
 | `source_date_epoch` | 整数 | 否 | `0` | **1.1.0+** 确定性构建时间戳（`0` = 自动解析；负值报错） |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
+
+> **源文件目录扫描是「非递归」的（0.2.2 至今）：** `src_dirs`（以及 `[test].dirs`）只收录所列目录**直接包含**的源文件，子目录中的文件不会自动参与编译。要编译子目录，需把子目录逐个写进列表：
+>
+> ```toml
+> [compile]
+> src_dirs = ["src", "src/core", "src/ui", "lib/util"]
+> ```
+>
+> 两个易踩的坑：① `src_dirs` 是目录列表而非 glob——`"src/**"` 会被当作字面目录名（找不到时仅告警）；② 采集按**文件名**去重，两个不同目录下的同名文件（`src/a/util.cpp` 与 `src/b/util.cpp`）只会编译先出现的那个并打印重复告警。递归查找为候选功能，尚未支持。
 
 > **`source_date_epoch` 解析优先级（仅当 `deterministic = true` 时）：**
 > `[compile].source_date_epoch` → 环境变量 `SOURCE_DATE_EPOCH` → git HEAD 提交时间
@@ -419,7 +428,7 @@ sharedir = "share"
 
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `dirs` | string[] | 否 | `["test"]` | 测试源文件目录 |
+| `dirs` | string[] | 否 | `["test"]` | 测试源文件目录（**非递归**：只扫描所列目录自身，子目录需逐个列出） |
 | `framework` | string | 否 | `"catch2"` | 测试框架：`"catch2"` 或 `"ezmk"`（大小写不敏感） |
 | `default_profile` | string | 否 | `""` | **1.2.0-dev.12+** 未传 `--profile` 时测试默认应用的 profile（复用 `[compile.profile.<name>]` / `[link.profile.<name>]`，与 `[compile].default_profile` 对称） |
 | `include_dirs` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-I` 目录（相对项目根解析、缺失跳过），不污染主构建 |

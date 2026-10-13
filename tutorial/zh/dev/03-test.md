@@ -16,6 +16,8 @@ include_dirs = ["test/helpers"] # 测试专属 -I
 link_targets = ["pthread"]      # 测试专属 -l
 ```
 
+（`dirs` 与 `src_dirs` 一样**不递归**：只扫描所列目录自身，子目录需逐个列出。）
+
 （`[test] flags` 自 1.2.0-dev.12 起已弃用、2.0.0 移除——仍可用，但会打印弃用警告。）
 
 有两种框架。两者都遵循"零配置"哲学——把文件交给 `ezmk test`，其余由它处理。

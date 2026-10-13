@@ -139,6 +139,24 @@ src_dirs = ["src", "lib", "vendor"]
 
 ---
 
+### Q: Source files in subdirectories are not compiled
+
+**Cause**: source-directory scanning is **not recursive** — `[compile].src_dirs` (and `[test].dirs`) only collect the files **directly inside** each listed directory. Files in subdirectories are never discovered.
+
+**Solution**: list each subdirectory explicitly:
+```toml
+[compile]
+src_dirs = ["src", "src/core", "src/ui", "lib/util"]
+```
+
+Two traps:
+1. `src_dirs` is a list of directories, not a glob — `"src/**"` is treated as a literal directory name (a missing directory only warns).
+2. Collection deduplicates by **filename**: two same-named files in different directories (e.g. `src/a/util.cpp` and `src/b/util.cpp`) compile only the first one, with a duplicate warning — rename them or adjust the directory split.
+
+Recursive discovery is a candidate feature and is not supported yet.
+
+---
+
 ## Package Management
 
 ### Q: "Package not found: xxx"

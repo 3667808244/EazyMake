@@ -113,7 +113,7 @@ code supports a baseline standard (optionally up to a documented upper bound):
 | `flags` | string[] | No | `[]` | Compile flags (e.g. `-Wall`, `-O2`). GCC/Clang format, auto-translated under MSVC |
 | `msvc_flags` | string[] | No | `[]` | **0.2.1+** MSVC-specific compile flags (not translated, only appended when using MSVC toolchain) |
 | `include_dirs` | string[] | No | `["include"]` | `-I` search paths during compilation, relative to project root; also honored for packages (1.2.0-dev.9+, resolved relative to the package root, order-preserving dedup against the default `include/`). `<proj_root>/include` is always added to `-I` whenever it exists, whether or not `include_dirs` lists it; an explicit `include_dirs = []` silently falls back to `["include"]` (asymmetric with `src_dirs = []`, which errors) |
-| `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error; also honored for packages (1.2.0-dev.9+, package sources are collected from these directories, missing dirs warn + skip) |
+| `src_dirs` | string[] | No | `["src"]` | **0.2.2+** Source file search directories; supports multiple directories (e.g. `["src", "lib"]`). Explicitly setting to `[]` causes an error; also honored for packages (1.2.0-dev.9+, package sources are collected from these directories, missing dirs warn + skip). **Not recursive** — only files **directly inside** each directory are collected; subdirectories are not scanned (see the note below) |
 | `ezmk_macros` | bool | No | `true` | **0.2.2+** Whether to auto-inject `EZMK_*` standard preprocessor macros (`EZMK`/`EZMK_VERSION`/`EZMK_PROJECT_*`) |
 | `compile_commands` | bool | No | `false` | **1.1.1+** Auto-generate `compile_commands.json` (clangd index) after a successful build |
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
@@ -121,6 +121,15 @@ code supports a baseline standard (optionally up to a documented upper bound):
 | `source_date_epoch` | integer | No | `0` | **1.1.0+** Deterministic build timestamp (`0` = resolve automatically; negative values are rejected) |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
+
+> **Source-directory scanning is not recursive (since 0.2.2):** `src_dirs` (and `[test].dirs`) collect only the source files **directly inside** each listed directory; files in subdirectories are not picked up. To compile a subdirectory, list it explicitly:
+>
+> ```toml
+> [compile]
+> src_dirs = ["src", "src/core", "src/ui", "lib/util"]
+> ```
+>
+> Two traps: (1) `src_dirs` is a list of directories, not a glob — `"src/**"` is treated as a literal directory name (a missing directory only warns); (2) collection deduplicates by **filename**, so two same-named files in different directories (`src/a/util.cpp` and `src/b/util.cpp`) compile only the first one, with a duplicate warning. Recursive discovery is a candidate feature and is not supported yet.
 
 > **`source_date_epoch` resolution priority (only when `deterministic = true`):**
 > `[compile].source_date_epoch` → environment variable `SOURCE_DATE_EPOCH` →
@@ -491,7 +500,7 @@ Configuration for `ezmk test` (build and run project tests).
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `dirs` | string[] | No | `["test"]` | Test source file directories |
+| `dirs` | string[] | No | `["test"]` | Test source file directories (**not recursive** — list subdirectories explicitly) |
 | `framework` | string | No | `"catch2"` | Test framework: `"catch2"` or `"ezmk"` (case-insensitive) |
 | `default_profile` | string | No | `""` | **1.2.0-dev.12+** Profile applied when no `--profile` is given (reuses `[compile.profile.<name>]` / `[link.profile.<name>]`, symmetric with `[compile].default_profile`) |
 | `include_dirs` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-I` directories (resolved relative to the project root, missing dirs skipped); does not pollute the main build |

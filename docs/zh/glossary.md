@@ -40,7 +40,7 @@ EazyMake 文档的标准化中文术语。维护者和翻译者应参考此术�
 | 宏 | macro | 预处理器定义，通过 `-D` 标志、`[compile.macros]` 或自动注入的 `EZMK_*` 宏 |
 | 标志 | flag | 编译器或链接器的命令行选项（如 `-Wall`、`-O2`） |
 | 头文件目录 | include directory | `#include` 头文件的搜索路径，在 `[compile].include_dirs` 中配置 |
-| 源文件目录 | source directory | 扫描源文件的目录，在 `[compile].src_dirs` 中配置 |
+| 源文件目录 | source directory | 扫描源文件的目录，在 `[compile].src_dirs` 中配置；**只扫描目录自身，不递归子目录** |
 | 链接目录 | link directory | 链接时库文件的搜索路径，在 `[link].link_dirs` 中配置 |
 | 系统目标 | system target | 需要链接的系统库（如 `pthread`、`m`），在 `[link].system_target` 中声明 |
 
