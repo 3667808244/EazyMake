@@ -69,6 +69,8 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 
 - **1.4.10 为「可选递归源文件查找」补丁（✅ 已发布 2026-10-13，tag `v1.4.10`）**：当前 `util::list_files()` 非递归，`src_dirs` / `[test].dirs` 只扫描目录自身；本版采用**候选 A**——条目以 `/**` 结尾即递归该目录整棵子树（逐条目生效、可混用、非 glob），**默认行为零变化**；覆盖 build / test / package / `compile_commands` 一致源集合，并对齐 export 的 `GLOB` / `GLOB_RECURSE`、注明 pack 与 POSIX watch 的既有行为。设计见 [1.4.10.md](1.4.10.md)，阶段见根 [`plan.md`](../../plan.md)。**发布实测**：全量 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**；Release run `38416035316` success，7 资产 digest 核对一致（`macos-x64` skipped）；三渠道：Homebrew tap `4a3ff91`（真实 digest）/ pacman `makepkg -fd` 出包 `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)。
 
+- **1.4.11 为 1.4.10 发布后的代码质量审计修复补丁（第四轮）（📋 已立项 2026-10-17，待实现）**：承接 1.4.0-dev.6（第一轮）、1.4.2（第二轮）、1.4.6（第三轮）的同一主题，基于**八路并行逐行审计 + 独立复核**共 47 项（P1 4 项 / P2 20 项 / P3 23 项）。覆盖：命令执行与进程安全（fork 后 `setenv`、Lua run 权限 shell 元字符绕过、Windows/`$CXX` 转义遗漏点）、数据完整性与错误路径（`atomic_rename` 回退在 `cache.cpp`/`pkg.cpp` 的重复形态、`.tmp` 泄漏、`ThreadPool` 构造 `terminate`）、增量缓存与构建正确性、包/仓库/锁文件（`pkg remove` 不剪 lockfile、跨仓库预发布、precompiled 未固定、版本分量回绕）、Lua/i18n、配置解析、import/export/workspace、归档/下载。零功能新增、公共 API 无破坏性变更；零星项实现前需拍板（§3.11）。立项基线实测 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**。设计 + 阶段清单见 [1.4.11.md](1.4.11.md)。
+
 ## 跨版本关注点
 
 - **1.3.1 语义 A 为基线**：dev.2/dev.3 扩展而非替换区间语法语义；上界/元数据语义不变。
