@@ -124,15 +124,10 @@ void generate_compile_db(const cache::CompileInput& cin,
     }
     std::string json = arr.dump(2) + "\n";
 
-    // Atomic write (temp → rename), mirroring cache::save_record().
-    auto tmp = out;
-    tmp += ".tmp";
-    util::file_write(tmp, json);
-    std::error_code ec;
-    fs::rename(tmp, out, ec);
-    if (ec) {
-        util::file_write(out, json);
-    }
+    // 1.4.11 Q4-08: shared crash-safe writer (temp → atomic rename) that also
+    // removes the temp on failure — this used to leave compile_commands.json.tmp
+    // behind whenever the destination already existed.
+    util::atomic_write_text(out, json);
 }
 
 } // namespace ezmk::compile_db

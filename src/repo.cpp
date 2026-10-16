@@ -561,18 +561,23 @@ void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
         auto entries = load_repo_list(scope);
         for (auto it = entries.begin(); it != entries.end(); ++it) {
             if (it->name == name) {
-                // Delete cache directory for git repos
-                if (it->type == "git") {
+                // 1.4.11 Q4-10: persist the registry BEFORE deleting the cache.
+                // save_repo_list() calls util::fatal on failure; deleting first
+                // left the registry pointing at a cache that no longer existed.
+                const bool is_git = (it->type == "git");
+                entries.erase(it);
+                save_repo_list(scope, entries);
+
+                // Delete cache directory for git repos (best-effort, after the
+                // registry no longer references it).
+                if (is_git) {
                     auto cd = cache_dir(scope, name);
                     if (util::file_exists(cd)) {
                         util::info(ezmk::i18n::I18nKey::removing_cache,
                                    {{"path", cd.string()}});
-                        { std::error_code ec; fs::remove_all(cd, ec); }  // best-effort
+                        { std::error_code ec; fs::remove_all(cd, ec); }
                     }
                 }
-
-                entries.erase(it);
-                save_repo_list(scope, entries);
                 util::info(ezmk::i18n::I18nKey::repo_removed, {{"name", std::string(name)}});
                 return;
             }

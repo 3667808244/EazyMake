@@ -1038,14 +1038,10 @@ fs::path compile_package(const fs::path& pkg_dir,
         }
     }
 
-    {
-        std::error_code ec;
-        fs::rename(lib_tmp, lib, ec);
-        if (ec) {
-            fs::copy_file(lib_tmp, lib, fs::copy_options::overwrite_existing, ec);
-            fs::remove(lib_tmp, ec);
-        }
-    }
+    // 1.4.11 Q4-07: shared atomic helper — the old fallback deleted lib_tmp
+    // even when the copy failed, then reported success with a stale/missing
+    // archive (and hashed that into the lockfile).
+    util::atomic_rename(lib_tmp, lib);
 
     return lib;
 }

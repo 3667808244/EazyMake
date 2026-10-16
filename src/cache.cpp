@@ -399,6 +399,9 @@ void save_record(const CacheRecord& record, const fs::path& json_path) {
             util::warn("failed to write cache record to " + json_path.string() +
                        " — incremental cache will not persist");
         }
+        // 1.4.11 Q4-08: the rename fallback must not leave the temp file behind.
+        std::error_code rm_ec;
+        fs::remove(tmp, rm_ec);
     }
 }
 
@@ -857,15 +860,10 @@ SingleCompileResult compile_one_source(const fs::path& src,
         return result;
     }
 
-    // Atomically rename temp to final
-    {
-        std::error_code ec;
-        fs::rename(obj_tmp, obj, ec);
-        if (ec) {
-            fs::copy_file(obj_tmp, obj, fs::copy_options::overwrite_existing, ec);
-            fs::remove(obj_tmp, ec);
-        }
-    }
+    // 1.4.11 Q4-07: use the shared atomic helper. The previous hand-rolled
+    // fallback ran fs::remove(obj_tmp) even when copy_file failed, destroying
+    // the only valid object and still reporting success.
+    util::atomic_rename(obj_tmp, obj);
     result.object = obj;
 
     // Copy compiled object to cache (atomic)

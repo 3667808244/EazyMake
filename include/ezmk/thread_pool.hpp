@@ -22,22 +22,37 @@ public:
             throw std::invalid_argument(
                 "ThreadPool: num_threads must be at least 1");
         }
-        for (size_t i = 0; i < num_threads; ++i) {
-            workers_.emplace_back([this] {
-                while (true) {
-                    std::function<void()> task;
-                    {
-                        std::unique_lock<std::mutex> lock(queue_mutex_);
-                        condition_.wait(lock, [this] {
-                            return stop_ || !tasks_.empty();
-                        });
-                        if (stop_ && tasks_.empty()) return;
-                        task = std::move(tasks_.front());
-                        tasks_.pop();
+        try {
+            for (size_t i = 0; i < num_threads; ++i) {
+                workers_.emplace_back([this] {
+                    while (true) {
+                        std::function<void()> task;
+                        {
+                            std::unique_lock<std::mutex> lock(queue_mutex_);
+                            condition_.wait(lock, [this] {
+                                return stop_ || !tasks_.empty();
+                            });
+                            if (stop_ && tasks_.empty()) return;
+                            task = std::move(tasks_.front());
+                            tasks_.pop();
+                        }
+                        task();
                     }
-                    task();
-                }
-            });
+                });
+            }
+        } catch (...) {
+            // 1.4.11 Q4-09: if a worker thread cannot be created, unwinding the
+            // constructor would destroy joinable std::threads -> std::terminate.
+            // Stop, wake and join the workers already created, then rethrow.
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex_);
+                stop_ = true;
+            }
+            condition_.notify_all();
+            for (auto& w : workers_) {
+                if (w.joinable()) w.join();
+            }
+            throw;
         }
     }
 
