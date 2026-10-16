@@ -439,6 +439,20 @@ TEST_CASE("collect_sources: static library does not require main.cpp", "[build][
     REQUIRE(sources.size() == 1);
 }
 
+// 1.4.11 Q4-12: main.cc / main.cxx are collected source extensions, so the
+// executable entry-point check must recognize them too.
+TEST_CASE("collect_sources: main.cc also accepted for executable", "[build][1.4.11]") {
+    auto tmp = fs::temp_directory_path() / ("ezmk_test_collect_maincc_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(tmp / "src");
+    std::ofstream(tmp / "src" / "main.cc") << "int main() { return 0; }\n";
+
+    auto sources = collect_sources({"src"}, tmp, "executable");
+    fs::remove_all(tmp);
+
+    REQUIRE(sources.size() == 1);
+}
+
 TEST_CASE("collect_sources: main.c also accepted for executable", "[build][0.2.2]") {
     auto tmp = fs::temp_directory_path() / ("ezmk_test_collect8_" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));

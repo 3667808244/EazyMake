@@ -35,10 +35,25 @@ static void validate_test_cache_signature(cache::CacheRecord& record,
     auto cur_sig = cache::compile_options_signature(cin.compile, cin.extra_includes,
                                                     cin.lang.std_flag, cin.stdlib,
                                                     cin.use_pic);
+    bool invalidate = false;
     if (record.compile_options_signature != cur_sig) {
         record.compile_options_signature = cur_sig;
-        record.files.clear();
+        invalidate = true;
     }
+    // 1.4.11 Q4-11: mirror the build path (compile_phase) — a compiler change
+    // (upgrade / $CXX switch) must invalidate test objects too, or they get
+    // linked against freshly built project objects.
+    if (!record.compiler_version.empty() &&
+        record.compiler_version != cin.tc.version) {
+        invalidate = true;
+    }
+    record.compiler_version = cin.tc.version;
+    // 1.1.0 / 1.4.11: the deterministic toggle invalidates like the build path.
+    if (record.deterministic != cin.compile.deterministic) {
+        if (!record.files.empty()) invalidate = true;
+        record.deterministic = cin.compile.deterministic;
+    }
+    if (invalidate) record.files.clear();
 }
 
 // 0.2.2+: Check if a string is a plain integer (no quoting needed for -D flags)
@@ -198,13 +213,14 @@ std::vector<fs::path> collect_sources(
         util::fatal(ezmk::i18n::I18nKey::no_source_files);
     }
 
-    // Check main.cpp requirement for executables (1.2.0-dev.9: skipped when
-    // require_main=false — package compilation, which is always a static lib)
+    // Check main requirement for executables (1.2.0-dev.9: skipped when
+    // require_main=false — package compilation, which is always a static lib).
+    // 1.4.11 Q4-12: accept any collected source whose stem is "main" — main.cc /
+    // main.cxx were collected but never recognized.
     if (require_main && project_type == "executable") {
         bool has_main = false;
         for (auto& f : result) {
-            auto fn = f.filename().string();
-            if (fn == "main.cpp" || fn == "main.c") {
+            if (f.stem().string() == "main") {
                 has_main = true;
                 break;
             }
@@ -1191,7 +1207,14 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
             util::progress_newline();
         }
     } else {
-        comp_result = cache::compile_sources(cin, record);
+        // 1.4.11 Q4-13: a failing source throws out of compile_sources; persist
+        // the successfully merged entries first.
+        try {
+            comp_result = cache::compile_sources(cin, record);
+        } catch (...) {
+            if (!opts.disable_cache) cache::save_record(record);
+            throw;
+        }
     }
 
     // Process parallel results
@@ -1233,6 +1256,9 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
                                   std::to_string(error_count) + " error(s)";
             util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::build_failed_summary,
                                         {{"summary", summary}}));
+            // 1.4.11 Q4-13: persist the successful entries before aborting so a
+            // single bad file does not discard the whole run's cache updates.
+            if (!opts.disable_cache) cache::save_record(record);
             util::fatal(ezmk::i18n::I18nKey::build_failed);
         }
     }
@@ -2154,13 +2180,14 @@ std::vector<fs::path> collect_test_sources(
         }
         auto files = rec ? util::list_files_recursive(dir, {".c", ".cc", ".cpp", ".cxx"})
                          : util::list_files(dir, {".c", ".cc", ".cpp", ".cxx"});
+        // 1.4.11 Q4-14: dedup by project-root-relative path in BOTH modes so
+        // duplicate/overlapping [test].dirs entries do not compile the same
+        // test source twice (identical .o -> multiple definition).
         for (auto& f : files) {
-            if (rec) {
-                std::error_code ec;
-                fs::path rel = fs::relative(f, proj_root, ec);
-                std::string key = ec ? f.lexically_normal().string() : rel.generic_string();
-                if (!seen_paths.insert(key).second) continue;
-            }
+            std::error_code ec;
+            fs::path rel = fs::relative(f, proj_root, ec);
+            std::string key = ec ? f.lexically_normal().string() : rel.generic_string();
+            if (!seen_paths.insert(key).second) continue;
             result.push_back(f);
         }
     }
