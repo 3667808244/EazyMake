@@ -279,15 +279,50 @@ PermResult check_run_permission(std::string_view cmd,
                                 const std::optional<config::UtilsPermissions>& perms) {
     if (!perms) return PermResult::Allow; // legacy: unrestricted
 
-    std::string tok = first_token(cmd);
+    // 1.4.11 Q4-02: on POSIX the command is handed to /bin/sh, so an allow-list
+    // of ["git"] must not pass "git ; rm -rf ~". Refuse shell constructs that
+    // cannot be audited (expansion / redirection / subshell), and require EVERY
+    // command segment's first token to be permitted (deny > ask > allow).
+    static const char* kDangerous = "$><(){}";
+    if (cmd.find_first_of(kDangerous) != std::string_view::npos ||
+        cmd.find('\x60') != std::string_view::npos ||
+        cmd.find('\n') != std::string_view::npos ||
+        cmd.find('\r') != std::string_view::npos) {
+        return PermResult::Deny;
+    }
 
-    for (const auto& d : perms->run_deny) {
-        if (cmd_matches_entry(tok, d)) return PermResult::Deny;
+    PermResult worst = PermResult::Allow;
+    bool any = false;
+    auto consider = [&](std::string_view seg) {
+        std::string tok = first_token(seg);
+        if (tok.empty()) return;
+        any = true;
+        for (const auto& d : perms->run_deny) {
+            if (cmd_matches_entry(tok, d)) {
+                worst = PermResult::Deny;
+                return;
+            }
+        }
+        bool allowed = false;
+        for (const auto& a : perms->run) {
+            if (cmd_matches_entry(tok, a)) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed && worst == PermResult::Allow) worst = PermResult::Ask;
+    };
+    size_t start = 0;
+    for (size_t i = 0; i < cmd.size(); ++i) {
+        char c = cmd[i];
+        if (c == ';' || c == '|' || c == '&') {
+            consider(cmd.substr(start, i - start));
+            start = i + 1;
+        }
     }
-    for (const auto& a : perms->run) {
-        if (cmd_matches_entry(tok, a)) return PermResult::Allow;
-    }
-    return PermResult::Ask;
+    consider(cmd.substr(start));
+    if (!any) return PermResult::Deny;
+    return worst;
 }
 
 void set_noninteractive(bool value) { g_noninteractive = value; }

@@ -123,8 +123,8 @@ build/
         if (util::git_available()) {
             util::info(ezmk::i18n::I18nKey::init_git);
             std::ostringstream cmd;
-            cmd << "git init \""
-                << util::escape_shell_arg(root.string()) << "\"";
+            // 1.4.11 Q4-04: platform-correct quoting (Windows has no shell).
+            cmd << "git init " << util::quote_cli_arg(root.string());
             auto res = util::run_command(cmd.str());
             if (res.exit_code == 0) {
                 util::info(ezmk::i18n::I18nKey::git_initialized);

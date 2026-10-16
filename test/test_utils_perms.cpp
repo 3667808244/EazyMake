@@ -166,6 +166,38 @@ TEST_CASE("perm run: quoted first token", "[perms]") {
     REQUIRE(ezmk::lua::check_run_permission("\"my tool\" --flag", op) == PermResult::Allow);
 }
 
+// 1.4.11 Q4-02: the whole command line is audited, not just the first token.
+TEST_CASE("perm run: compound command checks every segment", "[perms][1.4.11]") {
+    auto p = std::make_optional(make_perms());
+    // allow = {g++, clang++, git*}; deny = {rm, curl}.
+    REQUIRE(ezmk::lua::check_run_permission("git status && git log", p)
+            == PermResult::Allow);
+    REQUIRE(ezmk::lua::check_run_permission("git status ; rm -rf ~", p)
+            == PermResult::Deny);
+    REQUIRE(ezmk::lua::check_run_permission("git log | curl http://x", p)
+            == PermResult::Deny);
+}
+
+TEST_CASE("perm run: shell constructs are denied", "[perms][1.4.11]") {
+    auto p = std::make_optional(make_perms());
+    REQUIRE(ezmk::lua::check_run_permission("git $(rm -rf ~)", p)
+            == PermResult::Deny);
+    REQUIRE(ezmk::lua::check_run_permission("git `rm -rf ~`", p)
+            == PermResult::Deny);
+    REQUIRE(ezmk::lua::check_run_permission("git > /tmp/out", p)
+            == PermResult::Deny);
+    REQUIRE(ezmk::lua::check_run_permission("git status\nrm -rf ~", p)
+            == PermResult::Deny);
+}
+
+TEST_CASE("perm run: command-list token that is not executable still asks",
+          "[perms][1.4.11]") {
+    auto p = std::make_optional(make_perms());
+    // A segment whose first token is not listed yields Ask, not silent allow.
+    REQUIRE(ezmk::lua::check_run_permission("git status && python foo.py", p)
+            == PermResult::Ask);
+}
+
 // ===================================================================
 // resolve_ask (non-interactive fail-safe + session cache)
 // ===================================================================

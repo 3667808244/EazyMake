@@ -265,8 +265,9 @@ inline void merge_env(RunOptions& opts,
                       const std::map<std::string, std::string>& extra) {
     for (const auto& kv : extra) opts.env[kv.first] = kv.second;
 }
-// Overload taking RunOptions. POSIX: cwd/env applied via chdir/setenv AFTER fork
-// (child-only, no race). Windows: lpCurrentDirectory + a built environment block.
+// Overload taking RunOptions. POSIX (1.4.11 Q4-01): cwd via chdir in the child,
+// env built BEFORE fork and passed to execve (setenv after fork is not
+// async-signal-safe). Windows: lpCurrentDirectory + a built environment block.
 // NOTE: keep the int overload above — it forwards here so existing callers work.
 ProcResult run_command(const std::string& cmd, const RunOptions& opts);
 

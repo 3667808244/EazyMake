@@ -453,7 +453,9 @@ static Toolchain detect_gcc_like(const std::string& cxx, const std::string& cc) 
     tc.archiver = fs::path("ar");
 
     // 1.1.0: capture compiler version (first line of --version output)
-    auto ver_res = util::run_command(cxx + " --version 2>&1");
+    // 1.4.11 Q4-06: quote the compiler path (may contain spaces, e.g.
+    // "C:/Program Files/LLVM/bin/clang++.exe").
+    auto ver_res = util::run_command(util::quote_cli_arg(cxx) + " --version 2>&1");
     if (ver_res.exit_code == 0 && !ver_res.out.empty()) {
         auto nl = ver_res.out.find('\n');
         tc.version = (nl != std::string::npos)
@@ -751,7 +753,7 @@ Toolchain detect_toolchain() {
 
     if (cxx_env && cxx_env[0] != '\0') {
         std::string cxx(cxx_env);
-        auto res = util::run_command(cxx + " --version 2>&1");
+        auto res = util::run_command(util::quote_cli_arg(cxx) + " --version 2>&1");
         if (res.exit_code == 0) {
             std::string cc = (cc_env && cc_env[0] != '\0') ? std::string(cc_env)
                 : (cxx.find("clang") != std::string::npos ? "clang" : "gcc");
@@ -785,7 +787,7 @@ Toolchain detect_toolchain() {
                                 const std::string& only) -> std::optional<Toolchain> {
             for (size_t i = 0; i < cxxs.size(); ++i) {
                 if (!only.empty() && cxxs[i] != only) continue;
-                auto res = util::run_command(cxxs[i] + " --version 2>&1");
+                auto res = util::run_command(util::quote_cli_arg(cxxs[i]) + " --version 2>&1");
                 if (res.exit_code == 0) return detect_gcc_like(cxxs[i], ccs[i]);
             }
             return std::nullopt;

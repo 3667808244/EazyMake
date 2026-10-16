@@ -1684,6 +1684,26 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
                        escape_shell_arg(out_tmpl) + "\" 2>\"" +
                        escape_shell_arg(err_tmpl) + "\"";
 
+    // 1.4.11 Q4-01: build the merged child environment BEFORE fork(). Calling
+    // setenv() in the forked child is not async-signal-safe (it may malloc), and
+    // a multi-threaded -jN parent can have a sibling holding the allocator lock
+    // at fork time — the child would then deadlock before exec.
+    std::vector<std::string> env_storage;
+    std::vector<char*> envp;
+    if (!opts.env.empty()) {
+        for (char** e = environ; e && *e; ++e) {
+            std::string entry(*e);
+            auto eq = entry.find('=');
+            if (eq != std::string::npos && opts.env.count(entry.substr(0, eq)))
+                continue;  // overridden below
+            env_storage.push_back(std::move(entry));
+        }
+        for (auto& [k, v] : opts.env) env_storage.push_back(k + "=" + v);
+        envp.reserve(env_storage.size() + 1);
+        for (auto& s : env_storage) envp.push_back(const_cast<char*>(s.c_str()));
+        envp.push_back(nullptr);
+    }
+
     pid_t pid = fork();
     if (pid == 0) {
         // Child: apply cwd + extra env BEFORE exec — fork() copy-on-write means
@@ -1701,15 +1721,21 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
         if (!opts.cwd.empty() && chdir(opts.cwd.string().c_str()) != 0) {
             _exit(126); // chdir failed
         }
-        for (auto& [k, v] : opts.env) {
-            setenv(k.c_str(), v.c_str(), 1);
-        }
+        // 1.4.11 Q4-01: no setenv() here — the merged environment was built
+        // before fork() and is handed to execve() (async-signal-safe).
         // Bind stdout/stderr to the temp files, then exec the shell.
         dup2(out_fd, STDOUT_FILENO);
         dup2(err_fd, STDERR_FILENO);
         close(out_fd);
         close(err_fd);
-        execl("/bin/sh", "sh", "-c", cmd2.c_str(), (char*)nullptr);
+        if (!envp.empty()) {
+            char* const argv[] = {const_cast<char*>("sh"),
+                                  const_cast<char*>("-c"),
+                                  const_cast<char*>(cmd2.c_str()), nullptr};
+            execve("/bin/sh", argv, envp.data());
+        } else {
+            execl("/bin/sh", "sh", "-c", cmd2.c_str(), (char*)nullptr);
+        }
         _exit(127); // exec failed
     } else if (pid > 0) {
         // 1.4.2 F-37: parent closes its copies of the write ends exactly once
@@ -1907,7 +1933,10 @@ std::string find_editor() {
 
 std::string build_editor_command(const std::string& editor, const fs::path& file) {
 #ifdef EZMK_WIN
-    return "\"" + escape_shell_arg(editor) + "\" \"" + escape_shell_arg(file.string()) + "\"";
+    // 1.4.11 Q4-05: run_command on Windows goes straight to CreateProcessW (no
+    // shell), so the POSIX escape_shell_arg (which doubles backslashes) corrupted
+    // UNC / '$'-containing paths. Use the MSVCRT-quoting helper here.
+    return quote_cli_arg(editor) + " " + quote_cli_arg(file.string());
 #else
     return "\"" + escape_shell_arg(editor) + "\" \"" + escape_shell_arg(file.string()) + "\" < /dev/tty > /dev/tty 2>&1";
 #endif

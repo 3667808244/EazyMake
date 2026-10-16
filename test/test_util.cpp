@@ -644,9 +644,15 @@ TEST_CASE("build_editor_command: quotes editor to prevent injection", "[util][1.
 TEST_CASE("build_editor_command: quotes editor and file with spaces", "[util][1.1.3]") {
     std::string cmd = build_editor_command("C:\\Program Files\\Editor\\code.exe",
                                            fs::path("a b.txt"));
-    // Command starts with a quoted editor; backslashes escaped by escape_shell_arg
+    // Command starts with a quoted editor. 1.4.11 Q4-05: on Windows this is
+    // MSVCRT quoting (backslashes stay literal); on POSIX escape_shell_arg
+    // doubles every backslash.
     REQUIRE(cmd.find('"') == 0);
+#if defined(_WIN32)
+    REQUIRE(cmd.find("\"C:\\Program Files\\Editor\\code.exe\"") != std::string::npos);
+#else
     REQUIRE(cmd.find("C:\\\\Program Files\\\\Editor\\\\code.exe") != std::string::npos);
+#endif
     // File is quoted too
     REQUIRE(cmd.find("\"a b.txt\"") != std::string::npos);
 }

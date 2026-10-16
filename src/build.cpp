@@ -2424,7 +2424,9 @@ static void run_catch2_tests(TestRunContext& ctx) {
     // "PASSED" line, which text parsing trivially confuses with a test case.
     // We rely on Catch2's exit code (non-zero on any failure) plus the
     // case-level summary line instead.
-    std::string test_cmd = "\"" + runner.string() + "\"";
+    // 1.4.11 Q4-03: platform-correct quoting (raw double quotes broke on
+    // Windows CreateProcess and embedded quotes/metacharacters on POSIX).
+    std::string test_cmd = util::quote_cli_arg(runner.string());
     if (!ctx.test_filter.empty()) {
         // 1.2.0-dev.11: escape the filter — it is user input interpolated
         // into a shell command on POSIX (1.1.3 S4 class of injection).
@@ -2627,7 +2629,8 @@ static void run_ezmk_tests(TestRunContext& ctx) {
         util::RunOptions run_opts;
         run_opts.timeout_sec = 30;
         util::merge_env(run_opts, ctx.msvc_env);
-        auto run_res = util::run_command("\"" + test_exe.string() + "\"", run_opts);
+        // 1.4.11 Q4-03: platform-correct quoting.
+        auto run_res = util::run_command(util::quote_cli_arg(test_exe.string()), run_opts);
         auto elapsed = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - test_start).count();
         total_time += elapsed;
