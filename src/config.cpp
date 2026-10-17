@@ -579,13 +579,15 @@ fs::path resolve_link_path(std::string_view name,
     std::string current_sub(sub_path);
     for (int depth = max_depth; depth > 0; --depth) {
         if (!visited.insert(current).second) {
-            throw std::runtime_error("link cycle detected at '" + current +
-                                     "' in .ezmk/links.json");
+            throw std::runtime_error(
+                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_link_cycle,
+                                {{"name", current}}));
         }
         auto it = links.find(current);
         if (it == links.end()) {
             throw std::runtime_error(
-                "link '" + current + "' not found in .ezmk/links.json");
+                ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_link_not_found,
+                                {{"name", current}}));
         }
         auto ref = util::parse_link_syntax(it->second);
         if (ref.name.empty()) {
@@ -603,8 +605,8 @@ fs::path resolve_link_path(std::string_view name,
         current_sub = std::move(combined);
     }
     throw std::runtime_error(
-        "link resolution depth exceeded for '" + std::string(name) +
-        "': possible infinite chain or too many indirections");
+        ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_link_depth,
+                        {{"name", std::string(name)}}));
 }
 
 // 1.1.3 Q2: parse_config 按 TOML 节拆分为私有 helper（纯提取，不改行为）。
@@ -617,8 +619,9 @@ static void read_optional_bool(const toml::node* node, const char* field,
                                bool& out) {
     if (!node) return;
     if (!node->is_boolean()) {
-        throw std::runtime_error(std::string("config field '") + field +
-                                 "' must be a boolean (true/false)");
+        throw std::runtime_error(
+            ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_bool_field_type,
+                            {{"field", field}}));
     }
     out = node->as_boolean()->get();
 }

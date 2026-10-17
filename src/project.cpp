@@ -15,8 +15,8 @@ namespace {
 // skeleton plus a cheerful "project created" message.
 void must_write(const fs::path& p, std::string_view content) {
     if (!util::file_write(p, content)) {
-        util::fatal("failed to write " + p.string() +
-                    " — the project directory is incomplete");
+        util::fatal(ezmk::i18n::I18nKey::project_err_write_failed,
+                    {{"path", p.string()}});
     }
 }
 } // namespace
@@ -57,8 +57,8 @@ static bool is_valid_project_name(const std::string& n) {
 void create_project(const std::string& name, const std::string& project_type,
                     bool disable_git_init, bool disable_gitignore) {
     if (!is_valid_project_name(name)) {
-        util::fatal("invalid project name: '" + name +
-                    "' (use letters, digits, '.', '-', '_', '+', or spaces)");
+        util::fatal(ezmk::i18n::I18nKey::project_err_invalid_name,
+                    {{"name", name}});
     }
     fs::path root = fs::current_path() / name;
 

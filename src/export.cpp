@@ -550,7 +550,8 @@ int export_cmake(const config::EzConfig& cfg,
     // 1.4.11 Q4-36: shared crash-safe writer; a failed write must not be
     // reported as "written".
     if (!util::atomic_write_text(out, text)) {
-        util::fatal(std::string("failed to write ") + out.string());
+        util::fatal(ezmk::i18n::I18nKey::export_err_write_failed,
+                    {{"path", out.string()}});
     }
 
     util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
@@ -747,7 +748,8 @@ int export_vscode(const config::EzConfig& cfg,
     for (const auto& f : trio) {
         fs::path out = dir / f.name;
         if (!util::atomic_write_text(out, f.text)) {
-            util::fatal(std::string("failed to write ") + out.string());
+            util::fatal(ezmk::i18n::I18nKey::export_err_write_failed,
+                        {{"path", out.string()}});
         }
         util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
     }

@@ -528,7 +528,7 @@ namespace ezmk::cli
             // 1.4.11 Q4-43: --glob was parsed but never applied, and --no-glob
             // silently won when both were given. Reject the conflict.
             if (p.has("glob") && p.has("no-glob")) {
-                util::fatal("conflicting options: --glob and --no-glob");
+                util::fatal(ezmk::i18n::I18nKey::cli_err_conflicting_glob);
             }
             if (p.has("glob"))
                 opts.use_glob = true;

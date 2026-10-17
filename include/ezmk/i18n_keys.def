@@ -480,3 +480,18 @@ EZMK_I18N_KEY(fatal_prefix)
 EZMK_I18N_KEY(error_prefix)
 EZMK_I18N_KEY(warn_prefix)
 EZMK_I18N_KEY(info_prefix)
+
+// ---- 1.4.11 fail-fast messages (i18n 收口) ----
+EZMK_I18N_KEY(config_err_bool_field_type)      // known boolean key with wrong type
+EZMK_I18N_KEY(config_err_link_cycle)           // @link: chain cycle
+EZMK_I18N_KEY(config_err_link_not_found)       // @link: name missing
+EZMK_I18N_KEY(config_err_link_depth)           // @link: depth exceeded
+EZMK_I18N_KEY(workspace_err_name_type)         // [workspace].name not a string
+EZMK_I18N_KEY(workspace_err_options_type)      // [workspace].options not a table
+EZMK_I18N_KEY(workspace_err_report_absolute)   // workspace test --report absolute path
+EZMK_I18N_KEY(project_err_invalid_name)        // project new invalid name
+EZMK_I18N_KEY(project_err_write_failed)        // project scaffold write failed
+EZMK_I18N_KEY(example_err_write_failed)        // example scaffold write failed
+EZMK_I18N_KEY(export_err_write_failed)         // export write failed
+EZMK_I18N_KEY(cli_err_conflicting_glob)        // --glob vs --no-glob
+

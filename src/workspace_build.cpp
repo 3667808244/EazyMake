@@ -216,8 +216,8 @@ int run_workspace_action(const workspace::Workspace& ws,
             fs::path rp(opts.test_report.substr(colon + 1));
             if (rp.is_absolute()) {
                 throw std::runtime_error(
-                    "workspace test --report must use a relative path (one per "
-                    "member); got: " + opts.test_report);
+                    i18n::fmt(I18nKey::workspace_err_report_absolute,
+                              {{"report", opts.test_report}}));
             }
         }
     }

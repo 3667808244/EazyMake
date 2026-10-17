@@ -230,8 +230,9 @@ std::optional<Workspace> load_from(const fs::path& start_dir) {
     // 1.4.11 Q4-29: a wrong-typed known key must fail fast, not be dropped.
     auto name_node = (*ws_table)["name"];
     if (name_node && !name_node.is_string()) {
-        throw std::runtime_error("[workspace].name must be a string in " +
-                                 file.string());
+        throw std::runtime_error(
+            i18n::fmt(I18nKey::workspace_err_name_type,
+                      {{"file", file.string()}}));
     }
     if (auto name = name_node.value<std::string>()) {
         ws.name = *name;
@@ -279,8 +280,9 @@ std::optional<Workspace> load_from(const fs::path& start_dir) {
     // 1.4.11 Q4-29: reject a non-table options value instead of ignoring it.
     auto options_node = (*ws_table)["options"];
     if (options_node && !options_node.is_table()) {
-        throw std::runtime_error("[workspace].options must be a table in " +
-                                 file.string());
+        throw std::runtime_error(
+            i18n::fmt(I18nKey::workspace_err_options_type,
+                      {{"file", file.string()}}));
     }
     if (auto opts = options_node.as_table()) {
         for (const auto& [key, val] : *opts) {

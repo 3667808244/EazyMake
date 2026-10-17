@@ -426,6 +426,18 @@
     "fatal_prefix": "致命错误: ",
     "error_prefix": "错误: ",
     "warn_prefix": "警告: ",
-    "info_prefix": "[ezmk] "
+    "info_prefix": "[ezmk] ",
+    "config_err_bool_field_type": "配置字段 '{field}' 必须是布尔值 (true/false)",
+    "config_err_link_cycle": "链接循环：'{name}'（.ezmk/links.json）",
+    "config_err_link_not_found": "链接 '{name}' 未在 .ezmk/links.json 中找到",
+    "config_err_link_depth": "链接解析深度超限：'{name}'（可能存在循环或间接层数过多）",
+    "workspace_err_name_type": "[workspace].name 必须是字符串（{file}）",
+    "workspace_err_options_type": "[workspace].options 必须是表（{file}）",
+    "workspace_err_report_absolute": "workspace test --report 必须使用相对路径（每个成员各写一份）；当前为: {report}",
+    "project_err_invalid_name": "非法的项目名: '{name}'（请使用字母、数字、'.', '-', '_', '+' 或空格）",
+    "project_err_write_failed": "写入失败: {path} - 项目目录不完整",
+    "example_err_write_failed": "写入文件失败: {path}",
+    "export_err_write_failed": "写入失败: {path}",
+    "cli_err_conflicting_glob": "冲突的选项: --glob 与 --no-glob"
   }
 }

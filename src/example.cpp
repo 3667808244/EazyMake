@@ -46,7 +46,8 @@ void create_example(const std::string& name, const fs::path& output_dir) {
     for (auto& f : it->files) {
         fs::path target = root / f.path;
         if (!util::file_write(target, f.content)) {
-            util::fatal("failed to write file: " + target.string());
+            util::fatal(i18n::I18nKey::example_err_write_failed,
+                        {{"path", target.string()}});
         }
     }
 

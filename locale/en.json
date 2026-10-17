@@ -426,6 +426,18 @@
     "fatal_prefix": "fatal: ",
     "error_prefix": "error: ",
     "warn_prefix": "warning: ",
-    "info_prefix": "[ezmk] "
+    "info_prefix": "[ezmk] ",
+    "config_err_bool_field_type": "config field '{field}' must be a boolean (true/false)",
+    "config_err_link_cycle": "link cycle detected at '{name}' in .ezmk/links.json",
+    "config_err_link_not_found": "link '{name}' not found in .ezmk/links.json",
+    "config_err_link_depth": "link resolution depth exceeded for '{name}': possible infinite chain or too many indirections",
+    "workspace_err_name_type": "[workspace].name must be a string ({file})",
+    "workspace_err_options_type": "[workspace].options must be a table ({file})",
+    "workspace_err_report_absolute": "workspace test --report must use a relative path (one per member); got: {report}",
+    "project_err_invalid_name": "invalid project name: '{name}' (use letters, digits, '.', '-', '_', '+', or spaces)",
+    "project_err_write_failed": "failed to write {path} - the project directory is incomplete",
+    "example_err_write_failed": "failed to write file: {path}",
+    "export_err_write_failed": "failed to write {path}",
+    "cli_err_conflicting_glob": "conflicting options: --glob and --no-glob"
   }
 }
