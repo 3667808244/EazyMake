@@ -60,9 +60,9 @@
 ### 发布
 
 - Release：run `39023022027` success；7 资产（`macos-x64` skipped），digest：`ezmk-windows-x64.zip` `24ea622e…`、`ezmk-linux-x64.tar.gz` `ada8740b…`、`ezmk-macos-arm64.tar.gz` `ee1a2a7d…`。
-- Homebrew：`publish/homebrew/ezmk.rb` 与 tap 同步 1.4.11（linux / macos-arm64 真实 sha256）。
+- Homebrew：`publish/homebrew/ezmk.rb` 与 tap 同步 1.4.11（linux / macos-arm64 真实 sha256）；tap commit `d448e2c`。
 - pacman：`eazymake 1.4.11-1`（sha256 `33ea7425…`，含 4 页 man + `_ezmk`）。
-- winget：1.4.11 三件套已通过 `winget validate`，PR 见索引。
+- winget：1.4.11 三件套已通过 `winget validate` 并推送 fork 分支 `EazyMake.EazyMake-1.4.11`（`e3662de`）；PR 待开启：<https://github.com/microsoft/winget-pkgs/compare/master...3667808244:winget-pkgs:EazyMake.EazyMake-1.4.11?expand=1>。
 
 ---
 

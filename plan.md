@@ -105,7 +105,7 @@
 - [ ] GitHub Release published + 资产 digest 核对
 - [x] pacman：`makepkg -fd` 出包 `eazymake 1.4.11-1`（sha256 `a06f8892…`，含 4 页 man + `_ezmk`，`ezmk version` → 1.4.11）
 - [ ] Homebrew 公式回填（tap + 仓库副本，真实 digest）
-- [ ] winget 三件套 + PR 提交
+- [ ] winget：三件套已推送 fork 分支 `EazyMake.EazyMake-1.4.11`（`e3662de`），PR 待人工开启（token 无 createPullRequest 权限）
 
 ## 4 关键设计决策
 
