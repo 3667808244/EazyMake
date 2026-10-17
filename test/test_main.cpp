@@ -4,12 +4,16 @@
 #include "catch2.hpp"
 #include "ezmk/i18n.hpp"
 
-// Initialize i18n before any tests run (Catch2 registers test cases
-// at static-init time, but they don't execute until main() runs).
-// This ensures all modules see initialized i18n strings.
 namespace {
-    struct I18nBootstrap {
-        I18nBootstrap() { ezmk::i18n::init("en"); }
-    } g_i18n_bootstrap;
+    // 1.4.12: initialize i18n when the TEST RUN starts, not in a static
+    // constructor. Static-init order across translation units is unspecified,
+    // so the old bootstrap could run before locale_data.cpp's map was built and
+    // leave the suite with the "{key}" fallback (observed with GCC on Arch).
+    struct I18nBootstrap : Catch::EventListenerBase {
+        using EventListenerBase::EventListenerBase;
+        void testRunStarting(Catch::TestRunInfo const&) override {
+            ezmk::i18n::init("en");
+        }
+    };
 }
-
+CATCH_REGISTER_LISTENER(I18nBootstrap)

@@ -134,8 +134,14 @@ TEST_CASE("import: conditional compilation takes current platform branch", "[imp
         "  target_compile_definitions(app PRIVATE IS_UNIX=1)\n"
         "endif()\n",
         test_root());
+#ifdef EZMK_WIN
     CHECK(t.find("IS_WIN") != std::string::npos);
     CHECK(t.find("IS_UNIX") == std::string::npos);  // Windows 平台 → UNIX 分支跳过
+#else
+    // 1.4.11 Q4-32: platform constants follow the HOST platform.
+    CHECK(t.find("IS_WIN") == std::string::npos);
+    CHECK(t.find("IS_UNIX") != std::string::npos);
+#endif
 }
 
 TEST_CASE("import: unevaluable condition skips block and leaves TODO", "[import][1.2.0]") {
@@ -329,9 +335,13 @@ TEST_CASE("import: evaluated false if still selects the else branch (1.4.2 F-08)
         "  target_link_libraries(app from_else)\n"
         "endif()\n",
         test_root());
-    CHECK(t.find("from_if") == std::string::npos);
 #ifdef EZMK_WIN
     // UNIX is evaluated to false on Windows → the else branch applies.
+    CHECK(t.find("from_if") == std::string::npos);
     CHECK(t.find("from_else") != std::string::npos);
+#else
+    // 1.4.11 Q4-32: UNIX is true on Linux/macOS → the if branch applies.
+    CHECK(t.find("from_if") != std::string::npos);
+    CHECK(t.find("from_else") == std::string::npos);
 #endif
 }
