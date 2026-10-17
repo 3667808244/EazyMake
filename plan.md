@@ -1,109 +1,137 @@
-# EazyMake 1.4.10 执行计划
+# EazyMake 1.4.11 执行计划
 
-> **状态：✅ 已发布（2026-10-13，tag `v1.4.10`；Release run `38416035316` success，7 资产 digest 核对一致、`macos-x64` skipped）** —— 本文档把设计文档 §4 转成可勾选的分阶段清单。1.4.x 系列路线图见 [plans/1.4.x/README.md](plans/1.4.x/README.md)；2.0.0 的移除清单见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)。
+> **状态：🚀 发布中（2026-10-17）** —— 版本已定稿并打 tag `v1.4.11`；全量 **1169 用例 / 6788 断言 / 4 跳过 / 0 失败**；pacman 已出包验证，GitHub Release 与 Homebrew/winget 回填进行中。本文档为可执行清单；详细设计见 [plans/1.4.x/1.4.11.md](plans/1.4.x/1.4.11.md)，系列索引见 [plans/1.4.x/README.md](plans/1.4.x/README.md)。
 >
-> 详细设计：[**1.4.10.md**](plans/1.4.x/1.4.10.md)。主题：**可选递归源文件查找（语法 A：条目后缀 `/**`）**。
->
-> **范围边界**：只新增一个**可选**的目录级递归源发现语法（`[compile].src_dirs` / `[test].dirs` 条目以 `/**` 结尾即递归），**默认行为零变化**；不引入 glob 表达式语言 / 构建图；Linux/macOS 文件监视真递归不在本版。
->
-> **⛔ 发布门槛**：① 阶段清单全部完成或明确收口；② 公共 API 无破坏性变更；③ 全量测试**无新增失败**（**立项基线待 `bash build.sh test-all` 实测回填**；参考值：1.4.9 发布态 1137 用例 / 6622 断言 / 4 跳过 / 0 失败；用例 / 断言数只增不减）；④ 附加门槛：`python scripts/check_man_sync.py` 通过、`groff -man -Tutf8 -z -ww man/*.1 man/*.5` 零告警、i18n 三向一致、`bash scripts/check_docs_sync.sh` 通过；⑤ `ci.yml` 在 push 上全绿。
-
----
+> **版本主题**：代码质量审计修复（第四轮）—— 47 项（P1 4 / P2 20 / P3 23），零功能新增、公共 API 无破坏性变更。
 
 ## 1 背景
 
-`util::list_files()`（`src/util.cpp:359-377`）用 `fs::directory_iterator`（`:363`）——只遍历目录自身，所以 `[compile].src_dirs` / `[test].dirs` 的子目录源文件从不参与编译，除非把子目录逐个列出。而 `project export cmake`（`src/export.cpp:156` / `:175`）与 `project pack`（`src/build.cpp:1800-1823`）**本来就递归**，导出 / 打包与 `ezmk build` 的源集合长期分叉；`collect_sources` 按文件名去重（`src/build.cpp:163-168`）又让「逐目录列出」在嵌套同名文件上踩坑。用户裁定：新增一个**可选**的目录级递归语法（**候选 A**），默认行为零变化。详见设计 §1。
+第四轮审计在 1.4.10 发布态上展开，覆盖 util / build+cache / pkg+repo / lua+i18n / cli+main+project / config+lockfile / toolchain+export+import / watcher+workspace+version 八个域。缺陷集中在错误路径、不可信输入、跨平台分支、跨模块契约与静默失败；Linux 侧验证另发现并修复了 4 个可移植性问题（重载歧义、i18n 静态初始化顺序、import 平台断言、含空格路径的 `cd` 引号）。
 
 ## 2 目标
 
-| 组 | # | 覆盖 | 优先级 |
-|----|---|------|--------|
-| 文档 | R-01 | 用户文档写明「非递归」（config_file / FAQ / glossary / tutorial，zh+en）+ man —— 已完成 | P0 |
-| 发现 | R-02 | `util::list_files` 增递归变体：跳过规则、符号链接不跟随、结果排序 | P0 |
-| 配置 | R-03 | 条目尾部 `/**` 标记的解析与剥离；非法形态按字面目录名处理 | P0 |
-| 构建 | R-04 | `collect_sources` 支持递归条目；递归模式按项目根相对路径去重 | P0 |
-| 对齐 | R-05 | test / pkg / utils 门控 / Lua `list_sources` / workspace 探测同源 | P0 |
-| 互操作 | R-06 | export 的 `GLOB` / `GLOB_RECURSE` 按标记分派；pack 与 watch 的差异写明 | P1 |
-| 测试 | R-07 | 单元（发现 / 跳过 / 排序 / 去重）+ 集成（嵌套项目 build / test / 包 / `compile_commands`） | P0 |
-| 收口 | R-08 | 配置文档 + FAQ + `CHANGES.md` + i18n 三向 + 索引状态 | P0 |
+| 组 | 覆盖 | 状态 |
+|----|------|------|
+| 命令执行安全 | Q4-01~06 | ✅ |
+| 数据完整性与错误路径 | Q4-07~10 | ✅ |
+| 增量缓存与构建正确性 | Q4-11~14 | ✅ |
+| 包 / 仓库 / 锁文件 | Q4-15~20 | ✅ |
+| Lua 与 i18n | Q4-21~26 | ✅ |
+| 配置解析 | Q4-27~30 | ✅ |
+| import / export / workspace / project / CLI | Q4-31~43 | ✅（Q4-40 文档化、Q4-42 低危延后） |
+| 归档 / 下载 / 工具函数 | Q4-44~47 | ✅ |
 
 ## 3 执行阶段
 
-### 阶段零：文档澄清 + 立项（R-01）
+### 阶段一：命令执行与进程安全（Q4-01~06）
+- [x] POSIX `run_command` 预构造 envp / `execve`
+- [x] Lua run 权限逐段校验（高级 shell 构造拒绝）
+- [x] 测试运行器命令平台正确转义
+- [x] `project new` 的 `git init` Windows 引号
+- [x] `build_editor_command` Windows 引号
+- [x] `$CXX`/`$CC` 探测路径引号化
+- [x] 回归：全量零失败
 
-- [x] 用户文档写明「非递归」：`docs/{zh,en}/config_file.md` 的 `src_dirs` + `[test].dirs`、`docs/{zh,en}/faq.md`、`docs/{zh,en}/glossary.md`、`tutorial/{zh,en}/basic/03-config.md` + `tutorial/{zh,en}/dev/03-test.md`、`man/ezmk.toml.5`
-- [x] 语法拍板（2026-10-13）：**候选 A（条目后缀 `/**`）**；范围 = `[compile].src_dirs` + `[test].dirs`
-- [x] 立项：根 `plan.md` 生成 + 索引登记（`plans/1.4.x/README.md` / `plans/README.md`）
-- [x] 记录立项基线（2026-10-13）：立项基线 = 1.4.9 发布态 **1137 用例 / 6622 断言 / 4 跳过 / 0 失败**（HEAD 代码与 v1.4.9 一致，自 v1.4.9 起仅文档 / 计划变更）；本机等价全量运行（`build/test_ezmk --order decl`，与 `build.sh test-all` 同一测试执行）RC=0
+### 阶段二：数据完整性与错误路径（Q4-07~10）
+- [x] 回退 copy 失败保留临时文件并报错（复用 `atomic_rename`）
+- [x] `record.json` / `compile_commands.json` 回退后清理 `.tmp`
+- [x] `ThreadPool` spawn 失败可恢复
+- [x] `repo remove` 先持久化注册表
+- [x] 回归：全量零失败
 
-### 阶段一：发现原语（R-02）
+### 阶段三：增量缓存与构建正确性（Q4-11~14）
+- [x] test 缓存随编译器版本 / deterministic 失效
+- [x] executable 入口接受 `main.cc`/`main.cxx`
+- [x] 单源失败保留其余缓存更新
+- [x] `collect_test_sources` 按路径去重
+- [x] 回归：全量零失败
 
-- [x] `util::list_files` 递归变体（**旧签名不变**）：新增 `util::list_files_recursive`（`include/ezmk/util.hpp` + `src/util.cpp`）——跳过 `.` 前缀目录与任意深度的 `build/`、不跟随目录符号链接、结果按路径排序
-- [x] 单测：`test/test_util.cpp` 新增 4 例（子树遍历 + 排序 / 隐藏与 `build` 剪枝 / 缺失目录 / 目录符号链接不跟随）
-- [x] 回归：全量 **1141 用例 / 6627 断言 / 5 跳过 / 0 失败**（基线 1137/6622/4 → +4 用例 / +5 断言 / +1 跳过；跳过的是「目录符号链接」用例，本机无创建权限时按设计 SKIP）
+### 阶段四：包 / 仓库 / 锁文件（Q4-15~20）
+- [x] `pkg remove` 剪除 lockfile
+- [x] 跨仓库版本选择用 `compare_version_precedence`
+- [x] precompiled 包 lockfile 内容固定
+- [x] `compare_version` 分量饱和
+- [x] `direct_dep_specs` 与 `parse_depends_entry` 互逆
+- [x] 未找到 / 未知命令非零退出
+- [x] 回归：全量零失败
 
-### 阶段二：配置解析 + 项目构建（R-03 / R-04）
+### 阶段五：Lua 与 i18n（Q4-21~26）
+- [x] `lua_pushlstring` 保留内嵌 NUL
+- [x] `json_to_lua` 深度上限
+- [x] 权限 glob 允许项锚定
+- [x] `lua_setupvalue` 返回值检查
+- [x] `ezmk_lua_main` 异常处理
+- [x] i18n 变体独立数据 + overlay 不半写
+- [x] 回归：全量零失败
 
-- [x] `[compile].src_dirs` 识别并剥离尾部 `/**`；`[test].dirs` 同步；非 glob，非法形态按字面目录名处理（`split_recursive_marker` / `split_source_dir_specs`，`src/config.cpp`）
-- [x] `collect_sources` 按条目标记分派（新重载，旧签名保留为全 flat）；递归模式按项目根相对路径去重，flat 模式按文件名去重不变（`include/ezmk/build.hpp` / `src/build.cpp`）
-- [x] 单测：`test/test_config.cpp` +4（标记解析 / 非标记字面 / 默认 flat / `test.dirs`）、`test/test_build.cpp` +4（递归子树 / 同名保留 / 混合 / 短 flags 视为 flat）
-- [x] 回归：全量 **1149 用例 / 6654 断言 / 5 跳过 / 0 失败**（阶段一 1141/6627 → +8 用例 / +27 断言；`bash build.sh test-all` exit 0）
+### 阶段六：配置解析（Q4-27~30）
+- [x] 语言范围界序号比较
+- [x] `resolve_link_path` 链式 / 循环
+- [x] 已知键类型错误 fail-fast
+- [x] `normalized_lang` 含默认版本
+- [x] 回归：全量零失败
 
-### 阶段三：全路径对齐（R-05）
+### 阶段七：import / export / workspace / project / CLI（Q4-31~43）
+- [x] import 条件链首个为真分支
+- [x] import 平台常量按宿主
+- [x] import 关键字集补齐
+- [x] export `-std=c++2a/2b` 映射 + stoi 兜底
+- [x] export CMake 路径引号化
+- [x] export 检查 `file_write`
+- [x] workspace test 无测试成员依赖仍构建
+- [x] 重复成员拒绝
+- [x] workspace test 绝对 `--report` 拒绝
+- [x] workspace watch 输出——已知限制（文档化）
+- [x] `project new` 名称校验
+- [x] `project new` / `example` 失败回滚——低危延后
+- [x] `project export --glob` 生效
+- [x] 回归：全量零失败
 
-- [x] test / 包编译 / utils 门控 / Lua `ezmk.list_sources()` / workspace 测试探测统一走递归感知 helper（`collect_test_sources` 加 flags；`pkg.cpp` compile_package + utils 门控；`lua_api.cpp` `list_sources`；`workspace_build.cpp` `member_has_tests`）
-- [x] 集成 / 单测：`test_lua.cpp` `list_sources` 递归、`test_pkg.cpp` 嵌套源包编译、`test_integration.cpp` 嵌套 `src/**` 的 `ezmk build` + `compile_commands.json` 断言
-- [x] 回归：全量 **1152 用例 / 6664 断言 / 5 跳过 / 0 失败**（阶段二 1149/6654 → +3 用例 / +10 断言；`bash build.sh test-all` exit 0）
+### 阶段八：归档 / 下载 / 工具函数与收口（Q4-44~47）
+- [x] `resolve_relative_path_flags` 精确前缀
+- [x] Windows 下载拆分 host/port
+- [x] `safe_extract_path` 接受 `.`/尾分隔符
+- [x] `extract_targz` 校验 gzip CRC32/ISIZE
+- [x] i18n 430 键三向一致（新增 12 个 fail-fast 键）
+- [x] 全量 `bash build.sh test-all`：**1169 / 6788 / 4 / 0**
+- [x] `check_man_sync.py` + groff 零告警 + `check_docs_sync.sh`
+- [x] CHANGES / 计划 / 索引收口
+- [x] 发布门槛复核（⛔ ①②③④⑤）
 
-### 阶段四：互操作（R-06）
-
-- [x] export：flat 条目 `GLOB`、递归条目 `GLOB_RECURSE`（`--glob` / `--no-glob` 两条分支）；混合时 `GLOB` + `GLOB_RECURSE` + `list(APPEND ...)`（`src/export.cpp`）
-- [x] 文档写明 pack「总是递归收录」与 watch 的 POSIX 非递归限制（`docs/{zh,en}/config_file.md` 规则块 + FAQ + man）
-- [x] 单测 / 集成：`test_export.cpp` +4（`/**` 用 `GLOB_RECURSE`、混合、`--no-glob` 递归、flat 跳过子目录）；既有集成断言改为默认模板导出 `file(GLOB exp_cmake_SOURCES`
-- [x] 回归：全量 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**（阶段三 1152/6664 → +4 用例 / +11 断言；`bash build.sh test-all` exit 0）
-
-### 阶段五：测试 / 文档 / 收口（R-07 / R-08）
-
-- [x] 配置文档（递归语法 + 规则边界 + 与 flat 差异）、FAQ、`glossary`、`tutorial`、`man/ezmk.toml.5`、`CHANGES.md`（1.4.10 未发布条目）
-- [x] i18n 三向一致：本版**零新增键**，键数与 1.4.9 发布态一致（`check_i18n.py` 通过）
-- [x] 索引：`plans/1.4.x/README.md` / `plans/README.md` / 本文件（阶段一~五状态）
-- [x] 门槛复核：全量零回归 + `check_man_sync.py` + groff 零告警 + i18n 三向 + `check_docs_sync.sh`
-
-### 发布阶段：1.4.10（正式发布时）
-
-- [x] 版本号置为 `1.4.10`（`build.sh:74` 的 `EZMK_VERSION` fallback；`include/ezmk/version.hpp` 由构建生成）
-- [x] `git tag v1.4.10` → Release run `38416035316` success；7 资产（`macos-x64` skipped）digest 与 `assets[].digest` 逐一核对一致
-- [x] 三渠道完成：Homebrew tap `4a3ff91`（真实 digest）/ pacman `makepkg -fd` 出包 `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`，含 4 页 man + `_ezmk`，`ezmk.exe version` → 1.4.10）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)（CI/版主审批为发布后跟进项）
+### 发布阶段：1.4.11
+- [x] 版本号置为 `1.4.11`（`build.sh` fallback）
+- [x] 全量回归零失败（1169 / 6788 / 4 / 0）
+- [x] `git tag v1.4.11` 并推送（指向 `ef2b0dd`）
+- [ ] GitHub Release published + 资产 digest 核对
+- [x] pacman：`makepkg -fd` 出包 `eazymake 1.4.11-1`（sha256 `a06f8892…`，含 4 页 man + `_ezmk`，`ezmk version` → 1.4.11）
+- [ ] Homebrew 公式回填（tap + 仓库副本，真实 digest）
+- [ ] winget 三件套 + PR 提交
 
 ## 4 关键设计决策
 
-1. **语法 A 冻结（2026-10-13）**：条目以 `/**` 结尾 = 递归该目录整棵子树；其余条目保持 flat；同一列表可混用；`[compile].src_dirs` 与 `[test].dirs` 同一语法。
-2. **不是 glob**：`/**` 只是目录级递归开关；`src/**/*.cpp` 不解析，按字面目录名处理（缺失时 warn），避免引入 glob 引擎与排除语法。单层 `/*` 不在本版。
-3. **默认零变化**：不写 `/**` 的项目，扫描集合与 flat 去重（按文件名）逐字节不变。
-4. **递归模式按相对路径去重**：嵌套同名文件（`src/a/util.cpp` 与 `src/b/util.cpp`）都参与编译——这是递归的意义；与 flat 的可观察差异写入文档。
-5. **跳过规则固定**：`.` 前缀目录 + `build/`；`recursive_directory_iterator` 不跟随目录符号链接（Windows junction 实现阶段实测确认）。
-6. **确定性**：递归结果按路径排序（承接 1.4.6 Q-19 对 `directory_iterator` 无序的收口）。
-7. **单一 helper**：build / test / package / utils 门控 / Lua `list_sources` / workspace 探测 / `compile_commands` 同源，避免再次分叉。
-8. **export 按标记分派** `GLOB` / `GLOB_RECURSE`，消除导出与原生构建的源集合分叉。
-9. **POSIX watch 不在本版**：Linux/macOS 只监视目录自身（`include/ezmk/file_watcher.hpp` 已文档化），递归目录新增的嵌套文件不触发重建——文档注明，不承诺修复。
-10. **契约不破**：`util::list_files` 旧签名保留；`collect_sources` 默认路径语义不变；无弃用面放宽或移除。
+1. **Q4-02**：权限激活时按 `;`/`&&`/`||`/`|`/`&` 逐段校验；含 `$`、反引号、重定向、子 shell、换行的命令直接拒绝。
+2. **Q4-23**：相对 glob 允许项锚定项目根。
+3. **Q4-28**：实现链式 link 解析 + 循环检测。
+4. **Q4-37**：无测试成员仍构建、仅跳过测试（计为 skipped）。
+5. **Q4-38**：重复成员为硬错误。
+6. **Q4-40**：`workspace watch` 输出缓冲收口为已知限制。
+7. **Q4-42**：`project new`/`example` 失败回滚为 P3 低危延后。
+8. **行为收紧**：未知命令 / `pkg remove/update` / `repo remove/update/info` 未找到目标退出非零；损坏 gzip、超深 JSON、含 shell 构造的受限 `ezmk.run` 明确报错。
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 说明 |
 |------|------|------|
-| 默认行为 | 零变化 | 不写 `/**` 时扫描与去重语义与今天一致 |
-| `/**` 递归标记 | 纯新增（配置面） | 旧版本（≤1.4.9）把 `"src/**"` 当字面目录名 → 缺失 warn，可能 `no_source_files` fatal。**降级不兼容**，文档写明 |
-| 递归模式去重 | 新模式内差异 | 嵌套同名文件都参与编译（flat 仍只编第一个） |
-| export 的 `GLOB_RECURSE` | 行为修正 | 过去无条件递归；分派后与 `ezmk build` 一致（既有导出的 CMake 可能少编译以前「多编」的文件） |
-| `util::list_files` / `collect_sources` | 无破坏性变更 | 旧签名保留；默认路径语义不变 |
-| POSIX watch | 已知限制（不变） | 递归目录新增的嵌套文件在 Linux/macOS 不触发重建 |
-| 弃用面 | 无变化 | 归 2.0.0，见 [2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md) |
+| 默认行为 | **零变化** | 未使用新开关 / 未触发错误路径时与 1.4.10 一致 |
+| 退出码收紧 | 行为收紧 | 未找到目标 / 未知命令返回非零 |
+| run 权限分段校验 | 行为收紧 | 含 shell 元字符的受限 `ezmk.run` 被拒 |
+| 归档 / JSON 校验收紧 | 行为收紧 | 损坏输入明确报错 |
+| i18n | 新增 12 键 | 418 → 430，三向一致 |
+| 公共 API | **无破坏性变更** | 仅内部签名与错误行为修正 |
 
 ## 6 延后项
 
-- `/*` 单层递归、glob 表达式与排除模式。
-- 全局便捷开关 `[compile].recursive_sources`（候选 B，视需求另立）。
-- Linux/macOS 文件监视真递归（沿用 1.4.2 §3.9 / 1.4.7 §3.6 裁定，另立版本）。
-- `project import` 用一条 `src/**` 折叠长 `src_dirs` 列表。
-- 大树递归发现的性能优化（如需要）。
+- `workspace watch` 流式输出（已知限制）。
+- `project new` / `example` 失败回滚（P3）。
+- 颜色深度引擎 / `ezmk config get/set`（属 1.4.12+）。
+- 破坏性变更与弃用面移除（归 2.0.0，见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)）。
