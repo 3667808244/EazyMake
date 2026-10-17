@@ -69,6 +69,20 @@ TEST_CASE("perm read: deny wins when target is also in allow", "[perms]") {
             == PermResult::Allow);
 }
 
+// 1.4.11 Q4-23: a relative glob allow-entry is anchored at the project root,
+// so it cannot match a path outside it.
+TEST_CASE("perm read: relative glob does not match outside the project",
+          "[perms][1.4.11]") {
+    UtilsPermissions p;
+    p.read = {"src/*"};
+    auto op = std::make_optional(p);
+    REQUIRE(ezmk::lua::check_read_permission(
+                ROOT.parent_path() / "outside/src/passwd", op, ROOT, PKG)
+            == PermResult::Ask);
+    REQUIRE(ezmk::lua::check_read_permission(ROOT / "src/main.cpp", op, ROOT, PKG)
+            == PermResult::Allow);
+}
+
 TEST_CASE("perm read: neither list → Ask", "[perms]") {
     auto p = std::make_optional(make_perms());
     REQUIRE(ezmk::lua::check_read_permission(ROOT / "external/foo.txt", p, ROOT, PKG)

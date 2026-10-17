@@ -152,13 +152,21 @@ namespace ezmk::i18n
                     return false;
                 }
 
+                // 1.4.11 Q4-26: parse into a temporary map first and apply
+                // only on full success — a bad value mid-loop used to leave a
+                // half-applied overlay (mixed base/variant strings).
+                std::map<std::string, std::string> parsed;
+                for (auto &[key, val] : root["strings"].items())
+                {
+                    parsed[key] = val.get<std::string>();
+                }
                 if (!overlay)
                 {
                     g_strings.clear();
                 }
-                for (auto &[key, val] : root["strings"].items())
+                for (auto &kv : parsed)
                 {
-                    g_strings[key] = val.get<std::string>();
+                    g_strings[kv.first] = kv.second;
                 }
                 g_current_lang = expected_lang;
                 return true;
@@ -279,7 +287,7 @@ namespace ezmk::i18n
 
         // 2. Variant overlay: locale/<tag>.json overrides only the keys it
         //    declares; when absent (or unparseable) the base language stays.
-        if (base_loaded && !variant.empty())
+        if (!variant.empty())
         {
             std::string v_json = load_runtime_locale_file(variant);
             if (v_json.empty())
@@ -292,7 +300,17 @@ namespace ezmk::i18n
             }
             if (!v_json.empty())
             {
-                parse_locale_json(v_json, variant, /*overlay=*/true);
+                // 1.4.11 Q4-26: a variant may be the only data available (no
+                // base language file) — load it as the base, matching
+                // detect_language's permissive variant check.
+                if (!base_loaded)
+                {
+                    base_loaded = parse_locale_json(v_json, variant, /*overlay=*/false);
+                }
+                else
+                {
+                    parse_locale_json(v_json, variant, /*overlay=*/true);
+                }
             }
         }
 

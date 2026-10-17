@@ -79,11 +79,23 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    ezmk::lua::init();   // initialize the shared Lua state
+    // 1.4.11 Q4-25: util::fatal throws fatal_error; without a catch it escapes
+    // main() and the process dies via std::terminate (non-1 exit + noisy dump)
+    // instead of a clean error exit like the main ezmk binary.
+    try {
+        ezmk::lua::init();   // initialize the shared Lua state
 
-    int rc = ezmk::lua::run_script_unrestricted(
-        ezmk::lua::state(), fs::path(script_path), project_root, profile, output);
+        int rc = ezmk::lua::run_script_unrestricted(
+            ezmk::lua::state(), fs::path(script_path), project_root, profile, output);
 
-    ezmk::lua::shutdown();
-    return rc;
+        ezmk::lua::shutdown();
+        return rc;
+    } catch (const ezmk::fatal_error&) {
+        ezmk::lua::shutdown();
+        return 1;
+    } catch (const std::exception& e) {
+        std::cerr << "ezmk-lua: " << e.what() << "\n";
+        ezmk::lua::shutdown();
+        return 1;
+    }
 }

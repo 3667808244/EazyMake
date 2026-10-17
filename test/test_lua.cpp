@@ -762,6 +762,22 @@ TEST_CASE("lua: json_decode invalid JSON errors", "[lua][api][json]") {
     lua_pop(L, 1);
 }
 
+// 1.4.11 Q4-22: deeply nested JSON must raise a clean Lua error instead of
+// overflowing the C++ stack in json_to_lua.
+TEST_CASE("lua: json_decode deep nesting errors cleanly", "[lua][api][json][1.4.11]") {
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    int rc = luaL_dostring(L,
+        "local s = string.rep('[', 1000) .. string.rep(']', 1000) "
+        "local ok = pcall(function() return ezmk.json_decode(s) end) "
+        "return ok and 1 or 0");
+    REQUIRE(rc == 0);
+    REQUIRE(lua_tointeger(L, -1) == 0);  // pcall caught the depth error
+    lua_pop(L, 1);
+}
+
 TEST_CASE("lua: json_encode rejects circular tables", "[lua][api][json]") {
     lua_State* L = state();
     REQUIRE(L != nullptr);

@@ -157,6 +157,14 @@ bool path_matches_entry(const std::string& target_abs,
     // Glob-style entries (contain * or ?) → match against the last path segment
     // as well as the full string, so patterns like "**/.ssh/" or "*.key" work.
     if (entry.find('*') != std::string::npos || entry.find('?') != std::string::npos) {
+        // 1.4.11 Q4-23: a RELATIVE glob is anchored at the project root, so a
+        // pattern like "src/*" cannot match an absolute path outside the project
+        // (the regex below searches the whole absolute path).
+        fs::path glob_entry(entry);
+        if (!glob_entry.is_absolute() &&
+            !path_within(target_abs, norm_path(project_root))) {
+            return false;
+        }
         // Build a regex from a simple glob: ** → .*, * → [^/]*, ? → single char.
         std::string rx;
         for (size_t i = 0; i < entry.size(); ++i) {
@@ -697,7 +705,9 @@ static int ezmk_file_read(lua_State* L) {
         return 2;
     }
     std::string content = util::file_read(resolved);
-    lua_pushstring(L, content.c_str());
+    // 1.4.11 Q4-21: pushlstring preserves embedded NUL bytes; pushstring
+    // truncates at the first NUL.
+    lua_pushlstring(L, content.data(), content.size());
     return 1;
 }
 
@@ -790,9 +800,9 @@ static int ezmk_run(lua_State* L) {
     lua_createtable(L, 0, 3);
     lua_pushinteger(L, res.exit_code);
     lua_setfield(L, -2, "exit_code");
-    lua_pushstring(L, res.out.c_str());
+    lua_pushlstring(L, res.out.data(), res.out.size());
     lua_setfield(L, -2, "stdout");
-    lua_pushstring(L, res.err.c_str());
+    lua_pushlstring(L, res.err.data(), res.err.size());
     lua_setfield(L, -2, "stderr");
     return 1;
 }
@@ -819,7 +829,7 @@ static int ezmk_run_capture(lua_State* L) {
     if (res.exit_code != 0) {
         luaL_error(L, "command failed (exit %d): %s", res.exit_code, res.err.c_str());
     }
-    lua_pushstring(L, res.out.c_str());
+    lua_pushlstring(L, res.out.data(), res.out.size());
     return 1;
 }
 
@@ -882,7 +892,13 @@ static int ezmk_cache_dir(lua_State* L) {
 // ===================================================================
 
 // Recursive helper: push a Lua value from a nlohmann::json object
-static void json_to_lua(lua_State* L, const nlohmann::json& j) {
+static void json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
+    // 1.4.11 Q4-22: symmetric with lua_to_json's kJsonMaxDepth cap — without it
+    // a deeply nested JSON document overflows the C++ stack during conversion.
+    if (depth > kJsonMaxDepth) {
+        luaL_error(L, "json decode: nesting exceeds depth limit (%d)", kJsonMaxDepth);
+        return;
+    }
     switch (j.type()) {
     case nlohmann::json::value_t::null:
         lua_pushnil(L);
@@ -897,14 +913,16 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j) {
     case nlohmann::json::value_t::number_float:
         lua_pushnumber(L, j.get<lua_Number>());
         break;
-    case nlohmann::json::value_t::string:
-        lua_pushstring(L, j.get<std::string>().c_str());
+    case nlohmann::json::value_t::string: {
+        std::string sv = j.get<std::string>();
+        lua_pushlstring(L, sv.data(), sv.size());
         break;
+    }
     case nlohmann::json::value_t::array: {
         lua_createtable(L, (int)j.size(), 0);
         int idx = 1;
         for (auto& el : j) {
-            json_to_lua(L, el);
+            json_to_lua(L, el, depth + 1);
             lua_rawseti(L, -2, idx++);
         }
         break;
@@ -913,7 +931,7 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j) {
         lua_createtable(L, 0, (int)j.size());
         for (auto& [k, v] : j.items()) {
             lua_pushstring(L, k.c_str());
-            json_to_lua(L, v);
+            json_to_lua(L, v, depth + 1);
             lua_settable(L, -3);
         }
         break;
@@ -1464,7 +1482,11 @@ static int run_lua_script_with_ctx(lua_State* L,
 
     // Set _ENV upvalue to sandbox
     lua_pushvalue(L, sandbox_idx);
-    lua_setupvalue(L, -2, 1);
+    // 1.4.11 Q4-24: on failure lua_setupvalue leaves the pushed value on the
+    // stack — pop it so later relative indices stay balanced.
+    if (lua_setupvalue(L, -2, 1) == nullptr) {
+        lua_pop(L, 1);
+    }
 
     // Execute the script chunk (define run function)
     // 1.4.2 F-19: arm the instruction budget — covers the chunk and run(ctx);
