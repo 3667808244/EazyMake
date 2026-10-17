@@ -272,7 +272,9 @@ int run_workspace_action(const workspace::Workspace& ws,
                                {{"member", m.name}});
                 }
             }
-            futures.push_back(pool.submit([&ws, idx, member_action, &stop, &print_mutex,
+            const bool testless_build = (member_action != action);
+            futures.push_back(pool.submit([&ws, idx, member_action, testless_build,
+                                           &stop, &print_mutex,
                                            &succeeded, &failed, &skipped,
                                            &opts, stop_on_err]() {
                 // --stop-on-error fired while this task was queued → skipped
@@ -283,11 +285,15 @@ int run_workspace_action(const workspace::Workspace& ws,
                 }
                 bool ok = run_member(ws.members[idx], member_action, print_mutex,
                                      opts.test_report);
-                if (ok) {
-                    succeeded.fetch_add(1);
-                } else {
+                if (!ok) {
                     failed.fetch_add(1);
                     if (stop_on_err) stop.store(true);
+                } else if (testless_build) {
+                    // 1.4.11 Q4-37: built only because a tested member may need
+                    // it — count it as skipped by the test action.
+                    skipped.fetch_add(1);
+                } else {
+                    succeeded.fetch_add(1);
                 }
             }));
         }
