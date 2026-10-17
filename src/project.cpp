@@ -1,4 +1,6 @@
 #include "ezmk/project.hpp"
+
+#include <cctype>
 #include "ezmk/config.hpp"
 #include "ezmk/util.hpp"
 
@@ -23,15 +25,41 @@ void must_write(const fs::path& p, std::string_view content) {
 // identifier. File names keep the original name (filesystem allows these
 // characters); only the C++ identifier needs sanitizing.
 std::string sanitize_namespace(const std::string& name) {
-    std::string ns = name;
-    for (char& c : ns) {
-        if (c == '-' || c == '.' || c == ' ') c = '_';
+    // 1.4.11 Q4-41: map every non-identifier character to '_' (not just - . space)
+    // and guarantee a non-digit first character, so names like "2d-physics" or
+    // "a+b" still produce a compilable namespace.
+    std::string ns;
+    ns.reserve(name.size() + 1);
+    for (char c : name) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') ns += c;
+        else ns += '_';
     }
+    if (ns.empty()) ns = "_";
+    if (std::isdigit(static_cast<unsigned char>(ns[0]))) ns = "_" + ns;
     return ns;
+}
+
+// 1.4.11 Q4-41: reject names that cannot safely become a directory + a C++
+// identifier (path separators, traversal, quotes, control characters).
+static bool is_valid_project_name(const std::string& n) {
+    if (n.empty() || n == "." || n == "..") return false;
+    if (n[0] == '.') return false;  // hidden / traversal
+    if (n.find("..") != std::string::npos) return false;
+    for (char c : n) {
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' ||
+              c == '_' || c == '.' || c == '+' || c == ' ')) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void create_project(const std::string& name, const std::string& project_type,
                     bool disable_git_init, bool disable_gitignore) {
+    if (!is_valid_project_name(name)) {
+        util::fatal("invalid project name: '" + name +
+                    "' (use letters, digits, '.', '-', '_', '+', or spaces)");
+    }
     fs::path root = fs::current_path() / name;
 
     if (util::file_exists(root)) {

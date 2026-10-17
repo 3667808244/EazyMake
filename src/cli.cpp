@@ -525,7 +525,14 @@ namespace ezmk::cli
                 opts.profile = *v;
             if (p.has("resolve"))
                 opts.resolve = true;
-            if (p.has("no-glob"))
+            // 1.4.11 Q4-43: --glob was parsed but never applied, and --no-glob
+            // silently won when both were given. Reject the conflict.
+            if (p.has("glob") && p.has("no-glob")) {
+                util::fatal("conflicting options: --glob and --no-glob");
+            }
+            if (p.has("glob"))
+                opts.use_glob = true;
+            else if (p.has("no-glob"))
                 opts.use_glob = false;
             // 1.4.0-dev.1: cmake-only flags on the vscode target — explicit
             // refusal beats silently ignoring them (design doc §3.1).

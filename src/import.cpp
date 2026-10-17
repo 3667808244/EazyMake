@@ -251,9 +251,30 @@ std::optional<bool> eval_cond(const std::vector<std::string>& args,
     if (args.empty()) return std::nullopt;
     if (args.size() == 1) {
         const std::string& a = args[0];
-        if (a == "WIN32")   return true;   // 当前平台为 Windows
-        if (a == "UNIX")    return false;
-        if (a == "APPLE")   return false;
+        // 1.4.11 Q4-32: evaluate against the HOST platform (the importer's
+        // "imported platform == target platform" model) instead of hardcoding
+        // Windows, which imported the WIN32 branch on Linux/macOS too.
+        if (a == "WIN32") {
+#ifdef EZMK_WIN
+            return true;
+#else
+            return false;
+#endif
+        }
+        if (a == "UNIX") {
+#if defined(EZMK_WIN)
+            return false;
+#else
+            return true;
+#endif
+        }
+        if (a == "APPLE") {
+#if defined(__APPLE__)
+            return true;
+#else
+            return false;
+#endif
+        }
         if (a == "MSVC")    return false;  // ezmk 用 g++
         if (a == "ANDROID" || a == "IOS") return false;
         if (a == "CMAKE_SYSTEM_NAME") return false;
@@ -312,9 +333,12 @@ void ascii_lower(std::string& s) {
 bool is_target_keyword(const std::string& s) {
     std::string u = s;
     ascii_upper(u);
+    // 1.4.11 Q4-33: also cover debug/optimized/general (link config) and
+    // BEFORE (include order) — these were imported as bogus libs/include dirs.
     return u == "PRIVATE" || u == "PUBLIC" || u == "INTERFACE" ||
            u == "SYSTEM" || u == "REQUIRED" || u == "EXCLUDE_FROM_ALL" ||
-           u == "OBJECT" || u == "ALL";
+           u == "OBJECT" || u == "ALL" || u == "DEBUG" || u == "OPTIMIZED" ||
+           u == "GENERAL" || u == "BEFORE";
 }
 
 std::string join(const std::vector<std::string>& v, const char* sep = " ") {
@@ -385,6 +409,10 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
 
     // 条件栈：optional<bool>，nullopt = 无法求值（跳过内容 + TODO）。
     std::vector<std::optional<bool>> cond_stack;
+    // 1.4.11 Q4-31: per-frame "a branch was already taken" latch. Storing the
+    // taken state as false made it indistinguishable from "condition false",
+    // so a later elseif/else executed even after an earlier branch ran.
+    std::vector<bool> cond_taken;
     std::set<std::string> todo_seen;
 
     // 1.4.0-dev.4: CMake 标准跟踪——set_target_properties / target_compile_features
@@ -407,9 +435,12 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
         // ---- 条件/函数块 ----
         if (call.name == "if") {
             auto r = eval_cond(call.args, table);
-            if (r) cond_stack.push_back(*r);
-            else {
+            if (r) {
+                cond_stack.push_back(*r);
+                cond_taken.push_back(*r);
+            } else {
                 cond_stack.push_back(std::nullopt);
+                cond_taken.push_back(false);
                 add_todo("未求值的条件块: if(" + join(call.args) + ")");
             }
             continue;
@@ -422,12 +453,15 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                     // (the old code evaluated it and replaced the nullopt frame,
                     // effectively treating an unknown condition as true).
                     add_todo("未求值的条件块: elseif(" + join(call.args) + ")");
-                } else if (!cond_stack.back().value()) {
+                } else if (cond_taken.back()) {
+                    // 1.4.11 Q4-31: an earlier branch already ran — this one and
+                    // any later branch must stay inactive.
+                    cond_stack.back() = false;
+                } else {
                     auto r = eval_cond(call.args, table);
                     cond_stack.back() = r;
+                    if (r && *r) cond_taken.back() = true;
                     if (!r) add_todo("未求值的条件块: elseif(" + join(call.args) + ")");
-                } else {
-                    cond_stack.back() = false;
                 }
             }
             continue;
@@ -439,25 +473,32 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                     // of an unevaluated condition must stay skipped, not be
                     // inverted into "true".
                     add_todo("未求值的条件块: else()");
+                } else if (cond_taken.back()) {
+                    // 1.4.11 Q4-31: a previous branch already ran.
+                    cond_stack.back() = false;
                 } else {
-                    cond_stack.back() = !cond_stack.back().value();
+                    cond_stack.back() = true;
+                    cond_taken.back() = true;
                 }
             }
             continue;
         }
         if (call.name == "endif") {
             if (!cond_stack.empty()) cond_stack.pop_back();
+            if (!cond_taken.empty()) cond_taken.pop_back();
             continue;
         }
         // 函数/宏/循环：内容跳过（阶段三再决定拒绝策略）。
         if (call.name == "function" || call.name == "macro" ||
             call.name == "foreach" || call.name == "while") {
             cond_stack.push_back(false);
+            cond_taken.push_back(false);
             continue;
         }
         if (call.name == "endfunction" || call.name == "endmacro" ||
             call.name == "endforeach" || call.name == "endwhile") {
             if (!cond_stack.empty()) cond_stack.pop_back();
+            if (!cond_taken.empty()) cond_taken.pop_back();
             continue;
         }
 
@@ -502,6 +543,11 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                     if (lib_type.empty()) lib_type = u;
                     continue;
                 }
+                if (u == "OBJECT") {
+                    // 1.4.11 Q4-33: record OBJECT explicitly (handled below).
+                    if (lib_type.empty()) lib_type = u;
+                    continue;
+                }
                 if (u == "EXCLUDE_FROM_ALL" || u == "ALIAS" || u == "IMPORTED" ||
                     u == "GLOBAL" || is_target_keyword(u)) {
                     continue;
@@ -524,6 +570,12 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                          (call.args.empty() ? std::string("<unnamed>") : call.args[0]));
             } else if (lib_type == "SHARED") {
                 p.type = "shared";
+            } else if (lib_type == "OBJECT") {
+                // CMake OBJECT libraries have no direct EazyMake equivalent;
+                // closest is static (flagged as a TODO).
+                p.type = "static";
+                add_todo("OBJECT 库按 static 处理: " +
+                         (call.args.empty() ? std::string("<unnamed>") : call.args[0]));
             } else {
                 // No explicit type → CMake's default is STATIC (never executable).
                 p.type = "static";

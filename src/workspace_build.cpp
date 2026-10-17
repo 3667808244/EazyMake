@@ -208,6 +208,20 @@ int run_workspace_action(const workspace::Workspace& ws,
     // an explicit CLI flag wins.
     const bool stop_on_err = opts.stop_on_error || ws.options.stop_on_error;
 
+    // 1.4.11 Q4-39: a workspace test report with an absolute path would make
+    // every member write the same file concurrently — require a relative path.
+    if (action == "test" && !opts.test_report.empty()) {
+        auto colon = opts.test_report.find(':');
+        if (colon != std::string::npos) {
+            fs::path rp(opts.test_report.substr(colon + 1));
+            if (rp.is_absolute()) {
+                throw std::runtime_error(
+                    "workspace test --report must use a relative path (one per "
+                    "member); got: " + opts.test_report);
+            }
+        }
+    }
+
     auto layers = workspace::topo_layers(ws);
     auto sel = select_layers(ws, layers, opts.members);
 
@@ -240,6 +254,7 @@ int run_workspace_action(const workspace::Workspace& ws,
         for (size_t idx : layer) {
             const auto& m = ws.members[idx];
             // Per-member test-availability check (test action only).
+            std::string member_action = action;
             if (action == "test") {
                 bool has_tests = true;
                 try {
@@ -249,16 +264,15 @@ int run_workspace_action(const workspace::Workspace& ws,
                     has_tests = false;
                 }
                 if (!has_tests) {
-                    {
-                        std::lock_guard<std::mutex> lk(print_mutex);
-                        util::info(I18nKey::workspace_test_no_tests,
-                                   {{"member", m.name}});
-                    }
-                    skipped.fetch_add(1);
-                    continue;
+                    // 1.4.11 Q4-37: still build it — a tested member may depend
+                    // on it; only the test run is skipped.
+                    member_action = "build";
+                    std::lock_guard<std::mutex> lk(print_mutex);
+                    util::info(I18nKey::workspace_test_no_tests,
+                               {{"member", m.name}});
                 }
             }
-            futures.push_back(pool.submit([&ws, idx, &action, &stop, &print_mutex,
+            futures.push_back(pool.submit([&ws, idx, member_action, &stop, &print_mutex,
                                            &succeeded, &failed, &skipped,
                                            &opts, stop_on_err]() {
                 // --stop-on-error fired while this task was queued → skipped
@@ -267,7 +281,7 @@ int run_workspace_action(const workspace::Workspace& ws,
                     skipped.fetch_add(1);
                     return;
                 }
-                bool ok = run_member(ws.members[idx], action, print_mutex,
+                bool ok = run_member(ws.members[idx], member_action, print_mutex,
                                      opts.test_report);
                 if (ok) {
                     succeeded.fetch_add(1);

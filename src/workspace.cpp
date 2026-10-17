@@ -262,6 +262,19 @@ std::optional<Workspace> load_from(const fs::path& start_dir) {
         ws.members.push_back(std::move(m));
     }
 
+    // 1.4.11 Q4-38: duplicate members would run two concurrent builds in the
+    // same directory (object/cache races) — reject after lexical normalization.
+    {
+        std::set<std::string> seen;
+        for (const auto& m : ws.members) {
+            std::string key = fs::path(m.name).lexically_normal().generic_string();
+            if (!seen.insert(key).second) {
+                throw std::runtime_error("duplicate workspace member '" + m.name +
+                                         "' in " + file.string());
+            }
+        }
+    }
+
     // [workspace.options] — optional table with defaults (§3.2).
     // 1.4.11 Q4-29: reject a non-table options value instead of ignoring it.
     auto options_node = (*ws_table)["options"];

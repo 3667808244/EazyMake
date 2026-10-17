@@ -99,6 +99,20 @@ fs::path find_installed_pkg(const std::string& name) {
 
 } // namespace
 
+// 1.4.11 Q4-35: CMake-quote a path/argument. Generated CMake emitted paths
+// verbatim, so a path containing whitespace or ';' split into several arguments
+// (bad GLOB / include / link entries).
+static std::string cmake_quote(const std::string& s) {
+    std::string r = "\"";
+    for (char c : s) {
+        if (c == '"' || c == '\\') r += '\\';
+        else if (c == ';') r += "\\;";
+        r += c;
+    }
+    r += '"';
+    return r;
+}
+
 std::string build_cmake_text(const config::EzConfig& cfg,
                              const fs::path& project_root,
                              const ExportOptions& opts) {
@@ -170,7 +184,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
                 bool outside = false;
                 std::string expr = cmake_path(src_dirs[i], project_root, outside);
                 for (const auto& ext : extensions) {
-                    os << "    " << expr << "/*." << ext << "\n";
+                    os << "    " << cmake_quote(expr + "/*." + ext) << "\n";
                 }
             }
         };
@@ -203,7 +217,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
             if (std::find(extensions.begin(), extensions.end(), ext) == extensions.end())
                 return;
             bool outside = false;
-            os << "    " << cmake_path(p, project_root, outside) << "\n";
+            os << "    " << cmake_quote(cmake_path(p, project_root, outside)) << "\n";
         };
         for (size_t i = 0; i < src_dirs.size(); ++i) {
             const bool rec = i < src_rec.size() && src_rec[i];
@@ -234,7 +248,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
             os << "target_include_directories(" << target << " INTERFACE";
             for (const auto& d : compile.include_dirs) {
                 bool outside = false;
-                os << " " << cmake_path(d, project_root, outside);
+                os << " " << cmake_quote(cmake_path(d, project_root, outside));
             }
             os << ")\n";
         }
@@ -280,9 +294,19 @@ std::string build_cmake_text(const config::EzConfig& cfg,
     auto digest_std = [&](const std::string& s) {
         std::string st = s;
         if (st.rfind("gnu", 0) == 0) { gnu_ext = true; st = st.substr(3); }
-        std::string digits;
-        for (char c : st) if (c >= '0' && c <= '9') digits += c;
-        if (!digits.empty()) std_num = std::stoi(digits);
+        // 1.4.11 Q4-34: canonicalize the c++/gnu++ prefixes and the 2a/2b
+        // aliases instead of scraping every digit (c++2a became CXX_STANDARD 2),
+        // and never let std::stoi throw on a long digit run.
+        if (st.rfind("++", 0) == 0) st = st.substr(2);
+        else if (st.rfind("c++", 0) == 0) st = st.substr(3);
+        else if (st.rfind("c", 0) == 0) st = st.substr(1);
+        if (st == "2a") st = "23";
+        else if (st == "2b") st = "26";
+        bool numeric = !st.empty();
+        for (char c : st) if (!std::isdigit((unsigned char)c)) numeric = false;
+        if (numeric) {
+            try { std_num = std::stoi(st); } catch (...) { std_num = 0; }
+        }
     };
 
     for (const auto& f : compile.flags) {
@@ -319,8 +343,8 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         for (const auto& d : include_dirs) {
             bool outside = false;
             std::string expr = cmake_path(d, project_root, outside);
-            if (outside) external.push_back(expr);
-            os << " " << expr;
+            if (outside) external.push_back(cmake_quote(expr));
+            os << " " << cmake_quote(expr);
         }
         os << ")\n";
         if (!external.empty()) {
@@ -384,13 +408,13 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         os << "target_link_directories(" << target << " PRIVATE";
         for (const auto& d : link_dirs) {
             bool outside = false;
-            os << " " << cmake_path(d, project_root, outside);
+            os << " " << cmake_quote(cmake_path(d, project_root, outside));
         }
         os << ")\n";
     }
     if (!link_libs.empty()) {
         os << "target_link_libraries(" << target << " PRIVATE";
-        for (const auto& l : link_libs) os << " " << l;
+        for (const auto& l : link_libs) os << " " << cmake_quote(l);
         os << ")\n";
     }
     if (!link_opts.empty()) {
@@ -419,7 +443,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
                 // Concrete paths (this machine only — not portable).
                 os << "# resolved from installed package (--resolve; machine-specific)\n";
                 os << "target_include_directories(" << target << " PRIVATE "
-                   << (pkg_dir / "include").generic_string() << ")\n";
+                   << cmake_quote((pkg_dir / "include").generic_string()) << ")\n";
                 // 1.2.0-dev.11: use the actual selected archive (tagged
                 // os-arch[-compiler][-abi] naming / MSVC .lib) rather than a
                 // hardcoded lib<name>.a.
@@ -432,7 +456,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
                     os << "# precompiled archive selection failed: " << e.what() << "\n";
                 }
                 os << "target_link_libraries(" << target << " PRIVATE "
-                   << resolved_archive << ")\n";
+                   << cmake_quote(resolved_archive) << ")\n";
                 continue;
             }
             auto it = std::find_if(std::begin(kPkgAliases), std::end(kPkgAliases),
@@ -523,13 +547,11 @@ int export_cmake(const config::EzConfig& cfg,
 
     std::string text = build_cmake_text(cfg, project_root, opts);
 
-    // Atomic write (temp → rename), mirroring cache/compile_db writers.
-    auto tmp = out;
-    tmp += ".tmp";
-    util::file_write(tmp, text);
-    std::error_code ec;
-    fs::rename(tmp, out, ec);
-    if (ec) util::file_write(out, text);
+    // 1.4.11 Q4-36: shared crash-safe writer; a failed write must not be
+    // reported as "written".
+    if (!util::atomic_write_text(out, text)) {
+        util::fatal(std::string("failed to write ") + out.string());
+    }
 
     util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
     // dev.8: hooks 现经 ezmk-lua 导出（best-effort），提示用户该运行时依赖。
@@ -721,14 +743,12 @@ int export_vscode(const config::EzConfig& cfg,
                     ec.message());
     }
 
-    // Atomic write per file (temp → rename), mirroring export_cmake.
+    // 1.4.11 Q4-36: shared crash-safe writer per file.
     for (const auto& f : trio) {
         fs::path out = dir / f.name;
-        auto tmp = out;
-        tmp += ".tmp";
-        util::file_write(tmp, f.text);
-        fs::rename(tmp, out, ec);
-        if (ec) util::file_write(out, f.text);
+        if (!util::atomic_write_text(out, f.text)) {
+            util::fatal(std::string("failed to write ") + out.string());
+        }
         util::info(ezmk::i18n::I18nKey::export_written, {{"path", out.string()}});
     }
     return 0;

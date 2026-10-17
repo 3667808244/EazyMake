@@ -276,7 +276,8 @@ TEST_CASE("export cmake: link mapping — system_targets + -l/-L split", "[expor
     cfg.link.flags = {"-lpthread", "-Lextra_lib", "-s"};
     cfg.link.link_dirs = {"mylib"};
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
-    REQUIRE(t.find("target_link_libraries(demo PRIVATE dl pthread)") != std::string::npos);
+    // 1.4.11 Q4-35: link entries are CMake-quoted now.
+    REQUIRE(t.find("target_link_libraries(demo PRIVATE \"dl\" \"pthread\")") != std::string::npos);
     REQUIRE(t.find("target_link_directories(demo PRIVATE") != std::string::npos);
     REQUIRE(t.find("target_link_options(demo PRIVATE -s)") != std::string::npos);
 }
