@@ -552,7 +552,9 @@ TEST_CASE("collect_sources: shorter flag vector means flat", "[build][1.4.10]") 
     std::ofstream(tmp / "src" / "main.cpp") << "int main() { return 0; }\n";
     std::ofstream(tmp / "src" / "sub" / "deep.cpp") << "void d() {}\n";
 
-    auto sources = collect_sources({"src"}, {}, tmp, "executable");
+    // 1.4.12: explicit vector<bool> — a bare {} is ambiguous between the
+    // 4-arg (path) and 5-arg (recursive flags) overloads on some GCC versions.
+    auto sources = collect_sources({"src"}, std::vector<bool>{}, tmp, "executable");
     fs::remove_all(tmp);
 
     REQUIRE(sources.size() == 1);
