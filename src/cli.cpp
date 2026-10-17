@@ -1288,9 +1288,8 @@ namespace ezmk::cli
             return result;
         }
 
-        util::error(ezmk::i18n::fmt(ezmk::i18n::I18nKey::cli_unknown_command,
-                                    {{"cmd", std::string(group)}}));
-        // 0.9.4+: suggest closest matching command
+        // 0.9.4+: suggest closest matching command. 1.4.11 Q4-20: the fatal at
+        // the end of this branch reports the unknown command and exits non-zero.
         {
             std::vector<std::string> cmds = {
                 "project", "pkg", "repo", "utils", "example", "workspace",
@@ -1312,8 +1311,11 @@ namespace ezmk::cli
             util::error(ezmk::i18n::I18nKey::cli_available_commands,
                         {{"commands", avail}});
         }
-        args.cmd = Command::Help;
-        return args;
+        // 1.4.11 Q4-20: an unknown command is an error — exit non-zero instead
+        // of printing usage and returning 0.
+        util::fatal(ezmk::i18n::I18nKey::cli_unknown_command,
+                    {{"cmd", std::string(group)}});
+        return args;  // unreachable (fatal throws)
     }
 
     void print_usage()

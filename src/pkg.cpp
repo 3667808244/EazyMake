@@ -1631,6 +1631,12 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     auto build_dir = entry.path() / "build";
                     auto lib_file = util::find_package_archive(
                         build_dir, pkg_cfg.project.name);
+                    if (lib_file.empty()) {
+                        // 1.4.11 Q4-17: precompiled packages ship the archive
+                        // under lib/ and never create build/.
+                        lib_file = util::find_package_archive(
+                            entry.path() / "lib", pkg_cfg.project.name);
+                    }
                     if (lp.type == "header-only") {
                         // 1.4.2 F-28: no archive to hash — pin the include/
                         // payload manifest so verify() can detect tampering.
@@ -2252,10 +2258,18 @@ void remove(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) 
         if (util::file_exists(pkg_path)) {
             util::info(ezmk::i18n::I18nKey::removing, {{"pkg", pkg_path.string()}});
             util::remove_all(pkg_path);
+            // 1.4.11 Q4-15: keep the lockfile in sync so a later deterministic
+            // build does not fatal on a recorded-but-removed package.
+            if (scope == cli::Scope::Project) {
+                maybe_write_lockfile(scope, /*no_lock=*/false,
+                                     toolchain::detect_toolchain(),
+                                     pkg_install_dir(scope));
+            }
             return;
         }
     }
-    util::error(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
+    // 1.4.11 Q4-20: a failed lookup must be script-visible (exit != 0).
+    util::fatal(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
 }
 
 // ===================================================================
@@ -2564,8 +2578,8 @@ void update(const std::string& pkg_name, const std::vector<cli::Scope>& scopes,
     }
 
     if (!found) {
-        util::error(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
-        return;
+        // 1.4.11 Q4-20: exit non-zero so scripts can detect the failure.
+        util::fatal(ezmk::i18n::I18nKey::not_found, {{"pkg", pkg_name}});
     }
 
     // Search registered repos for the package (all scopes)

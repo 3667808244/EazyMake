@@ -1220,6 +1220,27 @@ lib = ["fmt@10.2.1"]
     REQUIRE(cfg.depends.libs[0].constraint.version == "10.2.1");
 }
 
+// 1.4.11 Q4-19: the lockfile writes "name@^1.2"; it must parse back.
+TEST_CASE("parse_config: depends with lockfile-style @^ constraint",
+          "[config][1.4.11]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+
+[depends]
+lib = ["fmt@^1.2"]
+)");
+    auto cfg = parse_config(toml);
+    fs::remove(toml);
+
+    REQUIRE(cfg.depends.libs.size() == 1);
+    REQUIRE(cfg.depends.libs[0].name == "fmt");
+    REQUIRE(cfg.depends.libs[0].constraint.op == VersionConstraint::Compatible);
+    REQUIRE(cfg.depends.libs[0].constraint.version == "1.2");
+}
+
 TEST_CASE("parse_config: depends with compatible version constraint (^)", "[config][0.9.6]") {
     using namespace ezmk::config;
     auto toml = write_temp_toml(R"(

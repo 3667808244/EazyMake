@@ -247,10 +247,10 @@ TEST_CASE("pkg list: all scopes listable", "[pkg][0.2.3]") {
 // 0.2.3+: update() - basic error paths
 // ===================================================================
 
-TEST_CASE("pkg update: non-existent package shows error", "[pkg][0.2.3]") {
-    // update() of a non-existent package should output an error via util::error()
-    // and return without throwing
-    REQUIRE_NOTHROW(update("nonexistent_pkg_xyz_12345", {Scope::Project}));
+// 1.4.11 Q4-20: a not-found update is an error (non-zero exit).
+TEST_CASE("pkg update: non-existent package throws", "[pkg][0.2.3][1.4.11]") {
+    REQUIRE_THROWS_AS(update("nonexistent_pkg_xyz_12345", {Scope::Project}),
+                      ezmk::fatal_error);
 }
 
 // ===================================================================

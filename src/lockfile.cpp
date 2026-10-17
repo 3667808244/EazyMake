@@ -392,6 +392,11 @@ std::vector<std::string> verify(const fs::path& proj_root,
         // 1.2.0-dev.11: deterministic pick (shared with pkg.cpp record side) —
         // the previous "first directory entry" was non-deterministic.
         lib_file = util::find_package_archive(build_dir, pkg.name);
+        if (lib_file.empty()) {
+            // 1.4.11 Q4-17: mirror the record side — precompiled packages keep
+            // their archive under lib/ instead of build/.
+            lib_file = util::find_package_archive(pkg_path / "lib", pkg.name);
+        }
 
         const std::string recorded = artifact_hash(pkg);
         if (recorded.empty()) {

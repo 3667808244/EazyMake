@@ -583,7 +583,7 @@ void remove(std::string_view name, const std::vector<cli::Scope>& scopes) {
             }
         }
     }
-    util::error(ezmk::i18n::I18nKey::repo_not_found, {{"name", std::string(name)}});
+    util::fatal(ezmk::i18n::I18nKey::repo_not_found, {{"name", std::string(name)}});
 }
 
 // ===================================================================
@@ -647,7 +647,7 @@ void update(const std::string& name, const std::vector<cli::Scope>& scopes) {
 
     if (!updated_any) {
         if (!name.empty()) {
-            util::error(ezmk::i18n::I18nKey::repo_not_found, {{"name", name}});
+            util::fatal(ezmk::i18n::I18nKey::repo_not_found, {{"name", name}});
         } else {
             util::info(ezmk::i18n::I18nKey::no_repos);
         }
@@ -796,7 +796,7 @@ void info(std::string_view name, const std::vector<cli::Scope>& scopes) {
         }
     }
     // Not found
-    util::error(ezmk::i18n::I18nKey::repo_not_found, {{"name", std::string(name)}});
+    util::fatal(ezmk::i18n::I18nKey::repo_not_found, {{"name", std::string(name)}});
 }
 
 // ===================================================================
@@ -846,7 +846,9 @@ PkgSearchResult search_package(std::string_view pkg_name,
     // Find the highest version; tie-break by scope priority
     const Match* best = &matches[0];
     for (size_t i = 1; i < matches.size(); ++i) {
-        int cmp = util::compare_version(matches[i].version, best->version);
+        // 1.4.11 Q4-16: preserve pre-release precedence (F-27) across repos —
+        // plain compare_version strips the -rc suffix and can pick a pre-release.
+        int cmp = util::compare_version_precedence(matches[i].version, best->version);
         if (cmp > 0 || (cmp == 0 && matches[i].scope_index < best->scope_index)) {
             best = &matches[i];
         }
@@ -966,7 +968,7 @@ PkgSearchResult search_package(std::string_view pkg_name,
     // Find the highest version among filtered; tie-break by scope priority
     const Match* best = &filtered[0];
     for (size_t i = 1; i < filtered.size(); ++i) {
-        int cmp = util::compare_version(filtered[i].version, best->version);
+        int cmp = util::compare_version_precedence(filtered[i].version, best->version);
         if (cmp > 0 || (cmp == 0 && filtered[i].scope_index < best->scope_index)) {
             best = &filtered[i];
         }

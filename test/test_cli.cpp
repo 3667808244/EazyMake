@@ -542,17 +542,14 @@ TEST_CASE("cli parse: utils with no subcommand throws", "[cli]") {
 // unknown commands
 // ===================================================================
 
-TEST_CASE("cli parse: unknown command group", "[cli]") {
-    // "ezmk unknown_cmd sub" → falls through to help
-    // But the function calls util::error which we can't easily test without
-    // redirecting stderr. We just verify the returned struct.
-    // The code sets cmd = Help for unknown groups
+// 1.4.11 Q4-20: an unknown command is fatal (exit non-zero) instead of
+// falling through to help with exit 0.
+TEST_CASE("cli parse: unknown command group throws", "[cli][1.4.11]") {
     char arg0[] = "ezmk";
     char arg1[] = "unknown_group";
     char arg2[] = "sub";
     char* av[] = { arg0, arg1, arg2 };
-    auto args = ezmk::cli::parse(3, av);
-    REQUIRE(args.cmd == Command::Help);
+    REQUIRE_THROWS_AS(ezmk::cli::parse(3, av), ezmk::fatal_error);
 }
 
 // ===================================================================

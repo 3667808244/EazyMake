@@ -861,6 +861,14 @@ TEST_CASE("compare_version: long version numbers", "[util]") {
     REQUIRE(compare_version("1.0.0.0", "1.0.0") == 0);
 }
 
+// 1.4.11 Q4-18: an arbitrarily long digit run saturates instead of wrapping.
+TEST_CASE("compare_version: huge digit runs saturate", "[util][1.4.11]") {
+    REQUIRE(compare_version("99999999999999999999999.0.0",
+                            "99999999999999999999998.0.0") == 0);
+    REQUIRE(compare_version("99999999999999999999999.0.0", "2.0.0") > 0);
+    REQUIRE(compare_version("2.0.0", "99999999999999999999999.0.0") < 0);
+}
+
 TEST_CASE("compare_version: edge cases", "[util]") {
     REQUIRE(compare_version("0.0.0", "0.0.0") == 0);
     REQUIRE(compare_version("0.0.1", "0.0.0") > 0);

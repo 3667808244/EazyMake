@@ -35,12 +35,14 @@ int compare_version(std::string_view a, std::string_view b) {
             ++pos;
         }
         if (pos >= s.size()) return 0;
-        // Collect digits.
-        unsigned long val = 0;
+        // 1.4.11 Q4-18: saturating parse — an arbitrarily long digit run used to
+        // wrap around instead of clamping.
+        size_t seg_start = pos;
         while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
-            val = val * 10 + static_cast<unsigned long>(s[pos] - '0');
             ++pos;
         }
+        unsigned long val = parse_version_component(
+            s.substr(seg_start, pos - seg_start));
         // Advance past the delimiter ('.', '-', '+', or end).
         if (pos < s.size() && s[pos] == '.') {
             ++pos;

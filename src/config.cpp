@@ -137,6 +137,21 @@ static DependsEntry parse_depends_entry(std::string_view raw) {
     }
     raw = raw.substr(start, end - start + 1);
 
+    // 1.4.11 Q4-19: accept the lockfile's own "name@^1.2" spelling — a '@'
+    // directly before a relational/compat operator is just a separator.
+    // NOTE: 'normalized' must outlive the assignment to 'raw' (a string_view).
+    std::string normalized(raw);
+    auto strip = [&](std::string_view from, std::string_view to) {
+        size_t p;
+        while ((p = normalized.find(from)) != std::string::npos)
+            normalized.replace(p, from.size(), to);
+    };
+    strip("@>=", ">=");
+    strip("@>", ">");
+    strip("@^", "^");
+    strip("@~", "~");
+    raw = normalized;
+
     // Scan for constraint operators. Order: longest match first (>= before >).
     // 1.2.0-dev.11: pick the EARLIEST occurrence across all ops — the previous
     // ordered first-match scan mis-parsed compound constraints like "pkg@^1.0"

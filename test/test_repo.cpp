@@ -196,8 +196,10 @@ TEST_CASE("search_package: returns empty for unknown package", "[repo]") {
 // 0.2.5 — repo info
 // ===================================================================
 
-TEST_CASE("repo info: not found does not throw", "[repo][info]") {
-    REQUIRE_NOTHROW(info("nonexistent_repo_xyz_12345", {Scope::Project}));
+// 1.4.11 Q4-20: a not-found lookup is an error and must exit non-zero.
+TEST_CASE("repo info: not found throws", "[repo][info][1.4.11]") {
+    REQUIRE_THROWS_AS(info("nonexistent_repo_xyz_12345", {Scope::Project}),
+                      ezmk::fatal_error);
 }
 
 // ===================================================================
