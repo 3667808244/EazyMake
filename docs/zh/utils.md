@@ -311,7 +311,7 @@ deprecation warning。一旦声明该节，三类权限即全部进入 deny/allo
 - `ezmk.file_write()` → `false, "permission denied: write access to <path>"`
 - `ezmk.file_exists()` → 命中 deny 时返回 `false`（**不弹询问**）；既非 allow 也非 deny 时仍返回真实存在性，内容访问仍由 `file_read` 把关（1.4.2 F-18）
 - `ezmk.list_sources()` → 命中 deny 的路径被**静默过滤**（不弹询问；1.4.2 F-18）
-- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}`，其中 `<cmd>` 仅为命令的**首个 token**（可执行文件），而非整条命令；`run_capture()` 抛 error
+- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<token>'"}`；自 1.4.11 起整条命令会被**逐段校验**（按 `;`/`&&`/`||`/`|`/`&` 拆分，每段的首个 token 都要被允许；含 `$`、反引号、重定向、子 shell 或换行的命令一律拒绝），`<token>` 为触发拒绝那一段的 token；`run_capture()` 抛 error
 
 ---
 

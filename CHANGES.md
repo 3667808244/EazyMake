@@ -24,6 +24,40 @@
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
+## 1.4.11 (未发布) — 代码质量审计修复（第四轮）
+
+> **状态：🚧 开发中（8 阶段 / Q4-01~Q4-47）** —— 设计 + 阶段清单见 [plans/1.4.x/1.4.11.md](plans/1.4.x/1.4.11.md)。**零功能新增；公共 API 无破坏性变更。**
+
+### 缺陷修复（P0/P1）
+
+- **POSIX `run_command` 不再在 `fork()` 后调用 `setenv()`**（可能 malloc → 多线程 `-jN` 下死锁）；子进程环境在 fork 前构造并经 `execve` 传入。
+- **Lua `ezmk.run` / `run_capture` 权限改为逐段校验**：命令含 `$`、反引号、重定向、子 shell 或换行时拒绝；否则按 `;`/`&&`/`||`/`|`/`&` 拆分，要求每个可执行 token 都被 `[utils.permissions]` 允许（此前只校验首个 token，`git ; rm -rf ~` 可绕过 allow/deny/Ask）。
+- **`cache.cpp` 对象与 `pkg.cpp` 归档的原子落盘**改走 `util::atomic_rename`：回退 copy 失败不再删除唯一的临时成品、不再报告成功。
+- **`project import` 条件链 `if/elseif/else` 只执行首个为真分支**（此前已取分支后的 `else` 仍会执行）；平台常量 `WIN32`/`UNIX`/`APPLE` 改为按宿主平台求值。
+
+### 缺陷修复（P2/P3）
+
+- 错误路径：`record.json` / `compile_commands.json` 回退写入清理 `.tmp`；`ThreadPool` 线程创建失败不再 `terminate`；`repo remove` 先持久化注册表再删 cache。
+- 构建正确性：test 缓存随编译器版本 / deterministic 失效（对齐 build 路径）；executable 入口接受 `main.cc`/`main.cxx`；单源失败保留其余缓存更新；`collect_test_sources` 按路径去重。
+- 包/锁：`pkg remove` 剪除 lockfile 条目（确定性构建不再 fatal）；跨仓库版本选择使用 `compare_version_precedence`；precompiled 包在 lockfile 中做内容固定；`compare_version` 分量饱和；lockfile 约束 `name@^1.2` 可被 `ezmk.toml` 读回。
+- Lua/i18n：`lua_pushlstring` 保留内嵌 NUL；`json_decode` 深层嵌套报 Lua 错误而非栈溢出；权限 glob 允许项锚定项目根；`ezmk-lua` 主程序捕获异常。
+- 配置：语言范围界按年份序号比较（`C++98..C++11` 不再被误拒）；`resolve_link_path` 实现链式解析 + 循环检测；已知布尔键 / `[workspace]` 键类型错误 fail-fast；`normalized_lang` 补默认版本。
+- import/export/workspace：`is_target_keyword` 补 debug/optimized/general/BEFORE，OBJECT 库显式标注；`-std=c++2a/2b` 正确映射；导出的 CMake 路径引号化、写失败报错；workspace 重复成员拒绝、test-less 依赖仍构建、绝对 `--report` 路径拒绝。
+- project/CLI：`project new` 名称校验/净化；`--glob` 显式生效并拒绝与 `--no-glob` 冲突；`git init` 与 editor 命令在 Windows 使用 MSVCRT 引号。
+- util：`$CXX` 探测路径引号化；`resolve_relative_path_flags` 不再误伤 `/INCREMENTAL` 等；Windows 下载拆分 `host:port`；`safe_extract_path` 接受 `.`/尾分隔符；`extract_targz` 校验 gzip CRC32/ISIZE。
+
+### 行为收紧
+
+- 未知顶层命令、`pkg remove/update`、`repo remove/update/info` 未找到目标时**退出非零**（此前打印错误但返回 0）。
+- 损坏的 gzip 归档、超深 JSON、含 shell 构造的受限 `ezmk.run` 从「静默通过」变为明确报错。
+
+### 已知限制
+
+- `workspace watch` 仍缓冲成员输出至进程结束（本轮裁定为已知限制，不做流式改造）。
+- `project new` / `example` 中途失败仍可能留下半成品目录（低危延后）。
+
+---
+
 ## 1.4.10 (2026-10-13) — 可选递归源文件查找（`src_dirs` / `[test].dirs` 的 `/**`）
 
 > **状态：✅ 已发布（2026-10-13，tag `v1.4.10`；Release run `38416035316` success，7 资产 digest 核对一致、`macos-x64` skipped）。** 阶段一~五实现与文档全部落地；全量 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**。三渠道：Homebrew tap `4a3ff91` / pacman `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`，含 4 页 man + `_ezmk`，`ezmk version` → 1.4.10）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)（CI/版主审批为发布后跟进项）。 —— 设计见 [plans/1.4.x/1.4.10.md](plans/1.4.x/1.4.10.md)，阶段见根 [plan.md](plan.md)。**默认行为零变化；公共 API 无破坏性变更。**

@@ -1338,6 +1338,25 @@ TEST_CASE("create_targz → extract_targz round trip", "[util][1.2.0-dev.11]") {
     ezmk::util::remove_all(tmp);
 }
 
+// 1.4.11 Q4-47: a corrupted gzip CRC must be rejected, not silently parsed.
+TEST_CASE("extract_targz: gzip CRC mismatch is rejected", "[util][1.4.11]") {
+    auto tmp = fs::temp_directory_path() / "ezmk_targz_crc";
+    ezmk::util::remove_all(tmp);
+    ezmk::util::create_directories(tmp / "src");
+    ezmk::util::file_write(tmp / "src" / "a.txt", "hello world");
+    auto arc = tmp / "a.tar.gz";
+    ezmk::util::create_targz(tmp / "src", arc);
+
+    std::string bytes = ezmk::util::file_read(arc);
+    REQUIRE(bytes.size() > 8);
+    bytes[bytes.size() - 8] = static_cast<char>(bytes[bytes.size() - 8] ^ 0xFF);
+    ezmk::util::file_write(arc, bytes);
+
+    auto dest = tmp / "out";
+    REQUIRE_THROWS_AS(ezmk::util::extract_targz(arc, dest), std::runtime_error);
+    ezmk::util::remove_all(tmp);
+}
+
 // 1.3.6: collect_stage_entries — the shared staging traversal behind both
 // archive writers (relative names, forward slashes, dirs trailing '/', sorted).
 TEST_CASE("collect_stage_entries: relative, slash-normalized, sorted", "[util][1.3.6]") {
@@ -1571,6 +1590,28 @@ TEST_CASE("resolve_relative_path_flags: joined and split forms (F-12)", "[util][
     REQUIRE(fs::path(out[6].substr(9)) == base / "libs");   // /LIBPATH:libs
     REQUIRE(out[7] == "/I");
     REQUIRE(fs::path(out[8]) == base / "misc");
+}
+
+// 1.4.11 Q4-44: flags that merely START with a path prefix (/INCREMENTAL,
+// /IMPLIB, -include-pch, -isystem-after) must not be split into bogus paths.
+TEST_CASE("resolve_relative_path_flags: non-path prefixes kept", "[util][1.4.11]") {
+    fs::path base =
+#ifdef EZMK_WIN
+        "C:/proj";
+#else
+        "/proj";
+#endif
+    std::vector<std::string> flags = {
+        "/INCREMENTAL:NO", "/IMPLIB:out.lib", "-include-pch", "pre.h.pch",
+        "-isystem-after", "-Iinc",
+    };
+    auto out = resolve_relative_path_flags(flags, base);
+    REQUIRE(out[0] == "/INCREMENTAL:NO");
+    REQUIRE(out[1] == "/IMPLIB:out.lib");
+    REQUIRE(out[2] == "-include-pch");
+    REQUIRE(out[3] == "pre.h.pch");
+    REQUIRE(out[4] == "-isystem-after");
+    REQUIRE(fs::path(out[5].substr(2)) == base / "inc");
 }
 
 TEST_CASE("resolve_relative_path_flags: absolute values are kept verbatim (F-12)", "[util][1.4.2]") {

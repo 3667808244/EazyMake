@@ -472,11 +472,27 @@ std::vector<std::string> resolve_relative_path_flags(const std::vector<std::stri
     };
     // Flags whose path operand is joined to the flag ("-Iinc", "/LIBPATH:lib").
     auto joined_prefix = [](const std::string& f) -> std::string {
+        // 1.4.11 Q4-44: some flags merely START with a path-flag prefix
+        // (/INCREMENTAL, /IMPLIB, /IGNORE, -include-pch, -isystem-after) and
+        // must not be split into a bogus include/lib path.
+        static const char* kNotPath[] = {
+            "/INCREMENTAL", "/IMPLIB", "/IGNORE", "/INCLUDE", "/INTERFACE",
+            "-include-pch", "-isystem-after"};
+        for (const char* np : kNotPath) {
+            const size_t n = std::strlen(np);
+            if (f.size() >= n && f.compare(0, n, np) == 0) return {};
+        }
         static const char* kPrefixes[] = {"-I", "-L", "-include", "-isystem",
                                           "/I", "/LIBPATH:"};
         for (const char* p : kPrefixes) {
             const size_t n = std::strlen(p);
-            if (f.size() > n && f.compare(0, n, p) == 0) return std::string(p);
+            if (f.size() > n && f.compare(0, n, p) == 0) {
+                const unsigned char c = static_cast<unsigned char>(f[n]);
+                if (c == '/' || c == '\\' || c == '.' ||
+                    std::isalnum(c) || c == '_' || c == '-') {
+                    return std::string(p);
+                }
+            }
         }
         return {};
     };
@@ -1009,10 +1025,16 @@ static fs::path safe_extract_path(const fs::path& dest, std::string_view entry) 
     fs::path joined = (dest / name).lexically_normal();
     std::string jp = joined.generic_string();
     std::string dp = dest.lexically_normal().generic_string();
-    if (jp.size() < dp.size() ||
-        jp.compare(0, dp.size(), dp) != 0 ||
-        (jp.size() > dp.size() && jp[dp.size()] != '/')) {
-        throw std::runtime_error("unsafe path in archive: " + name);
+    // 1.4.11 Q4-46: normalize the destination before the prefix compare — a
+    // dest of "." or "out/" used to reject every (in fact safe) entry.
+    while (dp.size() > 1 && (dp.back() == '/' || dp.back() == '\\')) dp.pop_back();
+    if (dp == ".") dp.clear();
+    if (!dp.empty()) {
+        if (jp.size() < dp.size() ||
+            jp.compare(0, dp.size(), dp) != 0 ||
+            (jp.size() > dp.size() && jp[dp.size()] != '/')) {
+            throw std::runtime_error("unsafe path in archive: " + name);
+        }
     }
     return joined;
 }
@@ -1199,6 +1221,27 @@ void extract_targz(const fs::path& archive, const fs::path& dest) {
 
     out.resize(out_pos);
 
+    // 1.4.11 Q4-47: verify the gzip footer (CRC32 + ISIZE). Raw deflate has no
+    // internal checksum, so a bit-flipped archive could otherwise be parsed as
+    // valid tar. The footer is the last 8 bytes of the compressed file.
+    if (src_len < 8) {
+        throw std::runtime_error("truncated gzip stream");
+    }
+    auto rd32 = [&](size_t off) -> uint32_t {
+        return static_cast<uint32_t>(src[off]) |
+               (static_cast<uint32_t>(src[off + 1]) << 8) |
+               (static_cast<uint32_t>(src[off + 2]) << 16) |
+               (static_cast<uint32_t>(src[off + 3]) << 24);
+    };
+    const uint32_t want_crc = rd32(src_len - 8);
+    const uint32_t want_size = rd32(src_len - 4);
+    const uint32_t got_crc = static_cast<uint32_t>(
+        mz_crc32(MZ_CRC32_INIT, out.data(), out.size()));
+    if (got_crc != want_crc ||
+        static_cast<uint32_t>(out.size()) != want_size) {
+        throw std::runtime_error("gzip checksum mismatch (corrupted archive)");
+    }
+
     // Parse tar from decompressed data
     // Tar format: 512-byte header blocks, each file entry has:
     //   name[100] | mode[8] | uid[8] | gid[8] | size[12] | mtime[12] | chksum[8] | typeflag[1] | linkname[100] | ...
@@ -1349,6 +1392,25 @@ void download(std::string_view url_sv, const fs::path& dest) {
         host = url;
     }
 
+    // 1.4.11 Q4-45: split userinfo and port out of the authority —
+    // WinHttpConnect expects a bare hostname plus a numeric port, but the old
+    // code passed the whole "host:port" and let resolution fail.
+    INTERNET_PORT port = https ? INTERNET_DEFAULT_HTTPS_PORT
+                               : INTERNET_DEFAULT_HTTP_PORT;
+    auto at = host.rfind('@');
+    if (at != std::string::npos) host = host.substr(at + 1);
+    auto colon = host.rfind(':');
+    if (colon != std::string::npos && host.find(']') == std::string::npos) {
+        std::string port_str = host.substr(colon + 1);
+        if (!port_str.empty()) {
+            try {
+                int p = std::stoi(port_str);
+                if (p > 0 && p <= 65535) port = static_cast<INTERNET_PORT>(p);
+            } catch (...) { /* leave the default port */ }
+            host = host.substr(0, colon);
+        }
+    }
+
     std::wstring whost(host.begin(), host.end());
     std::wstring wpath(path.begin(), path.end());
 
@@ -1359,8 +1421,7 @@ void download(std::string_view url_sv, const fs::path& dest) {
         WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) throw std::runtime_error("WinHttpOpen failed");
 
-    HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(),
-        https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT, 0);
+    HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), port, 0);
     if (!hConnect) {
         WinHttpCloseHandle(hSession);
         throw std::runtime_error("WinHttpConnect failed");

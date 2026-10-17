@@ -291,7 +291,7 @@ Each access category is judged by a fixed priority (consistent across all three 
 
 - **Read**: `ezmk.toml` itself and the package directory returned by `ezmk.pkg_dir()` are allowed by default, but `read_deny` can still override this.
 - **Write**: First passes through the hard restriction of "no writing outside the project root" (non-bypassable), then enters deny/allow/ask.
-- **Execute**: Only matches against the first token of the command (the executable filename). Exact match (`g++` does not match `g++-13`), `*`-suffix prefix wildcard (`git*` matches `git`, `git.exe`), full path match.
+- **Execute**: When permissions are active, the *whole* command line is audited (1.4.11): shell constructs (`$`, backtick, `>`, `<`, subshell, newline) are refused, and a compound command split on `;`/`&&`/`||`/`|`/`&` requires **every** segment's first token to be allowed. Matching is on the executable token: exact match (`g++` does not match `g++-13`), `*`-suffix prefix wildcard (`git*` matches `git`, `git.exe`), full path match.
 
 > **Why deny before allow?** A too-broad allowlist is a realistic mistake, so
 > deny must always win — even when the same target is also allowlisted. Anything
@@ -323,7 +323,7 @@ Return values of controlled APIs when denied:
 - `ezmk.file_write()` → `false, "permission denied: write access to <path>"`
 - `ezmk.file_exists()` → `false` when denied (**no ask prompt**); if the target is neither allowed nor denied, the real existence result is still returned and content access stays gated at `file_read` (1.4.2 F-18)
 - `ezmk.list_sources()` → paths that match deny are **silently filtered out** (no ask prompt; 1.4.2 F-18)
-- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<cmd>'"}` where `<cmd>` is only the **first token** of the command (the executable), not the whole command line; `run_capture()` throws an error
+- `ezmk.run()` → `{exit_code=-1, stderr="permission denied: '<token>'"}` where `<token>` is the first token of the offending command segment; `run_capture()` throws an error. As of 1.4.11 every command segment is checked (see **Execute** above).
 
 ---
 
