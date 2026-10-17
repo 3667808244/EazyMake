@@ -574,10 +574,10 @@ void start_ws_watch(const fs::path& root, const fs::path& log_file,
                 " workspace watch " + flags + " > \"" +
                 escape_shell_arg(log_file.string()) + "\" 2>&1";
 #else
-    watch_cmd = "cd " + escape_shell_arg(root.string()) + " && " +
-                escape_shell_arg(ezmk_bin) +
-                " workspace watch " + flags + " > " +
-                escape_shell_arg(log_file.string()) + " 2>&1 &";
+    watch_cmd = "cd \"" + escape_shell_arg(root.string()) + "\" && \"" +
+                escape_shell_arg(ezmk_bin) + "\" " +
+                " workspace watch " + flags + " > \"" +
+                escape_shell_arg(log_file.string()) + "\" 2>&1 &";
 #endif
     run_command(watch_cmd);
 }

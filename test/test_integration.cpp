@@ -206,10 +206,10 @@ TEST_CASE("integration: watch mode detects file changes", "[integration]") {
 #else
     // POSIX: run in background with &
     std::string watch_cmd =
-        "cd " + escape_shell_arg(proj_dir.string()) + " && " +
+        "cd \"" + escape_shell_arg(proj_dir.string()) + "\" && \"" +
         escape_shell_arg(ezmk_bin) +
-        " project watch --no-build-on-start > " +
-        escape_shell_arg(log_file.string()) + " 2>&1 &";
+        "\" project watch --no-build-on-start > \"" +
+        escape_shell_arg(log_file.string()) + "\" 2>&1 &";
 #endif
 
     run_command(watch_cmd);
@@ -3310,9 +3310,9 @@ TEST_CASE("integration: watch failure prints watching text, not success (1.4.2 F
                 escape_shell_arg(ezmk_bin) + " watch > \"" + log_file.string() +
                 "\" 2>&1";
 #else
-    start_cmd = "cd " + escape_shell_arg(proj.string()) + " && " +
-                escape_shell_arg(ezmk_bin) + " watch > " +
-                escape_shell_arg(log_file.string()) + " 2>&1 &";
+    start_cmd = "cd \"" + escape_shell_arg(proj.string()) + "\" && \"" +
+                escape_shell_arg(ezmk_bin) + "\" watch > \"" +
+                escape_shell_arg(log_file.string()) + "\" 2>&1 &";
 #endif
     run_command(start_cmd);
 

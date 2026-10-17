@@ -88,8 +88,8 @@ inline std::string build_ezmk_cmd(const std::string& args, const fs::path& cwd) 
     // (no bash escaping needed — cmd.exe doesn't interpret backslashes).
     return "cd /d \"" + cwd.string() + "\" && \"" + ezmk_path + "\" " + args;
 #else
-    return "cd " + escape_shell_arg(cwd.string()) + " && " +
-           escape_shell_arg(ezmk_path) + " " + args;
+    return "cd \"" + escape_shell_arg(cwd.string()) + "\" && \"" +
+           escape_shell_arg(ezmk_path) + "\" " + args;
 #endif
 }
 
