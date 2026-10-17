@@ -433,6 +433,25 @@ TEST_CASE("parse_language: normalized_lang field", "[config][1.1.0-dev.4]") {
         auto info = parse_language("c11");
         REQUIRE(info.normalized_lang == "C11");
     }
+    // 1.4.11 Q4-30: a version-less declaration carries the defaulted version.
+    SECTION("CPP -> CPP17 (1.4.11)") {
+        auto info = parse_language("C++");
+        REQUIRE(info.normalized_lang == "CPP17");
+        REQUIRE(info.std_flag == "-std=c++17");
+    }
+    SECTION("C -> C11 (1.4.11)") {
+        auto info = parse_language("C");
+        REQUIRE(info.normalized_lang == "C11");
+    }
+}
+
+// 1.4.11 Q4-27: C++98 sorts before C++11 chronologically; the reverse is invalid.
+TEST_CASE("parse_language: C++98..C++11 range ordering", "[config][1.4.11]") {
+    using namespace ezmk::config;
+    auto info = parse_language("C++98..C++11");
+    REQUIRE(info.min_ver == 98);
+    REQUIRE(info.max_ver == 11);
+    REQUIRE_THROWS_AS(parse_language("C++11..C++98"), std::runtime_error);
 }
 
 // 1.1.0-dev.4: stdlib parsing helper (uses same write_temp_toml as below)
@@ -443,6 +462,19 @@ static fs::path write_temp_toml(const std::string& content) {
     f << content;
     f.close();
     return tmp;
+}
+
+// 1.4.11 Q4-29: a known boolean key with the wrong type must fail fast.
+TEST_CASE("parse_config: wrong-typed boolean field rejected", "[config][1.4.11]") {
+    using namespace ezmk::config;
+    auto toml = write_temp_toml(R"(
+[project]
+name = "testapp"
+version = "0.1.0"
+header_only = "true"
+)");
+    REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
+    fs::remove(toml);
 }
 
 // ===================================================================
@@ -2069,6 +2101,25 @@ TEST_CASE("load_links_json: absolute path value rejected", "[config][1.1.3]") {
     std::ofstream(tmp / ".ezmk/links.json") << R"({"bad": "/etc/passwd"})";
     REQUIRE_THROWS_AS(ezmk::config::load_links_json(tmp), std::runtime_error);
     fs::remove_all(tmp);
+}
+
+// 1.4.11 Q4-28: chained resolution + cycle detection.
+TEST_CASE("resolve_link_path: chains and cycles", "[config][1.4.11]") {
+    using ezmk::config::resolve_link_path;
+    std::map<std::string, std::string> links = {
+        {"a", "@link:b/sub"},
+        {"b", "real/dir"},
+        {"self", "@link:self"},
+    };
+    auto p = resolve_link_path("a", "", links, 10);
+    REQUIRE(p.generic_string().find("real/dir/sub") != std::string::npos);
+    auto q = resolve_link_path("b", "x", links, 10);
+    REQUIRE(q.generic_string().find("real/dir/x") != std::string::npos);
+    REQUIRE_THROWS_AS(resolve_link_path("self", "", links, 10), std::runtime_error);
+
+    std::map<std::string, std::string> deep = {
+        {"x1", "@link:x2"}, {"x2", "@link:x3"}, {"x3", "end"}};
+    REQUIRE_THROWS_AS(resolve_link_path("x1", "", deep, 1), std::runtime_error);
 }
 
 // ===================================================================

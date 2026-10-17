@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 
@@ -462,14 +463,22 @@ LanguageInfo parse_language(std::string_view language) {
     }
 
     // 1.3.1: numeric bounds — the effective -std= flag comes from MIN.
+    // 1.4.11 Q4-27: validate on a chronological (year) scale — plain integer
+    // comparison made "C++98..C++11" look reversed (11 < 98). The stored
+    // min_ver/max_ver stay raw for capability-table comparisons.
+    auto lang_ordinal = [](const std::string& v) -> int {
+        if (v == "98") return 1998;
+        if (v == "03") return 2003;
+        return 2000 + std::stoi(v);
+    };
     int min_ver = std::stoi(lo.ver);
     int max_ver = max_part.empty() ? 0 : std::stoi(hi.ver);
-    if (max_ver != 0 && max_ver < min_ver) {
+    if (!max_part.empty() && lang_ordinal(hi.ver) < lang_ordinal(lo.ver)) {
         throw std::runtime_error(
             ezmk::i18n::fmt(ezmk::i18n::I18nKey::config_err_invalid_lang_range,
                             {{"lang", std::string(language)},
-                             {"min", std::to_string(min_ver)},
-                             {"max", std::to_string(max_ver)}}));
+                             {"min", lo.ver},
+                             {"max", hi.ver}}));
     }
 
     if (lo.is_cxx) {
@@ -483,7 +492,12 @@ LanguageInfo parse_language(std::string_view language) {
     info.gnu_extensions = lo.gnu;
     // 1.3.1: normalized_lang = the MIN canonical form (min_part after unify),
     // so EZMK_LANG stays identical for "C++11" and ">=C++11" / "C++11..C++17".
+    // 1.4.11 Q4-30: when the declaration omitted the version, append the
+    // defaulted one (CPP -> CPP17) so EZMK_LANG agrees with the -std flag.
     info.normalized_lang = min_part;
+    if (min_part.find_first_of("0123456789") == std::string::npos) {
+        info.normalized_lang += lo.ver;
+    }
     info.min_ver = min_ver;
     info.max_ver = max_ver;
 
@@ -557,28 +571,57 @@ fs::path resolve_link_path(std::string_view name,
                             std::string_view sub_path,
                             const std::map<std::string, std::string>& links,
                             int max_depth) {
-    if (max_depth <= 0) {
-        throw std::runtime_error(
-            "link resolution depth exceeded (>10) for '" + std::string(name) +
-            "': possible infinite chain or too many indirections");
+    // 1.4.11 Q4-28: follow chained "@link:name" references (A -> B -> real)
+    // and detect cycles — the previous single-hop lookup returned the literal
+    // "@link:..." text and the documented depth guard never fired.
+    std::set<std::string> visited;
+    std::string current(name);
+    std::string current_sub(sub_path);
+    for (int depth = max_depth; depth > 0; --depth) {
+        if (!visited.insert(current).second) {
+            throw std::runtime_error("link cycle detected at '" + current +
+                                     "' in .ezmk/links.json");
+        }
+        auto it = links.find(current);
+        if (it == links.end()) {
+            throw std::runtime_error(
+                "link '" + current + "' not found in .ezmk/links.json");
+        }
+        auto ref = util::parse_link_syntax(it->second);
+        if (ref.name.empty()) {
+            fs::path resolved = it->second;
+            if (!current_sub.empty()) resolved = resolved / current_sub;
+            return resolved;
+        }
+        // Chained: fold the pending sub-path into the next hop's sub-path.
+        std::string combined = ref.sub_path;
+        if (!current_sub.empty()) {
+            combined = combined.empty() ? current_sub
+                                        : combined + "/" + current_sub;
+        }
+        current = ref.name;
+        current_sub = std::move(combined);
     }
-
-    auto it = links.find(std::string(name));
-    if (it == links.end()) {
-        throw std::runtime_error(
-            "link '" + std::string(name) + "' not found in .ezmk/links.json");
-    }
-
-    fs::path resolved = it->second;
-    if (!sub_path.empty()) {
-        resolved = resolved / std::string(sub_path);
-    }
-
-    return resolved;
+    throw std::runtime_error(
+        "link resolution depth exceeded for '" + std::string(name) +
+        "': possible infinite chain or too many indirections");
 }
 
 // 1.1.3 Q2: parse_config 按 TOML 节拆分为私有 helper（纯提取，不改行为）。
 // 每个 helper 只读 root 对应子表并写入 cfg；parse_config 只做编排。
+
+// 1.4.11 Q4-29: a known boolean key with the wrong type used to be silently
+// ignored (as_boolean() returns nullopt for a non-boolean node), so
+// header_only = "true" / deterministic = 1 were dropped without a word.
+static void read_optional_bool(const toml::node* node, const char* field,
+                               bool& out) {
+    if (!node) return;
+    if (!node->is_boolean()) {
+        throw std::runtime_error(std::string("config field '") + field +
+                                 "' must be a boolean (true/false)");
+    }
+    out = node->as_boolean()->get();
+}
 
 static void parse_project(const toml::table& root, EzConfig& cfg) {
     // [project]
@@ -607,17 +650,15 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
             cfg.project.stdlib = normalize_stdlib(*sl);
         }
         // 0.9.7+: header_only — skip compilation for header-only packages
-        if (auto ho = (*proj)["header_only"].as_boolean()) {
-            cfg.project.header_only = ho->get();
-        }
+        read_optional_bool(proj->get("header_only"), "project.header_only",
+                           cfg.project.header_only);
         // 0.9.7+: precompiled — use lib/*.a directly, skip compilation
-        if (auto pc = (*proj)["precompiled"].as_boolean()) {
-            cfg.project.precompiled = pc->get();
-        }
+        read_optional_bool(proj->get("precompiled"), "project.precompiled",
+                           cfg.project.precompiled);
         // 1.2.0-dev.10: precompiled_strict — refuse ABI-unsafe toolchain fallback
-        if (auto ps = (*proj)["precompiled_strict"].as_boolean()) {
-            cfg.project.precompiled_strict = ps->get();
-        }
+        read_optional_bool(proj->get("precompiled_strict"),
+                           "project.precompiled_strict",
+                           cfg.project.precompiled_strict);
     }
 }
 
@@ -657,9 +698,8 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         }
 
         // 1.1.0: deterministic — reproducible builds
-        if (auto det = (*comp)["deterministic"].as_boolean()) {
-            cfg.compile.deterministic = det->get();
-        }
+        read_optional_bool(comp->get("deterministic"), "compile.deterministic",
+                           cfg.compile.deterministic);
 
         // 1.1.0: source_date_epoch — SOURCE_DATE_EPOCH override
         // 1.2.0-dev.11: negative values were silently ignored — reject them.
@@ -672,9 +712,9 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         }
 
         // 1.1.1: compile_commands — auto-generate compile_commands.json after build
-        if (auto cc = (*comp)["compile_commands"].as_boolean()) {
-            cfg.compile.compile_commands = cc->get();
-        }
+        read_optional_bool(comp->get("compile_commands"),
+                           "compile.compile_commands",
+                           cfg.compile.compile_commands);
 
         // 1.2.0-dev.3: default_profile — default profile when no --profile given
         if (auto dp = (*comp)["default_profile"].value<std::string>()) {
@@ -978,9 +1018,8 @@ static void parse_utils(const toml::table& root, EzConfig& cfg) {
 // 1.4.0-dev.2: [pkg] — package-management configuration.
 static void parse_pkg(const toml::table& root, EzConfig& cfg) {
     if (auto pkg = root["pkg"].as_table()) {
-        if (auto ssc = (*pkg)["strict_std_check"].as_boolean()) {
-            cfg.pkg.strict_std_check = ssc->get();
-        }
+        read_optional_bool(pkg->get("strict_std_check"), "pkg.strict_std_check",
+                           cfg.pkg.strict_std_check);
     }
 }
 
