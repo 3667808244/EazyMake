@@ -11,6 +11,12 @@ build/
 *.o
 *.7z
 
+# ── pacman build artifacts (makepkg in publish/arch) ────────────────────────
+publish/arch/src/
+publish/arch/pkg/
+publish/arch/*.pkg.tar.zst
+publish/arch/*.tar.gz
+
 # ── Local scratch files / tooling bridges ───────────────────────────────────
 temp.md
 sessions.md
