@@ -3,7 +3,7 @@
 # 自取 PKGBUILD + makepkg -si（需 base-devel）。AUR 提交延后（账户开通后补）。
 # pkgver 指向 v1.4.11 正式 tag；sha256sums 为 v1.4.11 tag 源码 tarball 的真实 digest
 # （https://codeload.github.com/3667808244/EazyMake/tar.gz/refs/tags/v1.4.11，2026-10-17
-#  实测下载 2151807 字节；与 https://github.com/3667808244/EazyMake/archive/refs/tags/v1.4.11.tar.gz
+#  实测下载 2150903 字节；与 https://github.com/3667808244/EazyMake/archive/refs/tags/v1.4.11.tar.gz
 #  字节一致）
 #
 # 构建说明：build.sh 在 Linux 产出静态链接二进制（LDFLAGS="-static"），
@@ -20,7 +20,7 @@ url="https://github.com/3667808244/EazyMake"
 license=('MIT')
 makedepends=('gcc' 'python')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/3667808244/EazyMake/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('4351704e115bbb2b09fa684f2dc7f193b1c0f05398bff1b598e65408a05a46bd')
+sha256sums=('e22e4765190f9c70d59346a09733a3493d68c157bff682774e891cd84c56a35f')
 
 build() {
   cd "EazyMake-$pkgver"

@@ -57,6 +57,13 @@
 - `workspace watch` 仍缓冲成员输出至进程结束（本轮裁定为已知限制，不做流式改造）。
 - `project new` / `example` 中途失败仍可能留下半成品目录（低危延后）。
 
+### 发布
+
+- Release：run `39023022027` success；7 资产（`macos-x64` skipped），digest：`ezmk-windows-x64.zip` `24ea622e…`、`ezmk-linux-x64.tar.gz` `ada8740b…`、`ezmk-macos-arm64.tar.gz` `ee1a2a7d…`。
+- Homebrew：`publish/homebrew/ezmk.rb` 与 tap 同步 1.4.11（linux / macos-arm64 真实 sha256）。
+- pacman：`eazymake 1.4.11-1`（sha256 `33ea7425…`，含 4 页 man + `_ezmk`）。
+- winget：1.4.11 三件套已通过 `winget validate`，PR 见索引。
+
 ---
 
 ## 1.4.10 (2026-10-13) — 可选递归源文件查找（`src_dirs` / `[test].dirs` 的 `/**`）
