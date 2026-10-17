@@ -22,6 +22,7 @@
   #include <winhttp.h>
 #elif defined(EZMK_MACOS)
   #include <csignal>
+  #include <crt_externs.h>
   #include <mach-o/dyld.h>
   #include <pwd.h>
   #include <unistd.h>
@@ -1752,7 +1753,14 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     std::vector<std::string> env_storage;
     std::vector<char*> envp;
     if (!opts.env.empty()) {
-        for (char** e = environ; e && *e; ++e) {
+#if defined(__APPLE__)
+        // macOS has no linkable 'environ' symbol; the C runtime exposes it via
+        // _NSGetEnviron() (crt_externs.h).
+        char** env_begin = *_NSGetEnviron();
+#else
+        char** env_begin = environ;
+#endif
+        for (char** e = env_begin; e && *e; ++e) {
             std::string entry(*e);
             auto eq = entry.find('=');
             if (eq != std::string::npos && opts.env.count(entry.substr(0, eq)))

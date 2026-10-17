@@ -4,6 +4,7 @@
 
 ### 重点修复
 
+- **macOS 构建**：`run_command` 改用 `_NSGetEnviron()` 读取环境（macOS 无 linkable `environ` 符号），修复 macos-arm64 构建失败。
 - **进程安全**：POSIX \`run_command\` 不再在 \`fork()\` 后调用 \`setenv()\`（多线程 \`-jN\` 下的死锁风险）。
 - **Lua 权限**：\`ezmk.run\` / \`run_capture\` 改为逐段校验（修复 \`git ; rm -rf ~\` 绕过 allow/deny/Ask）；含 shell 高级构造的命令拒绝执行。
 - **数据完整性**：\`cache.cpp\` 对象与 \`pkg.cpp\` 归档改走 \`atomic_rename\`（回退 copy 失败不再删除唯一成品/报告成功）；\`.tmp\` 清理；\`ThreadPool\` 线程创建失败不再 terminate。

@@ -30,6 +30,7 @@
 
 ### 缺陷修复（P0/P1）
 
+- **macOS 构建修复**：`run_command` 读取环境改用 `_NSGetEnviron()`（macOS 无 linkable `environ` 符号），修复 macos-arm64 构建失败。
 - **POSIX `run_command` 不再在 `fork()` 后调用 `setenv()`**（可能 malloc → 多线程 `-jN` 下死锁）；子进程环境在 fork 前构造并经 `execve` 传入。
 - **Lua `ezmk.run` / `run_capture` 权限改为逐段校验**：命令含 `$`、反引号、重定向、子 shell 或换行时拒绝；否则按 `;`/`&&`/`||`/`|`/`&` 拆分，要求每个可执行 token 都被 `[utils.permissions]` 允许（此前只校验首个 token，`git ; rm -rf ~` 可绕过 allow/deny/Ask）。
 - **`cache.cpp` 对象与 `pkg.cpp` 归档的原子落盘**改走 `util::atomic_rename`：回退 copy 失败不再删除唯一的临时成品、不再报告成功。
