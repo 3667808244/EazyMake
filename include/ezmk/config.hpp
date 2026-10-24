@@ -151,6 +151,79 @@ struct EzConfig {
 };
 
 // 1.1.0: Lockfile — dependency version & content pinning for reproducible builds.
+// ===================================================================
+// 1.5.0-dev.1: two-level runtime configuration (system + user config.toml).
+// Loaded once before CLI parsing; consumers read runtime_config(). All
+// defaults preserve pre-1.5.0 behavior.
+// ===================================================================
+struct BaseDirConfig {
+    std::optional<fs::path> installed_packages;
+    std::optional<fs::path> repo_cache;
+    std::optional<fs::path> examples;
+    std::optional<fs::path> logs;
+};
+
+struct SettingsConfig {
+    std::string natural_language = "auto";
+    std::string color_mode = "auto";
+    std::string color_theme = "default";
+    std::string log_level = "info";
+
+    bool has_initial_commit = false;
+    bool initial_commit_enabled = false;
+    std::string initial_commit_message;
+    bool auto_init_git = true;
+    bool gen_gitignore = true;
+    bool gen_readme = true;
+    bool gen_agent_md = false;
+
+    std::string default_project_type = "executable";
+    std::string default_language = "C++17";
+    std::string default_project_version = "0.1.0";
+    std::vector<std::string> default_compile_flags = {"-Wall", "-Wextra"};
+
+    std::string build_dir = "build";
+    int default_jobs = 0;
+    int test_timeout = 30;
+    std::string test_report_dir = ".ezmk/test-results";
+    int watch_debounce_ms = 300;
+    std::vector<std::string> watch_ignore;
+
+    std::string pack_format = "tar.gz";
+    std::string pack_output_dir = ".";
+    std::string pack_name;
+    std::vector<std::string> pack_exclude;
+
+    std::string default_pkg_scope = "project";
+    bool auto_install_deps = true;
+    std::vector<std::string> scan_skip_dirs;
+
+    std::string git_path = "git";
+    std::string editor;
+    bool auto_pack = false;
+};
+
+struct RuntimeConfig {
+    SettingsConfig settings;
+    BaseDirConfig global_dirs;   // [base_dir] from the system-level file
+    BaseDirConfig user_dirs;     // [base_dir] from the user-level file
+    fs::path global_config_file; // empty = not present
+    fs::path user_config_file;   // empty = not present
+    bool loaded = false;
+};
+
+// Merged runtime configuration. Before load_runtime_config() runs (e.g. in unit
+// tests that call helpers directly) this returns the built-in defaults.
+const RuntimeConfig& runtime_config();
+
+// Load the system + user config.toml files. Idempotent. Scans --config <file>
+// and --no-config, then reads the files. Throws std::runtime_error on malformed
+// configuration. Must be called before cli::parse().
+void load_runtime_config(int argc, const char* const* argv);
+
+// Test-only: clear the cached configuration.
+void reset_runtime_config_for_test();
+
 struct LockedPackage {
     std::string name;
     std::string version;

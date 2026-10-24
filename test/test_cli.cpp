@@ -913,6 +913,17 @@ TEST_CASE("cli parse: --color mid-subcommand is stripped, rest parses", "[cli][0
     REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Never);
 }
 
+// 1.5.0-dev.1: --config / --no-config are consumed before command parsing.
+TEST_CASE("cli parse: --no-config and --config are consumed",
+          "[cli][1.5.0-dev.1]") {
+    auto no_cfg = TestArgs({"--no-config", "version"}).parse();
+    REQUIRE(no_cfg.cmd == Command::Version);
+    auto cfg = TestArgs({"--config", "x.toml", "version"}).parse();
+    REQUIRE(cfg.cmd == Command::Version);
+    auto eq = TestArgs({"--config=x.toml", "version"}).parse();
+    REQUIRE(eq.cmd == Command::Version);
+}
+
 TEST_CASE("cli parse: --color after -- is NOT consumed (utils passthrough)", "[cli][0.2.6][color]") {
     ColorModeGuard g;
     ezmk::util::set_color_mode(ezmk::util::ColorMode::Auto);

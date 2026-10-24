@@ -6,7 +6,7 @@
 
 | 子版本 | 主题 | 关键交付 | 依赖 | 状态 |
 |--------|------|----------|------|------|
-| [1.5.0-dev.1](1.5.0-dev.1.md) | 配置骨架与加载器 | 两个环境变量 / `config.toml` schema / 合并 / 校验 / `RuntimeConfig` / `--config` / `--no-config` | 无 | 📋 计划完成，待实现 |
+| [1.5.0-dev.1](1.5.0-dev.1.md) | 配置骨架与加载器 | 两个环境变量 / `config.toml` schema / 合并 / 校验 / `RuntimeConfig` / `--config` / `--no-config` | 无 | ✅ 实现收口（1177/6833） |
 | [1.5.0-dev.2](1.5.0-dev.2.md) | 路径与工具定位 | `[base_dir]` + `build_dir` + `git_path` + `editor` | dev.1 | 📋 计划完成，待实现 |
 | [1.5.0-dev.3](1.5.0-dev.3.md) | 项目创建与行为默认值 | 语言 / 颜色 / 主题 + `project new` 默认（git / gitignore / readme / 初始提交 / 类型 / 语言 / 版本 / flags）+ `auto_pack` / `gen_agent_md` | dev.1 | 📋 计划完成，待实现 |
 | [1.5.0-dev.4](1.5.0-dev.4.md) | 日志子系统 | `log_level` 过滤 + `[base_dir].logs` 文件日志 + 失败降级 | dev.1、dev.2 | 📋 计划完成，待实现 |

@@ -175,6 +175,9 @@ int main(int argc, char** argv) {
     ezmk::lua::init();   // initialize Lua interpreter
 
     try {
+        // 1.5.0-dev.1: load the two-level config.toml before CLI parsing so
+        // --config / --no-config are honoured by every command.
+        ezmk::config::load_runtime_config(argc, argv);
         auto args = ezmk::cli::parse(argc, argv);
 
         // 0.9.8+: show shorthand expansion hint in verbose mode

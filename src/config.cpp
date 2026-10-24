@@ -3,6 +3,8 @@
 #include "ezmk/util.hpp"
 
 #include <cctype>
+#include <cstdlib>
+#include <initializer_list>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -1182,6 +1184,352 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     if (!util::file_write(toml_path, content)) {
         throw std::runtime_error("failed to write config file: " + toml_path.string());
     }
+}
+
+// ===================================================================
+// 1.5.0-dev.1: two-level runtime configuration (system + user config.toml)
+// ===================================================================
+namespace {
+
+constexpr const char* kGlobalConfigEnv = "EZMK_GLOBAL_CONFIG_DIR";
+constexpr const char* kUserConfigEnv   = "EZMK_USER_CONFIG_DIR";
+
+RuntimeConfig g_runtime_config;
+bool g_runtime_loaded = false;
+
+std::string env_value(const char* name) {
+    const char* v = std::getenv(name);
+    return (v && *v) ? std::string(v) : std::string();
+}
+
+fs::path default_global_config_dir() {
+    std::string env = env_value(kGlobalConfigEnv);
+    if (!env.empty()) return fs::path(env);
+#ifdef EZMK_WIN
+    return fs::path("C:/.ezmk/config");
+#else
+    return fs::path("/etc/ezmk");
+#endif
+}
+
+fs::path default_user_config_dir() {
+    std::string env = env_value(kUserConfigEnv);
+    if (!env.empty()) return fs::path(env);
+#ifdef EZMK_WIN
+    return util::get_home_dir() / ".ezmk" / "config";
+#else
+    std::string xdg = env_value("XDG_CONFIG_HOME");
+    if (!xdg.empty()) return fs::path(xdg) / "ezmk";
+    return util::get_home_dir() / ".config" / "ezmk";
+#endif
+}
+
+[[noreturn]] void config_type_error(const fs::path& file, const char* field,
+                                    const char* expected) {
+    throw std::runtime_error("config field '" + std::string(field) + "' in " +
+                             file.string() + " must be " + expected);
+}
+
+void validate_enum(const fs::path& file, const char* field,
+                   const std::string& value,
+                   std::initializer_list<const char*> allowed) {
+    for (const char* a : allowed) {
+        if (value == a) return;
+    }
+    std::string list;
+    for (const char* a : allowed) {
+        if (!list.empty()) list += ", ";
+        list += a;
+    }
+    throw std::runtime_error("invalid value '" + value + "' for config field '" +
+                             field + "' in " + file.string() +
+                             " (expected one of: " + list + ")");
+}
+
+bool is_known_base_dir_key(const std::string& k) {
+    static const std::set<std::string> keys = {
+        "installed_packages", "repo_cache", "examples", "logs"};
+    return keys.count(k) != 0;
+}
+
+bool is_known_settings_key(const std::string& k) {
+    static const std::set<std::string> keys = {
+        "natural_language", "color_mode", "color_theme", "log_level",
+        "initial_commit", "auto_init_git", "gen_gitignore", "gen_readme",
+        "gen_agent_md", "default_project_type", "default_language",
+        "default_project_version", "default_compile_flags", "build_dir",
+        "default_jobs", "test_timeout", "test_report_dir",
+        "watch_debounce_ms", "watch_ignore", "pack_format",
+        "pack_output_dir", "pack_name", "pack_exclude", "default_pkg_scope",
+        "auto_install_deps", "scan_skip_dirs", "git_path", "editor",
+        "auto_pack"};
+    return keys.count(k) != 0;
+}
+
+void read_string(const toml::table& t, const char* key, const char* field,
+                 const fs::path& file, std::string& out) {
+    auto* n = t.get(key);
+    if (!n) return;
+    auto v = n->value<std::string>();
+    if (!v) config_type_error(file, field, "a string");
+    out = *v;
+}
+
+void read_bool(const toml::table& t, const char* key, const char* field,
+               const fs::path& file, bool& out) {
+    auto* n = t.get(key);
+    if (!n) return;
+    auto v = n->value<bool>();
+    if (!v) config_type_error(file, field, "a boolean");
+    out = *v;
+}
+
+void read_int(const toml::table& t, const char* key, const char* field,
+              const fs::path& file, int& out, int min_value, int max_value) {
+    auto* n = t.get(key);
+    if (!n) return;
+    auto v = n->value<int64_t>();
+    if (!v) config_type_error(file, field, "an integer");
+    if (*v < min_value || *v > max_value) {
+        throw std::runtime_error("config field '" + std::string(field) +
+                                 "' in " + file.string() + " is out of range");
+    }
+    out = static_cast<int>(*v);
+}
+
+void read_initial_commit(const toml::table& t, const fs::path& file,
+                         SettingsConfig& s) {
+    auto* n = t.get("initial_commit");
+    if (!n) return;
+    if (auto b = n->value<bool>()) {
+        s.has_initial_commit = true;
+        s.initial_commit_enabled = *b;
+        s.initial_commit_message.clear();
+        return;
+    }
+    if (auto str = n->value<std::string>()) {
+        s.has_initial_commit = true;
+        s.initial_commit_enabled = true;
+        s.initial_commit_message = *str;
+        return;
+    }
+    config_type_error(file, "settings.initial_commit",
+                      "a boolean or a string");
+}
+
+void parse_base_dir_table(const toml::table& t, BaseDirConfig& out,
+                          const fs::path& file) {
+    for (auto&& [k, v] : t) {
+        (void)v;
+        std::string key(k.str());
+        if (!is_known_base_dir_key(key)) {
+            throw std::runtime_error("unknown key '" + key +
+                                     "' in [base_dir] of " + file.string());
+        }
+    }
+    auto read_path = [&](const char* key, const char* field,
+                         std::optional<fs::path>& dst) {
+        auto* n = t.get(key);
+        if (!n) return;
+        auto v = n->value<std::string>();
+        if (!v) config_type_error(file, field, "a string path");
+        if (v->find('\0') != std::string::npos) {
+            throw std::runtime_error("config field '" + std::string(field) +
+                                     "' in " + file.string() +
+                                     " contains a NUL byte");
+        }
+        dst = fs::path(*v);
+    };
+    read_path("installed_packages", "base_dir.installed_packages",
+              out.installed_packages);
+    read_path("repo_cache", "base_dir.repo_cache", out.repo_cache);
+    read_path("examples", "base_dir.examples", out.examples);
+    read_path("logs", "base_dir.logs", out.logs);
+}
+
+void parse_settings_table(const toml::table& t, SettingsConfig& s,
+                          const fs::path& file) {
+    for (auto&& [k, v] : t) {
+        (void)v;
+        std::string key(k.str());
+        if (!is_known_settings_key(key)) {
+            throw std::runtime_error("unknown key '" + key +
+                                     "' in [settings] of " + file.string());
+        }
+    }
+    read_string(t, "natural_language", "settings.natural_language", file,
+                s.natural_language);
+    read_string(t, "color_mode", "settings.color_mode", file, s.color_mode);
+    validate_enum(file, "settings.color_mode", s.color_mode,
+                  {"auto", "off", "16colors", "256colors", "truecolor"});
+    read_string(t, "color_theme", "settings.color_theme", file, s.color_theme);
+    read_string(t, "log_level", "settings.log_level", file, s.log_level);
+    validate_enum(file, "settings.log_level", s.log_level,
+                  {"off", "error", "warn", "info", "debug"});
+
+    read_bool(t, "auto_init_git", "settings.auto_init_git", file,
+              s.auto_init_git);
+    read_bool(t, "gen_gitignore", "settings.gen_gitignore", file,
+              s.gen_gitignore);
+    read_bool(t, "gen_readme", "settings.gen_readme", file, s.gen_readme);
+    read_bool(t, "gen_agent_md", "settings.gen_agent_md", file,
+              s.gen_agent_md);
+    read_initial_commit(t, file, s);
+
+    read_string(t, "default_project_type", "settings.default_project_type",
+                file, s.default_project_type);
+    validate_enum(file, "settings.default_project_type", s.default_project_type,
+                  {"executable", "static", "shared", "utils"});
+    read_string(t, "default_language", "settings.default_language", file,
+                s.default_language);
+    read_string(t, "default_project_version",
+                "settings.default_project_version", file,
+                s.default_project_version);
+    if (t.get("default_compile_flags")) {
+        s.default_compile_flags = extract_string_array(
+            t.get("default_compile_flags"), "settings.default_compile_flags");
+    }
+
+    read_string(t, "build_dir", "settings.build_dir", file, s.build_dir);
+    read_int(t, "default_jobs", "settings.default_jobs", file, s.default_jobs,
+             0, 65536);
+    read_int(t, "test_timeout", "settings.test_timeout", file, s.test_timeout,
+             0, 86400);
+    read_string(t, "test_report_dir", "settings.test_report_dir", file,
+                s.test_report_dir);
+    read_int(t, "watch_debounce_ms", "settings.watch_debounce_ms", file,
+             s.watch_debounce_ms, 0, 60000);
+    if (t.get("watch_ignore")) {
+        s.watch_ignore = extract_string_array(t.get("watch_ignore"),
+                                              "settings.watch_ignore");
+    }
+
+    read_string(t, "pack_format", "settings.pack_format", file, s.pack_format);
+    validate_enum(file, "settings.pack_format", s.pack_format,
+                  {"tar.gz", "zip", "tgz"});
+    read_string(t, "pack_output_dir", "settings.pack_output_dir", file,
+                s.pack_output_dir);
+    read_string(t, "pack_name", "settings.pack_name", file, s.pack_name);
+    if (t.get("pack_exclude")) {
+        s.pack_exclude = extract_string_array(t.get("pack_exclude"),
+                                              "settings.pack_exclude");
+    }
+
+    read_string(t, "default_pkg_scope", "settings.default_pkg_scope", file,
+                s.default_pkg_scope);
+    validate_enum(file, "settings.default_pkg_scope", s.default_pkg_scope,
+                  {"project", "user", "global"});
+    read_bool(t, "auto_install_deps", "settings.auto_install_deps", file,
+              s.auto_install_deps);
+    if (t.get("scan_skip_dirs")) {
+        s.scan_skip_dirs = extract_string_array(t.get("scan_skip_dirs"),
+                                                "settings.scan_skip_dirs");
+    }
+
+    read_string(t, "git_path", "settings.git_path", file, s.git_path);
+    read_string(t, "editor", "settings.editor", file, s.editor);
+    read_bool(t, "auto_pack", "settings.auto_pack", file, s.auto_pack);
+}
+
+void parse_runtime_file(const fs::path& file, BaseDirConfig& dirs,
+                        SettingsConfig& settings) {
+    toml::table tbl;
+    try {
+        tbl = toml::parse_file(file.string());
+    } catch (const toml::parse_error& e) {
+        throw std::runtime_error("failed to parse " + file.string() + ": " +
+                                 std::string(e.description()));
+    }
+    for (auto&& [k, v] : tbl) {
+        (void)v;
+        std::string key(k.str());
+        if (key != "base_dir" && key != "settings") {
+            throw std::runtime_error("unknown top-level key '" + key +
+                                     "' in " + file.string());
+        }
+    }
+    if (auto* n = tbl.get("base_dir")) {
+        auto* sub = n->as_table();
+        if (!sub) config_type_error(file, "base_dir", "a table");
+        parse_base_dir_table(*sub, dirs, file);
+    }
+    if (auto* n = tbl.get("settings")) {
+        auto* sub = n->as_table();
+        if (!sub) config_type_error(file, "settings", "a table");
+        parse_settings_table(*sub, settings, file);
+    }
+}
+
+void load_runtime_config_impl(int argc, const char* const* argv) {
+    bool no_config = false;
+    std::optional<fs::path> explicit_config;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i] ? argv[i] : "";
+        if (a == "--") break;
+        if (a == "--no-config") {
+            no_config = true;
+            continue;
+        }
+        if (a == "--config") {
+            if (i + 1 >= argc) {
+                throw std::runtime_error("option '--config' requires a value");
+            }
+            explicit_config = fs::path(argv[++i]);
+            continue;
+        }
+        if (a.rfind("--config=", 0) == 0) {
+            std::string value = a.substr(9);
+            if (value.empty()) {
+                throw std::runtime_error("option '--config' requires a value");
+            }
+            explicit_config = fs::path(value);
+        }
+    }
+    if (no_config && explicit_config) {
+        throw std::runtime_error(
+            "options '--config' and '--no-config' are mutually exclusive");
+    }
+
+    RuntimeConfig rc;  // built-in defaults
+    if (no_config) {
+        rc.loaded = true;
+        g_runtime_config = std::move(rc);
+        g_runtime_loaded = true;
+        return;
+    }
+
+    fs::path global_file = default_global_config_dir() / "config.toml";
+    if (util::file_exists(global_file)) {
+        parse_runtime_file(global_file, rc.global_dirs, rc.settings);
+        rc.global_config_file = global_file;
+    }
+
+    fs::path user_file = explicit_config ? *explicit_config
+                                         : (default_user_config_dir() / "config.toml");
+    if (util::file_exists(user_file)) {
+        // User [settings] overlay the system-level values; [base_dir] is kept
+        // per scope (user entries never override the global scope).
+        parse_runtime_file(user_file, rc.user_dirs, rc.settings);
+        rc.user_config_file = user_file;
+    }
+
+    rc.loaded = true;
+    g_runtime_config = std::move(rc);
+    g_runtime_loaded = true;
+}
+
+} // anonymous namespace
+
+const RuntimeConfig& runtime_config() { return g_runtime_config; }
+
+void reset_runtime_config_for_test() {
+    g_runtime_config = RuntimeConfig{};
+    g_runtime_loaded = false;
+}
+
+void load_runtime_config(int argc, const char* const* argv) {
+    if (g_runtime_loaded) return;
+    load_runtime_config_impl(argc, argv);
 }
 
 } // namespace ezmk::config

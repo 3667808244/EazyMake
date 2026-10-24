@@ -1138,6 +1138,35 @@ namespace ezmk::cli
             util::set_color_mode(mode);
     }
 
+    // 1.5.0-dev.1: consume the global --config / --no-config options (before
+    // "--") so command parsers never see them. load_runtime_config() already
+    // read them in main(); this only keeps CLI parsing clean.
+    static void strip_config_options(std::vector<std::string>& toks) {
+        std::vector<std::string> out;
+        out.reserve(toks.size());
+        bool passthrough = false;
+        if (!toks.empty()) out.push_back(toks[0]);
+        for (size_t i = 1; i < toks.size(); ++i) {
+            const std::string& t = toks[i];
+            if (passthrough) { out.push_back(t); continue; }
+            if (t == "--") { passthrough = true; out.push_back(t); continue; }
+            if (t == "--no-config") continue;
+            if (t == "--config") {
+                if (i + 1 >= toks.size())
+                    util::fatal("option '--config' requires a value");
+                ++i;
+                continue;
+            }
+            if (t.rfind("--config=", 0) == 0) {
+                if (t.size() == 9)
+                    util::fatal("option '--config' requires a value");
+                continue;
+            }
+            out.push_back(t);
+        }
+        toks.swap(out);
+    }
+
     CliArgs parse(int argc, char **argv)
     {
         CliArgs args;
@@ -1152,6 +1181,7 @@ namespace ezmk::cli
             // OS 不会传入含嵌入 NUL 的 argv，故此处无需额外防御（已知限制，不是待办项）。
             toks.emplace_back(argv[i]);
         strip_color_option(toks);
+        strip_config_options(toks);
 
         if (toks.size() < 2)
         {

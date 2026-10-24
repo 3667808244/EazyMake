@@ -5,10 +5,12 @@
 #include "ezmk/util.hpp"
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -2304,3 +2306,224 @@ flags = ["-DTESTING"]
     REQUIRE(cfg.test.flags.size() == 1);
     REQUIRE(cfg.test.flags[0] == "-DTESTING");
 }
+
+// ===================================================================
+// 1.5.0-dev.1: two-level runtime configuration
+// ===================================================================
+namespace {
+
+struct EnvScope {
+    std::string name;
+    bool had = false;
+    std::string old;
+    EnvScope(std::string n, const std::string& value) : name(std::move(n)) {
+        const char* cur = std::getenv(name.c_str());
+        if (cur) { had = true; old = cur; }
+        set_value(value.c_str());
+    }
+    ~EnvScope() { set_value(had ? old.c_str() : nullptr); }
+    void set_value(const char* v) {
+#ifdef _WIN32
+        _putenv_s(name.c_str(), v ? v : "");
+#else
+        if (v) setenv(name.c_str(), v, 1);
+        else unsetenv(name.c_str());
+#endif
+    }
+};
+
+fs::path make_runtime_cfg_root(const char* tag) {
+    auto p = fs::temp_directory_path() /
+             (std::string("ezmk_rtcfg_") + tag + "_" +
+              std::to_string(std::chrono::steady_clock::now()
+                                 .time_since_epoch().count()));
+    fs::remove_all(p);
+    fs::create_directories(p);
+    return p;
+}
+
+void write_runtime_cfg(const fs::path& dir, const std::string& content) {
+    fs::create_directories(dir);
+    std::ofstream(dir / "config.toml", std::ios::binary) << content;
+}
+
+} // namespace
+
+TEST_CASE("runtime config: defaults match pre-1.5.0 behavior",
+          "[config][1.5.0-dev.1]") {
+    ezmk::config::reset_runtime_config_for_test();
+    const auto& rc = ezmk::config::runtime_config();
+    REQUIRE_FALSE(rc.loaded);
+    REQUIRE(rc.settings.build_dir == "build");
+    REQUIRE(rc.settings.default_jobs == 0);
+    REQUIRE(rc.settings.test_timeout == 30);
+    REQUIRE(rc.settings.test_report_dir == ".ezmk/test-results");
+    REQUIRE(rc.settings.watch_debounce_ms == 300);
+    REQUIRE(rc.settings.log_level == "info");
+    REQUIRE(rc.settings.color_mode == "auto");
+    REQUIRE(rc.settings.default_pkg_scope == "project");
+    REQUIRE(rc.settings.auto_install_deps == true);
+    REQUIRE(rc.settings.pack_format == "tar.gz");
+    REQUIRE(rc.settings.git_path == "git");
+    REQUIRE(rc.settings.default_project_type == "executable");
+    REQUIRE(rc.settings.default_language == "C++17");
+    REQUIRE(rc.settings.default_compile_flags.size() == 2);
+    REQUIRE(rc.settings.default_compile_flags[0] == "-Wall");
+    REQUIRE(rc.settings.default_compile_flags[1] == "-Wextra");
+}
+
+TEST_CASE("runtime config: global < user merge and base_dir scoping",
+          "[config][1.5.0-dev.1]") {
+    auto root = make_runtime_cfg_root("merge");
+    auto gdir = root / "global";
+    auto udir = root / "user";
+    write_runtime_cfg(gdir, R"(
+[base_dir]
+installed_packages = "/g/pkg"
+repo_cache = "/g/repo"
+
+[settings]
+build_dir = "out"
+default_jobs = 4
+log_level = "warn"
+)");
+    write_runtime_cfg(udir, R"(
+[base_dir]
+installed_packages = "/u/pkg"
+
+[settings]
+default_jobs = 8
+)");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+    const auto& rc = ezmk::config::runtime_config();
+    REQUIRE(rc.loaded);
+    REQUIRE(rc.global_dirs.installed_packages.has_value());
+    REQUIRE(*rc.global_dirs.installed_packages == fs::path("/g/pkg"));
+    REQUIRE(rc.user_dirs.installed_packages.has_value());
+    REQUIRE(*rc.user_dirs.installed_packages == fs::path("/u/pkg"));
+    REQUIRE(rc.settings.build_dir == "out");     // user omits -> global remains
+    REQUIRE(rc.settings.default_jobs == 8);      // user overrides global
+    REQUIRE(rc.settings.log_level == "warn");    // user omits -> global remains
+    REQUIRE(rc.settings.test_timeout == 30);     // neither -> default
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: --no-config ignores both levels",
+          "[config][1.5.0-dev.1]") {
+    auto root = make_runtime_cfg_root("noconfig");
+    auto gdir = root / "global";
+    write_runtime_cfg(gdir, "[settings]\nbuild_dir = \"out\"\n");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "--no-config", "version"};
+    ezmk::config::load_runtime_config(3, av);
+    const auto& rc = ezmk::config::runtime_config();
+    REQUIRE(rc.loaded);
+    REQUIRE(rc.global_config_file.empty());
+    REQUIRE(rc.settings.build_dir == "build");
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: --config replaces the user-level file",
+          "[config][1.5.0-dev.1]") {
+    auto root = make_runtime_cfg_root("explicit");
+    auto udir = root / "user";
+    auto explicit_file = root / "explicit.toml";
+    write_runtime_cfg(udir, "[settings]\nbuild_dir = \"user\"\n");
+    std::ofstream(explicit_file) << "[settings]\nbuild_dir = \"explicit\"\n";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    std::string p = explicit_file.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    ezmk::config::load_runtime_config(4, av);
+    const auto& rc = ezmk::config::runtime_config();
+    REQUIRE(rc.settings.build_dir == "explicit");
+    REQUIRE(rc.user_config_file == explicit_file);
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: --config and --no-config conflict",
+          "[config][1.5.0-dev.1]") {
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "--config", "x.toml", "--no-config", "version"};
+    REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(5, av),
+                      std::runtime_error);
+    ezmk::config::reset_runtime_config_for_test();
+}
+
+TEST_CASE("runtime config: unknown keys and bad types are rejected",
+          "[config][1.5.0-dev.1]") {
+    auto root = make_runtime_cfg_root("bad");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+
+    SECTION("unknown settings key") {
+        write_runtime_cfg(udir, "[settings]\nnope = 1\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("wrong scalar type") {
+        write_runtime_cfg(udir, "[settings]\ndefault_jobs = \"four\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("invalid enum") {
+        write_runtime_cfg(udir, "[settings]\ncolor_mode = \"rainbow\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("unknown top-level key") {
+        write_runtime_cfg(udir, "nope = 1\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: initial_commit accepts bool or string",
+          "[config][1.5.0-dev.1]") {
+    auto root = make_runtime_cfg_root("commit");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+
+    SECTION("true") {
+        write_runtime_cfg(udir, "[settings]\ninitial_commit = true\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        ezmk::config::load_runtime_config(2, av);
+        const auto& rc = ezmk::config::runtime_config();
+        REQUIRE(rc.settings.has_initial_commit);
+        REQUIRE(rc.settings.initial_commit_enabled);
+        REQUIRE(rc.settings.initial_commit_message.empty());
+    }
+    SECTION("string message") {
+        write_runtime_cfg(udir,
+                          "[settings]\ninitial_commit = \"chore: init\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        ezmk::config::load_runtime_config(2, av);
+        const auto& rc = ezmk::config::runtime_config();
+        REQUIRE(rc.settings.has_initial_commit);
+        REQUIRE(rc.settings.initial_commit_enabled);
+        REQUIRE(rc.settings.initial_commit_message == "chore: init");
+    }
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
