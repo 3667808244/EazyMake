@@ -71,7 +71,7 @@ dev.5 集中收口 1.3.x 各版延后的小功能项（watch `--` 透传 / `work
 
 - **1.4.11 为 1.4.10 发布后的代码质量审计修复补丁（第四轮）（✅ 已发布 2026-10-17，tag `v1.4.11`；全量 1169/6788 零失败；Release run `39023022027`；Homebrew tap `d448e2c`；pacman sha256 `33ea7425…`；winget PR [#454711](https://github.com/microsoft/winget-pkgs/pull/454711)（CLA pass））**：承接 1.4.0-dev.6（第一轮）、1.4.2（第二轮）、1.4.6（第三轮）的同一主题，基于**八路并行逐行审计 + 独立复核**共 47 项（P1 4 项 / P2 20 项 / P3 23 项）。覆盖：命令执行与进程安全（fork 后 `setenv`、Lua run 权限 shell 元字符绕过、Windows/`$CXX` 转义遗漏点）、数据完整性与错误路径（`atomic_rename` 回退在 `cache.cpp`/`pkg.cpp` 的重复形态、`.tmp` 泄漏、`ThreadPool` 构造 `terminate`）、增量缓存与构建正确性、包/仓库/锁文件（`pkg remove` 不剪 lockfile、跨仓库预发布、precompiled 未固定、版本分量回绕）、Lua/i18n、配置解析、import/export/workspace、归档/下载。零功能新增、公共 API 无破坏性变更；零星项实现前需拍板（§3.11）。立项基线实测 **1156 用例 / 6675 断言 / 5 跳过 / 0 失败**。设计 + 阶段清单见 [1.4.11.md](1.4.11.md)。
 
-- **1.4.12 为用户/全局配置文件（📋 计划完成 2026-10-17，待实现）**：新增系统级 `EZMK_GLOBAL_CONFIG_DIR` / 用户级 `EZMK_USER_CONFIG_DIR` 两级只读 `config.toml`——`[base_dir]`（包安装 / 仓库缓存 / example 输出 / 日志目录）+ `[settings]`（natural_language / color_mode / log_level / auto_init_git / gen_gitignore / gen_readme / initial_commit / auto_pack / gen_agent_md）；用户级覆盖系统级，CLI/环境最高优先，未配置时行为零变化。草稿中的重名标题与拼写错误已订正。设计见 [1.4.12.md](1.4.12.md)。
+- **1.4.12 → 已迁移为 [1.5.0-dev.1](../1.5.x/1.5.0-dev.1.md)**（用户/全局配置文件；按 2026-10-24 裁定升级为 **1.5.0 次版本**，原补丁计划作废）。
 
 ## 跨版本关注点
 
