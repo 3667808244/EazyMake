@@ -514,7 +514,13 @@ static int ezmk_project_config(lua_State* L) {
 
 static int ezmk_build_dir(lua_State* L) {
     check_arg_count(L, 0);
-    lua_pushstring(L, (g_project_root / "build").generic_string().c_str());
+    fs::path dir;
+    if (auto* cfg = get_config()) {
+        dir = config::effective_build_dir(*cfg, g_project_root);
+    } else {
+        dir = config::effective_build_dir_for(g_project_root);
+    }
+    lua_pushstring(L, dir.generic_string().c_str());
     return 1;
 }
 

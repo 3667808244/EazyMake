@@ -18,6 +18,7 @@ struct ProjectSection {
     bool header_only = false;        // 0.9.7+ header-only package (no compilation needed)
     bool precompiled = false;        // 0.9.7+ precompiled package (use lib/*.a, skip compilation)
     bool precompiled_strict = false; // 1.2.0-dev.10: precompiled packages refuse ABI-unsafe toolchain fallback (fail-fast)
+    std::string build_dir;            // 1.5.0-dev.2: per-project build dir (empty = global default)
 };
 
 // 0.2.5+ — Fine-grained utils permission declaration ([utils.permissions]).
@@ -223,6 +224,18 @@ void load_runtime_config(int argc, const char* const* argv);
 
 // Test-only: clear the cached configuration.
 void reset_runtime_config_for_test();
+
+// 1.5.0-dev.2: effective build directory — [project].build_dir > global
+// [settings].build_dir > "build"; relative values resolve against proj_root.
+fs::path effective_build_dir(const EzConfig& cfg, const fs::path& proj_root);
+
+// Parse <proj_root>/ezmk.toml (if present) and return its effective build dir;
+// falls back to the global default when the config is absent/unparseable.
+fs::path effective_build_dir_for(const fs::path& proj_root);
+
+// User-level [base_dir] value overrides the system-level one.
+std::optional<fs::path> effective_examples();
+std::optional<fs::path> effective_logs();
 
 struct LockedPackage {
     std::string name;

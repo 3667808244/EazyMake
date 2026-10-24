@@ -37,6 +37,9 @@ fs::path repo_dir(cli::Scope scope) {
         return root.value_or(fs::current_path()) / ".ezmk/repo";
     }
     case cli::Scope::User: {
+        if (config::runtime_config().user_dirs.repo_cache) {
+            return *config::runtime_config().user_dirs.repo_cache;
+        }
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");
         if (appdata) return fs::path(appdata) / "ezmk/repo";
@@ -46,6 +49,9 @@ fs::path repo_dir(cli::Scope scope) {
 #endif
     }
     case cli::Scope::Global:
+        if (config::runtime_config().global_dirs.repo_cache) {
+            return *config::runtime_config().global_dirs.repo_cache;
+        }
         return util::get_exe_dir() / "repo";
     }
     return {};

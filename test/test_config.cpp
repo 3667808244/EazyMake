@@ -1,7 +1,10 @@
 // Unit tests for config.cpp
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
+#include "ezmk/cli.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/pkg.hpp"
+#include "ezmk/repo.hpp"
 #include "ezmk/util.hpp"
 
 #include <chrono>
@@ -2379,8 +2382,8 @@ TEST_CASE("runtime config: global < user merge and base_dir scoping",
     auto udir = root / "user";
     write_runtime_cfg(gdir, R"(
 [base_dir]
-installed_packages = "/g/pkg"
-repo_cache = "/g/repo"
+installed_packages = "g/pkg"
+repo_cache = "g/repo"
 
 [settings]
 build_dir = "out"
@@ -2389,7 +2392,7 @@ log_level = "warn"
 )");
     write_runtime_cfg(udir, R"(
 [base_dir]
-installed_packages = "/u/pkg"
+installed_packages = "u/pkg"
 
 [settings]
 default_jobs = 8
@@ -2402,9 +2405,11 @@ default_jobs = 8
     const auto& rc = ezmk::config::runtime_config();
     REQUIRE(rc.loaded);
     REQUIRE(rc.global_dirs.installed_packages.has_value());
-    REQUIRE(*rc.global_dirs.installed_packages == fs::path("/g/pkg"));
+    REQUIRE(*rc.global_dirs.installed_packages ==
+            (gdir / "g/pkg").lexically_normal());
     REQUIRE(rc.user_dirs.installed_packages.has_value());
-    REQUIRE(*rc.user_dirs.installed_packages == fs::path("/u/pkg"));
+    REQUIRE(*rc.user_dirs.installed_packages ==
+            (udir / "u/pkg").lexically_normal());
     REQUIRE(rc.settings.build_dir == "out");     // user omits -> global remains
     REQUIRE(rc.settings.default_jobs == 8);      // user overrides global
     REQUIRE(rc.settings.log_level == "warn");    // user omits -> global remains
@@ -2526,4 +2531,158 @@ TEST_CASE("runtime config: initial_commit accepts bool or string",
     ezmk::config::reset_runtime_config_for_test();
     fs::remove_all(root);
 }
+
+// ===================================================================
+// 1.5.0-dev.2: path and tool resolution
+// ===================================================================
+
+TEST_CASE("runtime config: base_dir resolves relative paths and ~",
+          "[config][1.5.0-dev.2]") {
+    auto root = make_runtime_cfg_root("basedir");
+    auto gdir = root / "global";
+    write_runtime_cfg(gdir, R"(
+[base_dir]
+installed_packages = "rel/pkg"
+repo_cache = "~/repo-cache"
+)");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+    const auto& rc = ezmk::config::runtime_config();
+    REQUIRE(rc.global_dirs.installed_packages.has_value());
+    REQUIRE(*rc.global_dirs.installed_packages ==
+            (gdir / "rel/pkg").lexically_normal());
+    REQUIRE(rc.global_dirs.repo_cache.has_value());
+    REQUIRE(*rc.global_dirs.repo_cache ==
+            (ezmk::util::get_home_dir() / "repo-cache").lexically_normal());
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("effective_build_dir: project > global > default",
+          "[config][1.5.0-dev.2]") {
+    auto root = make_runtime_cfg_root("builddir");
+    auto gdir = root / "global";
+    write_runtime_cfg(gdir, "[settings]\nbuild_dir = \"out\"\n");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    ezmk::config::EzConfig cfg;
+    auto proj = root / "proj";
+    REQUIRE(ezmk::config::effective_build_dir(cfg, proj) ==
+            (proj / "out").lexically_normal());
+    cfg.project.build_dir = "build2";
+    REQUIRE(ezmk::config::effective_build_dir(cfg, proj) ==
+            (proj / "build2").lexically_normal());
+    cfg.project.build_dir = (root / "abs_build").string();
+    REQUIRE(ezmk::config::effective_build_dir(cfg, proj) ==
+            (root / "abs_build").lexically_normal());
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("effective_build_dir_for: reads [project].build_dir",
+          "[config][1.5.0-dev.2]") {
+    auto root = make_runtime_cfg_root("builddirfor");
+    auto proj = root / "proj";
+    fs::create_directories(proj);
+    std::ofstream(proj / "ezmk.toml")
+        << "[project]\nname = \"p\"\nversion = \"0.1.0\"\n"
+           "build_dir = \"custom\"\n";
+    ezmk::config::reset_runtime_config_for_test();
+    REQUIRE(ezmk::config::effective_build_dir_for(proj) ==
+            (proj / "custom").lexically_normal());
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("effective_examples/logs: user overrides global",
+          "[config][1.5.0-dev.2]") {
+    auto root = make_runtime_cfg_root("exlog");
+    auto gdir = root / "global";
+    auto udir = root / "user";
+    std::string g_examples = (root / "g/examples").generic_string();
+    std::string g_logs = (root / "g/logs").generic_string();
+    std::string u_examples = (root / "u/examples").generic_string();
+    write_runtime_cfg(gdir, "[base_dir]\nexamples = \"" + g_examples +
+                                "\"\nlogs = \"" + g_logs + "\"\n");
+    write_runtime_cfg(udir, "[base_dir]\nexamples = \"" + u_examples + "\"\n");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    REQUIRE(ezmk::config::effective_examples().has_value());
+    REQUIRE(*ezmk::config::effective_examples() ==
+            (root / "u/examples").lexically_normal());
+    REQUIRE(ezmk::config::effective_logs().has_value());
+    REQUIRE(*ezmk::config::effective_logs() ==
+            (root / "g/logs").lexically_normal());
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: package and repo dirs honor [base_dir]",
+          "[config][1.5.0-dev.2]") {
+    auto root = make_runtime_cfg_root("pkgrepo");
+    auto gdir = root / "global";
+    auto udir = root / "user";
+    std::string g_pkgs = (root / "g/pkgs").generic_string();
+    std::string g_repos = (root / "g/repos").generic_string();
+    std::string u_pkgs = (root / "u/pkgs").generic_string();
+    std::string u_repos = (root / "u/repos").generic_string();
+    write_runtime_cfg(gdir, "[base_dir]\ninstalled_packages = \"" + g_pkgs +
+                                "\"\nrepo_cache = \"" + g_repos + "\"\n");
+    write_runtime_cfg(udir, "[base_dir]\ninstalled_packages = \"" + u_pkgs +
+                                "\"\nrepo_cache = \"" + u_repos + "\"\n");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    using ezmk::cli::Scope;
+    REQUIRE(ezmk::pkg::pkg_install_dir(Scope::Global) ==
+            (root / "g/pkgs").lexically_normal());
+    REQUIRE(ezmk::pkg::pkg_install_dir(Scope::User) ==
+            (root / "u/pkgs").lexically_normal());
+    REQUIRE(ezmk::repo::repo_list_path(Scope::Global).parent_path() ==
+            (root / "g/repos").lexically_normal());
+    REQUIRE(ezmk::repo::repo_list_path(Scope::User).parent_path() ==
+            (root / "u/repos").lexically_normal());
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: git_path and editor are honored",
+          "[config][1.5.0-dev.2]") {
+    auto root = make_runtime_cfg_root("tools");
+    auto udir = root / "user";
+    write_runtime_cfg(udir, R"(
+[settings]
+git_path = "C:/tools/git.exe"
+editor = "my-editor"
+)");
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    REQUIRE(ezmk::util::git_executable() == "C:/tools/git.exe");
+
+    EnvScope e("EDITOR", "");
+    EnvScope v("VISUAL", "");
+    REQUIRE(ezmk::util::find_editor() == "my-editor");
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
 

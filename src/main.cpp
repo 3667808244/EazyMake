@@ -454,7 +454,8 @@ int main(int argc, char** argv) {
             // tree and the .ezmk/ state dir are ignored wholesale, and
             // object/dep/temp files are ignored by suffix (matters when a
             // src_dir is "." or contains the build tree).
-            watcher.add_ignore_prefix((proj_root / "build").string());
+            watcher.add_ignore_prefix(
+                ezmk::config::effective_build_dir(cfg, proj_root).string());
             watcher.add_ignore_prefix((proj_root / ".ezmk").string());
             watcher.add_ignore_suffix(".o");
             watcher.add_ignore_suffix(".d");

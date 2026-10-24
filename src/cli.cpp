@@ -1,5 +1,6 @@
 #include "ezmk/cli.hpp"
 #include "ezmk/argparse.hpp"
+#include "ezmk/config.hpp"
 #include "ezmk/i18n.hpp"
 #include "ezmk/util.hpp"
 
@@ -1039,10 +1040,14 @@ namespace ezmk::cli
             return args;
         }
 
-        // Documented default (cli.hpp): scaffold into the current directory.
+        // 1.5.0-dev.2: -o wins; otherwise the configured examples base
+        // ([base_dir].examples, user overrides global) or "." (default).
         opts.output_dir = ".";
-        if (auto o = p.value("output"))
+        if (auto o = p.value("output")) {
             opts.output_dir = *o;
+        } else if (auto ex = ezmk::config::effective_examples()) {
+            opts.output_dir = ex->string();
+        }
 
         if (p.positionals.empty())
         {

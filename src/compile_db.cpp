@@ -1,6 +1,7 @@
 #include "ezmk/compile_db.hpp"
 #include "ezmk/build.hpp"
 #include "ezmk/cache.hpp"
+#include "ezmk/config.hpp"
 #include "ezmk/toolchain.hpp"
 #include "ezmk/util.hpp"
 #include "ezmk/i18n.hpp"
@@ -100,11 +101,13 @@ void generate_compile_db(const cache::CompileInput& cin,
     entries.reserve(cin.sources.size());
 
     bool is_msvc = (cin.tc.family == toolchain::CompilerFamily::Msvc);
+    // 1.5.0-dev.2: honor [project].build_dir / the global build_dir default.
+    const fs::path build_dir = config::effective_build_dir_for(root);
     for (auto& src : cin.sources) {
         auto rel = fs::relative(src, root);
         // Logical object path (build/<rel>.<ext>) — the index is read-only, so
         // a stable relative -o keeps the JSON clean without touching the build.
-        fs::path obj = root / "build" / rel;
+        fs::path obj = build_dir / rel;
         obj.replace_extension(is_msvc ? ".obj" : ".o");
         auto args = normalize_for_index(cache::build_compile_args(cin, src, obj),
                                         root, rel);

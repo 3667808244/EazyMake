@@ -151,6 +151,9 @@ fs::path pkg_install_dir(cli::Scope scope) {
         return (root.value_or(fs::current_path())) / ".ezmk/pkg";
     }
     case cli::Scope::User: {
+        if (config::runtime_config().user_dirs.installed_packages) {
+            return *config::runtime_config().user_dirs.installed_packages;
+        }
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");
         if (appdata) return fs::path(appdata) / "ezmk/pkg";
@@ -160,6 +163,9 @@ fs::path pkg_install_dir(cli::Scope scope) {
 #endif
     }
     case cli::Scope::Global:
+        if (config::runtime_config().global_dirs.installed_packages) {
+            return *config::runtime_config().global_dirs.installed_packages;
+        }
         return util::get_exe_dir() / "pkg";
     }
     return {};
@@ -896,7 +902,7 @@ fs::path compile_package(const fs::path& pkg_dir,
     auto lang = config::parse_language(cfg.project.language);
     lang = negotiate_package_std(lang, consumer_ctx.min, tc);
 
-    fs::path build_dir = pkg_dir / "build";
+    fs::path build_dir = config::effective_build_dir(cfg, pkg_dir);
     fs::create_directories(build_dir);
 
     // 1.2.0-dev.9: collect sources from [compile].src_dirs (default ["src"]),
@@ -1628,7 +1634,7 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     // Hash the built library — 1.2.0-dev.11: deterministic
                     // pick (shared with lockfile verify side) so record and
                     // verify hash the SAME archive.
-                    auto build_dir = entry.path() / "build";
+                    auto build_dir = config::effective_build_dir(pkg_cfg, entry.path());
                     auto lib_file = util::find_package_archive(
                         build_dir, pkg_cfg.project.name);
                     if (lib_file.empty()) {
@@ -1745,7 +1751,8 @@ static InstallOutcome install_git_source(const std::string& source_url,
         if (ok) {
             // checkout <sha> → detached HEAD at the pinned commit
             std::string pin = expected_commit ? *expected_commit : std::string(ref);
-            std::string cmd = "git -C \"" + util::escape_shell_arg(clone_dir.string()) +
+            std::string cmd = util::quote_cli_arg(util::git_executable()) +
+                              " -C \"" + util::escape_shell_arg(clone_dir.string()) +
                               "\" checkout --detach \"" + util::escape_shell_arg(pin) + "\"";
             auto res = util::run_command(cmd);
             ok = res.exit_code == 0;
@@ -2458,7 +2465,7 @@ void info(const std::string& pkg_name, const std::vector<cli::Scope>& scopes) {
                 print_list("run-deny", pm.run_deny);
                 util::info_line("    (unlisted access will prompt at runtime)");
             }
-            fs::path build_dir = pkg_path / "build";
+            fs::path build_dir = config::effective_build_dir(cfg, pkg_path);
             if (util::file_exists(build_dir)) {
                 std::string line = ezmk::i18n::get(ezmk::i18n::I18nKey::pkg_info_artifacts) + ":";
                 bool found = false;

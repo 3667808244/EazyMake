@@ -657,7 +657,7 @@ static std::vector<fs::path> package_include_dirs(const fs::path& pkg_root,
 static std::vector<fs::path> collect_package_archives(const fs::path& pkg_root,
                                                       bool is_msvc) {
     std::vector<fs::path> archives;
-    auto pkg_build = pkg_root / "build";
+    auto pkg_build = config::effective_build_dir_for(pkg_root);
     if (util::file_exists(pkg_build)) {
         for (auto& f : fs::directory_iterator(pkg_build)) {
             auto ext = f.path().extension().string();
@@ -697,7 +697,7 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
     // builds work from any subdirectory; falls back to CWD when no ezmk.toml.
     st.proj_root = util::locate_project_root(fs::current_path()).value_or(fs::current_path());
     st.temp_dir = st.proj_root / ".ezmk/temp";
-    st.build_dir = st.proj_root / "build";
+    st.build_dir = config::effective_build_dir(cfg, st.proj_root);
     st.cache_obj_dir = st.proj_root / ".ezmk/cache/obj";
 
     // Language + toolchain detection
@@ -800,7 +800,9 @@ BuildState prepare_build_state(const config::EzConfig& cfg,
             std::error_code ec;
             auto git_dir = st.proj_root / ".git";
             if (fs::exists(git_dir, ec)) {
-                auto git_res = util::run_command("git log -1 --format=%ct 2>&1");
+                auto git_res = util::run_command(
+                    util::quote_cli_arg(util::git_executable()) +
+                    " log -1 --format=%ct 2>&1");
                 if (git_res.exit_code == 0 && !git_res.out.empty()) {
                     try {
                         st.compile_cfg.source_date_epoch = static_cast<uint64_t>(std::stoull(git_res.out));
@@ -1353,7 +1355,7 @@ void export_object_archive(const config::EzConfig& cfg,
     fs::path out;
     const std::string& configured = it->second.export_objs_path;
     if (configured.empty()) {
-        out = st.proj_root / "build" / "obj_files.zip";
+        out = st.build_dir / "obj_files.zip";
     } else {
         out = configured;
         if (out.is_relative()) out = st.proj_root / out;
@@ -1641,8 +1643,9 @@ WsInjection resolve_ws_injection(const fs::path& start_dir,
         auto inc = m.path / "include";
         if (util::file_exists(inc)) out.include_dirs.push_back(inc);
 
-        fs::path lib = is_msvc ? m.path / "build" / (m.basename + ".lib")
-                               : m.path / "build" / ("lib" + m.basename + ".a");
+        fs::path member_build = config::effective_build_dir_for(m.path);
+        fs::path lib = is_msvc ? member_build / (m.basename + ".lib")
+                               : member_build / ("lib" + m.basename + ".a");
         if (util::file_exists(lib)) {
             if (is_msvc) {
                 out.msvc_archives.push_back(lib);
@@ -1772,7 +1775,7 @@ void install_project(const config::EzConfig& cfg,
 
     std::string name = cfg.project.name;
     std::string type = cfg.project.type;
-    fs::path build_dir = proj_root / "build";
+    fs::path build_dir = config::effective_build_dir(cfg, proj_root);
 
     fs::create_directories(bindir);
     fs::create_directories(libdir);
@@ -1857,10 +1860,12 @@ void install_project(const config::EzConfig& cfg,
 // 1.2.5: copy a directory tree into the pack staging dir, pruning build
 // residue (build/ .ezmk/ .git) and binary artifacts so they never leak into
 // a source package.
-static void copy_pack_source_dir(const fs::path& from, const fs::path& to) {
+static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
+                                 const std::string& build_dir_name) {
     std::error_code ec;
     fs::create_directories(to, ec);
-    static const std::set<std::string> prune_dirs = {"build", ".ezmk", ".git"};
+    std::set<std::string> prune_dirs = {"build", ".ezmk", ".git"};
+    if (!build_dir_name.empty()) prune_dirs.insert(build_dir_name);
     static const std::set<std::string> prune_exts = {
         ".o", ".obj", ".a", ".lib", ".so", ".dylib", ".dll", ".exe",
         ".rsp", ".log"};
@@ -1870,7 +1875,7 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to) {
         std::string name = p.filename().string();
         if (it->is_directory(ec)) {
             if (prune_dirs.count(name)) continue;
-            copy_pack_source_dir(p, to / name);
+            copy_pack_source_dir(p, to / name, build_dir_name);
         } else if (it->is_regular_file(ec)) {
             if (name.size() > 7 &&
                 name.compare(name.size() - 7, 7, ".tar.gz") == 0)
@@ -1969,7 +1974,7 @@ void pack_project(const config::EzConfig& cfg,
         bool is_msvc = (toolchain::detect_toolchain().family ==
                         toolchain::CompilerFamily::Msvc);
         auto archive_path =
-            project_artifact_paths(proj_root / "build", name, cfg.project.type, is_msvc).primary;
+            project_artifact_paths(config::effective_build_dir(cfg, proj_root), name, cfg.project.type, is_msvc).primary;
 
         // 1.3.0-dev.5: always build first (incremental) so the precompiled
         // archive is packed from FRESH artifacts — the old existence-only gate
@@ -2036,11 +2041,15 @@ void pack_project(const config::EzConfig& cfg,
             fs::path dest = d;
             if (!dest.is_relative()) dest = dest.filename();
             if (util::file_exists(stage_dir / dest)) continue;  // already copied
-            copy_pack_source_dir(src, stage_dir / dest);
+            copy_pack_source_dir(
+                src, stage_dir / dest,
+                config::effective_build_dir(cfg, proj_root).filename().string());
         }
         auto include_src = proj_root / "include";
         if (util::file_exists(include_src)) {
-            copy_pack_source_dir(include_src, stage_dir / "include");
+            copy_pack_source_dir(
+                include_src, stage_dir / "include",
+                config::effective_build_dir(cfg, proj_root).filename().string());
         }
 
         // ezmk.toml as-is — no precompiled marker (the consumer compiles the
@@ -2728,7 +2737,7 @@ void run_tests(const config::EzConfig& cfg,
                const std::string& test_report) {
     // 1.2.0-dev.7: located project root (upward search); CWD fallback
     fs::path proj_root = util::locate_project_root(fs::current_path()).value_or(fs::current_path());
-    fs::path build_dir = proj_root / "build";
+    fs::path build_dir = config::effective_build_dir(cfg, proj_root);
     fs::path cache_dir = proj_root / ".ezmk/cache";
 
     // 1.3.2: --report <fmt>[:<path>] — split once here, used by both

@@ -388,7 +388,7 @@ std::vector<std::string> verify(const fs::path& proj_root,
         }
 
         fs::path lib_file;
-        auto build_dir = pkg_path / "build";
+        auto build_dir = config::effective_build_dir_for(pkg_path);
         // 1.2.0-dev.11: deterministic pick (shared with pkg.cpp record side) —
         // the previous "first directory entry" was non-deterministic.
         lib_file = util::find_package_archive(build_dir, pkg.name);

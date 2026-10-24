@@ -281,6 +281,9 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts);
 // Local paths (C:/..., /abs, \root) are never URLs → false.
 bool is_git_url(std::string_view s);
 
+// 1.5.0-dev.2: configured git executable ([settings].git_path, default "git").
+std::string git_executable();
+
 // Check if git is available in PATH.
 bool git_available();
 

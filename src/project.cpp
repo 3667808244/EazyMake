@@ -72,7 +72,7 @@ void create_project(const std::string& name, const std::string& project_type,
     // Directory structure
     fs::create_directories(root / "include");
     fs::create_directories(root / "src");
-    fs::create_directories(root / "build");
+    fs::create_directories(ezmk::config::effective_build_dir_for(root));
     fs::create_directories(root / ".ezmk/pkg");
     fs::create_directories(root / ".ezmk/temp");
     fs::create_directories(root / ".ezmk/cache");
@@ -152,7 +152,8 @@ build/
             util::info(ezmk::i18n::I18nKey::init_git);
             std::ostringstream cmd;
             // 1.4.11 Q4-04: platform-correct quoting (Windows has no shell).
-            cmd << "git init " << util::quote_cli_arg(root.string());
+            cmd << util::quote_cli_arg(util::git_executable()) << " init "
+                << util::quote_cli_arg(root.string());
             auto res = util::run_command(cmd.str());
             if (res.exit_code == 0) {
                 util::info(ezmk::i18n::I18nKey::git_initialized);

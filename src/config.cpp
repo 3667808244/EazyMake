@@ -664,6 +664,10 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
         read_optional_bool(proj->get("precompiled_strict"),
                            "project.precompiled_strict",
                            cfg.project.precompiled_strict);
+        // 1.5.0-dev.2: per-project build directory (empty = global default).
+        if (auto bd = (*proj)["build_dir"].value<std::string>()) {
+            cfg.project.build_dir = *bd;
+        }
     }
 }
 
@@ -1345,6 +1349,28 @@ void parse_base_dir_table(const toml::table& t, BaseDirConfig& out,
     read_path("repo_cache", "base_dir.repo_cache", out.repo_cache);
     read_path("examples", "base_dir.examples", out.examples);
     read_path("logs", "base_dir.logs", out.logs);
+
+    // 1.5.0-dev.2: resolve relative paths against the config file's directory
+    // and expand "~" / "~/" / "~" (same rules as [install].prefix).
+    auto resolve = [&](std::optional<fs::path>& p) {
+        if (!p || p->empty()) return;
+        fs::path v = *p;
+        std::string s = v.string();
+        if (s == "~") {
+            v = util::get_home_dir();
+        } else if (s.size() > 1 && s[0] == '~' &&
+                   (s[1] == '/' || s[1] == '\\')) {
+            v = util::get_home_dir() / s.substr(2);
+        }
+        if (v.is_relative()) {
+            v = fs::absolute(file).parent_path() / v;
+        }
+        *p = v.lexically_normal();
+    };
+    resolve(out.installed_packages);
+    resolve(out.repo_cache);
+    resolve(out.examples);
+    resolve(out.logs);
 }
 
 void parse_settings_table(const toml::table& t, SettingsConfig& s,
@@ -1531,5 +1557,45 @@ void load_runtime_config(int argc, const char* const* argv) {
     if (g_runtime_loaded) return;
     load_runtime_config_impl(argc, argv);
 }
+
+fs::path effective_build_dir(const EzConfig& cfg, const fs::path& proj_root) {
+    std::string value = cfg.project.build_dir;
+    if (value.empty()) value = runtime_config().settings.build_dir;
+    if (value.empty()) value = "build";
+    fs::path p(value);
+    if (p.is_relative()) p = proj_root / p;
+    return p.lexically_normal();
+}
+
+fs::path effective_build_dir_for(const fs::path& proj_root) {
+    try {
+        auto toml = proj_root / "ezmk.toml";
+        if (util::file_exists(toml)) {
+            return effective_build_dir(parse_config(toml), proj_root);
+        }
+    } catch (...) {
+        // Broken package config: fall through to the global default.
+    }
+    std::string value = runtime_config().settings.build_dir;
+    if (value.empty()) value = "build";
+    fs::path p(value);
+    if (p.is_relative()) p = proj_root / p;
+    return p.lexically_normal();
+}
+
+std::optional<fs::path> effective_examples() {
+    const auto& rc = runtime_config();
+    if (rc.user_dirs.examples) return rc.user_dirs.examples;
+    if (rc.global_dirs.examples) return rc.global_dirs.examples;
+    return std::nullopt;
+}
+
+std::optional<fs::path> effective_logs() {
+    const auto& rc = runtime_config();
+    if (rc.user_dirs.logs) return rc.user_dirs.logs;
+    if (rc.global_dirs.logs) return rc.global_dirs.logs;
+    return std::nullopt;
+}
+
 
 } // namespace ezmk::config

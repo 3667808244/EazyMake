@@ -1,4 +1,5 @@
 #include "ezmk/util.hpp"
+#include "ezmk/config.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1908,8 +1909,13 @@ bool is_git_url(std::string_view s) {
     return false;
 }
 
+std::string git_executable() {
+    std::string configured = config::runtime_config().settings.git_path;
+    return configured.empty() ? std::string("git") : configured;
+}
+
 bool git_available() {
-    auto res = run_command("git --version");
+    auto res = run_command(quote_cli_arg(git_executable()) + " --version");
     return res.exit_code == 0;
 }
 
@@ -1918,7 +1924,7 @@ bool git_clone(const std::string& url, const fs::path& dest,
     std::ostringstream cmd;
     // branch is quoted like url/dest: escape_shell_arg only covers `" \ ` $`,
     // and a bare branch name with spaces/; would split or inject under sh -c.
-    cmd << "git clone";
+    cmd << quote_cli_arg(git_executable()) << " clone";
     // 1.4.1: `--depth 1` — single-branch shallow clone. Only used for
     // branch/tag/default-head clones (repo.cpp callers never set it).
     if (shallow) cmd << " --depth 1";
@@ -1938,7 +1944,7 @@ bool git_clone(const std::string& url, const fs::path& dest,
 
 bool git_pull(const fs::path& repo_dir, std::string_view branch) {
     std::ostringstream cmd;
-    cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
+    cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
         << "\" pull origin \"" << escape_shell_arg(branch) << "\"";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) {
@@ -1950,7 +1956,7 @@ bool git_pull(const fs::path& repo_dir, std::string_view branch) {
 
 std::string git_last_commit_time(const fs::path& repo_dir) {
     std::ostringstream cmd;
-    cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
+    cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
         << "\" log -1 --format=%cI";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) return {};
@@ -1965,7 +1971,7 @@ std::string git_last_commit_time(const fs::path& repo_dir) {
 // lockfile and by `--locked` to reject force-pushed / drifted refs.
 std::string git_head_commit(const fs::path& repo_dir) {
     std::ostringstream cmd;
-    cmd << "git -C \"" << escape_shell_arg(repo_dir.string())
+    cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
         << "\" rev-parse HEAD";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) return {};
@@ -1984,6 +1990,10 @@ std::string find_editor() {
     if (editor_env && editor_env[0] != '\0') return editor_env;
     const char* visual_env = std::getenv("VISUAL");
     if (visual_env && visual_env[0] != '\0') return visual_env;
+    // 1.5.0-dev.2: [settings].editor (after explicit EDITOR/VISUAL).
+    if (!config::runtime_config().settings.editor.empty()) {
+        return config::runtime_config().settings.editor;
+    }
 #ifdef EZMK_WIN
     // Fallback: notepad (always available on Windows)
     return "notepad";
