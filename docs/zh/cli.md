@@ -1,6 +1,6 @@
 # 命令行参考
 
-`ezmk` 命令行和环境变量的权威参考文档。本文档是唯一真相来源；README 中的命令表格是快速上手的子集。行为细节请参阅各专题文档（`pkg.md`、`repo.md`、`utils.md`、`config_file.md`、`cache.md`、`safety.md`）。
+`ezmk` 命令行和环境变量的权威参考文档。本文档是唯一真相来源；README 中的命令表格是快速上手的子集。行为细节请参阅各专题文档（`pkg.md`、`repo.md`、`utils.md`、`project_config.md`、`cache.md`、`safety.md`）。
 
 ## 概要
 
@@ -125,7 +125,7 @@ VS Code 调试三件套——`launch.json` + `tasks.json` + `settings.json`（�
 
 已存在文件默认拒绝覆盖，需显式 `--overwrite`。cmake 专属 flag（`-o` / `--resolve` /
 `--glob` / `--no-glob`）在本目标下直接报错。这些文件镜像的配置字段见
-[config_file.md](config_file.md)。
+[project_config.md](project_config.md)。
 
 **伴侣运行时：`ezmk-lua`（1.2.0-dev.8+）。** `ezmk project export cmake`
 把 `[hooks]` 的 `pre_build` / `post_build` 映射为 `add_custom_command` 调用，
@@ -139,7 +139,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 `ctx` 表（`output` / `project_root` / `profile`）。生成的 CMake 通过
 `find_program(EZMK_LUA ezmk-lua)` 定位；未安装时回退为 `message(WARNING)`
 （跳过钩子后处理，非致命）。`on_failure` 在 CMake 中无等价物，不导出。
-完整映射见 [config_file.md](config_file.md) 的 `hooks` 节。
+完整映射见 [project_config.md](project_config.md) 的 `hooks` 节。
 
 **`build-opts`**（`build` / `run` / `watch` 共用）：
 
@@ -261,7 +261,7 @@ stop_on_error = false             # 可选，默认 false
 workspace = ["strutil"]           # 兄弟成员（末段或完整相对路径）
 ```
 
-依赖约束：**单向非循环**（环 / 自环在配置期拒绝）+ 被依赖成员必须是 `type = "static"`（产物 `build/lib<name>.a` 复用）；无版本（开发中即改即用，版本/快照语义走包）。详见 [`config_file.md`](config_file.md) 的 `[depends]` 节。
+依赖约束：**单向非循环**（环 / 自环在配置期拒绝）+ 被依赖成员必须是 `type = "static"`（产物 `build/lib<name>.a` 复用）；无版本（开发中即改即用，版本/快照语义走包）。详见 [`project_config.md`](project_config.md) 的 `[depends]` 节。
 
 **`-w` / `--workspace` 重定向（附在 `build` / `test` / `watch` / `clean` 上）：** `ezmk build -w` ≡ `ezmk workspace build`，`ezmk watch -w` ≡ `ezmk workspace watch`（从工作区内任意子目录自动向上定位工作区根）。**不是**「项目 + workspace 都构建」；不加 `-w` 的成员内 `ezmk build` 仍是单项目语义（只构建当前成员，注入**已存在**的兄弟产物）。
 
@@ -475,13 +475,21 @@ include_dirs = ["include", "@link:shared/include"]
 
 | 模式 | 别名 | 行为 |
 |---|---|---|
-| `always` | `enable` | 强制彩色输出（同时启用在旧版 Windows 终端上的 VT100 支持） |
+| `always` | `enable` / `on` / `16colors` / `256colors` / `truecolor` | 强制彩色输出（同时启用在旧版 Windows 终端上的 VT100 支持） |
 | `auto` | `default` | 仅在交互终端输出彩色（**默认**） |
-| `never` | `disable` | 禁用彩色输出 |
+| `never` | `disable` / `off` | 禁用彩色输出 |
 
 选项值不区分大小写。`--color=always` 和 `--color always` 均接受。显式指定 `always` / `never` 会覆盖 `NO_COLOR`；仅 `auto` 遵守 `NO_COLOR`（行为与 git/ls 对齐）。`--` 之后的 token 保持原样以用于透传。
 
 > **为什么只有 `auto` 遵守 `NO_COLOR`？** 显式指定 `--color=always|never` 比环境变量的意图更强，应优先（与 git/ls 行为一致）；`auto` 才是让环境变量生效的模式。
+
+### `--config <file>` / `--no-config`（1.5.0+）
+
+`--config <file>` 用指定文件替换**用户级** `config.toml`（全局级仍生效）；文件不存在会直接报错。`--no-config` 跳过全局级与用户级两层，使用内置默认值。两者互斥。
+
+### `--lang <tag>`（1.5.0+）
+
+覆盖本次调用的界面语言，优先级高于 `EZMK_LANG` 与 `[settings].natural_language`。未知标签回退到基础语言/英文。
 
 ---
 
@@ -490,6 +498,9 @@ include_dirs = ["include", "@link:shared/include"]
 | 变量 | 作用范围 | 用途 |
 |---|---|---|
 | `EZMK_LANG` | 运行时 | 界面语言（`en` / `zh` / 变体标签如 `zh-TW`，1.3.0+），覆盖系统检测（`src/i18n.cpp`） |
+| `EZMK_GLOBAL_CONFIG_DIR` | 运行时 | 全局级 `config.toml` 所在目录（默认 `/etc/ezmk` / `C:\.ezmk\config`，1.5.0+） |
+| `EZMK_USER_CONFIG_DIR` | 运行时 | 用户级 `config.toml` 所在目录（默认 `$XDG_CONFIG_HOME/ezmk` / `%USERPROFILE%\.ezmk\config`，1.5.0+） |
+| `XDG_CONFIG_HOME` | 运行时 | Unix 用户级配置默认根目录（1.5.0+） |
 | `NO_COLOR` | 运行时 | 禁用彩色输出（仅 `--color=auto` 时遵守）（`src/util.cpp`） |
 | `CXX` / `CC` | 运行时 + 构建 | 覆盖编译器检测（0.1.8+） |
 | `EZMK_TOOLCHAIN` | 运行时 + 构建 | 强制选择工具链：`gcc` / `clang` / `msvc`（1.4.7+）；不设置=自动（GCC/Clang 优先，MSVC 回退）（`src/toolchain.cpp`） |
@@ -510,7 +521,7 @@ include_dirs = ["include", "@link:shared/include"]
 
 ## 相关文档
 
-- [`config_file.md`](config_file.md) — 完整的 `ezmk.toml` 规范
+- [`project_config.md`](project_config.md) — 完整的 `ezmk.toml` 规范
 - [`pkg.md`](pkg.md) — 包格式与管理
 - [`repo.md`](repo.md) — 仓库系统
 - [`utils.md`](utils.md) — Lua 插件 API

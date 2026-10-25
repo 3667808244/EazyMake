@@ -225,10 +225,10 @@ and
 .TP
 .BR \-\-color= \fImode\fR
 Colorize output. Values:
-.BR always " (alias " enable ),
+.BR always " (aliases " enable ", " on ", " 16colors ", " 256colors ", " truecolor ),
 .BR auto " (alias " default ,
 the default) and
-.BR never " (alias " disable ).
+.BR never " (aliases " disable ", " off ).
 Case\-insensitive. An explicit
 .B always
 or
@@ -238,6 +238,28 @@ overrides the
 environment variable; only
 .B auto
 honors it.
+.TP
+.BR \-\-config " \fIfile\fR"
+Read this file as the user\-level
+.BR config.toml
+instead of the default user path. The global file still applies. A missing
+explicit file is a fatal error.
+.TP
+.B \-\-no\-config
+Skip both the global and user\-level
+.B config.toml
+files. Built\-in defaults apply.
+.TP
+.BR \-\-lang " \fItag\fR"
+Override the interface language for this invocation (for example
+.BR en ,
+.B zh
+or
+.BR zh\-TW ).
+Takes precedence over
+.B EZMK_LANG
+and
+.BR [settings].natural_language .
 .SS Common build options
 Accepted by
 .BR build ,
@@ -279,6 +301,16 @@ Write
 .B compile_commands.json
 after a successful build, for this invocation only (one\-shot equivalent of
 .BR "[compile] compile_commands = true" ).
+.TP
+.B \-\-no\-auto\-pack
+Do not run automatic source packaging for
+.B static
+projects, even when
+.BR "[settings].auto_pack = true" .
+Only applies to
+.B build
+and
+.BR run .
 .SS ezmk project build
 In addition to the common build options:
 .TP
@@ -684,6 +716,29 @@ BCP 47\-style tags are normalized
 .B zh_CN.UTF\-8 ).
 Unknown variants fall back to the base language and then to English.
 .TP
+.B EZMK_GLOBAL_CONFIG_DIR
+Directory containing the global
+.BR config.toml .
+Default:
+.B /etc/ezmk
+on Unix and
+.B C:/.ezmk/config
+on Windows.
+.TP
+.B EZMK_USER_CONFIG_DIR
+Directory containing the user\-level
+.BR config.toml .
+Default:
+.B $XDG_CONFIG_HOME/ezmk
+(or
+.BR (ti/.config/ezmk )
+on Unix and
+.B %USERPROFILE%/.ezmk/config
+on Windows.
+.TP
+.B XDG_CONFIG_HOME
+Base directory for the default user\-level config path on Unix.
+.TP
 .B NO_COLOR
 Disable colored output. Honored only when
 .B \-\-color
@@ -774,7 +829,7 @@ https://github.com/3667808244/EazyMake/blob/main/docs/en/cli.md
 .PP
 Configuration file specification:
 .br
-https://github.com/3667808244/EazyMake/blob/main/docs/en/config_file.md
+https://github.com/3667808244/EazyMake/blob/main/docs/en/project_config.md
 .PP
 Tutorial:
 .br

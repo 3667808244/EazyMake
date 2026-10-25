@@ -131,7 +131,7 @@ post_build = "hooks/post.lua"    # 链接成功后
 on_failure = "hooks/fail.lua"    # 构建失败时
 ```
 
-> **注意：** 构建钩子在沙盒化的 Lua 环境中运行。详见 `docs/zh/config_file.md`。
+> **注意：** 构建钩子在沙盒化的 Lua 环境中运行。详见 `docs/zh/project_config.md`。
 
 ---
 
@@ -512,5 +512,5 @@ int main() {
 
 - **[pkg.md](pkg.md)** — 包管理（安装、更新、移除）
 - **[repo.md](repo.md)** — 仓库管理和 `index.toml` 格式
-- **[config_file.md](config_file.md)** — 完整的 `ezmk.toml` 规范
+- **[project_config.md](project_config.md)** — 完整的 `ezmk.toml` 规范
 - **[safety.md](safety.md)** — 安全模型（SHA-256、沙盒）

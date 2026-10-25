@@ -102,5 +102,5 @@ See [migrate-from-cmake.md](migrate-from-cmake.md) for the supported/rejected co
 - Design philosophy — [README](../../README.md)
 - Why each boundary exists — [non-goals.md](non-goals.md)
 - Moving between EazyMake and CMake — [migrate-from-cmake.md](migrate-from-cmake.md)
-- Configuration reference — [config_file.md](config_file.md)
+- Configuration reference — [project_config.md](project_config.md)
 - `utils` multi-tool packages — [utils.md](utils.md)

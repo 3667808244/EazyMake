@@ -1,5 +1,7 @@
 # Configuration File `ezmk.toml`
 
+> This page documents the **project-level** `ezmk.toml` only. See [user_config.md](user_config.md) for the user-level `config.toml` and [global_config.md](global_config.md) for the global level.
+
 ---
 
 ## `project` Section
@@ -12,6 +14,8 @@
 | `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified. **1.3.1+** range syntax: `">=C++11"` (minimum) / `"C++11..C++17"` (min..max) |
 | `stdlib` | string | No | `"libstdc++"` | **1.1.0-dev.4+** Standard library: `"libstdc++"` (default) or `"libc++"`. Aliases: `"glibcxx"` / `"gnu"` → `libstdc++`; `"llvm"` → `libc++`. Case-insensitive |
 | `precompiled_strict` | bool | No | `false` | **1.2.0-dev.10+** Precompiled-package strict mode: L2/L1 toolchain fallback (possibly ABI-incompatible) becomes a fail-fast error. Only affects packages (with `precompiled = true`); see [Package Authoring Guide](package_authoring.md#33-precompiled-package-precompiled--true-097) |
+| `build_dir` | string | No | `""` (inherit global) | **1.5.0+** Project build directory; empty = use `[settings].build_dir` (default `build`) |
+| `output_name` | string | No | `""` (project name) | **1.5.0+** Artifact basename; affects executable / static / shared, install and pack. Must be a safe basename (no path separators) |
 
 > **Why is `type` a string instead of an enum?** So adding a project type later
 > (e.g. `"header-only"`) only introduces a new string value — existing `ezmk.toml`
@@ -119,6 +123,7 @@ code supports a baseline standard (optionally up to a documented upper bound):
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
 | `deterministic` | bool | No | `false` | **1.1.0+** Deterministic (reproducible) builds: injects `-ffile-prefix-map` / `-frandom-seed` (GCC/Clang) or `/Brepro` (MSVC), and makes a missing or hash-mismatched `ezmk.lock.json` a **fatal error** |
 | `source_date_epoch` | integer | No | `0` | **1.1.0+** Deterministic build timestamp (`0` = resolve automatically; negative values are rejected) |
+| `jobs` | int | No | `-1` (inherit global) | **1.5.0+** Project parallelism; `0` = auto; max 1024; unset uses `[settings].default_jobs` |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
 
@@ -510,6 +515,8 @@ Configuration for `ezmk test` (build and run project tests).
 | `default_profile` | string | No | `""` | **1.2.0-dev.12+** Profile applied when no `--profile` is given (reuses `[compile.profile.<name>]` / `[link.profile.<name>]`, symmetric with `[compile].default_profile`) |
 | `include_dirs` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-I` directories (resolved relative to the project root, missing dirs skipped); does not pollute the main build |
 | `link_targets` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-l` link targets; does not pollute the main build |
+| `timeout` | int | No | `-1` (inherit global) | **1.5.0+** Test timeout in seconds; `0` = no timeout; unset uses `[settings].test_timeout` |
+| `report_dir` | string | No | `""` (inherit global) | **1.5.0+** Default test report directory (relative to the project root); an explicit `--report` path still wins |
 | `flags` | string[] | No | `[]` | ⚠️ **Deprecated (1.2.0-dev.12+, removed in 2.0.0)** — still honored but warns; use `default_profile` + `[compile.profile.<name>]`, or `include_dirs` / `link_targets` |
 
 Example:
@@ -546,6 +553,22 @@ See `utils.md`.
 
 ---
 
+## `watch` Section (1.5.0+)
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `debounce_ms` | int | No | `0` (inherit global) | Debounce in ms; `0` means 300; explicit values 50..5000 |
+| `ignore` | string[] | No | `[]` | Extra ignored prefixes (relative to the project root); built-in build/.ezmk/.o/.d/.tmp still apply |
+
+## `pack` Section (1.5.0+)
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `format` | string | No | `""` (inherit global) | `tar.gz` / `zip` / `tgz` (alias) |
+| `output_dir` | string | No | `""` (inherit global) | Output directory; relative to the process CWD |
+| `name` | string | No | `""` (`<name>-<version>`) | Archive basename; must be a safe basename |
+| `exclude` | string[] | No | `[]` | Extra excluded directory names / extensions; built-in exclusions still apply |
+
 ## `pkg` Section (1.4.0-dev.2+)
 
 Package-management configuration. Optional — all fields default to the
@@ -554,6 +577,7 @@ informative (non-failing) behavior.
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `strict_std_check` | bool | No | `false` | **1.4.0-dev.2+** Escalate the install-time standard compatibility check (1.3.1) from a warning to a **fatal error** when a package's minimum standard exceeds the project's |
+| `auto_install` | bool | No | `true` (inherit global) | **1.5.0+** Auto-install missing dependencies; `false` fails and lists the missing packages |
 
 > **When to enable?** With `strict_std_check = true`, installing a package whose
 > minimum standard is higher than your `[project].language` compiles at **fails**

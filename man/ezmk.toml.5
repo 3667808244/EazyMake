@@ -520,11 +520,235 @@ dirs = ["test"]
 prefix = "\(ti/.local"
 .ft R
 .fi
+.SH RUNTIME CONFIGURATION
+The user\-level and global
+.B config.toml
+files use a different schema from a project
+.BR ezmk.toml :
+they contain only the
+.B [base_dir]
+and
+.B [settings]
+tables. Project keys listed below never appear in those files.
+.PP
+The merge order is built\-in defaults, global
+.BR config.toml ,
+user
+.BR config.toml ,
+project
+.BR ezmk.toml ,
+then command\-line/environment overrides. Relative
+.B [base_dir]
+paths resolve against the directory containing the config file; a leading
+.B \(ti
+is expanded.
+.SS [base_dir]
+.TP
+.B installed_packages
+Directory for user/global scope package installations.
+.TP
+.B repo_cache
+Directory for the user/global scope repository cache.
+.TP
+.B examples
+Output root used by
+.B ezmk example
+when
+.B \-o
+is omitted.
+.TP
+.B logs
+Directory for the optional
+.B ezmk.log
+file log.
+.SS [settings]
+.TP
+.B natural_language
+Interface language. Values are
+.BR auto ,
+.BR en ,
+.B zh
+or a variant tag. Precedence:
+.BR \-\-lang ,
+.BR EZMK_LANG ,
+this key, system locale.
+.TP
+.B color_mode
+One of
+.BR auto ,
+.BR off ,
+.BR 16colors ,
+.B 256colors
+or
+.BR truecolor .
+.TP
+.B color_theme
+Reserved theme name; only
+.B default
+is accepted today.
+.TP
+.B log_level
+One of
+.BR off ,
+.BR error ,
+.BR warn ,
+.B info
+or
+.BR debug .
+.B fatal
+messages are never filtered.
+.TP
+.B initial_commit
+Boolean or string. Enables an initial
+.B git commit
+after
+.B project new
+created the repository; a string is used as the commit message.
+.TP
+.B auto_init_git
+Boolean, default true. Run
+.B git init
+in
+.BR "ezmk project new" .
+.TP
+.B gen_gitignore
+Boolean, default true. Generate
+.BR .gitignore .
+.TP
+.B gen_readme
+Boolean, default true. Generate
+.BR README.md .
+.TP
+.B gen_agent_md
+Boolean, default false. Generate
+.BR AGENTS.md .
+.TP
+.B default_project_type
+Default
+.B \-\-type
+for
+.BR "ezmk project new" .
+.TP
+.B default_language
+Default language standard written into a new project.
+.TP
+.B default_project_version
+Default project version written into a new project.
+.TP
+.B default_compile_flags
+String array. Default
+.B [compile].flags
+written into a new project.
+.TP
+.B default_jobs
+Non\-negative integer, default 0 (auto). Upper bound 1024. Overridden by
+.BR [compile].jobs .
+.TP
+.B test_timeout
+Integer seconds, default 30. Zero means no timeout. Overridden by
+.BR [test].timeout .
+.TP
+.B test_report_dir
+Default report directory. Overridden by
+.BR [test].report_dir .
+.TP
+.B watch_debounce_ms
+Zero (default 300) or 50..5000 milliseconds.
+.TP
+.B watch_ignore
+String array of extra ignore prefixes.
+.TP
+.B pack_format
+.BR tar.gz ,
+.B zip
+or the
+.B tgz
+alias.
+.TP
+.B pack_output_dir
+Default pack output directory, relative to the process working directory.
+.TP
+.B pack_name
+Archive basename; empty means
+.BR <name>\-<version> .
+.TP
+.B pack_exclude
+String array of extra directory names or extensions to exclude.
+.TP
+.B default_pkg_scope
+.BR project ,
+.B user
+or
+.BR global .
+.TP
+.B auto_install_deps
+Boolean, default true. False makes a missing dependency fatal.
+.TP
+.B scan_skip_dirs
+String array of extra directory names skipped by
+.BR "workspace scan" .
+.TP
+.B git_path
+Git executable path, default
+.BR git .
+.TP
+.B editor
+Editor command. EDITOR/VISUAL still take precedence.
+.TP
+.B auto_pack
+Boolean, default false. Pack a static project after a successful build/run.
+.SS Project run defaults
+The following keys live in the project
+.B ezmk.toml
+and override the user/global defaults. They never appear in
+.BR config.toml .
+.TP
+.B build_dir
+Project build directory.
+.TP
+.B output_name
+Artifact basename. Must be a safe basename.
+.TP
+.B jobs
+Project parallelism; zero means auto; upper bound 1024.
+.TP
+.B timeout
+Test timeout in seconds; zero means no timeout.
+.TP
+.B report_dir
+Default test report directory.
+.SS [watch]
+.TP
+.B debounce_ms
+Zero (default 300) or 50..5000.
+.TP
+.B ignore
+Extra ignore prefixes.
+.SS [pack]
+.TP
+.B format
+.BR tar.gz ,
+.B zip
+or
+.BR tgz .
+.TP
+.B output_dir
+Output directory, relative to the process working directory.
+.TP
+.B name
+Archive basename.
+.TP
+.B exclude
+Extra directory names or extensions to exclude.
+.SS [pkg]
+.TP
+.B auto_install
+Boolean. False fails on a missing dependency instead of installing it.
 .SH SEE ALSO
 .BR ezmk (1)
 .PP
 The full specification, the package authoring guide and the CLI reference ship
 with the source tree as
-.BR docs/en/config_file.md ", " docs/en/package_authoring.md " and " docs/en/cli.md .
+.BR docs/en/project_config.md ", " docs/en/package_authoring.md " and " docs/en/cli.md .
 .PP
 https://github.com/3667808244/EazyMake

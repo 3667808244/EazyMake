@@ -113,6 +113,6 @@
 
 - 设计理念 — [README](../../README_ZH.md)
 - 什么算"复杂"（用户视角）— [complex-builds.md](complex-builds.md)
-- 配置参考 — [config_file.md](config_file.md)
+- 配置参考 — [project_config.md](project_config.md)
 - `utils` 多工具包 — [utils.md](utils.md)
-- Lua hooks — [config_file.md](config_file.md)
+- Lua hooks — [project_config.md](project_config.md)

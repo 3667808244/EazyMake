@@ -96,7 +96,7 @@ want = ["spdlog"]   # optional — used if installed, skipped otherwise
 optional.
 
 For the complete specification — including profiles and hooks — see
-[`docs/en/config_file.md`](../../../docs/en/config_file.md).
+[`docs/en/project_config.md`](../../../docs/en/project_config.md).
 
 > 💡 Want a complete runnable example? Run `ezmk example greeter` to scaffold a
 > static-library project (see [`examples/README.md`](../../../examples/README.md) for the list).

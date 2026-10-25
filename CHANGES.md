@@ -24,6 +24,37 @@
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
+## 1.5.0-dev (2026-10-25) — 用户/全局配置层（开发中，未发布）
+
+> **状态：dev 收口（dev.1 ~ dev.7），未发布。** 配置契约、路径、项目默认、日志、运行默认与代码审查修复已落地；全量 **1205 用例 / 6940 断言 / 4 跳过 / 0 失败**。
+
+### 新增
+
+- **两级用户配置**：系统级 `config.toml`（`EZMK_GLOBAL_CONFIG_DIR`，默认 `/etc/ezmk` / `C:\.ezmk\config`）与用户级 `config.toml`（`EZMK_USER_CONFIG_DIR`，默认 `$XDG_CONFIG_HOME/ezmk` / `%USERPROFILE%\.ezmk\config`）。合并顺序：内置默认 < 全局 < 用户 < 项目 < CLI/env；`--config <file>` 替换用户级，`--no-config` 跳过两级。
+- **`[settings]`**：语言、颜色、日志级别、project-new 默认、构建目录、并行度、测试超时/报告目录、watch 去抖/忽略、pack 默认/命名/排除、包默认作用域/自动安装、workspace scan 跳过、git/editor、auto_pack。
+- **`[base_dir]`**：`installed_packages` / `repo_cache` / `examples` / `logs`；相对路径按 config 文件目录解析，支持 `~`。
+- **项目级覆盖**：`[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
+- **CLI**：`--config` / `--no-config` / `--lang`、`--no-auto-pack`；`--color` 新增 `off` / `on` / `16colors` / `256colors` / `truecolor` 别名；`--lang` 优先级高于 `EZMK_LANG` 与配置。
+- **日志**：`log_level` 过滤（`off` 仅 fatal）、可选 `<logs>/ezmk.log` 追加写、失败一次性告警并降级。
+- **行为默认**：`project new` 的 git/readme/gitignore/initial commit/AGENTS.md/类型/语言/版本/flags；static 项目 build/run 后自动打包；测试超时/报告目录；watch 去抖/忽略；pack 格式/输出/命名/排除；包默认作用域与依赖自动安装。
+
+### 行为变更
+
+- 默认全部保持 1.4.11 行为；只有显式创建 `config.toml` 或设置项目级键时才变化。
+- Catch2 测试默认不超时（仅显式配置 `[test].timeout` / `[settings].test_timeout` 时启用）；内置 ezmk 框架仍默认 30s。
+- 显式 `--config` 指向不存在的文件现在是致命错误。
+- `[project].output_name` / `[pack].name` 必须是 basename；含路径分隔符会报错。
+- pack 暂存目录改为唯一临时目录，不再删除同名源码目录。
+
+### 文档
+
+- `docs/{zh,en}/config_file.md` 重命名为 `project_config.md`（项目级 `ezmk.toml`）。
+- 新增 `docs/{zh,en}/user_config.md` 与 `docs/{zh,en}/global_config.md`（用户级 / 全局级 `config.toml`）。
+- README / man / tutorial / package_authoring 的引用同步更新；man 增加配置键与全局选项。
+- 审查修复：`--config` 缺失、pack 暂存目录冲突、Catch2 超时、output_name 跨模块一致性、日志加载期 debug、`off` 下异常静默、严格类型/basename 校验、全局/项目边界统一。
+
+---
+
 ## 1.4.11 (2026-10-17) — 代码质量审计修复（第四轮）
 
 > **状态：✅ 已发布（2026-10-17，tag \`v1.4.11\`；Windows 全量 **1169 用例 / 6788 断言 / 4 跳过 / 0 失败**；Linux 侧单元与集成另行验证）。** —— 设计 + 阶段清单见 [plans/1.4.x/1.4.11.md](plans/1.4.x/1.4.11.md)。**零功能新增；公共 API 无破坏性变更。**

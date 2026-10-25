@@ -99,6 +99,12 @@ not started yet are reported as
 while members already running finish naturally (they are never killed).
 .B workspace clean
 has no dependency semantics and rejects the flag.
+.TP
+.B scan_skip
+String array of extra directory names skipped by
+.BR "workspace scan" .
+It is appended to the built-in hidden-directory rule; nested workspaces and
+symlink-escape checks are unaffected.
 .PP
 Unknown keys inside either table are rejected with an error naming the
 offending key, so typos fail loudly instead of being ignored. Type errors
@@ -203,4 +209,4 @@ of
 and
 .B depends
 of
-.IR docs/en/config_file.md ).
+.IR docs/en/project_config.md ).

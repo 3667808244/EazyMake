@@ -138,4 +138,4 @@ $ ezmk workspace build --stop-on-error -j 4
 - 成员依赖必须**单向非循环**——环（含自环）在配置加载时就报错。
 - 被依赖的成员必须是 `type = "static"`（`executable` / `shared` 不能被依赖）。
 - 成员依赖**无版本**——开发中即改即用；要版本化、可分发复用，请用包（`[depends] lib` + `ezmk pkg install`）。
-- 完整语义见 [`docs/zh/cli.md`](../../../docs/zh/cli.md) 的 `workspace` 节；配置见 [`docs/zh/config_file.md`](../../../docs/zh/config_file.md) 的 `[depends] workspace`。
+- 完整语义见 [`docs/zh/cli.md`](../../../docs/zh/cli.md) 的 `workspace` 节；配置见 [`docs/zh/project_config.md`](../../../docs/zh/project_config.md) 的 `[depends] workspace`。

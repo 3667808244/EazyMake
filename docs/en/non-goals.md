@@ -113,6 +113,6 @@ When a requirement hits one of these, the recommended move is to grow into CMake
 
 - Design philosophy — [README](../../README.md)
 - What counts as "complex" (user-facing) — [complex-builds.md](complex-builds.md)
-- Configuration reference — [config_file.md](config_file.md)
+- Configuration reference — [project_config.md](project_config.md)
 - `utils` multi-tool packages — [utils.md](utils.md)
-- Lua hooks — [config_file.md](config_file.md)
+- Lua hooks — [project_config.md](project_config.md)

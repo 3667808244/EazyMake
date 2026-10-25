@@ -157,7 +157,7 @@ post_build = "hooks/post.lua"    # After successful link
 on_failure = "hooks/fail.lua"    # On build error
 ```
 
-> **Note:** Build hooks run in a sandboxed Lua environment. See `docs/en/config_file.md` for details.
+> **Note:** Build hooks run in a sandboxed Lua environment. See `docs/en/project_config.md` for details.
 
 ---
 
@@ -550,5 +550,5 @@ int main() {
 
 - **[pkg.md](pkg.md)** — Package management (install, update, remove)
 - **[repo.md](repo.md)** — Repository management and `index.toml` format
-- **[config_file.md](config_file.md)** — Full `ezmk.toml` specification
+- **[project_config.md](project_config.md)** — Full `ezmk.toml` specification
 - **[`safety.md`](safety.md)** — Security model (SHA-256, sandbox)

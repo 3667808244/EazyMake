@@ -138,4 +138,4 @@ $ ezmk workspace build --stop-on-error -j 4
 - Member dependencies must be **one-way acyclic** — cycles (including self-loops) are rejected when the config loads.
 - The depended-on member must be `type = "static"` (`executable` / `shared` cannot be depended on).
 - Member dependencies have **no versions** — develop-and-use; for versioned, distributable reuse, use packages (`[depends] lib` + `ezmk pkg install`).
-- Full semantics: the [`docs/en/cli.md`](../../../docs/en/cli.md) `workspace` section; config: `[depends] workspace` in [`docs/en/config_file.md`](../../../docs/en/config_file.md).
+- Full semantics: the [`docs/en/cli.md`](../../../docs/en/cli.md) `workspace` section; config: `[depends] workspace` in [`docs/en/project_config.md`](../../../docs/en/project_config.md).

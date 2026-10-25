@@ -87,7 +87,7 @@ pre_build  = "scripts/gen_headers.lua"   # runs before compiling
 post_build = "scripts/strip_symbols.lua" # runs after linking
 ```
 
-See `docs/en/config_file.md` (§ `[hooks]`) and `tutorial/en/dev/01-watch-hooks.md`
+See `docs/en/project_config.md` (§ `[hooks]`) and `tutorial/en/dev/01-watch-hooks.md`
 for hook examples. `execute_process`-style logic maps to
 `ezmk.run()` / `ezmk.run_capture()` / `ezmk.file_write()` in the Lua API; `pkg_check_modules`
 maps to `ezmk pkg install <name>` (or the commented `[depends]` entries above).

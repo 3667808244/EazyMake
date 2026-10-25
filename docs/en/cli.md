@@ -3,7 +3,7 @@
 Authoritative reference for the `ezmk` command line and environment variables.
 This document is the single source of truth; the README command tables are a
 quick-start subset. For behavior details see the per-topic docs
-(`pkg.md`, `repo.md`, `utils.md`, `config_file.md`, `cache.md`, `safety.md`).
+(`pkg.md`, `repo.md`, `utils.md`, `project_config.md`, `cache.md`, `safety.md`).
 
 ## Synopsis
 
@@ -149,7 +149,7 @@ trio under `.vscode/` from `ezmk.toml` — `launch.json`, `tasks.json` and
 
 Existing files are refused unless `--overwrite` is given. The cmake-only flags
 (`-o` / `--resolve` / `--glob` / `--no-glob`) are rejected for this target.
-See [config_file.md](config_file.md) for the config fields these files mirror.
+See [project_config.md](project_config.md) for the config fields these files mirror.
 
 **Companion runtime: `ezmk-lua` (1.2.0-dev.8+).** `ezmk project export cmake`
 maps `[hooks]` `pre_build` / `post_build` to `add_custom_command` calls that
@@ -166,7 +166,7 @@ from the CLI flags. The generated CMake locates it via
 `find_program(EZMK_LUA ezmk-lua)` and falls back to a `message(WARNING)` when it
 is not installed (hook post-processing is skipped, never fatal). `on_failure`
 has no CMake equivalent and is not exported. See the `hooks` section in
-[config_file.md](config_file.md) for the full mapping.
+[project_config.md](project_config.md) for the full mapping.
 
 **`build-opts`** (shared by `build` / `run` / `watch`):
 
@@ -322,7 +322,7 @@ Each member keeps its own `ezmk.toml`; declaring a sibling dependency is one lin
 workspace = ["strutil"]           # sibling member (basename or full relative path)
 ```
 
-Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at config time) + the depended-on member must be `type = "static"` (its `build/lib<name>.a` is reused); no versions (develop-and-use; version/snapshot semantics belong to packages). See the `[depends]` section of [`config_file.md`](config_file.md).
+Dependency constraints: **one-way acyclic** (cycles / self-loops rejected at config time) + the depended-on member must be `type = "static"` (its `build/lib<name>.a` is reused); no versions (develop-and-use; version/snapshot semantics belong to packages). See the `[depends]` section of [`project_config.md`](project_config.md).
 
 **`-w` / `--workspace` redirect (on `build` / `test` / `watch` / `clean`):** `ezmk build -w` ≡ `ezmk workspace build`, `ezmk watch -w` ≡ `ezmk workspace watch` (the workspace root is located upward from any subdirectory). It is **not** "build both the project and the workspace"; without `-w`, a member-internal `ezmk build` keeps single-project semantics (builds only the current member, injecting **already-existing** sibling artifacts).
 
@@ -575,9 +575,9 @@ These may appear on any command and are consumed before per-command parsing.
 
 | Mode | Aliases | Behavior |
 |---|---|---|
-| `always` | `enable` | Force color (also enables VT100 on legacy Windows terminals) |
+| `always` | `enable` / `on` / `16colors` / `256colors` / `truecolor` | Force color (also enables VT100 on legacy Windows terminals) |
 | `auto` | `default` | Color only on an interactive terminal (**default**) |
-| `never` | `disable` | Disable color |
+| `never` | `disable` / `off` | Disable color |
 
 Values are case-insensitive. Both `--color=always` and `--color always` are accepted.
 An explicit `always` / `never` overrides `NO_COLOR`; only `auto` honors it (matching
@@ -587,6 +587,14 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 > stronger user intent than the ambient environment variable, so it wins (matching
 > git/ls). `auto` is where the environment variable takes effect.
 
+### `--config <file>` / `--no-config` (1.5.0+)
+
+`--config <file>` replaces the **user-level** `config.toml` for this invocation (the global file still applies); a missing file is a fatal error. `--no-config` skips both levels and uses the built-in defaults. They are mutually exclusive.
+
+### `--lang <tag>` (1.5.0+)
+
+Overrides the UI language for this invocation. It takes precedence over `EZMK_LANG` and `[settings].natural_language`; unknown tags fall back to the base language and then English.
+
 ---
 
 ## Environment variables
@@ -594,6 +602,9 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 | Variable | Scope | Purpose |
 |---|---|---|
 | `EZMK_LANG` | runtime | UI language (`en` / `zh` / variant tags like `zh-TW`, 1.3.0+), overrides system detection (`src/i18n.cpp`) |
+| `EZMK_GLOBAL_CONFIG_DIR` | runtime | Directory containing the global `config.toml` (default `/etc/ezmk` / `C:\.ezmk\config`, 1.5.0+) |
+| `EZMK_USER_CONFIG_DIR` | runtime | Directory containing the user-level `config.toml` (default `$XDG_CONFIG_HOME/ezmk` / `%USERPROFILE%\.ezmk\config`, 1.5.0+) |
+| `XDG_CONFIG_HOME` | runtime | Base directory for the default Unix user config path (1.5.0+) |
 | `NO_COLOR` | runtime | Disable colored output (honored only by `--color=auto`) (`src/util.cpp`) |
 | `CXX` / `CC` | runtime + build | Override compiler detection (0.1.8+) |
 | `EZMK_TOOLCHAIN` | runtime + build | Force the toolchain: `gcc` / `clang` / `msvc` (1.4.7+); unset = auto (GCC/Clang first, MSVC fallback) (`src/toolchain.cpp`) |
@@ -614,7 +625,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 
 ## Related documents
 
-- [`config_file.md`](config_file.md) — full `ezmk.toml` spec
+- [`project_config.md`](project_config.md) — full `ezmk.toml` spec
 - [`pkg.md`](pkg.md) — package format and management
 - [`repo.md`](repo.md) — repository system
 - [`utils.md`](utils.md) — Lua plugin API

@@ -141,7 +141,9 @@ lib = ["fmt", "zlib"]           # hard dependencies
 want = ["sqlite3"]              # optional dependencies
 ```
 
-Full reference: [`docs/en/config_file.md`](docs/en/config_file.md)
+Full reference: [`docs/en/project_config.md`](docs/en/project_config.md)
+
+Besides the project file, user-level and global `config.toml` are documented in [User config](docs/en/user_config.md) and [Global config](docs/en/global_config.md).
 
 ## Commands at a glance
 
@@ -194,8 +196,8 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 
 | Feature | One-liner | Links |
 |---------|-----------|-------|
-| Semantic version constraints | `[depends]` entries like `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` pin dependency versions precisely | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [Pkg 02](tutorial/en/packages/02-version-lockfile.md) |
-| `ezmk.lock.json` deterministic builds | Lock dependency versions and content hashes; `--locked` gives reproducible CI builds | [`docs/en/config_file.md`](docs/en/config_file.md) · Tutorial [Pkg 02](tutorial/en/packages/02-version-lockfile.md) |
+| Semantic version constraints | `[depends]` entries like `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` pin dependency versions precisely | [`docs/en/project_config.md`](docs/en/project_config.md) · Tutorial [Pkg 02](tutorial/en/packages/02-version-lockfile.md) |
+| `ezmk.lock.json` deterministic builds | Lock dependency versions and content hashes; `--locked` gives reproducible CI builds | [`docs/en/project_config.md`](docs/en/project_config.md) · Tutorial [Pkg 02](tutorial/en/packages/02-version-lockfile.md) |
 | Multi-platform / multi-toolchain precompiled packages | One package ships `win-x64-msvc143` / `linux-x64-gcc13-abi11` artifacts, auto-selected for the current toolchain | [`docs/en/package_authoring.md`](docs/en/package_authoring.md) · Tutorial [Interop 02](tutorial/en/interop/02-precompiled-packages.md) |
 | Third-party / private repos | `ezmk repo add <url>` wires in git-repo third-party sources | [`docs/en/repo.md`](docs/en/repo.md) · Tutorial [Pkg 03](tutorial/en/packages/03-third-party-repos.md) |
 | CMake interop | `project export cmake` to export / `project import --from cmake` to import (experimental) | [`docs/en/cli.md`](docs/en/cli.md) · Tutorial [Interop 01](tutorial/en/interop/01-import-cmake.md) |
@@ -208,7 +210,9 @@ Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 |----------|-------|
 | [Tutorial](tutorial/en/) | Hands-on, zero-to-productive guide |
 | [CLI Reference](docs/en/cli.md) | Full command & environment variable reference |
-| [Config File](docs/en/config_file.md) | Complete `ezmk.toml` specification |
+| [Project Config](docs/en/project_config.md) | Complete `ezmk.toml` specification |
+| [User Config](docs/en/user_config.md) | User-level `config.toml` |
+| [Global Config](docs/en/global_config.md) | Global-level `config.toml` |
 | [Package Management](docs/en/pkg.md) | Package format and lifecycle |
 | [Repository System](docs/en/repo.md) | Git-based repo system |
 | [Lua Plugins](docs/en/utils.md) | Plugin tool system and API reference |

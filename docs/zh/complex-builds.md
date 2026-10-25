@@ -102,5 +102,5 @@ EazyMake 面向**单产物、声明式、中小型**的项目。只要越过这�
 - 设计理念 — [README](../../README_ZH.md)
 - 每道边界为何存在 — [non-goals.md](non-goals.md)
 - EazyMake 与 CMake 之间迁移 — [migrate-from-cmake.md](migrate-from-cmake.md)
-- 配置参考 — [config_file.md](config_file.md)
+- 配置参考 — [project_config.md](project_config.md)
 - `utils` 多工具包 — [utils.md](utils.md)

@@ -1,5 +1,7 @@
 # 配置文件`ezmk.toml`
 
+> 本文档只描述**项目级** `ezmk.toml`。用户级 `config.toml` 见 [user_config.md](user_config.md)，全局级见 [global_config.md](global_config.md)。
+
 ---
 
 ## `project` 节
@@ -12,6 +14,8 @@
 | `language` | string | 否 | `"C++17"` | 语言标准，如 `"C++17"`、`"C11"`、`"GNUCPP17"`。大小写不敏感，`C++`/`CXX`/`CPP` 统一。**1.3.1+** 区间语法：`">=C++11"`（最低要求）/ `"C++11..C++17"`（min..max） |
 | `stdlib` | string | 否 | `"libstdc++"` | **1.1.0-dev.4+** 标准库：`"libstdc++"`（默认）或 `"libc++"`。别名：`"glibcxx"` / `"gnu"` → `libstdc++`；`"llvm"` → `libc++`。大小写不敏感 |
 | `precompiled_strict` | bool | 否 | `false` | **1.2.0-dev.10+** 预编译包严格模式：L2/L1 工具链降级（可能 ABI 不兼容）改为 fail-fast 报错。仅对包生效（`precompiled = true` 时），详见 [包制作指南](package_authoring.md#33-预编译包precompiled--true097) |
+| `build_dir` | string | 否 | `""`（回退全局） | **1.5.0+** 项目构建目录；空 = 使用 `[settings].build_dir`（默认 `build`） |
+| `output_name` | string | 否 | `""`（项目名） | **1.5.0+** 产物 basename；影响 executable / static / shared、install、pack。必须是安全 basename（不含路径分隔符） |
 
 > **为什么 `type` 用字符串而非枚举？** 为了让旧配置平滑升级——以后新增项目类型（如 `"header-only"`）只需引入一个新字符串值，已有的 `ezmk.toml` 无需改动。字符串在声明式配置里读起来也更自然。
 
@@ -92,6 +96,7 @@
 | `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
 | `deterministic` | bool | 否 | `false` | **1.1.0+** 确定性构建：注入 `-ffile-prefix-map` / `-frandom-seed`（GCC/Clang）或 `/Brepro`（MSVC），并让 `ezmk.lock.json` 缺失/哈希不匹配成为**致命错误** |
 | `source_date_epoch` | 整数 | 否 | `0` | **1.1.0+** 确定性构建时间戳（`0` = 自动解析；负值报错） |
+| `jobs` | int | 否 | `-1`（回退全局） | **1.5.0+** 项目并行度；`0` = 自动；上限 1024；未设置时使用 `[settings].default_jobs` |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
 
@@ -438,6 +443,8 @@ sharedir = "share"
 | `default_profile` | string | 否 | `""` | **1.2.0-dev.12+** 未传 `--profile` 时测试默认应用的 profile（复用 `[compile.profile.<name>]` / `[link.profile.<name>]`，与 `[compile].default_profile` 对称） |
 | `include_dirs` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-I` 目录（相对项目根解析、缺失跳过），不污染主构建 |
 | `link_targets` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-l` 链接目标，不污染主构建 |
+| `timeout` | int | 否 | `-1`（回退全局） | **1.5.0+** 测试超时秒数；`0` = 不超时；未设置时使用 `[settings].test_timeout` |
+| `report_dir` | string | 否 | `""`（回退全局） | **1.5.0+** 默认测试报告目录（相对项目根）；`--report` 显式路径仍优先 |
 | `flags` | string[] | 否 | `[]` | ⚠️ **已弃用（1.2.0-dev.12+，2.0.0 移除）**——仍生效但输出警告；请改用 `default_profile` + `[compile.profile.<name>]`，或 `include_dirs` / `link_targets` |
 
 示例：
@@ -474,6 +481,22 @@ tools = ["cc", "compile-commands"]
 
 ---
 
+## `watch` 节（1.5.0+）
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `debounce_ms` | int | 否 | `0`（回退全局） | 去抖毫秒；`0` 表示默认 300；显式值 50..5000 |
+| `ignore` | string[] | 否 | `[]` | 额外忽略前缀（相对项目根）；内置 build/.ezmk/.o/.d/.tmp 仍生效 |
+
+## `pack` 节（1.5.0+）
+
+| 字段 | 类型 | 必须 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `format` | string | 否 | `""`（回退全局） | `tar.gz` / `zip` / `tgz`（别名） |
+| `output_dir` | string | 否 | `""`（回退全局） | 输出目录；相对进程 CWD |
+| `name` | string | 否 | `""`（`<name>-<version>`） | 归档 basename；必须是安全 basename |
+| `exclude` | string[] | 否 | `[]` | 额外排除的目录名 / 扩展名；内置排除仍生效 |
+
 ## `pkg` 节（1.4.0-dev.2+）
 
 包管理配置。可选——所有字段默认保持「信息性（不失败）」行为。
@@ -481,6 +504,7 @@ tools = ["cc", "compile-commands"]
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `strict_std_check` | bool | 否 | `false` | **1.4.0-dev.2+** 把安装期标准兼容校验（1.3.1）从警告升级为**致命错误**：当包的最低标准超过本项目的 `[project].language` 时直接失败 |
+| `auto_install` | bool | 否 | `true`（回退全局） | **1.5.0+** 缺依赖时是否自动安装；`false` 直接报错并列出缺失项 |
 
 > **何时开启？** 设置 `strict_std_check = true` 后，安装最低标准高于本项目编译标准的包会**失败**
 > （而不是警告后继续）。用于 CI 或严格要求的环境，让 ABI/源码不匹配直接阻断安装。

@@ -64,18 +64,21 @@ BASELINE = {
     "top_aliases": 7,       # build run clean watch install test pack
     "commands": 32,         # rows in cli::print_help()
     "env_vars": 14,
-    "config_keys": 55,
-    "workspace_keys": 5,    # name members options default_jobs stop_on_error
+    "config_keys": 70,
+    "workspace_keys": 6,    # name members options default_jobs stop_on_error scan_skip
     "lua_options": 4,       # --project-root --profile --output --help
 }
 
 # Long options that legitimately appear in the man pages without being an
 # entry of an OptionSpec table.
 EXTRA_LONG_OK = {
-    "color",    # global option, consumed before per-command parsing
-    "help",     # top-level; also an example-command option
-    "version",  # top-level
-    "flag",     # placeholder used by the OPTION SYNTAX section
+    "color",     # global option, consumed before per-command parsing
+    "config",    # global option, consumed before per-command parsing
+    "no-config", # global option, consumed before per-command parsing
+    "lang",      # global option, consumed before per-command parsing
+    "help",      # top-level; also an example-command option
+    "version",   # top-level
+    "flag",      # placeholder used by the OPTION SYNTAX section
 }
 # Short options documented although no OptionSpec declares them.
 EXTRA_SHORT_OK = {
@@ -99,6 +102,13 @@ ENV_INTERNAL = {
     "LC_ALL": "system locale detection",
     "EZMK_TEST_BIN": "integration-test harness only",
 }
+# Variables read through a helper/constant rather than a literal getenv("...")
+# in src/*.cpp; still documented in ezmk(1).
+ENV_INDIRECT = {
+    "EZMK_GLOBAL_CONFIG_DIR": "read via env_value() in src/config.cpp",
+    "EZMK_USER_CONFIG_DIR": "read via env_value() in src/config.cpp",
+    "XDG_CONFIG_HOME": "read via env_value() in src/config.cpp",
+}
 ENV_DOCUMENTED = {
     "EZMK_LANG",
     "NO_COLOR",
@@ -108,6 +118,9 @@ ENV_DOCUMENTED = {
     "SOURCE_DATE_EPOCH",
     "EDITOR",
     "VISUAL",
+    "EZMK_GLOBAL_CONFIG_DIR",
+    "EZMK_USER_CONFIG_DIR",
+    "XDG_CONFIG_HOME",
 }
 
 # Config keys that may appear as a bare ".B key" tag without being read by
@@ -378,7 +391,8 @@ def main():
         documented = set(t for t in roff_tags(env_block) if re.fullmatch(r"[A-Z][A-Z0-9_]*", t))
         for name in sorted(ENV_DOCUMENTED - documented):
             report.fail("environment", f"{name} is read by the code but not documented in the ENVIRONMENT block")
-        for name in sorted(documented - env_vars - set(ENV_INTERNAL)):
+        for name in sorted(documented - env_vars - set(ENV_INTERNAL) -
+                           set(ENV_INDIRECT)):
             report.fail("environment", f"{name} is documented in the ENVIRONMENT block but never read by src/")
         for name in sorted(env_vars - documented - set(ENV_INTERNAL)):
             if name not in ENV_DOCUMENTED:

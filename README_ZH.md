@@ -140,7 +140,9 @@ lib = ["fmt", "zlib"]           # 硬性依赖
 want = ["sqlite3"]              # 可选依赖
 ```
 
-完整参考：[`docs/zh/config_file.md`](docs/zh/config_file.md)
+完整参考：[`docs/zh/project_config.md`](docs/zh/project_config.md)
+
+项目配置之外，用户级 / 全局级 `config.toml` 见 [用户级配置](docs/zh/user_config.md) 与 [全局级配置](docs/zh/global_config.md)。
 
 ## 命令速览
 
@@ -193,8 +195,8 @@ ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-worksp
 
 | 特性                        | 一句话                                                                                                                                                 | 链接                                                                                                                              |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| 语义化版本约束              | `[depends]` 中用 `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本                                                                              | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md)                    |
-| `ezmk.lock.json` 确定性构建 | 锁定依赖版本与内容哈希，`--locked` 下 CI 可复现构建                                                                                                    | [`docs/zh/config_file.md`](docs/zh/config_file.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md)                    |
+| 语义化版本约束              | `[depends]` 中用 `fmt@1.2.3` / `^1.0` / `~1.2` / `>=1.0` 精确控制依赖版本                                                                              | [`docs/zh/project_config.md`](docs/zh/project_config.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md)                    |
+| `ezmk.lock.json` 确定性构建 | 锁定依赖版本与内容哈希，`--locked` 下 CI 可复现构建                                                                                                    | [`docs/zh/project_config.md`](docs/zh/project_config.md) · 教程 [包 02](tutorial/zh/packages/02-version-lockfile.md)                    |
 | 多平台多工具链预编译共包    | 同一包携带 `win-x64-msvc143` / `linux-x64-gcc13-abi11` 等多份产物，按当前工具链自动选择                                                                | [`docs/zh/package_authoring.md`](docs/zh/package_authoring.md) · 教程 [互操作 02](tutorial/zh/interop/02-precompiled-packages.md) |
 | 第三方 / 私有仓库           | `ezmk repo add <url>` 接入 git 仓库形式的第三方源                                                                                                      | [`docs/zh/repo.md`](docs/zh/repo.md) · 教程 [包 03](tutorial/zh/packages/03-third-party-repos.md)                                 |
 | CMake 互操作                | `project export cmake` 导出 / `project import --from cmake` 导入（实验性）                                                                             | [`docs/zh/cli.md`](docs/zh/cli.md) · 教程 [互操作 01](tutorial/zh/interop/01-import-cmake.md)                                     |
@@ -207,7 +209,9 @@ ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-worksp
 | -------------------------------------- | -------------------------- |
 | [教程](tutorial/zh/)                   | 手把手上手教程             |
 | [CLI 参考](docs/zh/cli.md)             | 命令行与环境变量完整参考   |
-| [配置文件](docs/zh/config_file.md)     | `ezmk.toml` 完整格式说明   |
+| [项目配置](docs/zh/project_config.md)     | `ezmk.toml` 完整格式说明   |
+| [用户级配置](docs/zh/user_config.md)   | 用户级 `config.toml`      |
+| [全局级配置](docs/zh/global_config.md) | 全局级 `config.toml`      |
 | [包管理](docs/zh/pkg.md)               | 包格式与生命周期           |
 | [仓库系统](docs/zh/repo.md)            | 基于 git 的仓库系统        |
 | [Lua 插件](docs/zh/utils.md)           | 插件系统与 API 参考        |
