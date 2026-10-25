@@ -417,6 +417,13 @@ int main(int argc, char** argv) {
                 if (std::filesystem::exists(dir)) watch_dirs.push_back(dir.string());
             }
 
+            // 1.5.0-dev.5: [watch].debounce_ms > [settings].watch_debounce_ms.
+            int debounce = cfg.watch.debounce_ms > 0
+                               ? cfg.watch.debounce_ms
+                               : ezmk::config::runtime_config()
+                                     .settings.watch_debounce_ms;
+            if (debounce < 50) debounce = 50;
+            if (debounce > 5000) debounce = 5000;
             // Create file watcher
             auto ezmk_toml_abs = std::filesystem::absolute(proj_root / "ezmk.toml").string();
             ezmk::util::FileWatcher watcher(
@@ -457,7 +464,7 @@ int main(int argc, char** argv) {
                         ezmk::util::info(ezmk::i18n::I18nKey::watch_watching);
                     }
                 },
-                300  // 300ms debounce
+                debounce
             );
 
             // Add directories to watcher
@@ -481,6 +488,18 @@ int main(int argc, char** argv) {
             watcher.add_ignore_suffix(".o");
             watcher.add_ignore_suffix(".d");
             watcher.add_ignore_suffix(".tmp");
+            // 1.5.0-dev.5: extra [watch].ignore / [settings].watch_ignore prefixes.
+            auto add_watch_ignores = [&](const std::vector<std::string>& pats) {
+                for (const auto& pat : pats) {
+                    if (pat.empty()) continue;
+                    fs::path p(pat);
+                    if (p.is_relative()) p = proj_root / p;
+                    watcher.add_ignore_prefix(p.string());
+                }
+            };
+            add_watch_ignores(cfg.watch.ignore);
+            add_watch_ignores(
+                ezmk::config::runtime_config().settings.watch_ignore);
 
             // Run watcher in background thread, main thread waits for SIGINT
             std::atomic<bool> watcher_done{false};

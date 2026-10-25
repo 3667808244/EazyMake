@@ -27,6 +27,8 @@ namespace fs = std::filesystem;
 struct Options {
     int default_jobs = 0;        // 0 = auto (hardware_concurrency)
     bool stop_on_error = false;
+    // 1.5.0-dev.5: extra directory names skipped by the scan command.
+    std::vector<std::string> scan_skip;
 };
 
 // One workspace member — a single project with its own ezmk.toml.
@@ -118,7 +120,8 @@ struct ScanResult {
 //   * directories whose canonical path escapes the root (symlink escape) —
 //     skipped, recorded in `skipped`
 // Member directories are still descended into (nested projects are allowed).
-ScanResult scan_projects(const fs::path& root);
+ScanResult scan_projects(const fs::path& root,
+                          const std::vector<std::string>& skip_dirs = {});
 
 // Merge an existing member list with newly discovered ones. Normalizes each
 // path for comparison ('\' → '/', trailing '/' stripped, dedupe); keeps the

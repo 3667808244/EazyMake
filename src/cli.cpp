@@ -463,10 +463,11 @@ namespace ezmk::cli
             reject_positionals(p, "ezmk project pack");
             if (p.has("verbose"))     opts.verbose = true;
             if (p.has("precompiled")) opts.precompiled = true;  // 1.2.5
-            if (auto v = p.value("output"))
+            opts.output_dir = ".";
+            if (auto v = p.value("output")) {
                 opts.output_dir = *v;
-            else
-                opts.output_dir = ".";
+                opts.output_explicit = true;
+            }
             if (auto v = p.value("format")) {
                 // 1.3.5: tar.gz / zip (case-insensitive); anything else → fatal.
                 // 1.4.0-dev.5: `tgz` is an alias for `tar.gz` (normalized here;
@@ -479,6 +480,7 @@ namespace ezmk::cli
                                                 {{"val", *v}}));
                 }
                 opts.format = std::move(fmt);
+                opts.format_explicit = true;
             }
             args.project_pack_opts = opts;
             return args;
@@ -684,7 +686,13 @@ namespace ezmk::cli
             opts.pkg_file = require_positional(
                 p, "ezmk pkg install",
                 ezmk::i18n::get(ezmk::i18n::I18nKey::arg_package_arg));
-            opts.scope = scopes.empty() ? Scope::Project : scopes[0];
+            // 1.5.0-dev.5: no -p/-u/-g → [settings].default_pkg_scope.
+            Scope default_scope = Scope::Project;
+            const std::string& configured =
+                ezmk::config::runtime_config().settings.default_pkg_scope;
+            if (configured == "user") default_scope = Scope::User;
+            else if (configured == "global") default_scope = Scope::Global;
+            opts.scope = scopes.empty() ? default_scope : scopes[0];
             if (auto s = p.value("sha256")) {
                 // 1.2.0-dev.11: validate the hash format up front — a typo'd
                 // value used to fail only after a full download+install.

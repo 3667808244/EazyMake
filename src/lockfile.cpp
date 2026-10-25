@@ -391,7 +391,14 @@ std::vector<std::string> verify(const fs::path& proj_root,
         auto build_dir = config::effective_build_dir_for(pkg_path);
         // 1.2.0-dev.11: deterministic pick (shared with pkg.cpp record side) —
         // the previous "first directory entry" was non-deterministic.
-        lib_file = util::find_package_archive(build_dir, pkg.name);
+        std::string archive_name = pkg.name;
+        try {
+            archive_name = config::project_output_name(
+                config::parse_config(pkg_path / "ezmk.toml"));
+        } catch (...) {
+            // Fall back to the package name when the config is unreadable.
+        }
+        lib_file = util::find_package_archive(build_dir, archive_name);
         if (lib_file.empty()) {
             // 1.4.11 Q4-17: mirror the record side — precompiled packages keep
             // their archive under lib/ instead of build/.

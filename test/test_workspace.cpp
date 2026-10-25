@@ -796,3 +796,26 @@ TEST_CASE("workspace deps: invalidity propagation is order-independent (1.4.2 F-
         REQUIRE(layered == 0);   // only C remains, and it is invalid
     }
 }
+
+TEST_CASE("workspace scan: scan_skip excludes directories",
+          "[workspace][1.5.0-dev.5]") {
+    auto root = fs::temp_directory_path() / "ezmk_ws_skip_test";
+    ezmk::util::remove_all(root);
+    ezmk::util::create_directories(root / "keep");
+    ezmk::util::create_directories(root / "skipme");
+    std::ofstream(root / "keep" / "ezmk.toml") << "";
+    std::ofstream(root / "skipme" / "ezmk.toml") << "";
+
+    auto result = ezmk::workspace::scan_projects(root, {"skipme"});
+    bool has_keep = false;
+    bool has_skip = false;
+    for (const auto& m : result.members) {
+        if (m == "keep") has_keep = true;
+        if (m == "skipme") has_skip = true;
+    }
+    REQUIRE(has_keep);
+    REQUIRE_FALSE(has_skip);
+
+    ezmk::util::remove_all(root);
+}
+

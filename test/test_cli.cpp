@@ -2,9 +2,12 @@
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
 #include "ezmk/cli.hpp"
+#include "ezmk/config.hpp"
 #include "ezmk/util.hpp"
 
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -1428,3 +1431,23 @@ TEST_CASE("cli parse: workspace scan rejects bad input", "[cli][1.4.0-dev.7]") {
     REQUIRE_THROWS_AS(TestArgs({"workspace", "scan", "-w"}).parse(),
                       ezmk::fatal_error);
 }
+
+TEST_CASE("cli: pkg install default scope from settings",
+          "[cli][1.5.0-dev.5]") {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "ezmk_cli_scope.toml";
+    { std::ofstream(tmp) << "[settings]\ndefault_pkg_scope = \"user\"\n"; }
+    std::string p = tmp.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::config::load_runtime_config(4, av);
+
+    auto a = TestArgs({"pkg", "install", "foo.zip"}).parse();
+    REQUIRE(a.cmd == Command::PkgInstall);
+    REQUIRE(a.install_opts.has_value());
+    REQUIRE(a.install_opts->scope == Scope::User);
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove(tmp);
+}
+

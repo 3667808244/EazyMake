@@ -19,6 +19,7 @@ struct ProjectSection {
     bool precompiled = false;        // 0.9.7+ precompiled package (use lib/*.a, skip compilation)
     bool precompiled_strict = false; // 1.2.0-dev.10: precompiled packages refuse ABI-unsafe toolchain fallback (fail-fast)
     std::string build_dir;            // 1.5.0-dev.2: per-project build dir (empty = global default)
+    std::string output_name;          // 1.5.0-dev.5: artifact basename (empty = name)
 };
 
 // 0.2.5+ — Fine-grained utils permission declaration ([utils.permissions]).
@@ -50,6 +51,7 @@ struct CompileSection {
     uint64_t source_date_epoch = 0;            // 1.1.0: SOURCE_DATE_EPOCH override (0 = auto)
     bool compile_commands = false;             // 1.1.1: auto-generate compile_commands.json after build
     std::string default_profile;               // 1.2.0-dev.3: profile used when no --profile given (may be empty)
+    int jobs = -1;                             // 1.5.0-dev.5: project parallelism (-1 = use global)
 };
 
 struct LinkSection {
@@ -126,6 +128,8 @@ struct TestConfig {
     std::string default_profile = "";                // 1.2.0-dev.12: profile applied when no --profile given
     std::vector<std::string> include_dirs = {};      // 1.2.0-dev.12: test-only -I dirs (resolved relative to project root)
     std::vector<std::string> link_targets = {};      // 1.2.0-dev.12: test-only -l system targets
+    int timeout = -1;                                // 1.5.0-dev.5: seconds (-1 = global; 0 = no timeout)
+    std::string report_dir;                          // 1.5.0-dev.5: default report dir (empty = global)
 };
 
 // 1.4.0-dev.2: Package-management configuration section ([pkg] in ezmk.toml).
@@ -135,6 +139,23 @@ struct PkgSection {
     // break the existing package ecosystem, so it is opt-in (CI / strict
     // requirements only).
     bool strict_std_check = false;
+    // 1.5.0-dev.5: [pkg].auto_install (false = fail on missing deps instead).
+    bool has_auto_install = false;
+    bool auto_install = true;
+};
+
+// 1.5.0-dev.5: [watch] — file-watcher defaults.
+struct WatchSection {
+    int debounce_ms = 0;                 // 0 = use [settings].watch_debounce_ms
+    std::vector<std::string> ignore;     // extra prefixes (relative to project root)
+};
+
+// 1.5.0-dev.5: [pack] — package defaults.
+struct PackSection {
+    std::string format;                  // "tar.gz" | "zip" | "tgz" (empty = global)
+    std::string output_dir;              // empty = global
+    std::string name;                    // archive basename (empty = name-version)
+    std::vector<std::string> exclude;    // extra dir names / extensions
 };
 
 struct EzConfig {
@@ -147,6 +168,8 @@ struct EzConfig {
     InstallSection install;                                      // 1.1.0 [install]
     TestConfig test;                                             // 1.1.0-dev.6 [test]
     PkgSection pkg;                                              // 1.4.0-dev.2 [pkg]
+    WatchSection watch;                                          // 1.5.0-dev.5 [watch]
+    PackSection pack;                                            // 1.5.0-dev.5 [pack]
     std::map<std::string, ProfileConfig> compile_profiles;       // 0.2.3+ [compile.profile.*]
     std::map<std::string, ProfileLinkConfig> link_profiles;      // 0.2.3+ [link.profile.*]
 };
@@ -229,6 +252,9 @@ void reset_runtime_config_for_test();
 // 1.5.0-dev.2: effective build directory — [project].build_dir > global
 // [settings].build_dir > "build"; relative values resolve against proj_root.
 fs::path effective_build_dir(const EzConfig& cfg, const fs::path& proj_root);
+
+// 1.5.0-dev.5: artifact basename — [project].output_name or [project].name.
+std::string project_output_name(const EzConfig& cfg);
 
 // Parse <proj_root>/ezmk.toml (if present) and return its effective build dir;
 // falls back to the global default when the config is absent/unparseable.

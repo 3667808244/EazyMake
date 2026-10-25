@@ -1143,11 +1143,20 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     // Build compile input (re-collect sources — already validated in prepare)
     auto cin = make_compile_input(st, opts);
 
+    // 1.5.0-dev.5: -j > [compile].jobs > [settings].default_jobs > hardware.
     int num_jobs = opts.jobs;
+    if (num_jobs <= 0) {
+        int configured = st.compile_cfg.jobs;
+        if (configured < 0) {
+            configured = config::runtime_config().settings.default_jobs;
+        }
+        num_jobs = configured;
+    }
     if (num_jobs <= 0) {
         num_jobs = static_cast<int>(std::thread::hardware_concurrency());
         if (num_jobs <= 0) num_jobs = 1;
     }
+    if (num_jobs > 1024) num_jobs = 1024;
 
     cache::CompileResult comp_result;
     std::vector<cache::SingleCompileResult> single_results;
@@ -1482,6 +1491,8 @@ fs::path link_phase(const BuildState& st,
                     const std::vector<fs::path>& objects,
                     const cli::BuildOptions& opts,
                     const config::EzConfig& cfg) {
+    // 1.5.0-dev.5: [project].output_name (empty = project name).
+    const std::string out_name = config::project_output_name(cfg);
     // Merge package link options
     config::LinkSection merged_link = st.link_cfg;
     for (auto& f : st.pkg_link_flags) merged_link.flags.push_back(f);
@@ -1510,16 +1521,16 @@ fs::path link_phase(const BuildState& st,
     if (cfg.project.type == "static") {
         if (st.is_msvc) {
             return try_link([&]() -> fs::path {
-                fs::path lib = st.build_dir / (cfg.project.name + ".lib");
-                fs::path lib_tmp = st.build_dir / (cfg.project.name + ".lib.tmp");
+                fs::path lib = st.build_dir / (out_name + ".lib");
+                fs::path lib_tmp = st.build_dir / (out_name + ".lib.tmp");
                 return execute_link(make_msvc_lib_cmd(objects, lib_tmp), lib, lib_tmp,
                                     opts.verbose, ezmk::i18n::I18nKey::archiving,
                                     lib.filename().string(), ezmk::i18n::I18nKey::archive_failed, st.tc);
             });
         } else {
             return try_link([&]() -> fs::path {
-                fs::path lib = st.build_dir / ("lib" + cfg.project.name + ".a");
-                fs::path lib_tmp = st.build_dir / ("lib" + cfg.project.name + ".a.tmp");
+                fs::path lib = st.build_dir / ("lib" + out_name + ".a");
+                fs::path lib_tmp = st.build_dir / ("lib" + out_name + ".a.tmp");
                 std::ostringstream ar_cmd;
                 // 1.4.6 Q-20: platform-correct quoting — quote_cli_arg picks
                 // MSVCRT quoting on Windows (CreateProcess) and shell quoting on
@@ -1535,16 +1546,16 @@ fs::path link_phase(const BuildState& st,
     } else if (cfg.project.type == "shared") {
         if (st.is_msvc) {
             return try_link([&]() -> fs::path {
-                fs::path dll = st.build_dir / (cfg.project.name + ".dll");
-                fs::path implib = st.build_dir / (cfg.project.name + "_implib.lib");
-                fs::path dll_tmp = st.build_dir / (cfg.project.name + ".dll.tmp");
+                fs::path dll = st.build_dir / (out_name + ".dll");
+                fs::path implib = st.build_dir / (out_name + "_implib.lib");
+                fs::path dll_tmp = st.build_dir / (out_name + ".dll.tmp");
                 return execute_link(make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp, implib, merged_link),
                                     dll, dll_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
                                     dll.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         } else {
             return try_link([&]() -> fs::path {
-                std::string lib_name = "lib" + cfg.project.name;
+                std::string lib_name = "lib" + out_name;
 #ifdef EZMK_WIN
                 lib_name += ".dll";
 #else
@@ -1565,19 +1576,19 @@ fs::path link_phase(const BuildState& st,
         // Default: executable
         if (st.is_msvc) {
             return try_link([&]() -> fs::path {
-                fs::path exe = st.build_dir / (cfg.project.name + ".exe");
-                fs::path exe_tmp = st.build_dir / (cfg.project.name + ".exe.tmp");
+                fs::path exe = st.build_dir / (out_name + ".exe");
+                fs::path exe_tmp = st.build_dir / (out_name + ".exe.tmp");
                 return execute_link(make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp, merged_link),
                                     exe, exe_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
                                     exe.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         } else {
             return try_link([&]() -> fs::path {
-                fs::path exe = st.build_dir / cfg.project.name;
+                fs::path exe = st.build_dir / out_name;
 #ifdef EZMK_WIN
                 exe += ".exe";
 #endif
-                fs::path exe_tmp = st.build_dir / (cfg.project.name + ".tmp");
+                fs::path exe_tmp = st.build_dir / (out_name + ".tmp");
 #ifdef EZMK_WIN
                 exe_tmp += ".exe";
 #endif
@@ -1678,9 +1689,8 @@ static void maybe_auto_pack(const config::EzConfig& cfg,
     active = true;
     try {
         cli::ProjectPackOptions pack_opts;
-        pack_opts.output_dir = ".";
         pack_opts.verbose = opts.verbose;
-        pack_opts.format = config::runtime_config().settings.pack_format;
+        // 1.5.0-dev.5: leave format/output empty so [pack] / global defaults apply.
         pack_project(cfg, pack_opts, proj_root);
     } catch (const std::exception& e) {
         util::warn(std::string("auto-pack failed: ") + e.what());
@@ -1799,6 +1809,7 @@ void install_project(const config::EzConfig& cfg,
     auto includedir = prefix / inst.includedir;
 
     std::string name = cfg.project.name;
+    std::string out_name = config::project_output_name(cfg);
     std::string type = cfg.project.type;
     fs::path build_dir = config::effective_build_dir(cfg, proj_root);
 
@@ -1837,7 +1848,7 @@ void install_project(const config::EzConfig& cfg,
     // MinGW shared (lib<name>.dll).
     bool is_msvc = (toolchain::detect_toolchain().family ==
                     toolchain::CompilerFamily::Msvc);
-    auto arts = project_artifact_paths(build_dir, name, type, is_msvc);
+    auto arts = project_artifact_paths(build_dir, out_name, type, is_msvc);
 
     if (type == "executable") {
         copy_file(arts.primary, bindir / arts.primary.filename());
@@ -1886,7 +1897,8 @@ void install_project(const config::EzConfig& cfg,
 // residue (build/ .ezmk/ .git) and binary artifacts so they never leak into
 // a source package.
 static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
-                                 const std::string& build_dir_name) {
+                                 const std::string& build_dir_name,
+                                 const std::vector<std::string>& extra_exclude) {
     std::error_code ec;
     fs::create_directories(to, ec);
     std::set<std::string> prune_dirs = {"build", ".ezmk", ".git"};
@@ -1894,18 +1906,26 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
     static const std::set<std::string> prune_exts = {
         ".o", ".obj", ".a", ".lib", ".so", ".dylib", ".dll", ".exe",
         ".rsp", ".log"};
+    auto excluded = [&](const std::string& filename,
+                        const std::string& ext) {
+        for (const auto& e : extra_exclude) {
+            if (e == filename || (!ext.empty() && e == ext)) return true;
+        }
+        return false;
+    };
     for (auto it = fs::directory_iterator(from, ec);
          !ec && it != fs::directory_iterator(); it.increment(ec)) {
         const fs::path& p = it->path();
         std::string name = p.filename().string();
         if (it->is_directory(ec)) {
-            if (prune_dirs.count(name)) continue;
-            copy_pack_source_dir(p, to / name, build_dir_name);
+            if (prune_dirs.count(name) || excluded(name, "")) continue;
+            copy_pack_source_dir(p, to / name, build_dir_name, extra_exclude);
         } else if (it->is_regular_file(ec)) {
             if (name.size() > 7 &&
                 name.compare(name.size() - 7, 7, ".tar.gz") == 0)
                 continue;
-            if (prune_exts.count(p.extension().string())) continue;
+            if (prune_exts.count(p.extension().string()) ||
+                excluded(name, p.extension().string())) continue;
             fs::copy_file(p, to / name, fs::copy_options::overwrite_existing, ec);
             if (ec)
                 throw std::runtime_error("failed to copy " + p.string() +
@@ -1962,6 +1982,7 @@ void pack_project(const config::EzConfig& cfg,
                   const fs::path& proj_root) {
     std::string name = cfg.project.name;
     std::string version = cfg.project.version;
+    const std::string out_name = config::project_output_name(cfg);
     const bool precompiled = opts.precompiled;  // 1.2.5
 
     // 1.2.5: the static-only restriction applies to --precompiled (a prebuilt
@@ -1973,13 +1994,32 @@ void pack_project(const config::EzConfig& cfg,
                      cfg.project.type + "\"");
     }
 
+    // 1.5.0-dev.5: resolve CLI > [pack] > [settings] defaults.
+    const auto& settings = config::runtime_config().settings;
+    std::string fmt = opts.format_explicit ? opts.format : std::string();
+    if (fmt.empty()) fmt = cfg.pack.format;
+    if (fmt.empty()) fmt = settings.pack_format;
+    if (fmt.empty()) fmt = "tar.gz";
+    if (fmt == "tgz") fmt = "tar.gz";
+    if (fmt != "tar.gz" && fmt != "zip") {
+        util::fatal("invalid pack format: " + fmt);
+    }
+    std::string output = opts.output_explicit ? opts.output_dir : std::string();
+    if (output.empty()) output = cfg.pack.output_dir;
+    if (output.empty()) output = settings.pack_output_dir;
+    if (output.empty()) output = ".";
+    fs::path output_dir = fs::absolute(output);
+
+    std::string base = cfg.pack.name;
+    if (base.empty()) base = settings.pack_name;
+    if (base.empty()) base = name + "-" + version;
+    if (base.empty() || base == "." || base == ".." ||
+        fs::path(base).filename().string() != base) {
+        util::fatal("invalid pack name (must be a basename): " + base);
+    }
     // Step 1: Create staging directory
-    fs::path output_dir = fs::absolute(opts.output_dir);
-    // 1.3.5: --format <tar.gz|zip> — archive name follows the format.
-    std::string fmt = opts.format.empty() ? "tar.gz" : opts.format;
-    std::string archive_name = name + "-" + version +
-                               (fmt == "zip" ? ".zip" : ".tar.gz");
-    std::string stage_name = name + "-" + version;
+    std::string archive_name = base + (fmt == "zip" ? ".zip" : ".tar.gz");
+    std::string stage_name = base;
     fs::path stage_dir = output_dir / stage_name;
 
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_collecting,
@@ -1999,7 +2039,7 @@ void pack_project(const config::EzConfig& cfg,
         bool is_msvc = (toolchain::detect_toolchain().family ==
                         toolchain::CompilerFamily::Msvc);
         auto archive_path =
-            project_artifact_paths(config::effective_build_dir(cfg, proj_root), name, cfg.project.type, is_msvc).primary;
+            project_artifact_paths(config::effective_build_dir(cfg, proj_root), out_name, cfg.project.type, is_msvc).primary;
 
         // 1.3.0-dev.5: always build first (incremental) so the precompiled
         // archive is packed from FRESH artifacts — the old existence-only gate
@@ -2054,6 +2094,13 @@ void pack_project(const config::EzConfig& cfg,
         }
     } else {
         // ---- 1.2.5: source package (default) — src_dirs + include/ + ezmk.toml ----
+        // 1.5.0-dev.5: extra [pack].exclude / [settings].pack_exclude entries.
+        std::vector<std::string> excludes = cfg.pack.exclude;
+        for (const auto& e : settings.pack_exclude) excludes.push_back(e);
+        for (auto& e : excludes) {
+            while (!e.empty() && (e.back() == '/' || e.back() == '\\'))
+                e.pop_back();
+        }
         for (const auto& d : cfg.compile.src_dirs) {
             fs::path src = d;
             if (src.is_relative()) src = proj_root / src;
@@ -2068,13 +2115,15 @@ void pack_project(const config::EzConfig& cfg,
             if (util::file_exists(stage_dir / dest)) continue;  // already copied
             copy_pack_source_dir(
                 src, stage_dir / dest,
-                config::effective_build_dir(cfg, proj_root).filename().string());
+                config::effective_build_dir(cfg, proj_root).filename().string(),
+                excludes);
         }
         auto include_src = proj_root / "include";
         if (util::file_exists(include_src)) {
             copy_pack_source_dir(
                 include_src, stage_dir / "include",
-                config::effective_build_dir(cfg, proj_root).filename().string());
+                config::effective_build_dir(cfg, proj_root).filename().string(),
+                excludes);
         }
 
         // ezmk.toml as-is — no precompiled marker (the consumer compiles the
@@ -2355,6 +2404,7 @@ struct TestRunContext {
     // compile/link/run subprocesses.
     std::map<std::string, std::string> msvc_env;
     config::LanguageInfo lang_info;
+    int test_timeout = 30;  // 1.5.0-dev.5: seconds (0 = no timeout)
 };
 
 // ---- Catch2 framework runner (moved verbatim from run_tests) ----
@@ -2503,6 +2553,7 @@ static void run_catch2_tests(TestRunContext& ctx) {
                     util::escape_shell_arg(ctx.report_path.string()) + "\"";
     }
     util::RunOptions test_opts;
+    test_opts.timeout_sec = ctx.test_timeout;
     util::merge_env(test_opts, ctx.msvc_env);
     auto test_res = util::run_command(test_cmd, test_opts);
 
@@ -2688,7 +2739,7 @@ static void run_ezmk_tests(TestRunContext& ctx) {
         // Run test with a 30s timeout — a hung test must not block the
         // whole suite indefinitely.
         util::RunOptions run_opts;
-        run_opts.timeout_sec = 30;
+        run_opts.timeout_sec = ctx.test_timeout;
         util::merge_env(run_opts, ctx.msvc_env);
         // 1.4.11 Q4-03: platform-correct quoting.
         auto run_res = util::run_command(util::quote_cli_arg(test_exe.string()), run_opts);
@@ -2698,7 +2749,8 @@ static void run_ezmk_tests(TestRunContext& ctx) {
 
         auto fname = ts.filename().string();
         if (run_res.timed_out) {
-            util::error("  [TIMEOUT] " + fname + "  (exceeded 30s)");
+            util::error("  [TIMEOUT] " + fname + "  (exceeded " +
+                        std::to_string(ctx.test_timeout) + "s)");
             timed_out++;
             records.push_back({fname, elapsed, EzmkTestRecord::Status::Timeout,
                                run_res.out, run_res.err});
@@ -2776,7 +2828,17 @@ void run_tests(const config::EzConfig& cfg,
         report_fmt = colon == std::string::npos ? test_report : test_report.substr(0, colon);
         std::string path_part = colon == std::string::npos ? "" : test_report.substr(colon + 1);
         if (path_part.empty()) {
-            report_path = proj_root / ".ezmk" / "test-results" / (report_fmt + ".xml");
+            // 1.5.0-dev.5: [test].report_dir > [settings].test_report_dir.
+            std::string dir_cfg = cfg.test.report_dir;
+            if (dir_cfg.empty()) {
+                dir_cfg = config::runtime_config().settings.test_report_dir;
+            }
+            fs::path report_dir = proj_root / ".ezmk" / "test-results";
+            if (!dir_cfg.empty()) {
+                fs::path d(dir_cfg);
+                report_dir = d.is_relative() ? proj_root / d : d;
+            }
+            report_path = report_dir / (report_fmt + ".xml");
         } else {
             fs::path p(path_part);
             report_path = p.is_relative() ? proj_root / p : p;
@@ -2976,6 +3038,11 @@ void run_tests(const config::EzConfig& cfg,
     // 1.4.7 M-03: cached vcvars environment (empty unless the toolchain is MSVC).
     ctx.msvc_env = toolchain::msvc_env(toolchain::detect_toolchain());
     ctx.lang_info = std::move(lang_info);
+    // 1.5.0-dev.5: [test].timeout > [settings].test_timeout (0 = no timeout).
+    ctx.test_timeout = cfg.test.timeout >= 0
+                           ? cfg.test.timeout
+                           : config::runtime_config().settings.test_timeout;
+    if (ctx.test_timeout < 0) ctx.test_timeout = 30;
 
     if (framework == "CATCH2") {
         run_catch2_tests(ctx);

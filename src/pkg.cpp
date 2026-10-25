@@ -65,6 +65,12 @@ struct AutoInstallTxn {
     }
 };
 
+// 1.5.0-dev.5: [pkg].auto_install > [settings].auto_install_deps.
+static bool auto_install_enabled(const config::EzConfig& cfg) {
+    if (cfg.pkg.has_auto_install) return cfg.pkg.auto_install;
+    return config::runtime_config().settings.auto_install_deps;
+}
+
 // 0.9.6+ — Check if a package version satisfies a version constraint.
 // Returns true if `version` satisfies `constraint`.
 bool satisfies_version_constraint(std::string_view version,
@@ -1225,6 +1231,11 @@ static InstallOutcome process_installed_pkg(const fs::path& pkg_root,
                         }
                         all_pkgs.push_back(dep_path);
                     } else {
+                        if (!auto_install_enabled(cur_cfg)) {
+                            throw std::runtime_error(
+                                ezmk::i18n::fmt(ezmk::i18n::I18nKey::missing_dep,
+                                                {{"dep", dep.name}}));
+                        }
                         // 1.1.0-dev.7: Auto-install hard dependency from registered repos
                         // 1.2.0-dev.11: guard against unbounded recursion on
                         // mutual dependencies (A⇄B).
@@ -1636,7 +1647,7 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                     // verify hash the SAME archive.
                     auto build_dir = config::effective_build_dir(pkg_cfg, entry.path());
                     auto lib_file = util::find_package_archive(
-                        build_dir, pkg_cfg.project.name);
+                        build_dir, config::project_output_name(pkg_cfg));
                     if (lib_file.empty()) {
                         // 1.4.11 Q4-17: precompiled packages ship the archive
                         // under lib/ and never create build/.

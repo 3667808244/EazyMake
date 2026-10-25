@@ -2920,6 +2920,84 @@ TEST_CASE("logging: debug level shows debug lines",
     fs::remove_all(root);
 }
 
+// ===================================================================
+// 1.5.0-dev.5: runtime defaults
+// ===================================================================
+
+TEST_CASE("config: dev.5 runtime defaults parse", "[config][1.5.0-dev.5]") {
+    auto root = make_runtime_cfg_root("dev5cfg");
+    auto toml = root / "ezmk.toml";
+    std::ofstream(toml) << R"(
+[project]
+name = "p"
+version = "0.1.0"
+output_name = "pbin"
+
+[compile]
+jobs = 3
+
+[test]
+timeout = 0
+report_dir = "reports"
+
+[watch]
+debounce_ms = 500
+ignore = ["tmp", "logs"]
+
+[pack]
+format = "zip"
+output_dir = "dist"
+name = "bundle"
+exclude = ["docs", ".md"]
+
+[pkg]
+auto_install = false
+)";
+    auto cfg = ezmk::config::parse_config(toml);
+    REQUIRE(cfg.project.output_name == "pbin");
+    REQUIRE(ezmk::config::project_output_name(cfg) == "pbin");
+    REQUIRE(cfg.compile.jobs == 3);
+    REQUIRE(cfg.test.timeout == 0);
+    REQUIRE(cfg.test.report_dir == "reports");
+    REQUIRE(cfg.watch.debounce_ms == 500);
+    REQUIRE(cfg.watch.ignore.size() == 2);
+    REQUIRE(cfg.watch.ignore[0] == "tmp");
+    REQUIRE(cfg.watch.ignore[1] == "logs");
+    REQUIRE(cfg.pack.format == "zip");
+    REQUIRE(cfg.pack.output_dir == "dist");
+    REQUIRE(cfg.pack.name == "bundle");
+    REQUIRE(cfg.pack.exclude.size() == 2);
+    REQUIRE(cfg.pack.exclude[0] == "docs");
+    REQUIRE(cfg.pack.exclude[1] == ".md");
+    REQUIRE(cfg.pkg.has_auto_install);
+    REQUIRE_FALSE(cfg.pkg.auto_install);
+
+    ezmk::config::EzConfig defaults;
+    defaults.project.name = "plain";
+    REQUIRE(ezmk::config::project_output_name(defaults) == "plain");
+
+    fs::remove_all(root);
+}
+
+TEST_CASE("config: dev.5 bounds are validated", "[config][1.5.0-dev.5]") {
+    auto root = make_runtime_cfg_root("dev5bad");
+    auto toml = root / "ezmk.toml";
+
+    auto expect_throw = [&](const std::string& body) {
+        std::ofstream(toml) << "[project]\nname = \"p\"\nversion = \"0.1.0\"\n"
+                            << body;
+        REQUIRE_THROWS_AS(ezmk::config::parse_config(toml),
+                          std::runtime_error);
+    };
+    expect_throw("[compile]\njobs = 1025\n");
+    expect_throw("[test]\ntimeout = -1\n");
+    expect_throw("[watch]\ndebounce_ms = 10\n");
+    expect_throw("[pack]\nformat = \"7z\"\n");
+
+    fs::remove_all(root);
+}
+
+
 
 
 

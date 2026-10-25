@@ -668,6 +668,10 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
         if (auto bd = (*proj)["build_dir"].value<std::string>()) {
             cfg.project.build_dir = *bd;
         }
+        // 1.5.0-dev.5: artifact basename (empty = project name).
+        if (auto on = (*proj)["output_name"].value<std::string>()) {
+            cfg.project.output_name = *on;
+        }
     }
 }
 
@@ -728,6 +732,15 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         // 1.2.0-dev.3: default_profile — default profile when no --profile given
         if (auto dp = (*comp)["default_profile"].value<std::string>()) {
             cfg.compile.default_profile = *dp;
+        }
+
+        // 1.5.0-dev.5: [compile].jobs — 0 = auto, -1 (absent) = use global.
+        if (auto jobs = (*comp)["jobs"].value<int64_t>()) {
+            if (*jobs < 0 || *jobs > 1024) {
+                throw std::runtime_error(
+                    "compile.jobs must be between 0 and 1024");
+            }
+            cfg.compile.jobs = static_cast<int>(*jobs);
         }
     }
 
@@ -986,6 +999,17 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
         cfg.test.include_dirs = extract_string_array(test->get("include_dirs"), "test.include_dirs");
         // 1.2.0-dev.12: test-only link targets (-l system libraries)
         cfg.test.link_targets = extract_string_array(test->get("link_targets"), "test.link_targets");
+        // 1.5.0-dev.5: per-test timeout (0 = no timeout) / default report dir.
+        if (auto t = (*test)["timeout"].value<int64_t>()) {
+            if (*t < 0 || *t > 86400) {
+                throw std::runtime_error(
+                    "test.timeout must be between 0 and 86400 seconds");
+            }
+            cfg.test.timeout = static_cast<int>(*t);
+        }
+        if (auto rd = (*test)["report_dir"].value<std::string>()) {
+            cfg.test.report_dir = *rd;
+        }
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
@@ -1029,6 +1053,56 @@ static void parse_pkg(const toml::table& root, EzConfig& cfg) {
     if (auto pkg = root["pkg"].as_table()) {
         read_optional_bool(pkg->get("strict_std_check"), "pkg.strict_std_check",
                            cfg.pkg.strict_std_check);
+        // 1.5.0-dev.5: [pkg].auto_install (absent = use global default).
+        if (auto ai = pkg->get("auto_install")) {
+            if (!ai->is_boolean()) {
+                throw std::runtime_error(
+                    "pkg.auto_install must be a boolean");
+            }
+            cfg.pkg.has_auto_install = true;
+            cfg.pkg.auto_install = ai->as_boolean()->get();
+        }
+    }
+}
+
+// 1.5.0-dev.5: [watch] — debounce / extra ignore prefixes.
+static void parse_watch(const toml::table& root, EzConfig& cfg) {
+    if (auto watch = root["watch"].as_table()) {
+        if (auto d = (*watch)["debounce_ms"].value<int64_t>()) {
+            if (*d < 0 || *d > 5000 || (*d > 0 && *d < 50)) {
+                throw std::runtime_error(
+                    "watch.debounce_ms must be 0 or 50..5000");
+            }
+            cfg.watch.debounce_ms = static_cast<int>(*d);
+        }
+        cfg.watch.ignore = extract_string_array(watch->get("ignore"),
+                                                 "watch.ignore");
+    }
+}
+
+// 1.5.0-dev.5: [pack] — format / output dir / name / extra excludes.
+static void parse_pack(const toml::table& root, EzConfig& cfg) {
+    if (auto pack = root["pack"].as_table()) {
+        if (auto f = (*pack)["format"].value<std::string>()) {
+            std::string fmt = *f;
+            for (auto& c : fmt) {
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            }
+            if (fmt == "tgz") fmt = "tar.gz";
+            if (fmt != "tar.gz" && fmt != "zip") {
+                throw std::runtime_error(
+                    "pack.format must be 'tar.gz', 'tgz' or 'zip'");
+            }
+            cfg.pack.format = fmt;
+        }
+        if (auto o = (*pack)["output_dir"].value<std::string>()) {
+            cfg.pack.output_dir = *o;
+        }
+        if (auto n = (*pack)["name"].value<std::string>()) {
+            cfg.pack.name = *n;
+        }
+        cfg.pack.exclude = extract_string_array(pack->get("exclude"),
+                                                 "pack.exclude");
     }
 }
 
@@ -1078,6 +1152,9 @@ EzConfig parse_config(const fs::path& toml_path) {
 
     // [pkg] (1.4.0-dev.2)
     parse_pkg(root, cfg);
+    // [watch] / [pack] (1.5.0-dev.5)
+    parse_watch(root, cfg);
+    parse_pack(root, cfg);
 
     // 1.1.0-dev.5: Resolve @link: references in path arrays
     {
@@ -1604,6 +1681,11 @@ void reset_runtime_config_for_test() {
 void load_runtime_config(int argc, const char* const* argv) {
     if (g_runtime_loaded) return;
     load_runtime_config_impl(argc, argv);
+}
+
+std::string project_output_name(const EzConfig& cfg) {
+    return cfg.project.output_name.empty() ? cfg.project.name
+                                           : cfg.project.output_name;
 }
 
 fs::path effective_build_dir(const EzConfig& cfg, const fs::path& proj_root) {

@@ -569,8 +569,21 @@ int run_scan(const cli::WorkspaceScanOptions& opts) {
     root = fs::weakly_canonical(root, rcec);  // canonical for display/compare
     if (rcec) root = fs::absolute(root);
 
-    // 3. Scan.
-    auto scan = workspace::scan_projects(root);
+    // 3. Scan. 1.5.0-dev.5: global scan_skip_dirs + existing workspace options.
+    std::vector<std::string> scan_skip =
+        config::runtime_config().settings.scan_skip_dirs;
+    if (existing) {
+        try {
+            if (auto ws = workspace::load_from(root)) {
+                scan_skip.insert(scan_skip.end(),
+                                 ws->options.scan_skip.begin(),
+                                 ws->options.scan_skip.end());
+            }
+        } catch (...) {
+            // Broken workspace file: fall back to the global skip list.
+        }
+    }
+    auto scan = workspace::scan_projects(root, scan_skip);
     for (const auto& [path, reason] : scan.skipped) {
         util::info(ezmk::i18n::fmt(I18nKey::workspace_scan_skip,
                                    {{"path", path}, {"reason", reason}}));

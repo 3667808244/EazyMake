@@ -32,7 +32,7 @@ namespace {
 // Unknown sections/keys in a workspace file are a config mistake — fail fast
 // with the file path and field name (1.3.0-dev.1, §3.2).
 const char* const kWorkspaceKeys[] = {"name", "members", "options"};
-const char* const kOptionsKeys[]   = {"default_jobs", "stop_on_error"};
+const char* const kOptionsKeys[]   = {"default_jobs", "stop_on_error", "scan_skip"};
 
 bool contains_key(const char* const* keys, size_t n, std::string_view key) {
     for (size_t i = 0; i < n; ++i) {
@@ -320,6 +320,23 @@ std::optional<Workspace> load_from(const fs::path& start_dir) {
                               {{"file", file.string()}}));
             }
             ws.options.stop_on_error = stop.as_boolean()->get();
+        }
+        // 1.5.0-dev.5: extra scan skip directory names.
+        if (auto skip = (*opts)["scan_skip"]) {
+            if (!skip.is_array()) {
+                throw std::runtime_error(
+                    "workspace.options.scan_skip must be an array in " +
+                    file.string());
+            }
+            for (auto& v : *skip.as_array()) {
+                auto s = v.value<std::string>();
+                if (!s) {
+                    throw std::runtime_error(
+                        "workspace.options.scan_skip entries must be strings in " +
+                        file.string());
+                }
+                ws.options.scan_skip.push_back(*s);
+            }
         }
     }
 
@@ -751,7 +768,8 @@ std::string replace_members_in_text(const std::string& text,
 // symlink pointing at the directory itself or at an ancestor is "within the
 // root", so the escape check alone recursed forever (1.4.2 F-34).
 void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
-              ScanResult& result, std::set<std::string>& visited) {
+              ScanResult& result, std::set<std::string>& visited,
+              const std::set<std::string>& skip_dirs) {
     std::error_code ec;
     auto it = fs::directory_iterator(
         dir, fs::directory_options::skip_permission_denied, ec);
@@ -759,6 +777,7 @@ void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
         const auto& entry = *it;
         std::string name = entry.path().filename().string();
         if (!name.empty() && name[0] == '.') continue;  // hidden — skip subtree
+        if (skip_dirs.count(name)) continue;            // 1.5.0-dev.5 configured
 
         std::error_code sec;
         if (!entry.is_directory(sec)) continue;  // follows symlinks to dirs
@@ -793,17 +812,19 @@ void scan_dir(const fs::path& root, const fs::path& rel, const fs::path& dir,
         }
         // Keep descending — nested projects are allowed (e.g. a project that
         // itself contains another project directory).
-        scan_dir(root, sub_rel, sub, result, visited);
+        scan_dir(root, sub_rel, sub, result, visited, skip_dirs);
     }
 }
 
 } // anonymous namespace
 
-ScanResult scan_projects(const fs::path& root) {
+ScanResult scan_projects(const fs::path& root,
+                          const std::vector<std::string>& skip_dirs) {
     ScanResult result;
     std::set<std::string> visited;
+    std::set<std::string> skip(skip_dirs.begin(), skip_dirs.end());
     visited.insert(canonicalize(root).generic_string());  // seed: the root itself
-    scan_dir(root, fs::path(), root, result, visited);
+    scan_dir(root, fs::path(), root, result, visited, skip);
     std::sort(result.members.begin(), result.members.end());
     return result;
 }
