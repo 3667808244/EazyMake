@@ -86,6 +86,8 @@ namespace ezmk::cli
             b.auto_update = true;
         if (p.has("compile-commands"))     // 1.1.1
             b.compile_commands = true;
+        if (p.has("no-auto-pack"))         // 1.5.0-dev.3
+            b.no_auto_pack = true;
     }
 
     // ===================================================================
@@ -242,6 +244,7 @@ namespace ezmk::cli
                 if (*t != "executable" && *t != "static" && *t != "shared" && *t != "utils")
                     util::fatal(ezmk::i18n::I18nKey::cli_unknown_project_type, {{"type", *t}});
                 args.project_type = *t;
+                args.project_type_explicit = true;
             }
             if (p.has("disable-git-init"))
                 args.disable_git_init = true;
@@ -259,6 +262,7 @@ namespace ezmk::cli
                 {'\0', "profile", true},
                 {'\0', "auto-update", false},    // 0.2.5+
                 {'\0', "compile-commands", false}, // 1.1.1
+                {'\0', "no-auto-pack", false},   // 1.5.0-dev.3
             };
             std::string cmd_name;
             if (action == "build")
@@ -294,6 +298,8 @@ namespace ezmk::cli
 
             auto p = parse_options(argc, argv, 3, spec, cmd_name);
             fill_build_opts(p, args.build_opts);
+            // 1.5.0-dev.3: auto-pack only for explicit build/run, never install.
+            args.build_opts.allow_auto_pack = (action == "build" || action == "run");
 
             if (action == "build" && p.has("workspace"))
             {
@@ -1083,9 +1089,10 @@ namespace ezmk::cli
         v.reserve(raw.size());
         for (char c : raw)
             v.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-        if (v == "always" || v == "enable")
+        if (v == "always" || v == "enable" || v == "on" ||
+            v == "16colors" || v == "256colors" || v == "truecolor")
             return util::ColorMode::Always;
-        if (v == "never" || v == "disable")
+        if (v == "never" || v == "disable" || v == "off")
             return util::ColorMode::Never;
         if (v == "auto" || v == "default")
             return util::ColorMode::Auto;
@@ -1165,6 +1172,17 @@ namespace ezmk::cli
             if (t.rfind("--config=", 0) == 0) {
                 if (t.size() == 9)
                     util::fatal("option '--config' requires a value");
+                continue;
+            }
+            if (t == "--lang") {
+                if (i + 1 >= toks.size())
+                    util::fatal("option '--lang' requires a value");
+                ++i;
+                continue;
+            }
+            if (t.rfind("--lang=", 0) == 0) {
+                if (t.size() == 7)
+                    util::fatal("option '--lang' requires a value");
                 continue;
             }
             out.push_back(t);

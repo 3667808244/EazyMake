@@ -1,4 +1,5 @@
 #include "ezmk/i18n.hpp"
+#include "ezmk/config.hpp"
 #include "ezmk/util.hpp"
 
 #include <algorithm>
@@ -415,11 +416,33 @@ namespace ezmk::i18n
                    !load_runtime_locale_file(base).empty();
         };
 
+        // 1.5.0-dev.3: --lang > EZMK_LANG > [settings].natural_language.
+        const auto& rc = config::runtime_config();
+        if (!rc.language_override.empty())
+        {
+            std::string tag = normalize_locale_tag(rc.language_override);
+            if (has_data(tag))
+            {
+                return tag;
+            }
+        }
+
         // 1. Check EZMK_LANG environment variable (normalized tag).
         const char *env_lang = std::getenv("EZMK_LANG");
         if (env_lang && env_lang[0] != '\0')
         {
             std::string tag = normalize_locale_tag(env_lang);
+            if (has_data(tag))
+            {
+                return tag;
+            }
+        }
+
+        // 1.5.0-dev.3: [settings].natural_language (after the env override).
+        if (!rc.settings.natural_language.empty() &&
+            rc.settings.natural_language != "auto")
+        {
+            std::string tag = normalize_locale_tag(rc.settings.natural_language);
             if (has_data(tag))
             {
                 return tag;

@@ -56,6 +56,10 @@ static bool is_valid_project_name(const std::string& n) {
 
 void create_project(const std::string& name, const std::string& project_type,
                     bool disable_git_init, bool disable_gitignore) {
+    const auto& settings = config::runtime_config().settings;
+    // 1.5.0-dev.3: empty --type → configured default project type.
+    const std::string effective_type =
+        project_type.empty() ? settings.default_project_type : project_type;
     if (!is_valid_project_name(name)) {
         util::fatal(ezmk::i18n::I18nKey::project_err_invalid_name,
                     {{"name", name}});
@@ -67,7 +71,7 @@ void create_project(const std::string& name, const std::string& project_type,
     }
 
     util::info(ezmk::i18n::I18nKey::creating_project,
-               {{"name", name}, {"type", project_type}});
+               {{"name", name}, {"type", effective_type}});
 
     // Directory structure
     fs::create_directories(root / "include");
@@ -82,7 +86,7 @@ void create_project(const std::string& name, const std::string& project_type,
     //   static/shared → include/<name>.hpp + src/<name>.cpp library skeleton
     //                   (no main.cpp — a library never links one)
     //   utils → no C++ code at all (utils/ holds Lua scripts)
-    if (project_type == "static" || project_type == "shared") {
+    if (effective_type == "static" || effective_type == "shared") {
         const std::string ns = sanitize_namespace(name);
 
         std::string hpp = "#pragma once\n"
@@ -109,7 +113,7 @@ void create_project(const std::string& name, const std::string& project_type,
 
         must_write(root / "include" / (name + ".hpp"), hpp);
         must_write(root / "src" / (name + ".cpp"), cpp);
-    } else if (project_type != "utils") {
+    } else if (effective_type != "utils") {
         // executable (default) and any other non-utils type: Hello world entry.
         std::string main_cpp = R"(#include <iostream>
 
@@ -123,31 +127,41 @@ int main(int argc, char **argv){
     // utils: no C++ code — only the utils/ directory created below.
 
     // For utils projects, create the utils/ directory for Lua scripts
-    if (project_type == "utils") {
+    if (effective_type == "utils") {
         fs::create_directories(root / "utils");
     }
 
     // ezmk.toml
-    config::write_default_config(root / "ezmk.toml", name, project_type);
+    config::write_default_config(root / "ezmk.toml", name, effective_type);
 
-    // README.md (empty)
-    must_write(root / "README.md", "");
+    // README.md (1.5.0-dev.3: [settings].gen_readme)
+    if (settings.gen_readme) {
+        must_write(root / "README.md", "");
+    }
 
-    // .gitignore (can be disabled)
-    if (!disable_gitignore) {
-        std::string gitignore = R"(# EazyMake build artifacts
-build/
-.ezmk/
-*.o
-*.obj
-*.tmp.o
-*.tmp.obj
-)";
+    // .gitignore (1.5.0-dev.3: [settings].gen_gitignore)
+    if (!disable_gitignore && settings.gen_gitignore) {
+        std::string build_name =
+            config::effective_build_dir_for(root).filename().string();
+        if (build_name.empty()) build_name = "build";
+        std::string gitignore = "# EazyMake build artifacts\n";
+        gitignore += build_name + "/\n";
+        gitignore += ".ezmk/\n*.o\n*.obj\n*.tmp.o\n*.tmp.obj\n";
         must_write(root / ".gitignore", gitignore);
     }
 
-    // git init (can be disabled, only runs if git is available)
-    if (!disable_git_init) {
+    // 1.5.0-dev.3: optional AGENTS.md scaffolding.
+    if (settings.gen_agent_md && !util::file_exists(root / "AGENTS.md")) {
+        std::string agents = "# AGENTS.md\n\n";
+        agents += "This project is managed by EazyMake.\n\n";
+        agents += "## Build\n\n- `ezmk build`\n\n";
+        agents += "## Test\n\n- `ezmk test`\n\n";
+        agents += "## Layout\n\n- `src/` — sources\n- `include/` — headers\n";
+        must_write(root / "AGENTS.md", agents);
+    }
+
+    // git init (1.5.0-dev.3: [settings].auto_init_git; only if git available)
+    if (!disable_git_init && settings.auto_init_git) {
         if (util::git_available()) {
             util::info(ezmk::i18n::I18nKey::init_git);
             std::ostringstream cmd;
@@ -157,6 +171,29 @@ build/
             auto res = util::run_command(cmd.str());
             if (res.exit_code == 0) {
                 util::info(ezmk::i18n::I18nKey::git_initialized);
+                if (settings.initial_commit_enabled) {
+                    const std::string git =
+                        util::quote_cli_arg(util::git_executable());
+                    const std::string root_q =
+                        util::quote_cli_arg(root.string());
+                    auto add = util::run_command(
+                        git + " -C " + root_q + " add -A");
+                    if (add.exit_code != 0) {
+                        util::warn("initial commit skipped (git add failed): " +
+                                   add.err);
+                    } else {
+                        const std::string msg =
+                            settings.initial_commit_message.empty()
+                                ? std::string("chore(init): initial commit")
+                                : settings.initial_commit_message;
+                        auto commit = util::run_command(
+                            git + " -C " + root_q + " commit -m " +
+                            util::quote_cli_arg(msg));
+                        if (commit.exit_code != 0) {
+                            util::warn("initial commit failed: " + commit.err);
+                        }
+                    }
+                }
             } else {
                 util::warn(ezmk::i18n::I18nKey::git_init_failed,
                            {{"code", std::to_string(res.exit_code)}});

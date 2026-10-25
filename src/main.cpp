@@ -171,13 +171,27 @@ namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
     ezmk::util::init_console();
-    ezmk::i18n::init();  // detect language, load locale data
     ezmk::lua::init();   // initialize Lua interpreter
 
     try {
         // 1.5.0-dev.1: load the two-level config.toml before CLI parsing so
         // --config / --no-config are honoured by every command.
+        // 1.5.0-dev.3: i18n initialization needs the configured/--lang value,
+        // so it runs after the config load.
         ezmk::config::load_runtime_config(argc, argv);
+        ezmk::i18n::init();
+        {
+            // 1.5.0-dev.3: apply [settings].color_mode; --color (parsed later)
+            // still wins.
+            const auto& cm =
+                ezmk::config::runtime_config().settings.color_mode;
+            if (cm == "off") {
+                ezmk::util::set_color_mode(ezmk::util::ColorMode::Never);
+            } else if (cm == "16colors" || cm == "256colors" ||
+                       cm == "truecolor") {
+                ezmk::util::set_color_mode(ezmk::util::ColorMode::Always);
+            }
+        }
         auto args = ezmk::cli::parse(argc, argv);
 
         // 0.9.8+: show shorthand expansion hint in verbose mode
@@ -205,10 +219,17 @@ int main(int argc, char** argv) {
             break;
         }
 
-        case ezmk::cli::Command::ProjectNew:
-            ezmk::project::create_project(*args.project_name, args.project_type,
-                                          args.disable_git_init, args.disable_gitignore);
+        case ezmk::cli::Command::ProjectNew: {
+            // 1.5.0-dev.3: --type wins; otherwise [settings].default_project_type.
+            const std::string type =
+                args.project_type_explicit
+                    ? args.project_type
+                    : ezmk::config::runtime_config().settings.default_project_type;
+            ezmk::project::create_project(*args.project_name, type,
+                                          args.disable_git_init,
+                                          args.disable_gitignore);
             break;
+        }
 
         case ezmk::cli::Command::Version:
             std::cout << ezmk::i18n::fmt(ezmk::i18n::I18nKey::version_output,

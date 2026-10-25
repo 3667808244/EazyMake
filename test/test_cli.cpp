@@ -905,6 +905,34 @@ TEST_CASE("cli parse: invalid --color value throws", "[cli][0.2.6][color]") {
     REQUIRE_THROWS_AS(TestArgs({"--color=bogus", "help"}).parse(), ezmk::fatal_error);
 }
 
+
+TEST_CASE("cli parse: --color accepts config aliases",
+          "[cli][1.5.0-dev.3][color]") {
+    ColorModeGuard g;
+    TestArgs({"--color=off", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Never);
+    TestArgs({"--color=on", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+    TestArgs({"--color=16colors", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+    TestArgs({"--color=256colors", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+    TestArgs({"--color=truecolor", "help"}).parse();
+    REQUIRE(ezmk::util::get_color_mode() == ezmk::util::ColorMode::Always);
+}
+
+TEST_CASE("cli parse: --no-auto-pack and --lang are consumed",
+          "[cli][1.5.0-dev.3]") {
+    auto build = TestArgs({"build", "--no-auto-pack"}).parse();
+    REQUIRE(build.cmd == Command::ProjectBuild);
+    REQUIRE(build.build_opts.no_auto_pack);
+    REQUIRE(build.build_opts.allow_auto_pack);
+    auto lang = TestArgs({"--lang", "zh", "version"}).parse();
+    REQUIRE(lang.cmd == Command::Version);
+    auto lang_eq = TestArgs({"--lang=ja", "version"}).parse();
+    REQUIRE(lang_eq.cmd == Command::Version);
+}
+
 TEST_CASE("cli parse: --color mid-subcommand is stripped, rest parses", "[cli][0.2.6][color]") {
     ColorModeGuard g;
     auto args = TestArgs({"pkg", "install", "--color=never", "foo.zip"}).parse();

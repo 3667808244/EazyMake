@@ -2685,4 +2685,77 @@ editor = "my-editor"
     fs::remove_all(root);
 }
 
+// ===================================================================
+// 1.5.0-dev.3: project-new defaults and --lang
+// ===================================================================
+
+TEST_CASE("runtime config: --lang override is recorded",
+          "[config][1.5.0-dev.3]") {
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "--lang", "zh", "version"};
+    ezmk::config::load_runtime_config(4, av);
+    REQUIRE(ezmk::config::runtime_config().language_override == "zh");
+
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av2[] = {"ezmk", "--lang=ja", "version"};
+    ezmk::config::load_runtime_config(3, av2);
+    REQUIRE(ezmk::config::runtime_config().language_override == "ja");
+    ezmk::config::reset_runtime_config_for_test();
+}
+
+TEST_CASE("runtime config: project-new defaults validate",
+          "[config][1.5.0-dev.3]") {
+    auto root = make_runtime_cfg_root("newdefaults");
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+
+    SECTION("empty version") {
+        write_runtime_cfg(root, "[settings]\ndefault_project_version = \"\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("unknown language") {
+        write_runtime_cfg(root, "[settings]\ndefault_language = \"not-a-language\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("unknown color theme") {
+        write_runtime_cfg(root, "[settings]\ncolor_theme = \"neon\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("write_default_config: [settings] project-new defaults",
+          "[config][1.5.0-dev.3]") {
+    auto root = make_runtime_cfg_root("newcfg");
+    auto cfg = root / "user.toml";
+    std::ofstream(cfg) << "[settings]\n"
+                          "default_project_version = \"1.2.3\"\n"
+                          "default_language = \"C++20\"\n"
+                          "default_compile_flags = [\"-O2\", \"-DFOO\"]\n";
+    std::string p = cfg.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::config::load_runtime_config(4, av);
+
+    auto out = root / "out.toml";
+    ezmk::config::write_default_config(out, "p", "executable");
+    auto content = ezmk::util::file_read(out);
+    REQUIRE(content.find("version = \"1.2.3\"") != std::string::npos);
+    REQUIRE(content.find("language = \"C++20\"") != std::string::npos);
+    REQUIRE(content.find("flags = [\"-O2\", \"-DFOO\"]") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+
 

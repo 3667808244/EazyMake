@@ -211,6 +211,7 @@ struct RuntimeConfig {
     fs::path global_config_file; // empty = not present
     fs::path user_config_file;   // empty = not present
     bool loaded = false;
+    std::string language_override; // 1.5.0-dev.3: --lang (highest priority)
 };
 
 // Merged runtime configuration. Before load_runtime_config() runs (e.g. in unit

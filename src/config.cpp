@@ -1141,11 +1141,29 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     content += "type = ";
     content += util::toml_quote(project_type);
     content += "\n";
-    content += "version = \"0.1.0\"\n";
-    content += "language = \"C++17\"\n";
+    // 1.5.0-dev.3: project-new defaults come from [settings].
+    const auto& settings = runtime_config().settings;
+    const std::string version =
+        settings.default_project_version.empty()
+            ? std::string("0.1.0")
+            : settings.default_project_version;
+    const std::string language =
+        settings.default_language.empty() ? std::string("C++17")
+                                          : settings.default_language;
+    content += "version = ";
+    content += util::toml_quote(version);
+    content += "\n";
+    content += "language = ";
+    content += util::toml_quote(language);
+    content += "\n";
     content += "\n";
     content += "[compile]\n";
-    content += "flags = [\"-Wall\", \"-Wextra\"]\n";
+    content += "flags = [";
+    for (size_t i = 0; i < settings.default_compile_flags.size(); ++i) {
+        if (i) content += ", ";
+        content += util::toml_quote(settings.default_compile_flags[i]);
+    }
+    content += "]\n";
     content += "default_profile = \"debug\"\n";
     content += "include_dirs = [\"include\"]\n";
     content += "\n";
@@ -1389,6 +1407,8 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     validate_enum(file, "settings.color_mode", s.color_mode,
                   {"auto", "off", "16colors", "256colors", "truecolor"});
     read_string(t, "color_theme", "settings.color_theme", file, s.color_theme);
+    // 1.5.0-dev.3: only the default theme exists for now.
+    validate_enum(file, "settings.color_theme", s.color_theme, {"default"});
     read_string(t, "log_level", "settings.log_level", file, s.log_level);
     validate_enum(file, "settings.log_level", s.log_level,
                   {"off", "error", "warn", "info", "debug"});
@@ -1408,9 +1428,17 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
                   {"executable", "static", "shared", "utils"});
     read_string(t, "default_language", "settings.default_language", file,
                 s.default_language);
+    if (!s.default_language.empty()) {
+        (void)parse_language(s.default_language);  // 1.5.0-dev.3: fail-fast
+    }
     read_string(t, "default_project_version",
                 "settings.default_project_version", file,
                 s.default_project_version);
+    if (s.default_project_version.empty()) {
+        throw std::runtime_error(
+            "config field 'settings.default_project_version' in " +
+            file.string() + " must not be empty");
+    }
     if (t.get("default_compile_flags")) {
         s.default_compile_flags = extract_string_array(
             t.get("default_compile_flags"), "settings.default_compile_flags");
@@ -1489,6 +1517,7 @@ void parse_runtime_file(const fs::path& file, BaseDirConfig& dirs,
 void load_runtime_config_impl(int argc, const char* const* argv) {
     bool no_config = false;
     std::optional<fs::path> explicit_config;
+    std::optional<std::string> explicit_language;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i] ? argv[i] : "";
         if (a == "--") break;
@@ -1509,6 +1538,21 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
                 throw std::runtime_error("option '--config' requires a value");
             }
             explicit_config = fs::path(value);
+            continue;
+        }
+        if (a == "--lang") {
+            if (i + 1 >= argc) {
+                throw std::runtime_error("option '--lang' requires a value");
+            }
+            explicit_language = std::string(argv[++i]);
+            continue;
+        }
+        if (a.rfind("--lang=", 0) == 0) {
+            std::string value = a.substr(7);
+            if (value.empty()) {
+                throw std::runtime_error("option '--lang' requires a value");
+            }
+            explicit_language = value;
         }
     }
     if (no_config && explicit_config) {
@@ -1517,6 +1561,7 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
     }
 
     RuntimeConfig rc;  // built-in defaults
+    if (explicit_language) rc.language_override = *explicit_language;
     if (no_config) {
         rc.loaded = true;
         g_runtime_config = std::move(rc);

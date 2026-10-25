@@ -306,3 +306,38 @@ TEST_CASE("create_project: existing directory throws", "[project]") {
 
     REQUIRE_THROWS_AS(create_project("exists_dir", "executable"), ezmk::fatal_error);
 }
+
+TEST_CASE("create_project: [settings] defaults and toggles",
+          "[project][1.5.0-dev.3]") {
+    CwdGuard guard;
+    auto cfg_path = guard.temp_dir / "test-config.toml";
+    std::ofstream(cfg_path)
+        << "[settings]\n"
+           "gen_readme = false\n"
+           "gen_gitignore = false\n"
+           "gen_agent_md = true\n"
+           "auto_init_git = false\n"
+           "default_project_type = \"static\"\n"
+           "default_project_version = \"2.0.0\"\n"
+           "default_language = \"C++20\"\n"
+           "default_compile_flags = [\"-O3\"]\n";
+    std::string p = cfg_path.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::config::load_runtime_config(4, av);
+
+    create_project("cfgprj", "", false, false);
+
+    auto root = guard.temp_dir / "cfgprj";
+    REQUIRE_FALSE(fs::exists(root / "README.md"));
+    REQUIRE_FALSE(fs::exists(root / ".gitignore"));
+    REQUIRE(fs::exists(root / "AGENTS.md"));
+    auto toml = file_read(root / "ezmk.toml");
+    REQUIRE(toml.find("type = \"static\"") != std::string::npos);
+    REQUIRE(toml.find("version = \"2.0.0\"") != std::string::npos);
+    REQUIRE(toml.find("language = \"C++20\"") != std::string::npos);
+    REQUIRE(toml.find("flags = [\"-O3\"]") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+}
+

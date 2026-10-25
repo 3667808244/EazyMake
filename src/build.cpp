@@ -1664,6 +1664,30 @@ WsInjection resolve_ws_injection(const fs::path& start_dir,
 // Build — public entry point
 // ===================================================================
 
+
+// 1.5.0-dev.3: automatic source package for static builds (build/run only).
+// Guarded against pack → build recursion.
+static void maybe_auto_pack(const config::EzConfig& cfg,
+                            const cli::BuildOptions& opts,
+                            const fs::path& proj_root) {
+    if (!opts.allow_auto_pack || opts.no_auto_pack) return;
+    if (cfg.project.type != "static") return;
+    if (!config::runtime_config().settings.auto_pack) return;
+    static thread_local bool active = false;
+    if (active) return;
+    active = true;
+    try {
+        cli::ProjectPackOptions pack_opts;
+        pack_opts.output_dir = ".";
+        pack_opts.verbose = opts.verbose;
+        pack_opts.format = config::runtime_config().settings.pack_format;
+        pack_project(cfg, pack_opts, proj_root);
+    } catch (const std::exception& e) {
+        util::warn(std::string("auto-pack failed: ") + e.what());
+    }
+    active = false;
+}
+
 fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opts) {
     // Phase 1: Setup, config merge, package scan, pre-build hook
     auto st = prepare_build_state(cfg, opts);
@@ -1703,6 +1727,7 @@ fs::path build_project(const config::EzConfig& cfg, const cli::BuildOptions& opt
     run_hook(cfg.hooks.post_build, st.proj_root, output, st.active_profile,
              ezmk::i18n::I18nKey::post_build_hook);
 
+    maybe_auto_pack(cfg, opts, st.proj_root);
     return output;
 }
 

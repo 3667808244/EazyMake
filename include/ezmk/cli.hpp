@@ -54,6 +54,8 @@ struct BuildOptions {
     std::string profile;        // 0.2.3+ build profile name (debug, release, etc.)
     bool auto_update = false;   // 0.2.5+: auto-update repo indices before build
     bool compile_commands = false;  // 1.1.1: also generate compile_commands.json after build
+    bool allow_auto_pack = false;   // 1.5.0-dev.3: set by build/run commands
+    bool no_auto_pack = false;      // 1.5.0-dev.3: --no-auto-pack
 };
 
 // 1.1.0: project install options
@@ -152,6 +154,7 @@ struct CliArgs {
     // Only valid for ProjectNew
     std::optional<std::string> project_name;
     std::string project_type = "executable";   // --type flag
+    bool project_type_explicit = false;        // 1.5.0-dev.3: --type was passed
     bool disable_git_init = false;             // --disable-git-init
     bool disable_gitignore = false;            // --disable-gitignore
 
