@@ -41,7 +41,7 @@ plans/
 
 ## 当前执行
 
-当前进行中版本：**1.5.0（用户/全局配置文件；dev.1~dev.5 已实现收口，dev.6~dev.7 待实现）**——拆分、依赖与各 dev 设计见 [1.5.x/README.md](1.5.x/README.md)。上一版 1.4.11 已发布（2026-10-17，tag `v1.4.11`；全量 1169 用例 / 6788 断言 / 4 跳过 / 0 失败）。上一版 1.4.10 已发布（2026-10-13，tag `v1.4.10`；全量 1156/6675 零失败；三渠道：Homebrew tap `4a3ff91` / pacman `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)（CI/版主审批为发布后跟进项））。设计见 [1.4.x/1.4.10.md](1.4.x/1.4.10.md)，阶段见根 [`plan.md`](../plan.md)。上一版 1.4.9 已发布（2026-10-07，tag `v1.4.9`；全量 1137/6622 零失败；三渠道：Homebrew tap `d839e9d` / pacman `eazymake-1.4.9-1-x86_64.pkg.tar.zst` / winget PR [#448100](https://github.com/microsoft/winget-pkgs/pull/448100)（CI/版主审批为发布后跟进项））。下一破坏性窗口 **2.0.0**（破坏性变更）见「未来规划」——其移除清单已含 1.4.5 新增的 R-03/R-04 两条回退。
+当前进行中版本：**1.5.0（用户/全局配置文件；dev.1~dev.5 已实现收口，dev.6 审查完成（P0×1 / P1×2 待修复）、dev.7 待实现）**——拆分、依赖与各 dev 设计见 [1.5.x/README.md](1.5.x/README.md)。上一版 1.4.11 已发布（2026-10-17，tag `v1.4.11`；全量 1169 用例 / 6788 断言 / 4 跳过 / 0 失败）。上一版 1.4.10 已发布（2026-10-13，tag `v1.4.10`；全量 1156/6675 零失败；三渠道：Homebrew tap `4a3ff91` / pacman `eazymake-1.4.10-1-x86_64.pkg.tar.zst`（sha256 `1874c925…`）/ winget PR [#451759](https://github.com/microsoft/winget-pkgs/pull/451759)（CI/版主审批为发布后跟进项））。设计见 [1.4.x/1.4.10.md](1.4.x/1.4.10.md)，阶段见根 [`plan.md`](../plan.md)。上一版 1.4.9 已发布（2026-10-07，tag `v1.4.9`；全量 1137/6622 零失败；三渠道：Homebrew tap `d839e9d` / pacman `eazymake-1.4.9-1-x86_64.pkg.tar.zst` / winget PR [#448100](https://github.com/microsoft/winget-pkgs/pull/448100)（CI/版主审批为发布后跟进项））。下一破坏性窗口 **2.0.0**（破坏性变更）见「未来规划」——其移除清单已含 1.4.5 新增的 R-03/R-04 两条回退。
 
 ## 未来规划
 
