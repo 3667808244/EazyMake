@@ -52,12 +52,19 @@ void error(std::string_view msg);
 // Intended for multi-line structured output (pkg info, repo info, repo list).
 void info_line(std::string_view msg);
 
+// 1.5.0-dev.4: debug-level message (shown only with log_level = "debug").
+void debug(std::string_view msg);
+
+// Test-only: close/reset the optional file logger.
+void reset_log_file_for_test();
+
 // I18n-aware logging overloads — format a localized string by key + args,
 // then output with the same prefix/color conventions as the raw overloads.
 void info(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
 void warn(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
 void error(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
 [[noreturn]] void fatal(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
+void debug(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args = {});
 
 // ---- Color support (VT100/ANSI) ----
 // Call once at startup to enable VT100 processing on Windows.

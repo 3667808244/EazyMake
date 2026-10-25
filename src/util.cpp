@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -56,8 +57,85 @@ namespace ezmk::util {
 // 0.2.3+: Global mutex for thread-safe console output during parallel builds.
 static std::mutex g_log_mutex;
 
+// 1.5.0-dev.4: severity filtering + optional <logs>/ezmk.log file log.
+namespace {
+enum class LogSeverity { Error = 1, Warn = 2, Info = 3, Debug = 4 };
+
+int log_threshold() {
+    const std::string& level =
+        config::runtime_config().settings.log_level;
+    if (level == "off") return 0;
+    if (level == "error") return 1;
+    if (level == "warn") return 2;
+    if (level == "debug") return 4;
+    return 3;  // "info" and the built-in default
+}
+
+bool log_enabled(LogSeverity severity) {
+    const int threshold = log_threshold();
+    return threshold > 0 && static_cast<int>(severity) <= threshold;
+}
+
+std::ofstream g_log_file;
+bool g_log_file_attempted = false;
+bool g_log_file_failed = false;
+
+void log_file_write(const char* level, std::string_view msg) {
+    if (log_threshold() == 0) return;
+    if (g_log_file_failed) return;
+    if (!g_log_file_attempted) {
+        g_log_file_attempted = true;
+        auto logs = config::effective_logs();
+        if (!logs) {
+            g_log_file_failed = true;
+            return;
+        }
+        std::error_code ec;
+        fs::create_directories(*logs, ec);
+        if (ec) {
+            std::cerr << "[ezmk warn] cannot create log directory "
+                      << logs->string() << ": " << ec.message()
+                      << " — file logging disabled\n";
+            g_log_file_failed = true;
+            return;
+        }
+        const fs::path file = *logs / "ezmk.log";
+        g_log_file.open(file, std::ios::app | std::ios::binary);
+        if (!g_log_file) {
+            std::cerr << "[ezmk warn] cannot open log file "
+                      << file.string() << " — file logging disabled\n";
+            g_log_file_failed = true;
+            return;
+        }
+    }
+    if (!g_log_file) {
+        g_log_file_failed = true;
+        return;
+    }
+    std::time_t t = std::chrono::system_clock::to_time_t(
+        std::chrono::system_clock::now());
+    std::tm tm{};
+#ifdef EZMK_WIN
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char stamp[32]{};
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &tm);
+    g_log_file << "[" << stamp << "] [" << level << "] " << msg << "\n";
+    g_log_file.flush();
+    if (!g_log_file) {
+        std::cerr << "[ezmk warn] log write failed — file logging disabled\n";
+        g_log_file.close();
+        g_log_file_failed = true;
+    }
+}
+} // namespace
+
 void info(std::string_view msg)  {
     std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (!log_enabled(LogSeverity::Info)) return;
+    log_file_write("INFO", msg);
     if (supports_color())
         std::cerr << color::green << "[ezmk] " << color::reset << msg << "\n";
     else
@@ -65,6 +143,8 @@ void info(std::string_view msg)  {
 }
 void warn(std::string_view msg)  {
     std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (!log_enabled(LogSeverity::Warn)) return;
+    log_file_write("WARN", msg);
     if (supports_color())
         std::cerr << color::yellow << "[ezmk warn] " << color::reset << msg << "\n";
     else
@@ -72,6 +152,8 @@ void warn(std::string_view msg)  {
 }
 void error(std::string_view msg) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (!log_enabled(LogSeverity::Error)) return;
+    log_file_write("ERROR", msg);
     if (supports_color())
         std::cerr << color::red << "[ezmk error] " << color::reset << msg << "\n";
     else
@@ -81,6 +163,7 @@ void error(std::string_view msg) {
 void fatal(std::string_view msg) {
     {
         std::lock_guard<std::mutex> lock(g_log_mutex);
+        log_file_write("FATAL", msg);
         if (supports_color())
             std::cerr << color::red << "[ezmk fatal] " << color::reset << msg << "\n";
         else
@@ -91,9 +174,25 @@ void fatal(std::string_view msg) {
 
 // 0.9.8+: structured info line — same prefix as info() but without color,
 // intended for multi-line data output (pkg info, repo info, repo list).
+// 1.5.0-dev.4: command data, not a log — never filtered by log_level.
 void info_line(std::string_view msg) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
     std::cerr << "[ezmk] " << msg << "\n";
+}
+
+void debug(std::string_view msg) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (!log_enabled(LogSeverity::Debug)) return;
+    log_file_write("DEBUG", msg);
+    std::cerr << "[ezmk debug] " << msg << "\n";
+}
+
+void reset_log_file_for_test() {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (g_log_file.is_open()) g_log_file.close();
+    g_log_file.clear();
+    g_log_file_attempted = false;
+    g_log_file_failed = false;
 }
 
 // ---- I18n-aware logging overloads ----
@@ -109,6 +208,9 @@ void error(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& ar
 }
 void fatal(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {
     fatal(ezmk::i18n::fmt(key, args));
+}
+void debug(ezmk::i18n::I18nKey key, const std::map<std::string, std::string>& args) {
+    debug(ezmk::i18n::fmt(key, args));
 }
 
 // ===================================================================
@@ -198,6 +300,7 @@ bool stderr_is_tty() {
 // Thread-safe: uses the same g_log_mutex as info/warn/error.
 void progress(std::string_view msg) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (!log_enabled(LogSeverity::Info)) return;
     if (supports_color())
         std::cerr << "\r" << color::green << "[ezmk] " << color::reset << msg << std::flush;
     else
@@ -206,6 +309,7 @@ void progress(std::string_view msg) {
 
 void progress_newline() {
     std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (!log_enabled(LogSeverity::Info)) return;
     std::cerr << "\n";
 }
 

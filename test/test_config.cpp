@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -2756,6 +2757,169 @@ TEST_CASE("write_default_config: [settings] project-new defaults",
     ezmk::config::reset_runtime_config_for_test();
     fs::remove_all(root);
 }
+
+// ===================================================================
+// 1.5.0-dev.4: log_level filtering + file logging
+// ===================================================================
+namespace {
+struct CerrCapture {
+    std::ostringstream ss;
+    std::streambuf* old;
+    CerrCapture() : old(std::cerr.rdbuf(ss.rdbuf())) {}
+    ~CerrCapture() { std::cerr.rdbuf(old); }
+    std::string str() const { return ss.str(); }
+};
+} // namespace
+
+TEST_CASE("logging: log_level filters stderr", "[config][1.5.0-dev.4]") {
+    auto root = make_runtime_cfg_root("logfilter");
+    write_runtime_cfg(root, "[settings]\nlog_level = \"warn\"\n");
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    std::string text;
+    {
+        CerrCapture cap;
+        ezmk::util::info("hidden-info");
+        ezmk::util::warn("shown-warn");
+        ezmk::util::error("shown-error");
+        text = cap.str();
+    }
+    REQUIRE(text.find("hidden-info") == std::string::npos);
+    REQUIRE(text.find("shown-warn") != std::string::npos);
+    REQUIRE(text.find("shown-error") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("logging: off keeps only fatal; info_line stays visible",
+          "[config][1.5.0-dev.4]") {
+    auto root = make_runtime_cfg_root("logoff");
+    write_runtime_cfg(root, "[settings]\nlog_level = \"off\"\n");
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    std::string text;
+    {
+        CerrCapture cap;
+        ezmk::util::info("hidden-info");
+        ezmk::util::warn("hidden-warn");
+        ezmk::util::error("hidden-error");
+        ezmk::util::info_line("data-line");
+        REQUIRE_THROWS_AS(ezmk::util::fatal("boom-fatal"), ezmk::fatal_error);
+        text = cap.str();
+    }
+    REQUIRE(text.find("hidden-info") == std::string::npos);
+    REQUIRE(text.find("hidden-warn") == std::string::npos);
+    REQUIRE(text.find("hidden-error") == std::string::npos);
+    REQUIRE(text.find("data-line") != std::string::npos);
+    REQUIRE(text.find("boom-fatal") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("logging: file log appends to ezmk.log",
+          "[config][1.5.0-dev.4]") {
+    auto root = make_runtime_cfg_root("logfile");
+    auto logs = root / "logs";
+    std::string cfg = "[settings]\nlog_level = \"info\"\n"
+                      "[base_dir]\nlogs = \"" +
+                      logs.generic_string() + "\"\n";
+    write_runtime_cfg(root, cfg);
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    {
+        CerrCapture cap;
+        ezmk::util::info("file-info-line");
+        ezmk::util::warn("file-warn-line");
+    }
+    auto file = logs / "ezmk.log";
+    REQUIRE(fs::exists(file));
+    auto content = ezmk::util::file_read(file);
+    REQUIRE(content.find("file-info-line") != std::string::npos);
+    REQUIRE(content.find("[INFO]") != std::string::npos);
+    REQUIRE(content.find("file-warn-line") != std::string::npos);
+    REQUIRE(content.find("[WARN]") != std::string::npos);
+
+    // Re-open in append mode: old lines must survive.
+    ezmk::util::reset_log_file_for_test();
+    { CerrCapture cap; ezmk::util::info("file-second-line"); }
+    auto content2 = ezmk::util::file_read(file);
+    REQUIRE(content2.find("file-info-line") != std::string::npos);
+    REQUIRE(content2.find("file-second-line") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("logging: unwritable log dir degrades to stderr",
+          "[config][1.5.0-dev.4]") {
+    auto root = make_runtime_cfg_root("logfail");
+    auto blocker = root / "blocker";
+    std::ofstream(blocker) << "x";
+    auto logs = blocker / "sub";
+    std::string cfg = "[settings]\nlog_level = \"info\"\n"
+                      "[base_dir]\nlogs = \"" +
+                      logs.generic_string() + "\"\n";
+    write_runtime_cfg(root, cfg);
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    std::string text;
+    {
+        CerrCapture cap;
+        ezmk::util::warn("still-visible");
+        text = cap.str();
+    }
+    REQUIRE(text.find("cannot create log directory") != std::string::npos);
+    REQUIRE(text.find("still-visible") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("logging: debug level shows debug lines",
+          "[config][1.5.0-dev.4]") {
+    auto root = make_runtime_cfg_root("logdebug");
+    write_runtime_cfg(root, "[settings]\nlog_level = \"debug\"\n");
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    std::string text;
+    {
+        CerrCapture cap;
+        ezmk::util::debug("debug-line");
+        text = cap.str();
+    }
+    REQUIRE(text.find("debug-line") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
 
 
 

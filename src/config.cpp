@@ -1563,6 +1563,7 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
     RuntimeConfig rc;  // built-in defaults
     if (explicit_language) rc.language_override = *explicit_language;
     if (no_config) {
+        util::debug("config loading disabled by --no-config");
         rc.loaded = true;
         g_runtime_config = std::move(rc);
         g_runtime_loaded = true;
@@ -1573,6 +1574,7 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
     if (util::file_exists(global_file)) {
         parse_runtime_file(global_file, rc.global_dirs, rc.settings);
         rc.global_config_file = global_file;
+        util::debug("loaded config: " + global_file.string());
     }
 
     fs::path user_file = explicit_config ? *explicit_config
@@ -1582,6 +1584,7 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
         // per scope (user entries never override the global scope).
         parse_runtime_file(user_file, rc.user_dirs, rc.settings);
         rc.user_config_file = user_file;
+        util::debug("loaded config: " + user_file.string());
     }
 
     rc.loaded = true;
