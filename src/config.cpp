@@ -628,6 +628,41 @@ static void read_optional_bool(const toml::node* node, const char* field,
     out = node->as_boolean()->get();
 }
 
+
+// 1.5.0-dev.6 R-05/R-08: strict typed readers + basename validation.
+static bool is_safe_basename(const std::string& s) {
+    if (s.empty() || s == "." || s == "..") return false;
+    if (s.find('/') != std::string::npos || s.find('\\') != std::string::npos)
+        return false;
+    if (s.size() >= 2 && s[1] == ':') return false;  // drive letter
+    return true;
+}
+
+static void read_strict_string(const toml::table& t, const char* key,
+                               const char* field, std::string& out) {
+    auto* n = t.get(key);
+    if (!n) return;
+    auto v = n->value<std::string>();
+    if (!v) {
+        throw std::runtime_error(std::string(field) + " must be a string");
+    }
+    out = *v;
+}
+
+static void read_strict_int(const toml::table& t, const char* key,
+                            const char* field, int& out, int min_v, int max_v) {
+    auto* n = t.get(key);
+    if (!n) return;
+    auto v = n->value<int64_t>();
+    if (!v) {
+        throw std::runtime_error(std::string(field) + " must be an integer");
+    }
+    if (*v < min_v || *v > max_v) {
+        throw std::runtime_error(std::string(field) + " is out of range");
+    }
+    out = static_cast<int>(*v);
+}
+
 static void parse_project(const toml::table& root, EzConfig& cfg) {
     // [project]
     if (auto proj = root["project"].as_table()) {
@@ -669,8 +704,12 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
             cfg.project.build_dir = *bd;
         }
         // 1.5.0-dev.5: artifact basename (empty = project name).
-        if (auto on = (*proj)["output_name"].value<std::string>()) {
-            cfg.project.output_name = *on;
+        read_strict_string(*proj, "output_name", "project.output_name",
+                           cfg.project.output_name);
+        if (!cfg.project.output_name.empty() &&
+            !is_safe_basename(cfg.project.output_name)) {
+            throw std::runtime_error(
+                "project.output_name must be a safe basename");
         }
     }
 }
@@ -735,13 +774,8 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         }
 
         // 1.5.0-dev.5: [compile].jobs — 0 = auto, -1 (absent) = use global.
-        if (auto jobs = (*comp)["jobs"].value<int64_t>()) {
-            if (*jobs < 0 || *jobs > 1024) {
-                throw std::runtime_error(
-                    "compile.jobs must be between 0 and 1024");
-            }
-            cfg.compile.jobs = static_cast<int>(*jobs);
-        }
+        read_strict_int(*comp, "jobs", "compile.jobs", cfg.compile.jobs,
+                        0, 1024);
     }
 
     // Apply default for include_dirs if empty
@@ -1000,16 +1034,10 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
         // 1.2.0-dev.12: test-only link targets (-l system libraries)
         cfg.test.link_targets = extract_string_array(test->get("link_targets"), "test.link_targets");
         // 1.5.0-dev.5: per-test timeout (0 = no timeout) / default report dir.
-        if (auto t = (*test)["timeout"].value<int64_t>()) {
-            if (*t < 0 || *t > 86400) {
-                throw std::runtime_error(
-                    "test.timeout must be between 0 and 86400 seconds");
-            }
-            cfg.test.timeout = static_cast<int>(*t);
-        }
-        if (auto rd = (*test)["report_dir"].value<std::string>()) {
-            cfg.test.report_dir = *rd;
-        }
+        read_strict_int(*test, "timeout", "test.timeout", cfg.test.timeout,
+                        0, 86400);
+        read_strict_string(*test, "report_dir", "test.report_dir",
+                           cfg.test.report_dir);
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
@@ -1068,13 +1096,14 @@ static void parse_pkg(const toml::table& root, EzConfig& cfg) {
 // 1.5.0-dev.5: [watch] — debounce / extra ignore prefixes.
 static void parse_watch(const toml::table& root, EzConfig& cfg) {
     if (auto watch = root["watch"].as_table()) {
-        if (auto d = (*watch)["debounce_ms"].value<int64_t>()) {
-            if (*d < 0 || *d > 5000 || (*d > 0 && *d < 50)) {
-                throw std::runtime_error(
-                    "watch.debounce_ms must be 0 or 50..5000");
-            }
-            cfg.watch.debounce_ms = static_cast<int>(*d);
+        int debounce = cfg.watch.debounce_ms;
+        read_strict_int(*watch, "debounce_ms", "watch.debounce_ms",
+                        debounce, 0, 5000);
+        if (debounce != 0 && debounce < 50) {
+            throw std::runtime_error(
+                "watch.debounce_ms must be 0 or 50..5000");
         }
+        cfg.watch.debounce_ms = debounce;
         cfg.watch.ignore = extract_string_array(watch->get("ignore"),
                                                  "watch.ignore");
     }
@@ -1083,8 +1112,9 @@ static void parse_watch(const toml::table& root, EzConfig& cfg) {
 // 1.5.0-dev.5: [pack] — format / output dir / name / extra excludes.
 static void parse_pack(const toml::table& root, EzConfig& cfg) {
     if (auto pack = root["pack"].as_table()) {
-        if (auto f = (*pack)["format"].value<std::string>()) {
-            std::string fmt = *f;
+        std::string fmt = cfg.pack.format;
+        read_strict_string(*pack, "format", "pack.format", fmt);
+        if (!fmt.empty()) {
             for (auto& c : fmt) {
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             }
@@ -1095,11 +1125,11 @@ static void parse_pack(const toml::table& root, EzConfig& cfg) {
             }
             cfg.pack.format = fmt;
         }
-        if (auto o = (*pack)["output_dir"].value<std::string>()) {
-            cfg.pack.output_dir = *o;
-        }
-        if (auto n = (*pack)["name"].value<std::string>()) {
-            cfg.pack.name = *n;
+        read_strict_string(*pack, "output_dir", "pack.output_dir",
+                           cfg.pack.output_dir);
+        read_strict_string(*pack, "name", "pack.name", cfg.pack.name);
+        if (!cfg.pack.name.empty() && !is_safe_basename(cfg.pack.name)) {
+            throw std::runtime_error("pack.name must be a safe basename");
         }
         cfg.pack.exclude = extract_string_array(pack->get("exclude"),
                                                  "pack.exclude");
@@ -1401,13 +1431,11 @@ void read_initial_commit(const toml::table& t, const fs::path& file,
     auto* n = t.get("initial_commit");
     if (!n) return;
     if (auto b = n->value<bool>()) {
-        s.has_initial_commit = true;
         s.initial_commit_enabled = *b;
         s.initial_commit_message.clear();
         return;
     }
     if (auto str = n->value<std::string>()) {
-        s.has_initial_commit = true;
         s.initial_commit_enabled = true;
         s.initial_commit_message = *str;
         return;
@@ -1523,13 +1551,19 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
 
     read_string(t, "build_dir", "settings.build_dir", file, s.build_dir);
     read_int(t, "default_jobs", "settings.default_jobs", file, s.default_jobs,
-             0, 65536);
+             0, 1024);
     read_int(t, "test_timeout", "settings.test_timeout", file, s.test_timeout,
              0, 86400);
+    if (t.get("test_timeout")) s.has_test_timeout = true;
     read_string(t, "test_report_dir", "settings.test_report_dir", file,
                 s.test_report_dir);
     read_int(t, "watch_debounce_ms", "settings.watch_debounce_ms", file,
-             s.watch_debounce_ms, 0, 60000);
+             s.watch_debounce_ms, 0, 5000);
+    if (s.watch_debounce_ms != 0 && s.watch_debounce_ms < 50) {
+        throw std::runtime_error(
+            "config field 'settings.watch_debounce_ms' in " + file.string() +
+            " must be 0 or 50..5000");
+    }
     if (t.get("watch_ignore")) {
         s.watch_ignore = extract_string_array(t.get("watch_ignore"),
                                               "settings.watch_ignore");
@@ -1640,7 +1674,6 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
     RuntimeConfig rc;  // built-in defaults
     if (explicit_language) rc.language_override = *explicit_language;
     if (no_config) {
-        util::debug("config loading disabled by --no-config");
         rc.loaded = true;
         g_runtime_config = std::move(rc);
         g_runtime_loaded = true;
@@ -1651,22 +1684,35 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
     if (util::file_exists(global_file)) {
         parse_runtime_file(global_file, rc.global_dirs, rc.settings);
         rc.global_config_file = global_file;
-        util::debug("loaded config: " + global_file.string());
     }
 
     fs::path user_file = explicit_config ? *explicit_config
                                          : (default_user_config_dir() / "config.toml");
+    // 1.5.0-dev.6 R-02: an explicitly requested --config must exist.
+    if (explicit_config && !util::file_exists(user_file)) {
+        throw std::runtime_error("config file not found: " +
+                                 user_file.string());
+    }
     if (util::file_exists(user_file)) {
         // User [settings] overlay the system-level values; [base_dir] is kept
         // per scope (user entries never override the global scope).
         parse_runtime_file(user_file, rc.user_dirs, rc.settings);
         rc.user_config_file = user_file;
-        util::debug("loaded config: " + user_file.string());
     }
 
     rc.loaded = true;
     g_runtime_config = std::move(rc);
     g_runtime_loaded = true;
+    // 1.5.0-dev.6 R-06: log after publishing the merged config, otherwise the
+    // debug level/logs path still come from the previous (default) config.
+    if (!g_runtime_config.global_config_file.empty()) {
+        util::debug("loaded config: " +
+                    g_runtime_config.global_config_file.string());
+    }
+    if (!g_runtime_config.user_config_file.empty()) {
+        util::debug("loaded config: " +
+                    g_runtime_config.user_config_file.string());
+    }
 }
 
 } // anonymous namespace

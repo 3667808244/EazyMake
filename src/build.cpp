@@ -1655,14 +1655,21 @@ WsInjection resolve_ws_injection(const fs::path& start_dir,
         if (util::file_exists(inc)) out.include_dirs.push_back(inc);
 
         fs::path member_build = config::effective_build_dir_for(m.path);
-        fs::path lib = is_msvc ? member_build / (m.basename + ".lib")
-                               : member_build / ("lib" + m.basename + ".a");
+        std::string member_out = m.basename;
+        try {
+            member_out = config::project_output_name(
+                config::parse_config(m.path / "ezmk.toml"));
+        } catch (...) {
+            // Fall back to the member directory basename.
+        }
+        fs::path lib = is_msvc ? member_build / (member_out + ".lib")
+                               : member_build / ("lib" + member_out + ".a");
         if (util::file_exists(lib)) {
             if (is_msvc) {
                 out.msvc_archives.push_back(lib);
             } else {
                 out.link_dirs.push_back(lib.parent_path());
-                out.link_names.push_back(m.basename);
+                out.link_names.push_back(member_out);
             }
         } else {
             out.missing.push_back(m.basename);
@@ -2017,17 +2024,22 @@ void pack_project(const config::EzConfig& cfg,
         fs::path(base).filename().string() != base) {
         util::fatal("invalid pack name (must be a basename): " + base);
     }
-    // Step 1: Create staging directory
+    // Step 1: Create staging directory. 1.5.0-dev.6 R-01: never remove a
+    // user-visible path — stage under a unique temp root, then archive the
+    // child named base (preserves the archive's top-level directory name).
     std::string archive_name = base + (fmt == "zip" ? ".zip" : ".tar.gz");
     std::string stage_name = base;
-    fs::path stage_dir = output_dir / stage_name;
+    const std::string nonce = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    fs::path stage_root = output_dir / (".ezmk-pack-" + nonce + "-" + base);
+    fs::path stage_dir = stage_root / stage_name;
 
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_collecting,
                                 {{"name", name}, {"version", version}}));
-    // Clean up any leftover staging (best-effort)
-    if (util::file_exists(stage_dir)) {
+    {
+        // Unique temp root: safe to clear any residue from a crashed pack.
         std::error_code ec;
-        fs::remove_all(stage_dir, ec);
+        fs::remove_all(stage_root, ec);
     }
     fs::create_directories(stage_dir);
 
@@ -2160,7 +2172,7 @@ void pack_project(const config::EzConfig& cfg,
 
     // Step: Cleanup staging (best-effort — failure to remove a temp dir should
     // not fail the pack command)
-    { std::error_code ec; fs::remove_all(stage_dir, ec); }
+    { std::error_code ec; fs::remove_all(stage_root, ec); }
 
     // Step: Verbose output — index.toml snippet
     if (opts.verbose) {
@@ -2405,6 +2417,7 @@ struct TestRunContext {
     std::map<std::string, std::string> msvc_env;
     config::LanguageInfo lang_info;
     int test_timeout = 30;  // 1.5.0-dev.5: seconds (0 = no timeout)
+    int catch2_timeout = 0; // 1.5.0-dev.6 R-03: 0 = legacy no-timeout
 };
 
 // ---- Catch2 framework runner (moved verbatim from run_tests) ----
@@ -2553,7 +2566,7 @@ static void run_catch2_tests(TestRunContext& ctx) {
                     util::escape_shell_arg(ctx.report_path.string()) + "\"";
     }
     util::RunOptions test_opts;
-    test_opts.timeout_sec = ctx.test_timeout;
+    test_opts.timeout_sec = ctx.catch2_timeout;
     util::merge_env(test_opts, ctx.msvc_env);
     auto test_res = util::run_command(test_cmd, test_opts);
 
@@ -3039,10 +3052,19 @@ void run_tests(const config::EzConfig& cfg,
     ctx.msvc_env = toolchain::msvc_env(toolchain::detect_toolchain());
     ctx.lang_info = std::move(lang_info);
     // 1.5.0-dev.5: [test].timeout > [settings].test_timeout (0 = no timeout).
+    // 1.5.0-dev.6 R-03: Catch2 had no timeout before dev.5, so keep it at 0
+    // unless the user explicitly configured one (project or global).
+    const auto& rt_settings = config::runtime_config().settings;
+    const bool timeout_configured =
+        cfg.test.timeout >= 0 || rt_settings.has_test_timeout;
     ctx.test_timeout = cfg.test.timeout >= 0
                            ? cfg.test.timeout
-                           : config::runtime_config().settings.test_timeout;
+                           : (rt_settings.has_test_timeout
+                                  ? rt_settings.test_timeout
+                                  : 30);
     if (ctx.test_timeout < 0) ctx.test_timeout = 30;
+    ctx.catch2_timeout = timeout_configured ? ctx.test_timeout : 0;
+
 
     if (framework == "CATCH2") {
         run_catch2_tests(ctx);

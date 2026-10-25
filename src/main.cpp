@@ -422,6 +422,7 @@ int main(int argc, char** argv) {
                                ? cfg.watch.debounce_ms
                                : ezmk::config::runtime_config()
                                      .settings.watch_debounce_ms;
+            if (debounce <= 0) debounce = 300;  // 1.5.0-dev.6 R-15
             if (debounce < 50) debounce = 50;
             if (debounce > 5000) debounce = 5000;
             // Create file watcher
@@ -694,7 +695,7 @@ int main(int argc, char** argv) {
         ezmk::lua::shutdown();
         return 1;
     } catch (const std::exception& e) {
-        ezmk::util::error(e.what());
+        ezmk::util::error_always(e.what());
         // 1.2.0-dev.7: temp dir lives under the located project root
         { std::error_code ec;
           fs::remove_all(ezmk::util::locate_project_root(fs::current_path())

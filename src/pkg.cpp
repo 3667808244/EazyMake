@@ -927,7 +927,8 @@ fs::path compile_package(const fs::path& pkg_dir,
     // 1.1.0: MSVC uses .lib, GCC/Clang use .a
     bool is_msvc = (tc.family == toolchain::CompilerFamily::Msvc);
     const char* lib_ext = is_msvc ? ".lib" : ".a";
-    fs::path lib = build_dir / ("lib" + name + lib_ext);
+    fs::path lib = build_dir /
+                   ("lib" + config::project_output_name(cfg) + lib_ext);
 
     // Clean stale temps from previous crashed builds
     {
@@ -1652,7 +1653,8 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
                         // 1.4.11 Q4-17: precompiled packages ship the archive
                         // under lib/ and never create build/.
                         lib_file = util::find_package_archive(
-                            entry.path() / "lib", pkg_cfg.project.name);
+                            entry.path() / "lib",
+                            config::project_output_name(pkg_cfg));
                     }
                     if (lp.type == "header-only") {
                         // 1.4.2 F-28: no archive to hash — pin the include/

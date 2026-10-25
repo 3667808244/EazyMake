@@ -193,7 +193,6 @@ struct SettingsConfig {
     std::string color_theme = "default";
     std::string log_level = "info";
 
-    bool has_initial_commit = false;
     bool initial_commit_enabled = false;
     std::string initial_commit_message;
     bool auto_init_git = true;
@@ -209,6 +208,7 @@ struct SettingsConfig {
     std::string build_dir = "build";
     int default_jobs = 0;
     int test_timeout = 30;
+    bool has_test_timeout = false;  // 1.5.0-dev.6 R-03: explicitly configured
     std::string test_report_dir = ".ezmk/test-results";
     int watch_debounce_ms = 300;
     std::vector<std::string> watch_ignore;

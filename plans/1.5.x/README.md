@@ -11,7 +11,7 @@
 | [1.5.0-dev.3](1.5.0-dev.3.md) | 项目创建与行为默认值 | 语言 / 颜色 / 主题 + `project new` 默认（git / gitignore / readme / 初始提交 / 类型 / 语言 / 版本 / flags）+ `auto_pack` / `gen_agent_md` | dev.1 | ✅ 实现收口（1189/6876） |
 | [1.5.0-dev.4](1.5.0-dev.4.md) | 日志子系统 | `log_level` 过滤 + `[base_dir].logs` 文件日志 + 失败降级 | dev.1、dev.2 | ✅ 实现收口（1194/6895） |
 | [1.5.0-dev.5](1.5.0-dev.5.md) | 构建/测试/监视/打包/包管理运行默认值 | `default_jobs` / `test_timeout` / `test_report_dir` / `watch_debounce_ms` / `watch_ignore` / `pack_*` / `default_pkg_scope` / `auto_install_deps` / `scan_skip_dirs` | dev.1、dev.2 | ✅ 实现收口（1198/6922） |
-| [1.5.0-dev.6](1.5.0-dev.6.md) | 代码审查（增量） | 审查 dev.1~dev.5 的配置 / 路径 / 工具 / 项目创建 / 日志 / 运行默认；P0/P1 修复或收口 | dev.1~dev.5 | 🔍 审查完成，待修复（P0×1 / P1×2） |
+| [1.5.0-dev.6](1.5.0-dev.6.md) | 代码审查（增量） | 审查 dev.1~dev.5 的配置 / 路径 / 工具 / 项目创建 / 日志 / 运行默认；P0/P1 修复或收口 | dev.1~dev.5 | ✅ 修复收口（1205/6940） |
 | [1.5.0-dev.7](1.5.0-dev.7.md) | 文档、i18n 与 dev 收口 | i18n / README / docs / tutorial / man / CHANGES / 索引 / 门槛 | dev.1~dev.6 | 📋 计划完成，待实现 |
 
 ## 依赖关系

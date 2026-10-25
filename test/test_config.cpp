@@ -1,6 +1,7 @@
 // Unit tests for config.cpp
 #define CATCH_AMALGAMATED_CUSTOM_MAIN
 #include "catch2.hpp"
+#include "ezmk/build.hpp"
 #include "ezmk/cli.hpp"
 #include "ezmk/config.hpp"
 #include "ezmk/pkg.hpp"
@@ -2514,7 +2515,6 @@ TEST_CASE("runtime config: initial_commit accepts bool or string",
         const char* av[] = {"ezmk", "version"};
         ezmk::config::load_runtime_config(2, av);
         const auto& rc = ezmk::config::runtime_config();
-        REQUIRE(rc.settings.has_initial_commit);
         REQUIRE(rc.settings.initial_commit_enabled);
         REQUIRE(rc.settings.initial_commit_message.empty());
     }
@@ -2525,7 +2525,6 @@ TEST_CASE("runtime config: initial_commit accepts bool or string",
         const char* av[] = {"ezmk", "version"};
         ezmk::config::load_runtime_config(2, av);
         const auto& rc = ezmk::config::runtime_config();
-        REQUIRE(rc.settings.has_initial_commit);
         REQUIRE(rc.settings.initial_commit_enabled);
         REQUIRE(rc.settings.initial_commit_message == "chore: init");
     }
@@ -2996,6 +2995,149 @@ TEST_CASE("config: dev.5 bounds are validated", "[config][1.5.0-dev.5]") {
 
     fs::remove_all(root);
 }
+
+// ===================================================================
+// 1.5.0-dev.6: review fixes (R-02 / R-05 / R-06 / R-07 / R-08 / R-11)
+// ===================================================================
+
+TEST_CASE("runtime config: explicit --config missing is fatal",
+          "[config][1.5.0-dev.6]") {
+    ezmk::config::reset_runtime_config_for_test();
+    auto missing = fs::temp_directory_path() / "ezmk_review_missing.toml";
+    fs::remove(missing);
+    std::string p = missing.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(4, av),
+                      std::runtime_error);
+    ezmk::config::reset_runtime_config_for_test();
+}
+
+TEST_CASE("config: output_name and pack.name must be safe basenames",
+          "[config][1.5.0-dev.6]") {
+    auto root = make_runtime_cfg_root("reviewbasename");
+    auto toml = root / "ezmk.toml";
+    auto expect_throw = [&](const std::string& body) {
+        std::ofstream(toml) << "[project]\nname = \"p\"\nversion = \"0.1.0\"\n"
+                            << body;
+        REQUIRE_THROWS_AS(ezmk::config::parse_config(toml),
+                          std::runtime_error);
+    };
+    expect_throw("output_name = \"../x\"\n");
+    expect_throw("output_name = \"a/b\"\n");
+    expect_throw("[pack]\nname = \"../x\"\n");
+    expect_throw("[pack]\nname = \"a/b\"\n");
+    fs::remove_all(root);
+}
+
+TEST_CASE("logging: debug config logs the loaded files",
+          "[config][1.5.0-dev.6]") {
+    auto root = make_runtime_cfg_root("reviewdebugload");
+    auto logs = root / "logs";
+    std::string cfg = "[settings]\nlog_level = \"debug\"\n"
+                      "[base_dir]\nlogs = \"" +
+                      logs.generic_string() + "\"\n";
+    write_runtime_cfg(root, cfg);
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", (root / "no-global").string());
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    auto file = logs / "ezmk.log";
+    REQUIRE(fs::exists(file));
+    auto content = ezmk::util::file_read(file);
+    REQUIRE(content.find("loaded config") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("logging: error_always ignores log_level=off",
+          "[config][1.5.0-dev.6]") {
+    auto root = make_runtime_cfg_root("reviewalways");
+    write_runtime_cfg(root, "[settings]\nlog_level = \"off\"\n");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", (root / "no-global").string());
+    EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+
+    std::string text;
+    {
+        CerrCapture cap;
+        ezmk::util::error_always("always-visible");
+        text = cap.str();
+    }
+    REQUIRE(text.find("always-visible") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::util::reset_log_file_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("config: new keys reject wrong types",
+          "[config][1.5.0-dev.6]") {
+    auto root = make_runtime_cfg_root("reviewtypes");
+    auto toml = root / "ezmk.toml";
+    auto expect_throw = [&](const std::string& body) {
+        std::ofstream(toml) << "[project]\nname = \"p\"\nversion = \"0.1.0\"\n"
+                            << body;
+        REQUIRE_THROWS_AS(ezmk::config::parse_config(toml),
+                          std::runtime_error);
+    };
+    expect_throw("[compile]\njobs = \"x\"\n");
+    expect_throw("[test]\ntimeout = \"x\"\n");
+    expect_throw("[test]\nreport_dir = 1\n");
+    expect_throw("[watch]\ndebounce_ms = \"x\"\n");
+    expect_throw("[pack]\nformat = 1\n");
+    expect_throw("[pack]\noutput_dir = 1\n");
+    expect_throw("[pack]\nname = 1\n");
+    fs::remove_all(root);
+}
+
+TEST_CASE("config: global defaults use the same bounds as project keys",
+          "[config][1.5.0-dev.6]") {
+    auto root = make_runtime_cfg_root("reviewbounds");
+    auto toml = root / "config.toml";
+    auto expect_throw = [&](const std::string& body) {
+        std::ofstream(toml) << "[settings]\n" << body;
+        EnvScope g("EZMK_GLOBAL_CONFIG_DIR", (root / "no-global").string());
+        EnvScope u("EZMK_USER_CONFIG_DIR", root.string());
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    };
+    expect_throw("default_jobs = 2048\n");
+    expect_throw("watch_debounce_ms = 6000\n");
+    expect_throw("watch_debounce_ms = 10\n");
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("pack: configured name never deletes an existing source dir",
+          "[config][1.5.0-dev.6]") {
+    auto root = make_runtime_cfg_root("reviewpackstage");
+    fs::create_directories(root / "src");
+    std::ofstream(root / "src" / "app.cpp") << "int f(){return 1;}\n";
+    std::ofstream(root / "ezmk.toml")
+        << "[project]\nname = \"p\"\ntype = \"static\"\n"
+           "version = \"0.1.0\"\n[pack]\nname = \"src\"\n";
+    auto cfg = ezmk::config::parse_config(root / "ezmk.toml");
+    ezmk::cli::ProjectPackOptions opts;
+    opts.output_dir = root.string();
+    opts.output_explicit = true;
+    ezmk::build::pack_project(cfg, opts, root);
+
+    REQUIRE(fs::exists(root / "src" / "app.cpp"));
+    REQUIRE(fs::exists(root / "src.tar.gz"));
+    fs::remove_all(root);
+}
+
+
 
 
 

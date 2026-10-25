@@ -57,7 +57,9 @@ struct VscodeDebugger {
 };
 VscodeDebugger select_vscode_debugger(HostPlatform plat,
                                       toolchain::CompilerFamily family,
-                                      const std::string& project_name);
+                                      const std::string& project_name,
+                                      const std::string& build_dir = "build",
+                                      const std::string& output_name = "");
 
 // The three generated files as JSON text (pure, no I/O) — unit-testable.
 struct VscodeFiles {

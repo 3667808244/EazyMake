@@ -160,6 +160,15 @@ void error(std::string_view msg) {
         std::cerr << "[ezmk error] " << msg << "\n";
 }
 
+void error_always(std::string_view msg) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    log_file_write("ERROR", msg);
+    if (supports_color())
+        std::cerr << color::red << "[ezmk error] " << color::reset << msg << "\n";
+    else
+        std::cerr << "[ezmk error] " << msg << "\n";
+}
+
 void fatal(std::string_view msg) {
     {
         std::lock_guard<std::mutex> lock(g_log_mutex);

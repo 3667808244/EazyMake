@@ -578,9 +578,14 @@ HostPlatform current_host_platform() {
 
 VscodeDebugger select_vscode_debugger(HostPlatform plat,
                                       toolchain::CompilerFamily family,
-                                      const std::string& project_name) {
+                                      const std::string& project_name,
+                                      const std::string& build_dir,
+                                      const std::string& output_name) {
     VscodeDebugger d;
-    d.program = "build/" + project_name;
+    const std::string out =
+        output_name.empty() ? project_name : output_name;
+    d.program = (fs::path(build_dir.empty() ? "build" : build_dir) / out)
+                    .generic_string();
     if (plat == HostPlatform::Windows) d.program += ".exe";
 
     // macOS + Clang (Apple toolchain) → native lldb (design §3.2).
@@ -615,8 +620,17 @@ VscodeFiles build_vscode_files(const config::EzConfig& cfg,
     }
 
     auto tc = toolchain::detect_toolchain();
-    VscodeDebugger dbg =
-        select_vscode_debugger(current_host_platform(), tc.family, cfg.project.name);
+    std::string build_rel = "build";
+    {
+        auto bd = config::effective_build_dir(cfg, project_root);
+        std::error_code ec;
+        auto rel = fs::relative(bd, project_root, ec);
+        build_rel = (!ec && !rel.empty()) ? rel.generic_string()
+                                          : bd.generic_string();
+    }
+    VscodeDebugger dbg = select_vscode_debugger(
+        current_host_platform(), tc.family, cfg.project.name, build_rel,
+        config::project_output_name(cfg));
 
     // ---- launch.json (design §3.2) ----
     nlohmann::json launch = nlohmann::json::object();

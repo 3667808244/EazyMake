@@ -47,6 +47,8 @@ namespace fs = std::filesystem;
 void info(std::string_view msg);
 void warn(std::string_view msg);
 void error(std::string_view msg);
+// 1.5.0-dev.6 R-07: runtime/exception error, never suppressed by log_level.
+void error_always(std::string_view msg);
 [[noreturn]] void fatal(std::string_view msg);  // throws ezmk::fatal_error
 // 0.9.8+: structured info line — [ezmk] prefix, no color, stderr, with newline.
 // Intended for multi-line structured output (pkg info, repo info, repo list).
