@@ -1,137 +1,114 @@
-# EazyMake 1.4.11 执行计划
+# EazyMake 1.5.0-pre.1 执行计划
 
-> **状态：🚀 发布中（2026-10-17）** —— 版本已定稿并打 tag `v1.4.11`；全量 **1169 用例 / 6788 断言 / 4 跳过 / 0 失败**；pacman 已出包验证，GitHub Release 与 Homebrew/winget 回填进行中。本文档为可执行清单；详细设计见 [plans/1.4.x/1.4.11.md](plans/1.4.x/1.4.11.md)，系列索引见 [plans/1.4.x/README.md](plans/1.4.x/README.md)。
+> **状态：📝 待执行（2026-10-25 立项）** —— 1.5.0 发布前收口；详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
 >
-> **版本主题**：代码质量审计修复（第四轮）—— 47 项（P1 4 / P2 20 / P3 23），零功能新增、公共 API 无破坏性变更。
+> **版本主题**：公共配置契约的发布前收口 —— 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛；零功能新增、公共 API 无破坏性变更。
+>
+> **基线**：dev.7 全量 **1205 用例 / 6940 断言 / 4 跳过 / 0 失败**；本机单元复核 1086/6152/3/0。
 
 ## 1 背景
 
-第四轮审计在 1.4.10 发布态上展开，覆盖 util / build+cache / pkg+repo / lua+i18n / cli+main+project / config+lockfile / toolchain+export+import / watcher+workspace+version 八个域。缺陷集中在错误路径、不可信输入、跨平台分支、跨模块契约与静默失败；Linux 侧验证另发现并修复了 4 个可移植性问题（重载歧义、i18n 静态初始化顺序、import 平台断言、含空格路径的 `cd` 引号）。
+dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.7 完成文档与 dev 收口。全量审查（47 项：P1 4 / P2 23 / P3 20，无 P0）发现发布级缺口：help 未列 1.5.0 全局开关、skills 仍引用重命名文档、workspace 忽略 `default_jobs`、`installed_packages` 未全链路、绝对 `build_dir` 未裁定，以及 Windows watch UAF、同 stem 对象碰撞、`src_dirs=["."]` 打包漏源、Lua 协程预算绕过、`--locked` 本地绕过等。本计划只做收口，不新增功能。
 
 ## 2 目标
 
 | 组 | 覆盖 | 状态 |
 |----|------|------|
-| 命令执行安全 | Q4-01~06 | ✅ |
-| 数据完整性与错误路径 | Q4-07~10 | ✅ |
-| 增量缓存与构建正确性 | Q4-11~14 | ✅ |
-| 包 / 仓库 / 锁文件 | Q4-15~20 | ✅ |
-| Lua 与 i18n | Q4-21~26 | ✅ |
-| 配置解析 | Q4-27~30 | ✅ |
-| import / export / workspace / project / CLI | Q4-31~43 | ✅（Q4-40 文档化、Q4-42 低危延后） |
-| 归档 / 下载 / 工具函数 | Q4-44~47 | ✅ |
+| 用户触达与 i18n | help / README / zsh / man / 433 键 / CI | ⬜ |
+| 全量文档与 skills | docs 17 对 / tutorial 16 对 / skills / 2.0 引用 / 文档闸门 | ⬜ |
+| 配置契约 | 绝对 build_dir / installed_packages / strict / NUL / 空串 / workspace jobs / pack_format | ⬜ |
+| 构建与打包 | watcher UAF / 同 stem 对象 / pack "." / 引号 / 写入检查 | ⬜ |
+| Lua 与 CLI 安全 | 协程预算 / 权限大小写 / 命令审计 / NUL / 空值 | ⬜ |
+| 包与仓库 | `--locked` / 暂存残留 / local repo / import 注入 | ⬜ |
+| 发布收口 | CHANGES / 索引 / 回归 / CI / 门槛 | ⬜ |
 
 ## 3 执行阶段
 
-### 阶段一：命令执行与进程安全（Q4-01~06）
-- [x] POSIX `run_command` 预构造 envp / `execve`
-- [x] Lua run 权限逐段校验（高级 shell 构造拒绝）
-- [x] 测试运行器命令平台正确转义
-- [x] `project new` 的 `git init` Windows 引号
-- [x] `build_editor_command` Windows 引号
-- [x] `$CXX`/`$CC` 探测路径引号化
-- [x] 回归：全量零失败
+### 阶段一：用户触达 + i18n + CI（P0）
+- [ ] `--help` 补 `--config` / `--no-config` / `--lang`，更新 `--color` 文案
+- [ ] 新增 3 个帮助 i18n 键、更新 color 键；en/zh 三向一致（433）
+- [ ] README / README_ZH 增加两级配置速览与全局选项
+- [ ] res/ezmk.zsh 覆盖新全局选项（并补齐缺失子命令）
+- [ ] man 与帮助交叉核对；check_man_sync + groff 零告警
+- [ ] CI 增加 `check_i18n.py`；补 help 选项存在性测试
+- [ ] 回归：单元零失败
 
-### 阶段二：数据完整性与错误路径（Q4-07~10）
-- [x] 回退 copy 失败保留临时文件并报错（复用 `atomic_rename`）
-- [x] `record.json` / `compile_commands.json` 回退后清理 `.tmp`
-- [x] `ThreadPool` spawn 失败可恢复
-- [x] `repo remove` 先持久化注册表
-- [x] 回归：全量零失败
+### 阶段二：全量文档与 skills（P0）
+- [ ] docs 17 对 + tutorial 16 对逐份核对（命令/路径/默认值/锚点）
+- [ ] B-04/B-05/B-07/B-11、D-07/D-10/D-11/D-12 修复
+- [ ] Catch2 超时、editor 已知限制、绝对 build_dir 风险写入文档
+- [ ] .claude/skills/ezmk-codebase 更新（project_config.md / RuntimeConfig / 两级配置 / 新键）
+- [ ] plans/2.0.x/REMOVALS.md 失效引用修正
+- [ ] 新增 `scripts/check_config_docs.py` 并接入 CI；链接检查
+- [ ] 回归：单元零失败
 
-### 阶段三：增量缓存与构建正确性（Q4-11~14）
-- [x] test 缓存随编译器版本 / deterministic 失效
-- [x] executable 入口接受 `main.cc`/`main.cxx`
-- [x] 单源失败保留其余缓存更新
-- [x] `collect_test_sources` 按路径去重
-- [x] 回归：全量零失败
+### 阶段三：配置契约加固（P0）
+- [ ] B-01 绝对 settings.build_dir 拒绝 + project 级文档裁定；补正/负测试
+- [ ] B-02 installed_packages 接入 utils / lockfile；补用例
+- [ ] B-03 project.build_dir strict；R-17 NUL 全路径校验；R-13 空串视为未设置；R-12 pack_format 归一化
+- [ ] C-03 workspace default_jobs + 1024 clamp；B-08 .gitignore 相对路径；B-09 解析错误带行列
+- [ ] 回归：单元零失败
 
-### 阶段四：包 / 仓库 / 锁文件（Q4-15~20）
-- [x] `pkg remove` 剪除 lockfile
-- [x] 跨仓库版本选择用 `compare_version_precedence`
-- [x] precompiled 包 lockfile 内容固定
-- [x] `compare_version` 分量饱和
-- [x] `direct_dep_specs` 与 `parse_depends_entry` 互逆
-- [x] 未找到 / 未知命令非零退出
-- [x] 回归：全量零失败
+### 阶段四：构建 / 打包正确性（P0）
+- [ ] A-01 Windows watcher 退出排空；stop 回归
+- [ ] A-02 对象名去碰撞 + 缓存记录失效；`a.c + a.cpp` 用例
+- [ ] A-03 pack `src_dirs=["."]` 漏源 + 暂存剪枝/清理；pack 用例
+- [ ] A-04 / A-05 / C-08 平台正确引号与 CXX 探测；Windows 命令字符串用例
+- [ ] C-09 clean 引号；C-11 写入失败检查
+- [ ] 回归：单元零失败；Windows CI 绿
 
-### 阶段五：Lua 与 i18n（Q4-21~26）
-- [x] `lua_pushlstring` 保留内嵌 NUL
-- [x] `json_to_lua` 深度上限
-- [x] 权限 glob 允许项锚定
-- [x] `lua_setupvalue` 返回值检查
-- [x] `ezmk_lua_main` 异常处理
-- [x] i18n 变体独立数据 + overlay 不半写
-- [x] 回归：全量零失败
+### 阶段五：Lua / CLI 安全（P0）
+- [ ] D-01 全局协程预算 / 协程数上限；逃逸用例
+- [ ] D-02 权限大小写；D-03 命令审计引号/反斜杠；D-04/D-05 NUL 往返
+- [ ] D-08 argparse 空 inline 值报缺值；补 CLI 负面用例
+- [ ] 回归：单元零失败
 
-### 阶段六：配置解析（Q4-27~30）
-- [x] 语言范围界序号比较
-- [x] `resolve_link_path` 链式 / 循环
-- [x] 已知键类型错误 fail-fast
-- [x] `normalized_lang` 含默认版本
-- [x] 回归：全量零失败
+### 阶段六：包 / 仓库完整性（P1）
+- [ ] C-01 --locked 本地绕过；C-04 local repo 绝对路径；C-05 暂存残留扫描
+- [ ] C-10 import 注释换行注入；补安全用例
+- [ ] 回归：单元零失败
 
-### 阶段七：import / export / workspace / project / CLI（Q4-31~43）
-- [x] import 条件链首个为真分支
-- [x] import 平台常量按宿主
-- [x] import 关键字集补齐
-- [x] export `-std=c++2a/2b` 映射 + stoi 兜底
-- [x] export CMake 路径引号化
-- [x] export 检查 `file_write`
-- [x] workspace test 无测试成员依赖仍构建
-- [x] 重复成员拒绝
-- [x] workspace test 绝对 `--report` 拒绝
-- [x] workspace watch 输出——已知限制（文档化）
-- [x] `project new` 名称校验
-- [x] `project new` / `example` 失败回滚——低危延后
-- [x] `project export --glob` 生效
-- [x] 回归：全量零失败
-
-### 阶段八：归档 / 下载 / 工具函数与收口（Q4-44~47）
-- [x] `resolve_relative_path_flags` 精确前缀
-- [x] Windows 下载拆分 host/port
-- [x] `safe_extract_path` 接受 `.`/尾分隔符
-- [x] `extract_targz` 校验 gzip CRC32/ISIZE
-- [x] i18n 430 键三向一致（新增 12 个 fail-fast 键）
-- [x] 全量 `bash build.sh test-all`：**1169 / 6788 / 4 / 0**
-- [x] `check_man_sync.py` + groff 零告警 + `check_docs_sync.sh`
-- [x] CHANGES / 计划 / 索引收口
-- [x] 发布门槛复核（⛔ ①②③④⑤）
-
-### 发布阶段：1.4.11
-- [x] 版本号置为 `1.4.11`（`build.sh` fallback）
-- [x] 全量回归零失败（1169 / 6788 / 4 / 0）
-- [x] `git tag v1.4.11` 并推送（指向 `ef2b0dd`）
-- [ ] GitHub Release published + 资产 digest 核对
-- [x] pacman：`makepkg -fd` 出包 `eazymake 1.4.11-1`（sha256 `a06f8892…`，含 4 页 man + `_ezmk`，`ezmk version` → 1.4.11）
-- [ ] Homebrew 公式回填（tap + 仓库副本，真实 digest）
-- [x] winget：三件套已推送 fork 分支 `EazyMake.EazyMake-1.4.11`（`e3662de`）；PR [#454711](https://github.com/microsoft/winget-pkgs/pull/454711) 已开启（CLA pass）
+### 阶段七：发布收口（P0）
+- [ ] CHANGES.md 新增 1.5.0-pre.1 条目（修复 / 文档 / 已知限制 / 延后项）
+- [ ] plans/1.5.x/README.md、plans/README.md、根 plan.md 状态与勾选
+- [ ] 发布清单预检：版本号、release.yml、PKGBUILD/Homebrew/winget 仅 checklist，不在 pre 改版本
+- [ ] `bash build.sh test-all` 零失败（≥ 1205/6940）
+- [ ] CI push 绿色；check_i18n / check_man_sync / check_docs_sync / check_config_docs / groff 全绿
+- [ ] 发布门槛预核对并记录结论
 
 ## 4 关键设计决策
 
-1. **Q4-02**：权限激活时按 `;`/`&&`/`||`/`|`/`&` 逐段校验；含 `$`、反引号、重定向、子 shell、换行的命令直接拒绝。
-2. **Q4-23**：相对 glob 允许项锚定项目根。
-3. **Q4-28**：实现链式 link 解析 + 循环检测。
-4. **Q4-37**：无测试成员仍构建、仅跳过测试（计为 skipped）。
-5. **Q4-38**：重复成员为硬错误。
-6. **Q4-40**：`workspace watch` 输出缓冲收口为已知限制。
-7. **Q4-42**：`project new`/`example` 失败回滚为 P3 低危延后。
-8. **行为收紧**：未知命令 / `pkg remove/update` / `repo remove/update/info` 未找到目标退出非零；损坏 gzip、超深 JSON、含 shell 构造的受限 `ezmk.run` 明确报错。
+1. **绝对 `[settings].build_dir` 拒绝**：对象目录不按项目隔离，共享绝对目录会互相覆盖；`[project].build_dir` 保留绝对路径但文档标注风险。
+2. **对象名去碰撞**：对象文件名纳入源扩展/语言后缀，缓存记录随命名版本失效，升级后一次性全量重编。
+3. **Lua 预算**：所有协程共享 1e8 指令总额，并限制存活协程数；不依赖每线程计数。
+4. **`--locked` 严格化**：锁模式下不再静默使用本地目录/归档，除非锁条目 `source=local`。
+5. **加载期诊断英文**：i18n 初始化晚于 config 加载，本版只文档化，不重构加载顺序。
+6. **延后项**：A-06~A-12、B-10、C-02/C-06/C-07/C-12、D-06/D-09 归 1.5.x，不阻塞 1.5.0。
 
 ## 5 兼容性矩阵
 
 | 变更 | 影响 | 说明 |
 |------|------|------|
-| 默认行为 | **零变化** | 未使用新开关 / 未触发错误路径时与 1.4.10 一致 |
-| 退出码收紧 | 行为收紧 | 未找到目标 / 未知命令返回非零 |
-| run 权限分段校验 | 行为收紧 | 含 shell 元字符的受限 `ezmk.run` 被拒 |
-| 归档 / JSON 校验收紧 | 行为收紧 | 损坏输入明确报错 |
-| i18n | 新增 12 键 | 418 → 430，三向一致 |
-| 公共 API | **无破坏性变更** | 仅内部签名与错误行为修正 |
+| 帮助 / README / man / zsh | 纯增量 | 只补新选项与说明 |
+| i18n | 新增 3 键 | 430 → 433 三向一致；zh-TW 继承 zh |
+| 绝对 settings.build_dir | 行为收紧 | 1.5.0 未发布，发布前加固 |
+| project.build_dir 类型错误 | 行为收紧 | 静默回退改为 fail-fast |
+| 对象命名 | 一次性重编 | 不改变产物语义 |
+| Windows watch / 引号 / Lua 权限 | 缺陷修复/收紧 | 安全相关 |
+| --locked 本地源 | 行为收紧 | 不再安装与锁不符的本地源 |
+| 公共 API | **无破坏性变更** | 只修内部与文档 |
 
 ## 6 延后项
 
-- `workspace watch` 流式输出（已知限制）。
-- `project new` / `example` 失败回滚（P3）。
-- 颜色深度引擎 / `ezmk config get/set`（属 1.4.12+）。
-- 破坏性变更与弃用面移除（归 2.0.0，见 [plans/2.0.x/REMOVALS.md](plans/2.0.x/REMOVALS.md)）。
+A-06 符号链接打包、A-07 Catch2 include、A-08 C 编译器版本缓存、A-09 Windows stdin、A-10 file_read、A-11 waitpid、A-12 MSVC response file、B-10 预发布版本排序、C-02 预发布版本约束、C-06 并发安装锁、C-07 workspace 输出缓冲、C-12 repo 迁移部分失败、D-06 子进程输出上限、D-09 Lua 权限文案 i18n。
+
+## 7 发布门槛
+
+⛔ 进入 1.5.0 正式发布前必须同时满足：
+
+- [ ] 阶段一~七全部勾选，或延后项明确登记
+- [ ] 47 项审查 + dev.6 遗留全部有去向
+- [ ] P1 零残留；P2 修复或明确收口
+- [ ] `bash build.sh test-all` 零失败，≥ 1205/6940
+- [ ] CI 最后一次 push 绿色
+- [ ] 公共 API 无破坏性变更；破坏性变更仍归 2.0.0
