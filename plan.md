@@ -1,6 +1,6 @@
 # EazyMake 1.5.0-pre.1 执行计划
 
-> **状态：🚧 实现收口（2026-10-31）** —— 代码、文档、i18n、测试与索引已完成；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1219 / 6979 / 8 跳过 / 0 失败**（3 个联网 catch2 用例按环境跳过），pre.1 标签用例 12/28 全绿（1 项 Windows-only skip）；CI 待联网环境补跑。详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
+> **状态：✅ 收口完成（2026-10-31）** —— 代码、文档、i18n、测试与索引已完成；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1219 / 6979 / 8 跳过 / 0 失败**（3 个联网 catch2 用例按环境跳过），pre.1 标签用例 12/28 全绿（1 项 Windows-only skip）；CI run `41212564762` 全绿（Ubuntu test-all / Windows unit / man / zsh）。详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
 >
 > **版本主题**：公共配置契约的发布前收口 —— 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛；零功能新增、公共 API 无破坏性变更。
 >
@@ -73,8 +73,8 @@ dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.
 - [x] plans/1.5.x/README.md、plans/README.md、根 plan.md 状态与勾选
 - [x] 发布清单预检：确认 PKGBUILD/Homebrew/winget 仍指向 1.4.11，正式发布时统一升级
 - [x] `bash build.sh test-all` 零失败（`EZMK_TEST_OFFLINE=1`：1219/6979/8/0；3 个联网 catch2 用例按环境跳过）
-- [ ] CI push 绿色；check_i18n / check_man_sync / check_docs_sync / check_config_docs / groff 全绿
-- [x] 发布门槛预核对：②API 无破坏 + ③全量零失败已满足；①清单收口、CI 绿色待补
+- [x] CI push 绿色；run `41212564762`（Ubuntu / Windows / man / zsh 全绿）
+- [x] 发布门槛预核对：②API 无破坏 + ③全量零失败已满足；三项均满足
 
 ## 4 关键设计决策
 
@@ -106,9 +106,9 @@ A-06 符号链接打包、A-07 Catch2 include、A-08 C 编译器版本缓存、A
 
 ⛔ 进入 1.5.0 正式发布前必须同时满足：
 
-- [ ] 阶段一~七全部勾选，或延后项明确登记
+- [x] 阶段一~七全部勾选，或延后项明确登记
 - [x] 47 项审查 + dev.6 遗留全部有去向
 - [x] P1 零残留；P2 修复或明确收口
 - [x] `bash build.sh test-all` 零失败（离线模式 1219/6979/8/0）
-- [ ] CI 最后一次 push 绿色
+- [x] CI 最后一次 push 绿色（run `41212564762`）
 - [x] 公共 API 无破坏性变更；破坏性变更仍归 2.0.0
