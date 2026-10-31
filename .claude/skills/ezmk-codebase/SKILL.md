@@ -196,14 +196,25 @@ Scope flags (`-p`/`-u`/`-g`): `install` and `repo add` accept only one; others a
 
 ### Global `--color=<mode>`
 
-Consumed by `strip_color_option()` at the top of `cli::parse()`. Values (case-insensitive): `always`/`enable`, `auto`/`default`, `never`/`disable`. Tokens after `--` are left for pass-through. Sets `util::set_color_mode()`; explicit `always`/`never` override `NO_COLOR` (only `auto` honors it). `always` also runs `init_console()` for Windows VT100.
+Consumed by `strip_color_option()` at the top of `cli::parse()`. Values (case-insensitive): `always`/`enable`/`on`/`16colors`/`256colors`/`truecolor`, `auto`/`default`, `never`/`disable`/`off`. Tokens after `--` are left for pass-through. Sets `util::set_color_mode()`; explicit `always`/`never` override `NO_COLOR` (only `auto` honors it). `always` also runs `init_console()` for Windows VT100.
+
+### Global config / language (1.5.0)
+
+`config::load_runtime_config(argc, argv)` runs in `main()` **before** `cli::parse()` and reads two optional files:
+
+- global: `<EZMK_GLOBAL_CONFIG_DIR>/config.toml` (default `/etc/ezmk` / `C:\.ezmk\config`)
+- user: `<EZMK_USER_CONFIG_DIR>/config.toml` (default `$XDG_CONFIG_HOME/ezmk` / `%USERPROFILE%\.ezmk\config`)
+
+Merge order: built-in < global < user < project < CLI/env. `[base_dir]` is kept per scope (user `examples`/`logs` override global; `installed_packages`/`repo_cache` stay scope-bound). `--config <file>` replaces the user layer (missing file is fatal), `--no-config` skips both, `--lang <tag>` overrides `EZMK_LANG` and `[settings].natural_language`. Consumers read `config::runtime_config()`; do not parse `config.toml` ad hoc.
+
+Docs: `docs/en/user_config.md`, `docs/en/global_config.md`, `docs/en/project_config.md`.
 
 ## Configuration system (`ezmk.toml`)
 
-See `README.md` for the TOML example and `docs/en/config_file.md` for the full spec. Key sections:
+See `README.md` for the TOML example and `docs/en/project_config.md` for the full spec. Key sections:
 
-- `[project]` — `name`, `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (required), `language` (default `"C++17"`)
-- `[compile]` — `flags`, `msvc_flags`, `include_dirs` (default `["include"]`), `src_dirs` (default `["src"]`), `ezmk_macros` (bool, default `true`), `deterministic` (bool, default `false`), `source_date_epoch` (uint64, optional). Sub-table `[compile.macros]` for semantic macro definitions (key-value, supports string/int/bool).
+- `[project]` — `name`, `type` (`"executable"` / `"static"` / `"shared"` / `"utils"`), `version` (required), `language` (default `"C++17"`); 1.5.0 adds `build_dir` (empty = global default) and `output_name` (safe basename, empty = name)
+- `[compile]` — `flags`, `msvc_flags`, `include_dirs` (default `["include"]`), `src_dirs` (default `["src"]`), `ezmk_macros` (bool, default `true`), `deterministic` (bool, default `false`), `source_date_epoch` (uint64, optional), `jobs` (1.5.0; `0` = auto, unset = global). Sub-table `[compile.macros]` for semantic macro definitions (key-value, supports string/int/bool).
 - `[link]` — `flags`, `msvc_flags`, `link_dirs`, `system_target`
 - `[depends]` — `lib` (hard deps, missing → error), `want` (optional deps)
 - `[utils]` — `tools` array (only for `type = "utils"`)
@@ -211,6 +222,10 @@ See `README.md` for the TOML example and `docs/en/config_file.md` for the full s
 - `[link.profile.<name>]` — profile-specific link `flags`, `msvc_flags`
 - `[hooks]` — `pre_build`, `post_build`, `on_failure`: paths to Lua hook scripts
 - `[install]` — `prefix`, `bindir`, `libdir`, `includedir`, `sharedir`: install layout
+- `[test]` — 1.5.0 adds `timeout` and `report_dir` (unset = global)
+- `[pkg]` — 1.5.0 adds `auto_install` (unset = global)
+- `[watch]` — 1.5.0: `debounce_ms` (0 = global), `ignore` (appended to global)
+- `[pack]` — 1.5.0: `format`, `output_dir` (relative CWD), `name` (safe basename), `exclude` (appended to global)
 
 ## Package management
 

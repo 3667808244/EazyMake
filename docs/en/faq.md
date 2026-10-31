@@ -254,6 +254,17 @@ Two traps:
 
 ---
 
+### Q: A broken user/global config.toml also breaks --help / version
+
+**Cause**: both `config.toml` layers are loaded before CLI parsing. This fail-fast behavior is intentional: a broken configuration must not silently build with defaults.
+
+**Solution**:
+1. Use the escape hatch for diagnostics: `ezmk --no-config --help`, `ezmk --no-config version`
+2. Fix the syntax/key/type in `config.toml`, or point `ezmk --config <file>` at a known-good file
+3. The error names the file and field; load-time diagnostics are English-only
+
+---
+
 ### Q: "invalid project type" error
 
 **Cause**: The `type` field in `[project]` has an unrecognized value.

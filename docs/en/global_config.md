@@ -43,7 +43,7 @@ The global and user levels share the **same schema**: `[base_dir]` + `[settings]
 | `examples` | Output root for `ezmk example`; overridable at the user level |
 | `logs` | File-log directory; overridable at the user level |
 | `default_jobs` | Machine-wide parallelism; `[compile].jobs` overrides it per project |
-| `build_dir` | Machine-wide default build dir; `[project].build_dir` overrides it |
+| `build_dir` | Machine-wide default build dir; `[project].build_dir` overrides it. **Must be relative** (to each project root); an absolute path fails at load time to avoid sharing object directories across projects |
 | `default_pkg_scope` | Default scope for `pkg install` when no scope flag is given |
 | `auto_install_deps` | Auto-install missing dependencies; `[pkg].auto_install` overrides it |
 

@@ -256,6 +256,7 @@ Lua scripts run in a restricted environment:
 - `os.execute` and `io.popen` are removed — external commands must be executed via `ezmk.run()`
 - `ezmk.file_write()` denies writes to absolute paths outside the project root
 - File-loading functions are **not exposed** (1.1.2): `dofile`, `loadfile`, `load`, `require`, and the `debug` library all resolve to `nil` — scripts cannot read files or load code from disk. All file/process access must go through the `ezmk.*` API
+- The **coroutine library is not exposed** (1.5.0-pre.1): `coroutine` resolves to `nil` — each coroutine would receive a fresh instruction-budget count and could bypass the sandbox execution budget
 
 > **Why strip `os.execute`/`io.popen` at compile time?** Removing them from the
 > Lua binary means scripts cannot reach them at all — every external command must

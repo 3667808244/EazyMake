@@ -254,6 +254,17 @@ src_dirs = ["src", "src/core", "src/ui"]
 
 ---
 
+### Q: 用户/全局 config.toml 写坏后，ezmk --help / version 也失败
+
+**原因**: 两级 `config.toml` 在 CLI 解析前加载；这是有意的 fail-fast，避免带着损坏配置继续构建。
+
+**解决**:
+1. 用逃生口先查看帮助/版本：`ezmk --no-config --help`、`ezmk --no-config version`
+2. 修复 `config.toml` 的语法/键名/类型，或临时用 `ezmk --config <file>` 指向一份可用配置
+3. 错误信息会给出文件路径与字段名；配置加载期的诊断固定为英文
+
+---
+
 ### Q: "invalid project type" 错误
 
 **原因**: `[project]` 中的 `type` 字段值不被识别。

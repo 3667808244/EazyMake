@@ -489,7 +489,7 @@ include_dirs = ["include", "@link:shared/include"]
 
 ### `--lang <tag>`（1.5.0+）
 
-覆盖本次调用的界面语言，优先级高于 `EZMK_LANG` 与 `[settings].natural_language`。未知标签回退到基础语言/英文。
+覆盖本次调用的界面语言，优先级高于 `EZMK_LANG` 与 `[settings].natural_language`。**无效/未内置的标签会被忽略**，继续按 `EZMK_LANG` → `[settings].natural_language` → 系统语言回退；全部缺失时英文兜底。
 
 ---
 

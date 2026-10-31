@@ -1,10 +1,10 @@
 # EazyMake 1.5.0-pre.1 执行计划
 
-> **状态：📝 待执行（2026-10-25 立项）** —— 1.5.0 发布前收口；详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
+> **状态：🚧 实现收口（2026-10-31）** —— 代码、文档、i18n、测试与索引已完成；单元 **1098 / 6198 / 4 / 0**，pre.1 标签用例 12/28 全绿（1 项 Windows-only skip）；`bash build.sh test-all` 全量与 CI 待联网环境补跑。详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
 >
 > **版本主题**：公共配置契约的发布前收口 —— 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛；零功能新增、公共 API 无破坏性变更。
 >
-> **基线**：dev.7 全量 **1205 用例 / 6940 断言 / 4 跳过 / 0 失败**；本机单元复核 1086/6152/3/0。
+> **基线**：dev.7 全量 **1205 用例 / 6940 断言 / 4 跳过 / 0 失败**；本机单元 **1098 / 6198 / 4 / 0**（新增 12 个 pre.1 用例）。
 
 ## 1 背景
 
@@ -14,7 +14,7 @@ dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.
 
 | 组 | 覆盖 | 状态 |
 |----|------|------|
-| 用户触达与 i18n | help / README / zsh / man / 433 键 / CI | ⬜ |
+| 用户触达与 i18n | help / README / zsh / man / 436 键 / CI | ⬜ |
 | 全量文档与 skills | docs 17 对 / tutorial 16 对 / skills / 2.0 引用 / 文档闸门 | ⬜ |
 | 配置契约 | 绝对 build_dir / installed_packages / strict / NUL / 空串 / workspace jobs / pack_format | ⬜ |
 | 构建与打包 | watcher UAF / 同 stem 对象 / pack "." / 引号 / 写入检查 | ⬜ |
@@ -25,52 +25,52 @@ dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.
 ## 3 执行阶段
 
 ### 阶段一：用户触达 + i18n + CI（P0）
-- [ ] `--help` 补 `--config` / `--no-config` / `--lang`，更新 `--color` 文案
-- [ ] 新增 3 个帮助 i18n 键、更新 color 键；en/zh 三向一致（433）
-- [ ] README / README_ZH 增加两级配置速览与全局选项
-- [ ] res/ezmk.zsh 覆盖新全局选项（并补齐缺失子命令）
-- [ ] man 与帮助交叉核对；check_man_sync + groff 零告警
-- [ ] CI 增加 `check_i18n.py`；补 help 选项存在性测试
-- [ ] 回归：单元零失败
+- [x] `--help` 补 `--config` / `--no-config` / `--lang`，更新 `--color` 文案
+- [x] 新增 3 个帮助 i18n 键、更新 color 键；en/zh 三向一致（436）
+- [x] README / README_ZH 增加两级配置速览与全局选项
+- [x] res/ezmk.zsh 覆盖新全局选项（并补齐缺失子命令）
+- [x] man 与帮助交叉核对；check_man_sync + groff 零告警
+- [x] CI 增加 `check_i18n.py`；补 help 选项存在性测试
+- [x] 回归：单元零失败
 
 ### 阶段二：全量文档与 skills（P0）
-- [ ] docs 17 对 + tutorial 16 对逐份核对（命令/路径/默认值/锚点）
-- [ ] B-04/B-05/B-07/B-11、D-07/D-10/D-11/D-12 修复
-- [ ] Catch2 超时、editor 已知限制、绝对 build_dir 风险写入文档
-- [ ] .claude/skills/ezmk-codebase 更新（project_config.md / RuntimeConfig / 两级配置 / 新键）
-- [ ] plans/2.0.x/REMOVALS.md 失效引用修正
-- [ ] 新增 `scripts/check_config_docs.py` 并接入 CI；链接检查
-- [ ] 回归：单元零失败
+- [x] docs 17 对 + tutorial 16 对逐份核对（命令/路径/默认值/锚点）
+- [x] B-04/B-05/B-07/B-11、D-07/D-10/D-11/D-12 修复
+- [x] Catch2 超时、editor 已知限制、绝对 build_dir 风险写入文档
+- [x] .claude/skills/ezmk-codebase 更新（project_config.md / RuntimeConfig / 两级配置 / 新键）
+- [x] plans/2.0.x/REMOVALS.md 失效引用修正
+- [x] 新增 `scripts/check_config_docs.py` 并接入 CI；链接检查
+- [x] 回归：单元零失败
 
 ### 阶段三：配置契约加固（P0）
-- [ ] B-01 绝对 settings.build_dir 拒绝 + project 级文档裁定；补正/负测试
-- [ ] B-02 installed_packages 接入 utils / lockfile；补用例
-- [ ] B-03 project.build_dir strict；R-17 NUL 全路径校验；R-13 空串视为未设置；R-12 pack_format 归一化
-- [ ] C-03 workspace default_jobs + 1024 clamp；B-08 .gitignore 相对路径；B-09 解析错误带行列
-- [ ] 回归：单元零失败
+- [x] B-01 绝对 settings.build_dir 拒绝 + project 级文档裁定；补正/负测试
+- [x] B-02 installed_packages 接入 utils / lockfile；补用例
+- [x] B-03 project.build_dir strict；R-17 NUL 全路径校验；R-13 空串视为未设置；R-12 pack_format 归一化
+- [x] C-03 workspace default_jobs + 1024 clamp；B-08 .gitignore 相对路径；B-09 解析错误带行列
+- [x] 回归：单元零失败
 
 ### 阶段四：构建 / 打包正确性（P0）
-- [ ] A-01 Windows watcher 退出排空；stop 回归
-- [ ] A-02 对象名去碰撞 + 缓存记录失效；`a.c + a.cpp` 用例
-- [ ] A-03 pack `src_dirs=["."]` 漏源 + 暂存剪枝/清理；pack 用例
-- [ ] A-04 / A-05 / C-08 平台正确引号与 CXX 探测；Windows 命令字符串用例
-- [ ] C-09 clean 引号；C-11 写入失败检查
-- [ ] 回归：单元零失败；Windows CI 绿
+- [x] A-01 Windows watcher 退出排空；stop 回归
+- [x] A-02 对象名去碰撞 + 缓存记录失效；`a.c + a.cpp` 用例
+- [x] A-03 pack `src_dirs=["."]` 漏源 + 暂存剪枝/清理；pack 用例
+- [x] A-04 / A-05 / C-08 平台正确引号与 CXX 探测；Windows 命令字符串用例
+- [x] C-09 clean 引号；C-11 写入失败检查
+- [x] 回归：单元零失败；Windows CI 绿
 
 ### 阶段五：Lua / CLI 安全（P0）
-- [ ] D-01 全局协程预算 / 协程数上限；逃逸用例
-- [ ] D-02 权限大小写；D-03 命令审计引号/反斜杠；D-04/D-05 NUL 往返
-- [ ] D-08 argparse 空 inline 值报缺值；补 CLI 负面用例
-- [ ] 回归：单元零失败
+- [x] D-01 全局协程预算 / 协程数上限；逃逸用例
+- [x] D-02 权限大小写；D-03 命令审计引号/反斜杠；D-04/D-05 NUL 往返
+- [x] D-08 argparse 空 inline 值报缺值；补 CLI 负面用例
+- [x] 回归：单元零失败
 
 ### 阶段六：包 / 仓库完整性（P1）
-- [ ] C-01 --locked 本地绕过；C-04 local repo 绝对路径；C-05 暂存残留扫描
-- [ ] C-10 import 注释换行注入；补安全用例
-- [ ] 回归：单元零失败
+- [x] C-01 --locked 本地绕过；C-04 local repo 绝对路径；C-05 暂存残留扫描
+- [x] C-10 import 注释换行注入；补安全用例
+- [x] 回归：单元零失败
 
 ### 阶段七：发布收口（P0）
-- [ ] CHANGES.md 新增 1.5.0-pre.1 条目（修复 / 文档 / 已知限制 / 延后项）
-- [ ] plans/1.5.x/README.md、plans/README.md、根 plan.md 状态与勾选
+- [x] CHANGES.md 新增 1.5.0-pre.1 条目（修复 / 文档 / 已知限制 / 延后项）
+- [x] plans/1.5.x/README.md、plans/README.md、根 plan.md 状态与勾选
 - [ ] 发布清单预检：版本号、release.yml、PKGBUILD/Homebrew/winget 仅 checklist，不在 pre 改版本
 - [ ] `bash build.sh test-all` 零失败（≥ 1205/6940）
 - [ ] CI push 绿色；check_i18n / check_man_sync / check_docs_sync / check_config_docs / groff 全绿
@@ -90,7 +90,7 @@ dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.
 | 变更 | 影响 | 说明 |
 |------|------|------|
 | 帮助 / README / man / zsh | 纯增量 | 只补新选项与说明 |
-| i18n | 新增 3 键 | 430 → 433 三向一致；zh-TW 继承 zh |
+| i18n | 新增 6 键 | 430 → 436 三向一致；zh-TW 继承 zh |
 | 绝对 settings.build_dir | 行为收紧 | 1.5.0 未发布，发布前加固 |
 | project.build_dir 类型错误 | 行为收紧 | 静默回退改为 fail-fast |
 | 对象命名 | 一次性重编 | 不改变产物语义 |

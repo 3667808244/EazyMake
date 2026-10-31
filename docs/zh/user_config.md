@@ -58,26 +58,26 @@
 | `default_language` | string | `"C++17"` | 新项目默认语言标准；非法值加载即报错 |
 | `default_project_version` | string | `"0.1.0"` | 新项目默认版本；不得为空 |
 | `default_compile_flags` | string[] | `["-Wall", "-Wextra"]` | 新项目默认 `[compile].flags` |
-| `build_dir` | string | `"build"` | 默认构建目录；项目可用 `[project].build_dir` 覆盖 |
+| `build_dir` | string | `"build"` | 默认构建目录；项目可用 `[project].build_dir` 覆盖。**必须是相对路径**（相对项目根）；绝对路径加载即报错，避免多个项目共享对象目录 |
 | `default_jobs` | int | `0` | 默认并行度；`0` = 自动；上限 1024 |
-| `test_timeout` | int | `30` | 测试默认超时秒数；`0` = 不超时 |
+| `test_timeout` | int | `30` | 测试默认超时秒数；`0` = 不超时。内置 ezmk 框架默认 30s；Catch2 在未显式配置时**不超时**（dev.6 R-03） |
 | `test_report_dir` | string | `".ezmk/test-results"` | 默认测试报告目录（相对项目根） |
-| `watch_debounce_ms` | int | `300` | watch 去抖毫秒；`0` 表示默认 300，显式值 50..5000 |
-| `watch_ignore` | string[] | `[]` | 额外忽略前缀（相对项目根） |
+| `watch_debounce_ms` | int | `300` | watch 去抖毫秒；`0` 表示回退默认 300，显式值 50..5000 |
+| `watch_ignore` | string[] | `[]` | 额外忽略前缀（相对项目根）；项目级 `[watch].ignore` **追加**在本值之后 |
 | `pack_format` | string | `"tar.gz"` | `tar.gz` / `zip` / `tgz` |
 | `pack_output_dir` | string | `"."` | 默认打包输出目录（相对进程 CWD） |
 | `pack_name` | string | 空 | 归档 basename；空 = `<name>-<version>` |
-| `pack_exclude` | string[] | `[]` | 额外排除的目录名 / 扩展名；内置排除仍生效 |
+| `pack_exclude` | string[] | `[]` | 额外排除的目录名 / 扩展名；项目级 `[pack].exclude` **追加**在本值之后，内置排除仍生效 |
 | `default_pkg_scope` | string | `"project"` | `pkg install` 未给 scope 时的默认：`project` / `user` / `global` |
 | `auto_install_deps` | bool | `true` | 缺依赖时是否自动安装；`false` 直接报错 |
 | `scan_skip_dirs` | string[] | `[]` | `workspace scan` 额外跳过的目录名 |
 | `git_path` | string | `"git"` | git 可执行文件路径 |
-| `editor` | string | 空 | 编辑器命令；`EDITOR`/`VISUAL` 优先，空则自动探测 |
+| `editor` | string | 空 | 编辑器可执行文件；`EDITOR`/`VISUAL` 优先，空则自动探测。整串按一个可执行路径处理，**不支持带参数**（如 `"code -w"`），需要参数请用 `EDITOR` 包装脚本 |
 | `auto_pack` | bool | `false` | `static` 项目在 `build`/`run` 成功后自动打源码包 |
 
-## 项目级可覆盖的键
+## 项目级可覆盖 / 追加的键
 
-| 用户级键 | 项目级覆盖 |
+| 用户级键 | 项目级覆盖 / 追加 |
 |----------|------------|
 | `build_dir` | `[project].build_dir` |
 | `default_jobs` | `[compile].jobs`（`0` 表示自动） |
@@ -88,7 +88,7 @@
 | `auto_install_deps` | `[pkg].auto_install` |
 | `scan_skip_dirs` | `[workspace.options].scan_skip` |
 
-产物命名 `[project].output_name` 只属于项目级。
+产物命名 `[project].output_name` 只属于项目级。标量键是**覆盖**；`ignore` / `pack_exclude` 是**追加**（项目在用户/全局值之后追加，不能清空）。
 
 ## 示例
 

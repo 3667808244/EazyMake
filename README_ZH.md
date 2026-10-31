@@ -142,7 +142,21 @@ want = ["sqlite3"]              # 可选依赖
 
 完整参考：[`docs/zh/project_config.md`](docs/zh/project_config.md)
 
-项目配置之外，用户级 / 全局级 `config.toml` 见 [用户级配置](docs/zh/user_config.md) 与 [全局级配置](docs/zh/global_config.md)。
+项目配置之外，还可以用用户级 / 全局级 `config.toml` 提供个人或整机默认值，不必改项目文件：
+
+```toml
+# 用户级：%USERPROFILE%\.ezmk\config\config.toml（Windows）
+#         $XDG_CONFIG_HOME/ezmk/config.toml（Linux/macOS）
+# 全局级：C:\.ezmk\config\config.toml（Windows）/ /etc/ezmk/config.toml（Linux/macOS）
+[settings]
+default_jobs = 4
+pack_format = "zip"
+
+[base_dir]
+logs = "~/ezmk/logs"
+```
+
+合并顺序：**内置 < 全局 < 用户 < 项目 < CLI/env**。用 `--config <file>` 替换用户级、`--no-config` 跳过两级、`--lang <tag>` 覆盖界面语言。完整 schema 见 [用户级配置](docs/zh/user_config.md) 与 [全局级配置](docs/zh/global_config.md)。
 
 ## 命令速览
 
@@ -188,6 +202,8 @@ ezmk workspace clean [flags]    # 清理成员缓存
 ezmk workspace scan [<dir>]     # 采纳现有项目：创建/更新 ezmk-workspace.toml（1.4.0-dev.7+）
 # build/test/watch/clean 附 -w 重定向：ezmk build -w ≡ ezmk workspace build
 ```
+
+全局选项（可出现在任意命令前）：`--config <file>`、`--no-config`、`--lang <tag>`、`--color=<mode>`。
 
 完整参考：[`docs/zh/cli.md`](docs/zh/cli.md)
 

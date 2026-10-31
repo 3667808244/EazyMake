@@ -74,9 +74,10 @@ of the exported target.
 .BR \-h ", " \-\-help
 Print usage and exit with status 0.
 .PP
-Unknown options, a missing option value and a missing
+Unknown options, a missing option value and extra operands are usage
+errors: an error line is printed and the exit status is 2. A missing
 .I hook.lua
-operand are usage errors: usage is printed and the exit status is 2.
+operand also prints the usage text and exits with status 2.
 .SH HOOK CONTRACT
 The script is loaded as an ordinary Lua chunk and must define a global
 function
@@ -131,12 +132,16 @@ API subset documented in
 The hook returned 0 (or a non\-numeric value).
 .TP
 .B 1
-Lua error, missing
+Lua error or missing
 .B run()
-function, or a non\-zero value returned by the hook.
+function.
 .TP
-.B 2
+.BR 2
 Usage error (unknown option, missing option value, missing script operand).
+.TP
+.B other
+A numeric value returned by the hook becomes the process exit status
+verbatim (for example, returning 3 exits with status 3).
 .SH FILES
 .TP
 .BR scripts/*.lua

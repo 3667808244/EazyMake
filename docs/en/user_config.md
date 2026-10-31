@@ -58,26 +58,26 @@ Path rules:
 | `default_language` | string | `"C++17"` | Default language standard; invalid values fail at load time |
 | `default_project_version` | string | `"0.1.0"` | Default new-project version; must not be empty |
 | `default_compile_flags` | string[] | `["-Wall", "-Wextra"]` | Default `[compile].flags` for new projects |
-| `build_dir` | string | `"build"` | Default build directory; `[project].build_dir` overrides it |
+| `build_dir` | string | `"build"` | Default build directory; `[project].build_dir` overrides it. **Must be relative** (to the project root); an absolute path fails at load time to avoid sharing object directories between projects |
 | `default_jobs` | int | `0` | Default parallelism; `0` = auto; max 1024 |
-| `test_timeout` | int | `30` | Default test timeout in seconds; `0` = no timeout |
+| `test_timeout` | int | `30` | Default test timeout in seconds; `0` = no timeout. The built-in ezmk framework defaults to 30s; Catch2 keeps **no timeout** unless configured explicitly (dev.6 R-03) |
 | `test_report_dir` | string | `".ezmk/test-results"` | Default report directory (relative to the project root) |
-| `watch_debounce_ms` | int | `300` | Watch debounce in ms; `0` means 300, explicit values 50..5000 |
-| `watch_ignore` | string[] | `[]` | Extra ignored prefixes (relative to the project root) |
+| `watch_debounce_ms` | int | `300` | Watch debounce in ms; `0` falls back to 300; explicit values 50..5000 |
+| `watch_ignore` | string[] | `[]` | Extra ignored prefixes (relative to the project root); `[watch].ignore` is **appended** after these |
 | `pack_format` | string | `"tar.gz"` | `tar.gz` / `zip` / `tgz` |
 | `pack_output_dir` | string | `"."` | Default pack output directory (relative to the process CWD) |
 | `pack_name` | string | empty | Archive basename; empty = `<name>-<version>` |
-| `pack_exclude` | string[] | `[]` | Extra excluded directory names / extensions; built-in exclusions still apply |
+| `pack_exclude` | string[] | `[]` | Extra excluded directory names / extensions; `[pack].exclude` is **appended** after these and built-in exclusions still apply |
 | `default_pkg_scope` | string | `"project"` | Default `pkg install` scope: `project` / `user` / `global` |
 | `auto_install_deps` | bool | `true` | Auto-install missing dependencies; `false` fails instead |
 | `scan_skip_dirs` | string[] | `[]` | Extra directory names skipped by `workspace scan` |
 | `git_path` | string | `"git"` | Git executable path |
-| `editor` | string | empty | Editor command; `EDITOR`/`VISUAL` take precedence, otherwise auto-detect |
+| `editor` | string | empty | Editor executable; `EDITOR`/`VISUAL` take precedence, otherwise auto-detect. The whole string is treated as one executable path, so **arguments are not supported** (e.g. `"code -w"`); use an `EDITOR` wrapper script when arguments are needed |
 | `auto_pack` | bool | `false` | `static` projects auto-pack after a successful `build`/`run` |
 
-## Project-level overrides
+## Project-level overrides / appends
 
-| User key | Project override |
+| User key | Project override / append |
 |----------|------------------|
 | `build_dir` | `[project].build_dir` |
 | `default_jobs` | `[compile].jobs` (`0` = auto) |
@@ -88,7 +88,7 @@ Path rules:
 | `auto_install_deps` | `[pkg].auto_install` |
 | `scan_skip_dirs` | `[workspace.options].scan_skip` |
 
-Artifact naming (`[project].output_name`) is project-level only.
+Artifact naming (`[project].output_name`) is project-level only. Scalar keys **override**; `ignore` / `pack_exclude` are **appended** after the user/global values (a project cannot clear them).
 
 ## Example
 

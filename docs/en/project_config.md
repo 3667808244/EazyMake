@@ -123,7 +123,7 @@ code supports a baseline standard (optionally up to a documented upper bound):
 | `default_profile` | string | No | `""` | **1.2.0+** Profile applied when no `--profile` is passed. When set, a plain `ezmk build` merges that profile (same lookup/merge/error path as an explicit `--profile`); when empty, no profile applies |
 | `deterministic` | bool | No | `false` | **1.1.0+** Deterministic (reproducible) builds: injects `-ffile-prefix-map` / `-frandom-seed` (GCC/Clang) or `/Brepro` (MSVC), and makes a missing or hash-mismatched `ezmk.lock.json` a **fatal error** |
 | `source_date_epoch` | integer | No | `0` | **1.1.0+** Deterministic build timestamp (`0` = resolve automatically; negative values are rejected) |
-| `jobs` | int | No | `-1` (inherit global) | **1.5.0+** Project parallelism; `0` = auto; max 1024; unset uses `[settings].default_jobs` |
+| `jobs` | int | No | unset (internal -1, inherit global) | **1.5.0+** Project parallelism; `0` = auto; max 1024; unset uses `[settings].default_jobs`. **Do not write -1 explicitly**: -1 is an internal sentinel and is rejected by range validation |
 
 Note: Legacy field `include_dir` (singular) is deprecated; if encountered during parsing, it is automatically mapped to `include_dirs`.
 
@@ -515,7 +515,7 @@ Configuration for `ezmk test` (build and run project tests).
 | `default_profile` | string | No | `""` | **1.2.0-dev.12+** Profile applied when no `--profile` is given (reuses `[compile.profile.<name>]` / `[link.profile.<name>]`, symmetric with `[compile].default_profile`) |
 | `include_dirs` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-I` directories (resolved relative to the project root, missing dirs skipped); does not pollute the main build |
 | `link_targets` | string[] | No | `[]` | **1.2.0-dev.12+** Test-only `-l` link targets; does not pollute the main build |
-| `timeout` | int | No | `-1` (inherit global) | **1.5.0+** Test timeout in seconds; `0` = no timeout; unset uses `[settings].test_timeout` |
+| `timeout` | int | No | unset (internal -1, inherit global) | **1.5.0+** Test timeout in seconds; `0` = no timeout; unset uses `[settings].test_timeout`. **Do not write -1 explicitly** (same as `[compile].jobs`). Catch2 keeps no timeout unless configured explicitly (dev.6 R-03); the built-in ezmk framework defaults to 30s |
 | `report_dir` | string | No | `""` (inherit global) | **1.5.0+** Default test report directory (relative to the project root); an explicit `--report` path still wins |
 | `flags` | string[] | No | `[]` | ⚠️ **Deprecated (1.2.0-dev.12+, removed in 2.0.0)** — still honored but warns; use `default_profile` + `[compile.profile.<name>]`, or `include_dirs` / `link_targets` |
 
@@ -557,8 +557,8 @@ See `utils.md`.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `debounce_ms` | int | No | `0` (inherit global) | Debounce in ms; `0` means 300; explicit values 50..5000 |
-| `ignore` | string[] | No | `[]` | Extra ignored prefixes (relative to the project root); built-in build/.ezmk/.o/.d/.tmp still apply |
+| `debounce_ms` | int | No | `0` (inherit global) | Debounce in ms; `0` falls back to `[settings].watch_debounce_ms` (default 300); explicit values 50..5000 |
+| `ignore` | string[] | No | `[]` | Extra ignored prefixes (relative to the project root), **appended** to `[settings].watch_ignore`; built-in build/.ezmk/.o/.d/.tmp still apply and a project cannot clear the global entries |
 
 ## `pack` Section (1.5.0+)
 
@@ -567,7 +567,7 @@ See `utils.md`.
 | `format` | string | No | `""` (inherit global) | `tar.gz` / `zip` / `tgz` (alias) |
 | `output_dir` | string | No | `""` (inherit global) | Output directory; relative to the process CWD |
 | `name` | string | No | `""` (`<name>-<version>`) | Archive basename; must be a safe basename |
-| `exclude` | string[] | No | `[]` | Extra excluded directory names / extensions; built-in exclusions still apply |
+| `exclude` | string[] | No | `[]` | Extra excluded directory names / extensions, **appended** to `[settings].pack_exclude`; built-in exclusions still apply and a project cannot clear the global entries |
 
 ## `pkg` Section (1.4.0-dev.2+)
 

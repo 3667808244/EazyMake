@@ -143,7 +143,21 @@ want = ["sqlite3"]              # optional dependencies
 
 Full reference: [`docs/en/project_config.md`](docs/en/project_config.md)
 
-Besides the project file, user-level and global `config.toml` are documented in [User config](docs/en/user_config.md) and [Global config](docs/en/global_config.md).
+Besides the project file, a user-level and a global `config.toml` can supply personal or machine-wide defaults without touching the project:
+
+```toml
+# User: %USERPROFILE%\.ezmk\config\config.toml (Windows)
+#       $XDG_CONFIG_HOME/ezmk/config.toml (Linux/macOS)
+# Global: C:\.ezmk\config\config.toml (Windows) / /etc/ezmk/config.toml (Linux/macOS)
+[settings]
+default_jobs = 4
+pack_format = "zip"
+
+[base_dir]
+logs = "~/ezmk/logs"
+```
+
+Merge order is **built-in < global < user < project < CLI/env**. Use `--config <file>` to replace the user layer, `--no-config` to skip both layers, and `--lang <tag>` to override the UI language. Full schemas: [User config](docs/en/user_config.md) and [Global config](docs/en/global_config.md).
 
 ## Commands at a glance
 
@@ -189,6 +203,8 @@ ezmk workspace clean [flags]    # clean member caches
 ezmk workspace scan [<dir>]     # adopt existing projects: create/update ezmk-workspace.toml (1.4.0-dev.7+)
 # build/test/watch/clean accept -w to redirect: ezmk build -w ≡ ezmk workspace build
 ```
+
+Global options (any command): `--config <file>`, `--no-config`, `--lang <tag>`, `--color=<mode>`.
 
 Full reference: [`docs/en/cli.md`](docs/en/cli.md)
 

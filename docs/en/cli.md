@@ -593,7 +593,7 @@ git/ls). Tokens after `--` are left untouched for pass-through.
 
 ### `--lang <tag>` (1.5.0+)
 
-Overrides the UI language for this invocation. It takes precedence over `EZMK_LANG` and `[settings].natural_language`; unknown tags fall back to the base language and then English.
+Overrides the UI language for this invocation. It takes precedence over `EZMK_LANG` and `[settings].natural_language`. **An invalid/unbundled tag is ignored**, then the normal fallback continues: `EZMK_LANG` → `[settings].natural_language` → system language; English is the final fallback.
 
 ---
 

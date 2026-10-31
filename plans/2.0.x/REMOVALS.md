@@ -28,7 +28,7 @@
 | 项 | 内容 |
 |----|------|
 | 现状证据 | 读取：`src/config.cpp:842`（`cfg.test.flags = extract_string_array(test->get("flags"), …)`）；使用点弃用告警：`src/build.cpp:2502-2503`（`test_flags_deprecated`）；消费：`src/build.cpp:2631`；模板注释刻意不展示：`src/config.cpp:1030-1032` |
-| 承诺 | `CHANGES.md` 1.2.0：dev.12 弃用、**2.0.0 移除**；`docs/{en,zh}/config_file.md`（en:484 / zh:413）、`tutorial/{en,zh}/dev/03-test.md`、`man/ezmk.toml.5:318-319`（"Array of strings, deprecated. Use …"）均已标注 |
+| 承诺 | `CHANGES.md` 1.2.0：dev.12 弃用、**2.0.0 移除**；`docs/{en,zh}/project_config.md`（en:484 / zh:413）、`tutorial/{en,zh}/dev/03-test.md`、`man/ezmk.toml.5:318-319`（"Array of strings, deprecated. Use …"）均已标注 |
 | 移除内容 | 字段读取 + 使用点告警 + i18n key `test_flags_deprecated`（def/en/zh；zh-TW 同步删）+ 各文档字段行 + man 字段条目 |
 | 迁移写法 | `[test].default_profile` + `[compile.profile.<name>]`；测试专属 include/链接改用 `[test].include_dirs` / `[test].link_targets` |
 | 联动 | `check_man_sync.py`：`config_keys` 基线 **55 → 54**；`ezmk.toml.5` 的 `[test]` 字段表删 `flags` 行 |
@@ -39,7 +39,7 @@
 | 项 | 内容 |
 |----|------|
 | 现状证据 | 分流：`src/main.cpp:104`（注释）、`:127-130`（弃用告警后转调 `ezmk project cc`）；i18n `utils_cc_deprecated`（def:60 / en:168 / zh:168 / zh-TW:157）；官方包内 `ezmk-official-utils/utils/cc.lua` + 其 `README.md`（1.2.0 起标 `@deprecated`） |
-| 承诺 | `CHANGES.md` 1.2.0：「`ezmk utils cc` 自本版起**弃用**（保留可用并提示转用 `ezmk project cc`，**2.0.0 移除**）」；`docs/en/cli.md:455`、`docs/zh/cli.md:377`、`docs/{en,zh}/utils.md`（en:7-11,71 / zh:7,67）、`docs/{en,zh}/glossary.md:55`、`docs/{en,zh}/config_file.md`（en:133 / zh:102）、`tutorial/{en,zh}/dev/02-utils.md`、`README_ZH.md:166` 均已标注 |
+| 承诺 | `CHANGES.md` 1.2.0：「`ezmk utils cc` 自本版起**弃用**（保留可用并提示转用 `ezmk project cc`，**2.0.0 移除**）」；`docs/en/cli.md:455`、`docs/zh/cli.md:377`、`docs/{en,zh}/utils.md`（en:7-11,71 / zh:7,67）、`docs/{en,zh}/glossary.md:55`、`docs/{en,zh}/project_config.md`（en:133 / zh:102）、`tutorial/{en,zh}/dev/02-utils.md`、`README_ZH.md:166` 均已标注 |
 | 移除内容 | `Command::Utils` 的 `cc` 分支（含转调逻辑）+ i18n key `utils_cc_deprecated`；官方包内 `cc.lua`（包版本 → 2.0.0，保留 `link.lua` / `gen-build-package.lua`） |
 | 迁移写法 | `ezmk project cc [-o <path>] [--profile <name>]`（内置命令，1.2.0 起即为正式入口） |
 | 联动 | **仓库内夹具** `pkg/ezmk-cc/`（被跟踪的 2 个文件：`ezmk.toml` + `utils/cc.lua`）与 `test/test_integration.cpp:256-302` 的使用例；`test/test_utils_perms.cpp:23` 仅把它当**路径字符串**（无 I/O，无需改，但可顺手更名）；`ezmk-official-utils` 打包与分发材料（若提及） |
@@ -50,10 +50,10 @@
 | 项 | 内容 |
 |----|------|
 | 现状证据 | lockfile：`src/lockfile.cpp` 的 `load()` 双读（`ezmk.lock.json` 优先 → 旧 `ezmk.lock` TOML 回退）+ `save()` 写新删旧；注册表：`src/repo.cpp` 的 `load_repo_list()` / `save_repo_list()` 同构（`list.json` ↔ 旧 `list.toml`，三作用域） |
-| 承诺 | [`../1.4.x/1.4.5.md`](../1.4.x/1.4.5.md) §3.12：本回退**仅为兼容存量文件**而存在；1.4.5 的文档（`CHANGES.md` / `docs/{en,zh}/config_file.md`）明写"旧格式可读、首次写入自动迁移"，并**未承诺永久读取** |
+| 承诺 | [`../1.4.x/1.4.5.md`](../1.4.x/1.4.5.md) §3.12：本回退**仅为兼容存量文件**而存在；1.4.5 的文档（`CHANGES.md` / `docs/{en,zh}/project_config.md`）明写"旧格式可读、首次写入自动迁移"，并**未承诺永久读取** |
 | 移除内容 | 两条旧格式解析路径（`toml::parse_file` 调用 + 旧字段读取）+ 旧路径查询（`lockfile::legacy_lockfile_path()` / `repo::legacy_repo_list_path()`）+ 双文件共存的陈旧警告 + 相关 i18n 键（`lock_legacy_detected` / `lock_legacy_stale` / `repo_list_legacy_detected`；`lock_migrated` / `repo_list_migrated` 随之失去意义）+ 迁移文案 |
 | 迁移写法 | 无需手动迁移：任何一次 1.4.5+ 的 `pkg install` / `repo add|remove|update` 已自动把文件改写为新名。2.0.0 起旧文件应给**明确迁移报错**（"检测到旧格式 …，请用 1.4.5+ 先迁移"），而不是静默当作"无 lockfile"（后者在 `deterministic = true` 下会退化成难懂的"缺少 lockfile"） |
-| 联动 | `check_i18n.py`（删键 → 键数回落）；`docs/{en,zh}/config_file.md` + `repo.md` + `tutorial/{en,zh}/packages/02-version-lockfile.md` 的"旧格式仍可读"表述；`test_lockfile.cpp` / `test_repo.cpp` 的旧 TOML 夹具（**注意**：`test_integration.cpp:938-941` 的旧 TOML 夹具是 1.4.5 双读路径的覆盖，删除回退时必须一并改写为负向用例） |
+| 联动 | `check_i18n.py`（删键 → 键数回落）；`docs/{en,zh}/project_config.md` + `repo.md` + `tutorial/{en,zh}/packages/02-version-lockfile.md` 的"旧格式仍可读"表述；`test_lockfile.cpp` / `test_repo.cpp` 的旧 TOML 夹具（**注意**：`test_integration.cpp:938-941` 的旧 TOML 夹具是 1.4.5 双读路径的覆盖，删除回退时必须一并改写为负向用例） |
 | 风险 | 用户在 1.4.5~1.5.x 期间生成的旧格式文件（例如长期未 `pkg install` 的项目）在 2.0.0 后会被拒读 → 必须以**明确报错 + 迁移指引**落地（见「单条移除的执行清单」第 1 步），并保证 1.4.5 的自动迁移在 2.0.0 之前有足够长的生效窗口 |
 
 ### R-04 `repo::list_toml_path()` 公共别名（1.4.5 新增）
@@ -73,7 +73,7 @@
 
 | # | 项 | 现状证据 | 选项 | 倾向 |
 |---|----|----------|------|------|
-| D-01 | lockfile `sha256` 旧别名（`lib_sha256` 的别名，1.4.2 起双写） | `src/lockfile.cpp:68,135`；`src/pkg.cpp:1618`；`docs/{en,zh}/config_file.md:290-292 / 244-246` | a) **写出停用、读取保留**（lockfile `version` 仍 1）<br>b) 读写全删 + `version` → 2（彻底） | **a**：读取兼容成本低，且 `--locked` 场景可能仍在消费旧文件；`version` 升 2 留到"字段结构真变"时 |
+| D-01 | lockfile `sha256` 旧别名（`lib_sha256` 的别名，1.4.2 起双写） | `src/lockfile.cpp:68,135`；`src/pkg.cpp:1618`；`docs/{en,zh}/project_config.md:290-292 / 244-246` | a) **写出停用、读取保留**（lockfile `version` 仍 1）<br>b) 读写全删 + `version` → 2（彻底） | **a**：读取兼容成本低，且 `--locked` 场景可能仍在消费旧文件；`version` 升 2 留到"字段结构真变"时 |
 | D-02 | `[compile].include_dir`（单数旧键） | 回退读取：`src/config.cpp:594`；`man/ezmk.toml.5:176`（"old singular form"） | a) 删回退（旧项目需改键名）<br>b) 保留 | **a**（与 D-09 的 fail-fast 一起，给出明确迁移报错） |
 | D-03 | `-V` 兼容别名 | `src/cli.cpp:584`（"`-V` kept for backward compatibility"） | a) 删（只留 `-v` / `--version`）<br>b) 保留 | **a**：CLI 面越小越好，且 `-V` 与 `-v` 大小写易误触 |
 | D-04 | `util::run_executable(int)` 旧重载 | `src/util.cpp:1364`（"int overload (backward compat) forwards to the RunOptions version"）；位于 **public header** `include/ezmk/util.hpp` | a) 删（属公共 API 破坏，正好落在 2.0.0）<br>b) 保留 | **a**：内部无调用方即删；2.0.0 是唯一合法窗口 |

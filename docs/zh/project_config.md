@@ -96,7 +96,7 @@
 | `default_profile` | string | 否 | `""` | **1.2.0+** 未传 `--profile` 时默认使用的 profile。非空时，裸 `ezmk build` 会按该名字执行一次 profile 合并（与显式 `--profile` 走同一 lookup/合并/报错路径）；为空时不应用任何 profile |
 | `deterministic` | bool | 否 | `false` | **1.1.0+** 确定性构建：注入 `-ffile-prefix-map` / `-frandom-seed`（GCC/Clang）或 `/Brepro`（MSVC），并让 `ezmk.lock.json` 缺失/哈希不匹配成为**致命错误** |
 | `source_date_epoch` | 整数 | 否 | `0` | **1.1.0+** 确定性构建时间戳（`0` = 自动解析；负值报错） |
-| `jobs` | int | 否 | `-1`（回退全局） | **1.5.0+** 项目并行度；`0` = 自动；上限 1024；未设置时使用 `[settings].default_jobs` |
+| `jobs` | int | 否 | 未设置（内部 -1，继承全局） | **1.5.0+** 项目并行度；`0` = 自动；上限 1024；未设置时使用 `[settings].default_jobs`。**不要显式写 -1**：-1 只是内部「未设置」哨兵，写入会被范围校验拒绝 |
 
 注：旧字段 `include_dir`（单数）已废弃，解析时若遇到可自动映射到 `include_dirs`。
 
@@ -443,7 +443,7 @@ sharedir = "share"
 | `default_profile` | string | 否 | `""` | **1.2.0-dev.12+** 未传 `--profile` 时测试默认应用的 profile（复用 `[compile.profile.<name>]` / `[link.profile.<name>]`，与 `[compile].default_profile` 对称） |
 | `include_dirs` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-I` 目录（相对项目根解析、缺失跳过），不污染主构建 |
 | `link_targets` | string[] | 否 | `[]` | **1.2.0-dev.12+** 测试专属 `-l` 链接目标，不污染主构建 |
-| `timeout` | int | 否 | `-1`（回退全局） | **1.5.0+** 测试超时秒数；`0` = 不超时；未设置时使用 `[settings].test_timeout` |
+| `timeout` | int | 否 | 未设置（内部 -1，继承全局） | **1.5.0+** 测试超时秒数；`0` = 不超时；未设置时使用 `[settings].test_timeout`。**不要显式写 -1**（同 `[compile].jobs`）。Catch2 在未显式配置超时时保持不超时（dev.6 R-03），内置 ezmk 框架默认 30s |
 | `report_dir` | string | 否 | `""`（回退全局） | **1.5.0+** 默认测试报告目录（相对项目根）；`--report` 显式路径仍优先 |
 | `flags` | string[] | 否 | `[]` | ⚠️ **已弃用（1.2.0-dev.12+，2.0.0 移除）**——仍生效但输出警告；请改用 `default_profile` + `[compile.profile.<name>]`，或 `include_dirs` / `link_targets` |
 
@@ -485,8 +485,8 @@ tools = ["cc", "compile-commands"]
 
 | 字段 | 类型 | 必须 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `debounce_ms` | int | 否 | `0`（回退全局） | 去抖毫秒；`0` 表示默认 300；显式值 50..5000 |
-| `ignore` | string[] | 否 | `[]` | 额外忽略前缀（相对项目根）；内置 build/.ezmk/.o/.d/.tmp 仍生效 |
+| `debounce_ms` | int | 否 | `0`（回退全局） | 去抖毫秒；`0` 表示回退 `[settings].watch_debounce_ms`（默认 300）；显式值 50..5000 |
+| `ignore` | string[] | 否 | `[]` | 额外忽略前缀（相对项目根），**追加**到 `[settings].watch_ignore`；内置 build/.ezmk/.o/.d/.tmp 仍生效，项目无法清空全局条目 |
 
 ## `pack` 节（1.5.0+）
 
@@ -495,7 +495,7 @@ tools = ["cc", "compile-commands"]
 | `format` | string | 否 | `""`（回退全局） | `tar.gz` / `zip` / `tgz`（别名） |
 | `output_dir` | string | 否 | `""`（回退全局） | 输出目录；相对进程 CWD |
 | `name` | string | 否 | `""`（`<name>-<version>`） | 归档 basename；必须是安全 basename |
-| `exclude` | string[] | 否 | `[]` | 额外排除的目录名 / 扩展名；内置排除仍生效 |
+| `exclude` | string[] | 否 | `[]` | 额外排除的目录名 / 扩展名，**追加**到 `[settings].pack_exclude`；内置排除仍生效，项目无法清空全局条目 |
 
 ## `pkg` 节（1.4.0-dev.2+）
 

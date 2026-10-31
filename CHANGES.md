@@ -22,6 +22,12 @@
 - **配置：** `[pkg] strict_std_check`（默认 `false`；`true` 时把 1.3.1 的标准兼容检查从警告升级为硬失败）。
 - **行为语义：** 源码包编译协商——源码包以 `max(pkg_min, consumer_min)` 重编，受工具链能力表（`max_supported_std`）与包声明区间的上界约束；`project import` 把 CMake 的 `CXX_STANDARD` / `C_STANDARD` 保留为区间语言（`">=CPP<N>"` / `">=C<N>"`）；`pkg install` 对本地归档做 sha256 边车自动校验（显式 `--sha256` / 索引哈希优先；URL 安装不信任边车）。
 
+**v1.5.0 扩展（1.5.0-pre.1）：**
+
+- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、project-new 默认、构建目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
+- **CLI：** `--config <file>` / `--no-config` / `--lang <tag>`；`--color` 的 `on` / `off` / `16colors` / `256colors` / `truecolor` 别名。
+- **环境：** `EZMK_GLOBAL_CONFIG_DIR` / `EZMK_USER_CONFIG_DIR` / `XDG_CONFIG_HOME` 的配置目录解析。
+
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
 ## 1.5.0-dev (2026-10-25) — 用户/全局配置层（开发中，未发布）
@@ -52,6 +58,42 @@
 - 新增 `docs/{zh,en}/user_config.md` 与 `docs/{zh,en}/global_config.md`（用户级 / 全局级 `config.toml`）。
 - README / man / tutorial / package_authoring 的引用同步更新；man 增加配置键与全局选项。
 - 审查修复：`--config` 缺失、pack 暂存目录冲突、Catch2 超时、output_name 跨模块一致性、日志加载期 debug、`off` 下异常静默、严格类型/basename 校验、全局/项目边界统一。
+
+---
+
+## 1.5.0-pre.1 (2026-10-31) — 发布前收口（未发布）
+
+> **状态：实现收口（2026-10-31），未发布。** 全量源代码审查 47 项（P1 4 / P2 23 / P3 20，无 P0）+ dev.6 遗留一并裁定；单元 **1098 用例 / 6198 断言 / 4 跳过 / 0 失败**。
+
+### 缺陷修复
+
+- **Windows watch 退出**：改用 `CancelIoEx` 并按 armed 读的完成包排空，避免关闭时释放仍被内核写入的 buffer / OVERLAPPED。
+- **同 stem 对象碰撞**：非 `.cpp` 源的对象/依赖文件名保留源扩展（`a.c.o` / `a.c.d`），`.cpp` 仍为 `a.o`；缓存签名加盐，升级后一次性重编。
+- **打包漏源**：`src_dirs = ["."]` 正确复制目录内容；staging 目录加 RAII 清理与 `.ezmk-pack-*` 剪枝。
+- **Lua sandbox**：指令预算改为所有协程共享；sandbox 不再暴露 `coroutine`；权限路径在 Windows 大小写不敏感；命令审计拒绝带引号/反斜杠的可执行 token；`file_write` / `json_encode` 保留内嵌 NUL。
+- **Windows 命令引号**：编译/链接、包归档与 workspace clean 统一按平台使用 `quote_cli_arg`；`$CXX` / `$CC` 带空格路径正确处理。
+- **配置契约**：绝对 `[settings].build_dir` 拒绝；`[project].build_dir` strict 类型；`installed_packages` 接入 utils/lockfile；workspace 遵循 `[settings].default_jobs` 并钳制 1024；`pack_format` 大小写归一化；空 `[base_dir]` 视为未设置；路径类配置统一 NUL 校验。
+- **包/仓库**：`--locked` 不再静默安装本地目录/归档；包扫描跳过 `.ezmk-stage-*` / `.ezmk-backup-*`；local repo 记录绝对路径并在读取时按注册表目录解析；import 注释去换行；import / compile_commands 写入失败不再报成功。
+- **CLI**：`--help` 补齐 `--config` / `--no-config` / `--lang` 与完整 color 值；`--opt=` 空 inline 值按缺值报错。
+- **解析错误**：两级 `config.toml` 的 TOML 错误保留行列信息。
+
+### 用户触达
+
+- README / README_ZH 增加两级配置速览与全局选项；zsh 补全覆盖配置/语言选项及 project/workspace 新命令；`man/ezmk-lua.1` 修正 usage/退出码语义。
+
+### 文档
+
+- 用户/全局/项目配置文档修正 `build_dir` 相对路径、`test_timeout` Catch2 语义、`jobs`/`timeout` 内部 -1 哨兵、watch/pack 数组追加语义、editor 参数限制与畸形配置逃生口。
+- `docs/zh/utils.md` 对齐 1.4.11 全命令逐段审计；新增 sandbox 不暴露 `coroutine` 说明。
+- `.claude/skills/ezmk-codebase` 更新为 `project_config.md` + 两级配置 + 1.5.0 项目键；`plans/2.0.x/REMOVALS.md` 重命名引用同步。
+- 新增 `scripts/check_config_docs.py`（settings 键 ↔ 文档/man 闸门），CI 增加 i18n 与配置文档检查。
+
+### 已知限制
+
+- 配置加载早于 i18n 初始化，加载期诊断保持英文（文档已注明）。
+- sandbox 不再提供 `coroutine`；`ezmk-lua` 非沙箱运行时不受影响。
+- `[settings].editor` 仍按单一可执行路径处理，不支持带参数命令。
+- 并发安装锁、workspace watch 流式输出、预发布版本排序、MSVC response file 等 14 项延后至 1.5.x（见 pre 计划 §3.4）。
 
 ---
 

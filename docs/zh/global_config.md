@@ -43,7 +43,7 @@
 | `examples` | `ezmk example` 的输出根目录；用户级可覆盖 |
 | `logs` | 文件日志目录；用户级可覆盖 |
 | `default_jobs` | 整机默认并行度；项目级 `[compile].jobs` 可覆盖 |
-| `build_dir` | 整机默认构建目录；项目级 `[project].build_dir` 可覆盖 |
+| `build_dir` | 整机默认构建目录；项目级 `[project].build_dir` 可覆盖。**必须是相对路径**（相对各项目根）；绝对路径加载即报错，避免所有项目共享对象目录 |
 | `default_pkg_scope` | `pkg install` 未给 scope 时的默认作用域 |
 | `auto_install_deps` | 缺依赖时是否自动安装；项目级 `[pkg].auto_install` 可覆盖 |
 
