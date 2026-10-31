@@ -154,6 +154,9 @@ TEST_CASE("integration: catch2 test --report junit writes report (1.3.2)", "[int
     if (!ezmk_available()) {
         SKIP("ezmk binary not found — build it first with: bash build.sh");
     }
+    if (offline_mode()) {
+        SKIP("EZMK_TEST_OFFLINE=1 — network package install disabled");
+    }
     EnvGuard lang_guard("EZMK_LANG", "en");
     TempDir tmp;
     fs::path proj_dir = tmp.path / "rpt_catch2";

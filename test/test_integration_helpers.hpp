@@ -26,6 +26,13 @@ using namespace ezmk::util;
 
 namespace ezi {
 
+// Offline test mode (EZMK_TEST_OFFLINE=1): skip cases whose only purpose is a
+// network package install, instead of blocking on an unreachable registry.
+inline bool offline_mode() {
+    const char* v = std::getenv("EZMK_TEST_OFFLINE");
+    return v && *v && std::string(v) != "0";
+}
+
 // Find the repo root by walking up from the current directory.
 // Looks for a directory containing both "build.sh" and "src/main.cpp".
 inline fs::path find_repo_root() {

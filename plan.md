@@ -1,10 +1,10 @@
 # EazyMake 1.5.0-pre.1 执行计划
 
-> **状态：🚧 实现收口（2026-10-31）** —— 代码、文档、i18n、测试与索引已完成；单元 **1098 / 6198 / 4 / 0**、集成子集 **110 / 706 / 1 skip**（排除 3 个联网 catch2 标签），pre.1 标签用例 12/28 全绿（1 项 Windows-only skip）；`bash build.sh test-all` 全量与 CI 待联网环境补跑。详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
+> **状态：🚧 实现收口（2026-10-31）** —— 代码、文档、i18n、测试与索引已完成；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1219 / 6979 / 8 跳过 / 0 失败**（3 个联网 catch2 用例按环境跳过），pre.1 标签用例 12/28 全绿（1 项 Windows-only skip）；CI 待联网环境补跑。详细设计见 [plans/1.5.x/1.5.0-pre.1.md](plans/1.5.x/1.5.0-pre.1.md)，全量源代码审查记录见 [plans/1.5.x/1.5.0-pre.1-audit.md](plans/1.5.x/1.5.0-pre.1-audit.md)，系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。
 >
 > **版本主题**：公共配置契约的发布前收口 —— 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛；零功能新增、公共 API 无破坏性变更。
 >
-> **基线**：dev.7 全量 **1205 用例 / 6940 断言 / 4 跳过 / 0 失败**；本机单元 **1098 / 6198 / 4 / 0**（新增 12 个 pre.1 用例）、集成子集 **110 / 706 / 1 skip**（排除 3 个联网 catch2 标签）。
+> **基线**：dev.7 全量 **1205 用例 / 6940 断言 / 4 跳过 / 0 失败**；本机全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1219 / 6979 / 8 跳过 / 0 失败**（3 个联网 catch2 用例按环境跳过）。
 
 ## 1 背景
 
@@ -72,7 +72,7 @@ dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.
 - [x] CHANGES.md 新增 1.5.0-pre.1 条目（修复 / 文档 / 已知限制 / 延后项）
 - [x] plans/1.5.x/README.md、plans/README.md、根 plan.md 状态与勾选
 - [ ] 发布清单预检：版本号、release.yml、PKGBUILD/Homebrew/winget 仅 checklist，不在 pre 改版本
-- [ ] `bash build.sh test-all` 零失败（≥ 1205/6940）
+- [x] `bash build.sh test-all` 零失败（`EZMK_TEST_OFFLINE=1`：1219/6979/8/0；3 个联网 catch2 用例按环境跳过）
 - [ ] CI push 绿色；check_i18n / check_man_sync / check_docs_sync / check_config_docs / groff 全绿
 - [ ] 发布门槛预核对并记录结论
 

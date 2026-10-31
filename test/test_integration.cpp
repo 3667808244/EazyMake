@@ -1575,6 +1575,9 @@ TEST_CASE("integration: ezmk test works with catch2 v3", "[integration][1.2.0-de
     if (!ezmk_available()) {
         SKIP("ezmk binary not found — build it first with: bash build.sh");
     }
+    if (offline_mode()) {
+        SKIP("EZMK_TEST_OFFLINE=1 — network package install disabled");
+    }
     EnvGuard lang_guard("EZMK_LANG", "en");
 
     TempDir tmp;
@@ -2886,9 +2889,10 @@ TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integr
         std::string toml = file_read(proj / "ezmk.toml");
         REQUIRE(toml.find("catch2") != std::string::npos);
 
-        ProcResult inst = run_ezmk("pkg install catch2 -p -y", proj);
+        ProcResult inst{1, "", ""};
+        if (!offline_mode()) inst = run_ezmk("pkg install catch2 -p -y", proj);
         INFO("catch2 install stderr: " << inst.err);
-        if (inst.exit_code != 0) {
+        if (offline_mode() || inst.exit_code != 0) {
             SKIP("catch2 install unavailable (network/repo) — test verification skipped");
         }
         ProcResult t = run_ezmk("test", proj);
@@ -2909,9 +2913,10 @@ TEST_CASE("integration: ezmk example generated projects build (1.2.3)", "[integr
         std::string toml = file_read(proj / "ezmk.toml");
         REQUIRE(toml.find("fmt") != std::string::npos);
 
-        ProcResult inst = run_ezmk("pkg install fmt -p -y", proj);
+        ProcResult inst{1, "", ""};
+        if (!offline_mode()) inst = run_ezmk("pkg install fmt -p -y", proj);
         INFO("fmt install stderr: " << inst.err);
-        if (inst.exit_code == 0) {
+        if (!offline_mode() && inst.exit_code == 0) {
             ProcResult b = run_ezmk("build", proj);
             INFO("with-packages build stderr: " << b.err);
             REQUIRE(b.exit_code == 0);

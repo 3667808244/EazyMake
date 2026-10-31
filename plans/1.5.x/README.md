@@ -13,7 +13,7 @@
 | [1.5.0-dev.5](1.5.0-dev.5.md) | 构建/测试/监视/打包/包管理运行默认值 | `default_jobs` / `test_timeout` / `test_report_dir` / `watch_debounce_ms` / `watch_ignore` / `pack_*` / `default_pkg_scope` / `auto_install_deps` / `scan_skip_dirs` | dev.1、dev.2 | ✅ 实现收口（1198/6922） |
 | [1.5.0-dev.6](1.5.0-dev.6.md) | 代码审查（增量） | 审查 dev.1~dev.5 的配置 / 路径 / 工具 / 项目创建 / 日志 / 运行默认；P0/P1 修复或收口 | dev.1~dev.5 | ✅ 修复收口（1205/6940） |
 | [1.5.0-dev.7](1.5.0-dev.7.md) | 文档、i18n 与 dev 收口 | i18n / README / docs / tutorial / man / CHANGES / 索引 / 门槛 | dev.1~dev.6 | ✅ dev 收口（1205/6940） |
-| [1.5.0-pre.1](1.5.0-pre.1.md) | 发布前收口 | 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛 | dev.1~dev.7 | 🚧 实现收口（1098/6198 单元；全量待 CI） |
+| [1.5.0-pre.1](1.5.0-pre.1.md) | 发布前收口 | 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛 | dev.1~dev.7 | 🚧 实现收口（test-all 1219/6979；CI 待） |
 
 > **全量源代码审查**（pre.1 输入）：[1.5.0-pre.1-audit.md](1.5.0-pre.1-audit.md) —— 47 项（P1 4 / P2 23 / P3 20，无 P0）。
 
