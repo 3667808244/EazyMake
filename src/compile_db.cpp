@@ -130,7 +130,9 @@ void generate_compile_db(const cache::CompileInput& cin,
     // 1.4.11 Q4-08: shared crash-safe writer (temp → atomic rename) that also
     // removes the temp on failure — this used to leave compile_commands.json.tmp
     // behind whenever the destination already existed.
-    util::atomic_write_text(out, json);
+    if (!util::atomic_write_text(out, json))
+        util::fatal(i18n::I18nKey::compile_db_write_failed,
+                    {{"path", out.string()}});
 }
 
 } // namespace ezmk::compile_db

@@ -85,7 +85,15 @@ static std::string error_message(lua_State* L, int idx) {
 // hooks) previously had no lua_sethook, so a runaway loop (`while true do end`)
 // hung ezmk forever. The count hook below fires every kInstructionBudget VM
 // instructions and aborts the script with a Lua error.
-static constexpr int kInstructionBudget = 100000000;   // ~1e8 instructions per script
+static constexpr int kInstructionBudget = 100000000;   // ~1e8 instructions per SCRIPT
+// 1.5.0-pre.1 (D-01): the hook must account for ALL coroutines. A per-thread
+// hook let a script create a new coroutine before each budget hit (each one
+// inherited the hook but restarted its count), so total CPU was unbounded.
+// A shared counter is decremented per hook tick; coroutines therefore draw
+// from the same 1e8-instruction pool.
+static constexpr int kInstructionHookInterval = 1000000;
+static uint64_t g_instruction_budget_remaining = 0;
+static bool g_instruction_budget_active = false;
 static constexpr int kRunCommandTimeoutSec = 300;      // default timeout for ezmk.run / run_capture
 static constexpr int kJsonMaxDepth = 200;              // json_encode nesting cap
 // Initial Lua-stack slots reserved at init() (see init() for why): must stay
@@ -94,10 +102,18 @@ static constexpr int kJsonMaxDepth = 200;              // json_encode nesting ca
 static constexpr int kLuaStackSlots = 4096;
 
 static void instruction_budget_hook(lua_State* L, lua_Debug*) {
-    // Disarm first — the error unwinding after luaL_error must not re-enter
-    // this hook while Lua cleans up the aborted chunk.
-    lua_sethook(L, nullptr, 0, 0);
-    luaL_error(L, "script exceeded the instruction budget (%d)", kInstructionBudget);
+    if (!g_instruction_budget_active) return;
+    if (g_instruction_budget_remaining <= kInstructionHookInterval) {
+        g_instruction_budget_remaining = 0;
+        // Keep the guard active: a coroutine can catch the error and resume
+        // another one — every subsequent hook must fail too, including the
+        // main thread's, until the guard is destroyed.
+        // Disarm first — the error unwinding after luaL_error must not re-enter
+        // this hook while Lua cleans up the aborted chunk.
+        lua_sethook(L, nullptr, 0, 0);
+        luaL_error(L, "script exceeded the instruction budget (%d)", kInstructionBudget);
+    }
+    g_instruction_budget_remaining -= kInstructionHookInterval;
 }
 
 // RAII: arm the count hook for one script execution and always disarm on scope
@@ -106,9 +122,14 @@ static void instruction_budget_hook(lua_State* L, lua_Debug*) {
 struct InstructionBudgetGuard {
     lua_State* L;
     explicit InstructionBudgetGuard(lua_State* s) : L(s) {
-        if (L) lua_sethook(L, instruction_budget_hook, LUA_MASKCOUNT, kInstructionBudget);
+        g_instruction_budget_remaining = kInstructionBudget;
+        g_instruction_budget_active = true;
+        if (L) lua_sethook(L, instruction_budget_hook, LUA_MASKCOUNT,
+                           kInstructionHookInterval);
     }
     ~InstructionBudgetGuard() {
+        g_instruction_budget_active = false;
+        g_instruction_budget_remaining = 0;
         if (L) lua_sethook(L, nullptr, 0, 0);
     }
 };
@@ -134,8 +155,19 @@ std::string norm_path(const fs::path& p) {
     return s;
 }
 
+// 1.5.0-pre.1 (D-02): Windows filesystems are case-insensitive, so a deny
+// entry must not be bypassed by writing SECRETS instead of secrets.
+std::string fold_path(std::string s) {
+#ifdef EZMK_WIN
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+#endif
+    return s;
+}
+
 // Does `child` equal `parent` or live under it? Both are normalized strings.
-bool path_within(const std::string& child, const std::string& parent) {
+bool path_within(const std::string& child_in, const std::string& parent_in) {
+    const std::string child = fold_path(child_in);
+    const std::string parent = fold_path(parent_in);
     if (child == parent) return true;
     if (child.size() > parent.size() &&
         child.compare(0, parent.size(), parent) == 0) {
@@ -186,7 +218,11 @@ bool path_matches_entry(const std::string& target_abs,
             }
         }
         try {
+#ifdef EZMK_WIN
+            std::regex re(rx, std::regex::icase);
+#else
             std::regex re(rx);
+#endif
             // Match against the whole path and against any suffix boundary.
             if (std::regex_search(target_abs, re)) return true;
         } catch (...) {
@@ -207,18 +243,20 @@ bool path_matches_entry(const std::string& target_abs,
 bool cmd_matches_entry(const std::string& cmd_token, const std::string& entry) {
     if (entry.empty()) return false;
     // Trailing "*" → prefix match (e.g. "git*" matches "git", "git.exe").
+    const std::string lhs = fold_path(cmd_token);
     if (entry.size() >= 1 && entry.back() == '*') {
-        std::string prefix = entry.substr(0, entry.size() - 1);
-        return cmd_token.compare(0, prefix.size(), prefix) == 0;
+        const std::string prefix = fold_path(entry.substr(0, entry.size() - 1));
+        return lhs.compare(0, prefix.size(), prefix) == 0;
     }
     // Exact match, or full-path basename equivalence.
-    if (cmd_token == entry) return true;
+    const std::string rhs = fold_path(entry);
+    if (lhs == rhs) return true;
     // Full path entry vs bare token, or vice versa: compare basenames only when
     // the entry itself looks like a plain command name.
     if (entry.find('/') == std::string::npos &&
         entry.find('\\') == std::string::npos) {
         fs::path p = cmd_token;
-        if (p.filename().generic_string() == entry) return true;
+        if (fold_path(p.filename().generic_string()) == rhs) return true;
     }
     return false;
 }
@@ -304,6 +342,15 @@ PermResult check_run_permission(std::string_view cmd,
     auto consider = [&](std::string_view seg) {
         std::string tok = first_token(seg);
         if (tok.empty()) return;
+#ifndef EZMK_WIN
+        // 1.5.0-pre.1 (D-03): /bin/sh removes quotes and backslashes, so
+        // r''m / \\rm execute rm but do not match a deny entry literally.
+        // When permissions are active, refuse such executable tokens.
+        if (tok.find_first_of("'\"\\") != std::string::npos) {
+            worst = PermResult::Deny;
+            return;
+        }
+#endif
         any = true;
         for (const auto& d : perms->run_deny) {
             if (cmd_matches_entry(tok, d)) {
@@ -720,7 +767,9 @@ static int ezmk_file_read(lua_State* L) {
 static int ezmk_file_write(lua_State* L) {
     check_arg_count(L, 2);
     const char* path    = luaL_checkstring(L, 1);
-    const char* content = luaL_checkstring(L, 2);
+    size_t content_len  = 0;
+    // 1.5.0-pre.1 (D-04): preserve embedded NUL bytes (file_read already does).
+    const char* content = luaL_checklstring(L, 2, &content_len);
 
     fs::path resolved = resolve_path(path);
 
@@ -764,7 +813,8 @@ static int ezmk_file_write(lua_State* L) {
     // Ensure parent directory exists
     util::create_directories(resolved.parent_path());
 
-    bool ok = util::file_write(resolved, content);
+    bool ok = util::file_write(resolved,
+                               std::string_view(content, content_len));
     lua_pushboolean(L, ok ? 1 : 0);
     if (!ok) lua_pushstring(L, "write failed");
     else     lua_pushnil(L);
@@ -936,7 +986,7 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
     case nlohmann::json::value_t::object: {
         lua_createtable(L, 0, (int)j.size());
         for (auto& [k, v] : j.items()) {
-            lua_pushstring(L, k.c_str());
+            lua_pushlstring(L, k.data(), k.size());
             json_to_lua(L, v, depth + 1);
             lua_settable(L, -3);
         }
@@ -966,8 +1016,11 @@ static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& 
             return lua_tointeger(L, idx);
         else
             return lua_tonumber(L, idx);
-    case LUA_TSTRING:
-        return lua_tostring(L, idx);
+    case LUA_TSTRING: {
+        size_t len = 0;
+        const char* s = lua_tolstring(L, idx, &len);
+        return std::string(s ? s : "", len);
+    }
     case LUA_TTABLE: {
         // 1.4.2 F-19: nesting cap — an acyclic but arbitrarily deep chain of
         // tables would otherwise recurse until the C stack blows up (the seen
@@ -1029,7 +1082,9 @@ static nlohmann::json lua_to_json(lua_State* L, int idx, std::set<const void*>& 
             while (lua_next(L, idx) != 0) {
                 std::string key;
                 if (lua_type(L, -2) == LUA_TSTRING) {
-                    key = lua_tostring(L, -2);
+                    size_t klen = 0;
+                    const char* ks = lua_tolstring(L, -2, &klen);
+                    key.assign(ks ? ks : "", klen);
                 } else if (lua_type(L, -2) == LUA_TNUMBER && lua_isinteger(L, -2)) {
                     key = std::to_string(lua_tointeger(L, -2));
                 } else {
@@ -1056,7 +1111,7 @@ static int ezmk_json_encode(lua_State* L) {
         std::set<const void*> seen;  // 1.4.0-pre.1: 循环表检测（入口建一次，贯穿递归）
         nlohmann::json j = lua_to_json(L, 1, seen, 0);
         std::string s = j.dump();
-        lua_pushstring(L, s.c_str());
+        lua_pushlstring(L, s.data(), s.size());
         return 1;
     } catch (const std::exception& e) {
         luaL_error(L, "json encode error: %s", e.what());
@@ -1180,6 +1235,10 @@ static void push_restricted_globals(lua_State* L) {
                                strcmp(key, "debug") == 0 ||
                                strcmp(key, "package") == 0 ||
                                strcmp(key, "collectgarbage") == 0 ||
+                               // 1.5.0-pre.1 (D-01): a coroutine gets its own
+                               // instruction-count reset; scripts could create
+                               // unbounded coroutines to escape the budget.
+                               strcmp(key, "coroutine") == 0 ||
                                strcmp(key, "_G") == 0 ||
                                // 1.2.0-dev.11: defense in depth — io/os are
                                // compile-time removed from linit.c, but if any

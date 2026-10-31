@@ -255,7 +255,9 @@ std::string detect_compiler(const std::string& language) {
     const char* env = is_cxx ? std::getenv("CXX") : std::getenv("CC");
     if (env && env[0] != '\0') {
         std::string candidate(env);
-        auto res = util::run_command(candidate + " --version 2>&1");
+        // 1.5.0-pre.1 (A-05): a compiler path with spaces must be quoted.
+        auto res = util::run_command(util::quote_cli_arg(candidate) +
+                                     " --version 2>&1");
         if (res.exit_code == 0) {
             cached = candidate;
             return cached;
@@ -1900,6 +1902,16 @@ void install_project(const config::EzConfig& cfg,
          {"size", size_str}}));
 }
 
+// 1.5.0-pre.1 (A-03): remove a pack staging tree on every exit path,
+// including exceptions (the normal path also removes it explicitly).
+struct PackStageGuard {
+    fs::path path;
+    ~PackStageGuard() {
+        std::error_code ec;
+        fs::remove_all(path, ec);
+    }
+};
+
 // 1.2.5: copy a directory tree into the pack staging dir, pruning build
 // residue (build/ .ezmk/ .git) and binary artifacts so they never leak into
 // a source package.
@@ -1925,6 +1937,9 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
         const fs::path& p = it->path();
         std::string name = p.filename().string();
         if (it->is_directory(ec)) {
+            // 1.5.0-pre.1 (A-03): never recurse into a pack staging tree even
+            // when src_dirs spans the project root / output dir.
+            if (name.rfind(".ezmk-pack-", 0) == 0) continue;
             if (prune_dirs.count(name) || excluded(name, "")) continue;
             copy_pack_source_dir(p, to / name, build_dir_name, extra_exclude);
         } else if (it->is_regular_file(ec)) {
@@ -2033,6 +2048,7 @@ void pack_project(const config::EzConfig& cfg,
         std::chrono::steady_clock::now().time_since_epoch().count());
     fs::path stage_root = output_dir / (".ezmk-pack-" + nonce + "-" + base);
     fs::path stage_dir = stage_root / stage_name;
+    PackStageGuard stage_guard{stage_root};
 
     util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_collecting,
                                 {{"name", name}, {"version", version}}));
@@ -2124,9 +2140,13 @@ void pack_project(const config::EzConfig& cfg,
             // absolute src_dirs fall back to their basename.
             fs::path dest = d;
             if (!dest.is_relative()) dest = dest.filename();
-            if (util::file_exists(stage_dir / dest)) continue;  // already copied
+            // 1.5.0-pre.1 (A-03): src_dirs=["."] must copy the directory
+            // CONTENTS into stage_dir; stage_dir/"." is always "already there"
+            // and used to skip the whole source tree silently.
+            const bool copy_contents = (dest == ".");
+            if (!copy_contents && util::file_exists(stage_dir / dest)) continue;
             copy_pack_source_dir(
-                src, stage_dir / dest,
+                src, copy_contents ? stage_dir : stage_dir / dest,
                 config::effective_build_dir(cfg, proj_root).filename().string(),
                 excludes);
         }

@@ -24,6 +24,8 @@ build_err.txt
 stdout_and_stderr.txt
 *.eml
 .dsh/
+__pycache__/
+*.pyc
 .claude/*
 !.claude/skills/
 

@@ -75,11 +75,19 @@ jobs:
       - name: "Man pages: CLI drift gate"
         run: python3 scripts/check_man_sync.py
 
+      # 1.5.0-pre.1: i18n_keys.def + en/zh must stay three-way consistent.
+      - name: "i18n: key parity"
+        run: python3 scripts/check_i18n.py
+
       # 1.4.4 M-06: filename-set parity between docs/{en,zh} and tutorial/{en,zh}.
       # Cheap (seconds) and mechanical — it cannot judge content, only that a
       # translation never forgets the counterpart file.
       - name: "Docs: en/zh file parity"
         run: bash scripts/check_docs_sync.sh
+
+      # 1.5.0-pre.1: parser ↔ user/global config docs + man5 key parity.
+      - name: "Docs: config key parity"
+        run: python3 scripts/check_config_docs.py
 
       - name: Build + run all tests
         run: bash build.sh test-all 2>&1 | tee test-report.log

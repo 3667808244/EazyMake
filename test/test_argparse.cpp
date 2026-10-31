@@ -95,6 +95,12 @@ TEST_CASE("parse_options: missing value throws fatal_error", "[argparse][1.1.3]"
                       ezmk::fatal_error);
 }
 
+TEST_CASE("parse_options: empty inline value is a missing value",
+          "[argparse][1.5.0-pre.1]") {
+    REQUIRE_THROWS_AS(run_parse({"cmd", "--key=", "value"}, {{'\0', "key", true}}),
+                      ezmk::fatal_error);
+}
+
 TEST_CASE("parse_options: unknown long option throws fatal_error", "[argparse][1.1.3]") {
     REQUIRE_THROWS_AS(run_parse({"cmd", "--bogus"}, {}), ezmk::fatal_error);
 }

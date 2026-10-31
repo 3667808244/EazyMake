@@ -111,6 +111,28 @@ TEST_CASE("load_repo_list: corrupt list.json throws (1.4.6 Q-17)", "[repo][1.4.6
     REQUIRE_THROWS_AS(load_repo_list(Scope::Project), std::runtime_error);
 }
 
+// 1.5.0-pre.1 (C-04): a relative local repo path is resolved against the
+// registry file, not against the caller's CWD.
+TEST_CASE("load_repo_list: relative local url resolves against registry dir",
+          "[repo][1.5.0-pre.1]") {
+    TempDir tmp;
+    CwdGuard cwd;
+    std::vector<RepoEntry> entries;
+    RepoEntry e;
+    e.name = "relative-local";
+    e.url = "pkgs";
+    e.type = "local";
+    entries.push_back(e);
+    save_repo_list(Scope::Project, entries);
+
+    auto loaded = load_repo_list(Scope::Project);
+    REQUIRE(loaded.size() == 1);
+    REQUIRE(loaded[0].url ==
+            (repo_list_path(Scope::Project).parent_path() / "pkgs")
+                .lexically_normal()
+                .string());
+}
+
 TEST_CASE("load_repo_list + save_repo_list: round-trip", "[repo]") {
     // 1.4.0-dev.5: the old test never called either function (it hand-wrote
     // TOML and asserted on a locally-built vector) — zero coverage of the

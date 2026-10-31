@@ -26,7 +26,8 @@ EZMK_I18N_KEY(lock_integrity_fail)         // 1.1.0
 EZMK_I18N_KEY(lock_missing_deterministic)  // 1.1.0
 EZMK_I18N_KEY(lock_locked_missing)         // 1.1.0
 EZMK_I18N_KEY(lock_locked_depends_mismatch)// 1.1.0
-EZMK_I18N_KEY(lock_locked_pkg_not_in_lockfile)      // 1.4.0-dev.5: --locked, package not recorded in the lockfile
+EZMK_I18N_KEY(lock_locked_pkg_not_in_lockfile)
+EZMK_I18N_KEY(lock_locked_source_mismatch) // 1.5.0-pre.1 (C-01)      // 1.4.0-dev.5: --locked, package not recorded in the lockfile
 EZMK_I18N_KEY(lock_locked_version_unavailable)      // 1.4.0-dev.5: --locked, locked version not found in repos
 EZMK_I18N_KEY(lock_commit_mismatch)        // 1.4.1: --locked, cloned git HEAD != lockfile commit (force-push drift)
 EZMK_I18N_KEY(lock_sha256_mismatch)        // 1.1.0
@@ -62,12 +63,14 @@ EZMK_I18N_KEY(hook_not_found)           // 0.2.3+
 EZMK_I18N_KEY(hook_nonzero)             // 0.2.3+
 EZMK_I18N_KEY(compile_db_no_sources)    // 1.1.1
 EZMK_I18N_KEY(compile_db_generate_failed) // 1.1.1
+EZMK_I18N_KEY(compile_db_write_failed)   // 1.5.0-pre.1 (C-11)
 EZMK_I18N_KEY(cc_help)                  // 1.1.1
 EZMK_I18N_KEY(utils_cc_deprecated)      // 1.2.0
 EZMK_I18N_KEY(export_unknown_target)    // 1.2.0
 EZMK_I18N_KEY(import_unknown_format)    // 1.2.0
 EZMK_I18N_KEY(import_missing_cmakelists)// 1.2.0
 EZMK_I18N_KEY(import_reject_unsupported) // 1.2.0
+EZMK_I18N_KEY(import_write_failed)       // 1.5.0-pre.1 (C-11)
 EZMK_I18N_KEY(export_exists_refuse)     // 1.2.0
 EZMK_I18N_KEY(export_written)           // 1.2.0
 EZMK_I18N_KEY(export_hook_note)         // 1.2.0-dev.8
@@ -379,6 +382,9 @@ EZMK_I18N_KEY(help_flag_auto_update)
 EZMK_I18N_KEY(help_flag_sha256)
 EZMK_I18N_KEY(help_flag_yes)
 EZMK_I18N_KEY(help_flag_color)
+EZMK_I18N_KEY(help_flag_config)           // 1.5.0-pre.1
+EZMK_I18N_KEY(help_flag_no_config)
+EZMK_I18N_KEY(help_flag_lang)
 EZMK_I18N_KEY(help_scope_project)
 EZMK_I18N_KEY(help_scope_user)
 EZMK_I18N_KEY(help_scope_global)

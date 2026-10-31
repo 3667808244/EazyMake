@@ -140,17 +140,28 @@ TEST_CASE("build_compile_args: test-path input translates for MSVC", "[cache][co
 // ===================================================================
 
 TEST_CASE("join_shell_args: quoting behavior", "[cache][compile_db]") {
+#ifdef EZMK_WIN
+    // Windows has no shell: CreateProcess/MSVCRT quoting is used instead.
+    REQUIRE(join_shell_args({"g++", "-c", "src/main.cpp"}) ==
+            "\"g++\" \"-c\" \"src/main.cpp\"");
+    REQUIRE(join_shell_args({"a b", "c"}) == "\"a b\" \"c\"");
+    REQUIRE(join_shell_args({"a$b"}) == "\"a$b\"");
+#else
     // Args without special chars are joined bare.
     REQUIRE(join_shell_args({"g++", "-c", "src/main.cpp"}) == "g++ -c src/main.cpp");
     // Args with whitespace are double-quoted (paths with spaces survive shells).
     REQUIRE(join_shell_args({"a b", "c"}) == "\"a b\" c");
     // Quotes inside an arg are backslash-escaped inside the double quotes.
     REQUIRE(join_shell_args({"a\"b"}) == "\"a\\\"b\"");
+#endif
 }
 
 // 1.1.3 S4: expanded shell metacharacter blacklist — these must be quoted so a
 // malicious flag (e.g. "-lfoo; echo pwned") cannot be executed by `sh -c`.
 TEST_CASE("join_shell_args: quotes shell metacharacters", "[cache][compile_db][1.1.3]") {
+#ifdef EZMK_WIN
+    SKIP("POSIX shell metacharacter escaping; Windows uses CreateProcess quoting");
+#else
     // Command-injection separators / operators
     REQUIRE(join_shell_args({"-lfoo; echo pwned"}) == "\"-lfoo; echo pwned\"");
     REQUIRE(join_shell_args({"a|b"}) == "\"a|b\"");
@@ -172,6 +183,7 @@ TEST_CASE("join_shell_args: quotes shell metacharacters", "[cache][compile_db][1
     // Regression: whitespace / plain-arg quoting unchanged
     REQUIRE(join_shell_args({"a b", "c"}) == "\"a b\" c");
     REQUIRE(join_shell_args({"g++", "-c", "src/main.cpp"}) == "g++ -c src/main.cpp");
+#endif
 }
 
 // ===================================================================

@@ -104,6 +104,9 @@ ParsedOptions parse_options(int argc, char** argv, int begin,
             std::string key = canonical_key(*s);
             if (s->takes_arg) {
                 if (inline_val) {
+                    // 1.5.0-pre.1 (D-08): --opt= is a missing value, not an
+                    // empty string (which silently fell back to a default).
+                    if (inline_val->empty()) err_missing("--" + name, cmd_name);
                     out.options.emplace_back(key, *inline_val);
                 } else {
                     if (i + 1 >= argc) err_missing("--" + name, cmd_name);

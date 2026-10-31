@@ -2465,6 +2465,75 @@ TEST_CASE("runtime config: --config and --no-config conflict",
     ezmk::config::reset_runtime_config_for_test();
 }
 
+TEST_CASE("runtime config: absolute settings.build_dir is rejected",
+          "[config][1.5.0-pre.1]") {
+    auto root = make_runtime_cfg_root("absbuild");
+    auto udir = root / "user";
+    write_runtime_cfg(udir, "[settings]\nbuild_dir = \"" +
+                                 fs::temp_directory_path().generic_string() +
+                                 "/ezmk-shared\"\n");
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                      std::runtime_error);
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: pack_format is case-insensitive and normalizes tgz",
+          "[config][1.5.0-pre.1]") {
+    auto root = make_runtime_cfg_root("packfmt");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+
+    write_runtime_cfg(udir, "[settings]\npack_format = \"ZIP\"\n");
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+    REQUIRE(ezmk::config::runtime_config().settings.pack_format == "zip");
+
+    write_runtime_cfg(udir, "[settings]\npack_format = \"TGZ\"\n");
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::config::load_runtime_config(2, av);
+    REQUIRE(ezmk::config::runtime_config().settings.pack_format == "tar.gz");
+
+    write_runtime_cfg(udir, "[settings]\npack_format = \"rar\"\n");
+    ezmk::config::reset_runtime_config_for_test();
+    REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                      std::runtime_error);
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: empty base_dir values are treated as unset",
+          "[config][1.5.0-pre.1]") {
+    auto root = make_runtime_cfg_root("emptybase");
+    auto udir = root / "user";
+    write_runtime_cfg(udir, "[base_dir]\nlogs = \"\"\nexamples = \"\"\n");
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+    const auto& rc = ezmk::config::runtime_config();
+    REQUIRE_FALSE(rc.user_dirs.logs.has_value());
+    REQUIRE_FALSE(rc.user_dirs.examples.has_value());
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("config: project.build_dir must be a string",
+          "[config][1.5.0-pre.1]") {
+    auto root = make_runtime_cfg_root("projbuildbad");
+    fs::create_directories(root);
+    auto toml = root / "ezmk.toml";
+    std::ofstream(toml)
+        << "[project]\nname = \"p\"\nversion = \"0.1.0\"\n"
+        << "build_dir = 123\n";
+    REQUIRE_THROWS_AS(ezmk::config::parse_config(toml), std::runtime_error);
+    fs::remove_all(root);
+}
+
 TEST_CASE("runtime config: unknown keys and bad types are rejected",
           "[config][1.5.0-dev.1]") {
     auto root = make_runtime_cfg_root("bad");

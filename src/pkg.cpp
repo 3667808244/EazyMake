@@ -868,9 +868,11 @@ std::string build_archive_command(bool is_msvc,
     } else {
         cmd << "ar rcs ";
     }
-    cmd << "\"" << util::escape_shell_arg(lib_out.string()) << "\"";
+    // 1.5.0-pre.1 (C-08): CreateProcessW has no shell on Windows — use the
+    // MSVCRT quoting helper there instead of POSIX escape_shell_arg.
+    cmd << util::quote_cli_arg(lib_out.string());
     for (auto& o : objects) {
-        cmd << " \"" << util::escape_shell_arg(o.string()) << "\"";
+        cmd << " " << util::quote_cli_arg(o.string());
     }
     return cmd.str();
 }
@@ -1578,6 +1580,9 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
         if (util::file_exists(pkg_dir)) {
             for (auto& entry : fs::directory_iterator(pkg_dir)) {
                 if (!entry.is_directory()) continue;
+                // 1.5.0-pre.1 (C-05): never treat staging/backup residue as a
+                // package.
+                if (entry.path().filename().string().rfind('.', 0) == 0) continue;
                 auto pkg_toml = entry.path() / "ezmk.toml";
                 if (!util::file_exists(pkg_toml)) continue;
                 try {
@@ -1855,6 +1860,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // Now: the lockfile's recorded version for this package becomes an Exact
     // constraint for the repo search, and the lockfile is never rewritten.
     std::string locked_version;    // non-empty only in --locked mode
+    std::string locked_source;     // 1.5.0-pre.1 (C-01): lockfile source kind
     std::string locked_sha256;     // 1.4.2 F-04: artifact hash (verify semantics)
     std::string locked_archive_sha256;  // 1.4.2 F-04: install-source archive hash
     // 1.4.1: git-source lockfile entries are re-cloned at the recorded commit.
@@ -1883,6 +1889,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         for (const auto& lp : lf->packages) {
             if (lp.name == pkg_name) {
                 found = true;
+                locked_source = lp.source;
                 if (lp.source == "git") {
                     locked_git_url = lp.source_url;
                     locked_git_commit = lp.commit;
@@ -1935,6 +1942,13 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // source (include/ + src/ + ezmk.toml, or precompiled/header-only). No
     // archive → no SHA-256 verification (emit a notice if --sha256 was given).
     if (fs::is_directory(input)) {
+        // 1.5.0-pre.1 (C-01): --locked must not silently install an unlocked
+        // local directory that happens to share the package name.
+        if (locked && locked_source != "local") {
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::lock_locked_source_mismatch,
+                {{"pkg", pkg_file}, {"source", locked_source}}));
+        }
         if (!expected_sha256.empty()) {
             util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
         }
@@ -1993,6 +2007,15 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // "https://dist/foo.zip" and the user got a download error instead of the
     // repo-search / not-found path.
     bool is_url = pkg_file.find("://") != std::string::npos;
+
+    // 1.5.0-pre.1 (C-01): a local archive is not an acceptable --locked source
+    // unless the lockfile itself records a local source.
+    if (locked && !is_url && util::file_exists(input) &&
+        locked_source != "local") {
+        util::fatal(ezmk::i18n::fmt(
+            ezmk::i18n::I18nKey::lock_locked_source_mismatch,
+            {{"pkg", pkg_file}, {"source", locked_source}}));
+    }
 
     // If no protocol, prepend https://
     std::string url;
@@ -2525,7 +2548,9 @@ void list(const std::vector<cli::Scope>& scopes) {
         std::vector<std::string> names;
         for (auto& entry : fs::directory_iterator(dir)) {
             if (entry.is_directory()) {
-                names.push_back(entry.path().filename().string());
+                const std::string n = entry.path().filename().string();
+                if (n.rfind('.', 0) == 0) continue;  // skip .ezmk-stage-*/.ezmk-backup-*
+                names.push_back(n);
             }
         }
         std::sort(names.begin(), names.end());
@@ -2656,7 +2681,10 @@ int update_all(const std::vector<cli::Scope>& scopes, bool assume_yes) {
         // entries or double-visit them on Windows.
         std::vector<std::string> names;
         for (auto& entry : fs::directory_iterator(dir)) {
-            if (entry.is_directory()) names.push_back(entry.path().filename().string());
+            if (!entry.is_directory()) continue;
+            const std::string n = entry.path().filename().string();
+            if (n.rfind('.', 0) == 0) continue;  // skip staging/backup residue
+            names.push_back(n);
         }
         std::sort(names.begin(), names.end());
 

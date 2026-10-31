@@ -171,21 +171,28 @@ std::vector<RepoEntry> load_repo_list(cli::Scope scope) {
     auto json_path = repo_list_path(scope);
     auto legacy = legacy_repo_list_path(scope);
 
+    std::vector<RepoEntry> entries;
     if (util::file_exists(json_path)) {
         // Both files present: the JSON one wins, the TOML one is stale. Never
         // merge, never pick silently.
         if (util::file_exists(legacy)) {
             util::warn(ezmk::i18n::I18nKey::repo_list_legacy_stale);
         }
-        return parse_repo_list_json(json_path);
-    }
-
-    if (util::file_exists(legacy)) {
+        entries = parse_repo_list_json(json_path);
+    } else if (util::file_exists(legacy)) {
         util::info(ezmk::i18n::I18nKey::repo_list_legacy_detected);
-        return parse_repo_list_toml(legacy);
+        entries = parse_repo_list_toml(legacy);
     }
 
-    return {};
+    // 1.5.0-pre.1 (C-04): old/relative local repo paths are relative to the
+    // registry file, not to whatever CWD a later command happens to use.
+    const fs::path base = json_path.parent_path();
+    for (auto& e : entries) {
+        if (e.type != "local") continue;
+        fs::path p(e.url);
+        if (p.is_relative()) e.url = (base / p).lexically_normal().string();
+    }
+    return entries;
 }
 
 void save_repo_list(cli::Scope scope, const std::vector<RepoEntry>& entries) {
@@ -542,11 +549,12 @@ void add(const cli::RepoOptions& opts) {
         entry.last_update = util::git_last_commit_time(dest);
         util::info(ezmk::i18n::I18nKey::repo_added, {{"name", repo_name}});
     } else {
-        // Local directory
+        // Local directory — store an absolute path so later commands are
+        // independent of CWD (1.5.0-pre.1 C-04).
         entry.type = "local";
-        entry.url = opts.url;
+        entry.url = fs::absolute(fs::path(opts.url)).lexically_normal().string();
 
-        validate_local_repo(fs::path(opts.url));
+        validate_local_repo(fs::path(entry.url));
         entry.last_update = now_iso();
         util::info(ezmk::i18n::I18nKey::repo_added, {{"name", repo_name}});
     }

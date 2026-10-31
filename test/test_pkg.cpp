@@ -453,11 +453,10 @@ TEST_CASE("build_archive_command: escapes paths for ar/lib", "[pkg][1.1.2]") {
         auto cmd = build_archive_command(false, "build/lib demo.a",
             {"build/a b$c.o", "build/$(touch /tmp/x).o"});
         REQUIRE(cmd.rfind("ar rcs ", 0) == 0);
-        REQUIRE(cmd.find("\"build/lib demo.a\"") != std::string::npos);
-        // `$` must be backslash-escaped so sh -c cannot expand it
-        REQUIRE(cmd.find("\"build/a b\\$c.o\"") != std::string::npos);
-        // `$` must be backslash-escaped inside the quoted segment
-        REQUIRE(cmd.find("\\$(touch /tmp/x)") != std::string::npos);
+        REQUIRE(cmd.find(quote_cli_arg("build/lib demo.a")) != std::string::npos);
+        // Each path is quoted according to the platform command model.
+        REQUIRE(cmd.find(quote_cli_arg("build/a b$c.o")) != std::string::npos);
+        REQUIRE(cmd.find(quote_cli_arg("build/$(touch /tmp/x).o")) != std::string::npos);
         // and no UNESCAPED `$(` directly after an opening quote (sh -c would expand it)
         REQUIRE(cmd.find("\"$(touch") == std::string::npos);
     }
@@ -466,17 +465,17 @@ TEST_CASE("build_archive_command: escapes paths for ar/lib", "[pkg][1.1.2]") {
             {"build/a b$c.obj"});
         // 1.4.7 M-03: the archiver is MSVCRT-quoted (quote_windows_arg).
         REQUIRE(cmd.rfind("\"lib.exe\" /OUT:", 0) == 0);
-        REQUIRE(cmd.find("\"lib demo.lib\"") != std::string::npos);
-        REQUIRE(cmd.find("\"build/a b\\$c.obj\"") != std::string::npos);
+        REQUIRE(cmd.find(quote_cli_arg("lib demo.lib")) != std::string::npos);
+        REQUIRE(cmd.find(quote_cli_arg("build/a b$c.obj")) != std::string::npos);
     }
     SECTION("empty object list") {
         auto cmd = build_archive_command(false, "build/lib.a", {});
-        REQUIRE(cmd == "ar rcs \"build/lib.a\"");
+        REQUIRE(cmd == "ar rcs " + quote_cli_arg("build/lib.a"));
     }
     SECTION("backtick and backslash escaped") {
         auto cmd = build_archive_command(false, "lib`x.a", {"build/obj\\sub.o"});
-        REQUIRE(cmd.find("\"lib\\`x.a\"") != std::string::npos);
-        REQUIRE(cmd.find("\"build/obj\\\\sub.o\"") != std::string::npos);
+        REQUIRE(cmd.find(quote_cli_arg("lib`x.a")) != std::string::npos);
+        REQUIRE(cmd.find(quote_cli_arg("build/obj\\sub.o")) != std::string::npos);
     }
 }
 

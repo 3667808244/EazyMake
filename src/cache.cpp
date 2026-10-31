@@ -271,6 +271,9 @@ std::string compile_options_signature(const config::CompileSection& compile,
     if (use_pic) {
         combined += "pic=1 ";
     }
+    // 1.5.0-pre.1 (A-02): object naming changed for non-.cpp sources; fold a
+    // salt into the signature so a pre-fix record rebuilds once.
+    combined += "objnaming=2 ";
     return crypto::sha256(combined);
 }
 
@@ -538,6 +541,11 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
         for (auto& inc : resolve_compile_include_paths(in)) args.push_back("-I" + inc.string());
         for (auto& inc : in.extra_includes) args.push_back("-I" + inc.string());
         fs::path dep = in.dep_dir / rel;
+        // 1.5.0-pre.1 (A-02): mirror object naming so .d files cannot collide.
+        if (const std::string sd = src.extension().string();
+            !sd.empty() && sd != ".cpp") {
+            dep += sd;
+        }
         dep.replace_extension(".d");
         args.push_back("-MMD");
         args.push_back("-MF");
@@ -552,6 +560,16 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
 
 std::string join_shell_args(const std::vector<std::string>& args) {
     std::string r;
+#ifdef EZMK_WIN
+    // 1.5.0-pre.1 (A-04): run_command goes straight to CreateProcessW on
+    // Windows — POSIX shell escaping would inject literal backslashes into
+    // paths containing $, backticks, UNC or \\?\\.
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i > 0) r += ' ';
+        r += util::quote_cli_arg(args[i]);
+    }
+    return r;
+#endif
     for (size_t i = 0; i < args.size(); ++i) {
         if (i > 0) r += ' ';
         const auto& a = args[i];
@@ -675,6 +693,10 @@ static std::vector<DepEntry> parse_compile_dependencies(
         }
     } else {
         fs::path dep = in.dep_dir / rel;
+        if (const std::string sd = rel.extension().string();
+            !sd.empty() && sd != ".cpp") {
+            dep += sd;
+        }
         dep.replace_extension(".d");
         deps = parse_depfile_and_hash(dep);
     }
@@ -711,12 +733,21 @@ SingleCompileResult compile_one_source(const fs::path& src,
     auto rel = safe_relative(src, in.proj_root);
     result.rel_src = rel.generic_string();
 
-    fs::path obj = in.obj_dir / rel;
+    // 1.5.0-pre.1 (A-02): a.c and a.cpp used to collapse to the same a.o in a
+    // parallel build. Keep the common .cpp object name, but append the source
+    // extension for every other language so same-stem files cannot collide.
+    auto lang_suffix = [&](fs::path p) {
+        const std::string ext = src.extension().string();
+        if (!ext.empty() && ext != ".cpp") p += ext;
+        return p;
+    };
+
+    fs::path obj = lang_suffix(in.obj_dir / rel);
     obj.replace_extension(obj_suffix);
-    fs::path obj_tmp = in.obj_dir / rel;
+    fs::path obj_tmp = lang_suffix(in.obj_dir / rel);
     obj_tmp.replace_extension(tmp_suffix);
 
-    fs::path cache_obj = in.cache_obj_dir / rel;
+    fs::path cache_obj = lang_suffix(in.cache_obj_dir / rel);
     cache_obj.replace_extension(obj_suffix);
 
     fs::create_directories(obj.parent_path());

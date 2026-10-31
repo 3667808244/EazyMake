@@ -1485,6 +1485,10 @@ namespace ezmk::cli
         row("--member <name>", I18nKey::help_flag_member);     // 1.3.0-dev.2
         row("--sha256 <hash>", I18nKey::help_flag_sha256);
         row("-y, --yes", I18nKey::help_flag_yes);
+        // 1.5.0-pre.1: global config / language switches must be discoverable.
+        row("--config <file>", I18nKey::help_flag_config);
+        row("--no-config", I18nKey::help_flag_no_config);
+        row("--lang <tag>", I18nKey::help_flag_lang);
         row("--color=<mode>", I18nKey::help_flag_color);
         std::cout << "\n";
 

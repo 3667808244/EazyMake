@@ -464,25 +464,36 @@ void FileWatcher::win32_repair_watches() {
 }
 
 void FileWatcher::win32_cleanup() {
+    // 1.5.0-pre.1 (A-01): CancelIo only cancels I/O issued by the calling
+    // thread, but the reads were posted by the worker. CancelIoEx cancels all
+    // pending I/O for the handle, then we wait for exactly one completion per
+    // armed read before closing handles / freeing OVERLAPPED and buffers.
+    size_t pending = 0;
     for (auto& w : watches_) {
-        if (w.dir_handle) {
-            CancelIo(static_cast<HANDLE>(w.dir_handle));
-            CloseHandle(static_cast<HANDLE>(w.dir_handle));
-        }
+        if (!w.dir_handle) continue;
+        if (w.armed) ++pending;
+        CancelIoEx(static_cast<HANDLE>(w.dir_handle), nullptr);
     }
-    // 1.4.6 Q-29: drain pending cancellation completions before freeing the
-    // OVERLAPPED objects — the kernel can still complete a cancelled read into
-    // one of them after CancelIo.
     if (iocp_) {
-        const size_t n = watches_.size();
-        for (size_t i = 0; i < n; ++i) {
+        size_t drained = 0;
+        while (drained < pending) {
             DWORD bytes = 0;
             ULONG_PTR key = 0;
             OVERLAPPED* ov = nullptr;
             if (!GetQueuedCompletionStatus(static_cast<HANDLE>(iocp_), &bytes,
-                                           &key, &ov, 100)) {
+                                           &key, &ov, INFINITE)) {
+                // A failed/cancelled completion still carries its OVERLAPPED;
+                // only a null OVERLAPPED means the queue itself failed.
+                if (ov) { ++drained; continue; }
                 break;
             }
+            if (ov) ++drained;
+        }
+    }
+    for (auto& w : watches_) {
+        if (w.dir_handle) {
+            CloseHandle(static_cast<HANDLE>(w.dir_handle));
+            w.dir_handle = nullptr;
         }
     }
     watches_.clear();

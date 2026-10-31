@@ -115,7 +115,7 @@ TEST_CASE("lua: basic builtins still work", "[lua][sandbox]") {
     lua_State* L = state();
     REQUIRE(L != nullptr);
 
-    // string, table, math, coroutine still available
+    // string, table, math still available (coroutine is blocked by D-01)
     int rc = luaL_dostring(L, "return type(string.upper), type(table.insert), type(math.abs)");
     REQUIRE(rc == 0);
     REQUIRE(std::string(lua_tostring(L, -3)) == "function");
@@ -411,6 +411,46 @@ TEST_CASE("lua: ezmk.file_write succeeds inside project root", "[lua][api][fs]")
     std::string content;
     std::getline(in, content);
     REQUIRE(content == "hello world");
+}
+
+TEST_CASE("lua: file_write/read preserve embedded NUL bytes",
+          "[lua][api][fs][1.5.0-pre.1]") {
+    init();
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    TempDir tmp;
+    write_minimal_config(tmp.path);
+    register_api(L, tmp.path);
+
+    fs::path target = tmp.path / "binary.dat";
+    std::string code =
+        "local ok = ezmk.file_write('" + target.generic_string() + "', 'A\\0B')\n"
+        "local d = ezmk.file_read('" + target.generic_string() + "')\n"
+        "return ok, d and #d or -1, d and string.byte(d, 2) or -1";
+    REQUIRE(luaL_dostring(L, code.c_str()) == 0);
+    REQUIRE(lua_toboolean(L, -3));
+    REQUIRE(lua_tointeger(L, -2) == 3);
+    REQUIRE(lua_tointeger(L, -1) == 0);
+    lua_pop(L, 3);
+}
+
+TEST_CASE("lua: json_encode/decode preserve embedded NUL bytes",
+          "[lua][api][json][1.5.0-pre.1]") {
+    init();
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    TempDir tmp;
+    write_minimal_config(tmp.path);
+    register_api(L, tmp.path);
+
+    const char* code =
+        "local j = ezmk.json_encode({s='a\\0b'})\n"
+        "local d = ezmk.json_decode(j).s\n"
+        "return #d, string.byte(d, 2)";
+    REQUIRE(luaL_dostring(L, code) == 0);
+    REQUIRE(lua_tointeger(L, -2) == 3);
+    REQUIRE(lua_tointeger(L, -1) == 0);
+    lua_pop(L, 2);
 }
 
 TEST_CASE("lua: ezmk.file_write denies write outside project root", "[lua][api][fs][sandbox]") {
@@ -1732,6 +1772,26 @@ end
     // Pre-1.4.2 this hung forever; now the count hook raises a Lua error.
     int rc = run_script(L, script, {});
     REQUIRE(rc == 1);
+}
+
+TEST_CASE("run_script: coroutine creation cannot reset the instruction budget",
+          "[lua][script][1.5.0-pre.1]") {
+    init();
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "coroutine_budget", R"(
+function run(args)
+    while true do
+        local co = coroutine.create(function() while true do end end)
+        coroutine.resume(co)
+    end
+end
+)");
+    // Pre-fix each new coroutine received a fresh 1e8-instruction budget.
+    REQUIRE(run_script(L, script, {}) == 1);
 }
 
 TEST_CASE("run_script: budget hook does not leak into the next script (F-19)", "[lua][script][1.4.2]") {

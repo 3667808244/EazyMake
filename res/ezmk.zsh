@@ -70,9 +70,11 @@ _ezmk_commands() {
         'test:Build and run project tests (alias: project test)'
         'pack:Create distributable package (alias: project pack)'
         # group commands
-        'project:Project management (new, build, run, watch, clean, install, pack, test)'
+        'project:Project management (new, build, run, watch, clean, install, pack, test, cc, export, import)'
         'pkg:Package management (install, remove, search, info, list, update)'
         'repo:Repository management (add, remove, update, list, info)'
+        'workspace:Workspace commands (list, build, test, watch, clean, scan)'
+        'example:Scaffold a built-in example (1.2.3+)'
         'utils:Run Lua-based utility tools'
         'version:Show version information'
         'help:Show help message'
@@ -95,6 +97,9 @@ _ezmk_project() {
         'install:Install build artifacts to prefix'
         'pack:Create distributable package'
         'test:Build and run project tests'
+        'cc:Generate compile_commands.json for clangd'
+        'export:Export CMakeLists.txt or .vscode/ debug config'
+        'import:Import a CMake project into ezmk.toml'
     )
     _describe -t subcommands 'project subcommand' subcmds
 }
@@ -173,6 +178,73 @@ _ezmk_project_test() {
         '--filter[Pattern to filter test cases]:filter:' \
         '(-V)--verbose[Verbose test output]' \
         '-V[Verbose test output (short)]'
+}
+
+# 1.5.0-pre.1: project cc / export / import were missing from completion.
+_ezmk_project_cc() {
+    _arguments \
+        '--output[Output path]:file:_files' \
+        '-o[Output path (short)]:file:_files' \
+        '--profile[Build profile]:profile:_ezmk_profiles'
+}
+
+_ezmk_project_export() {
+    _arguments \
+        '--overwrite[Overwrite existing generated files]' \
+        '--profile[Build profile]:profile:_ezmk_profiles' \
+        '1:target:(cmake vscode)'
+}
+
+_ezmk_project_import() {
+    _arguments \
+        '--from[Source format]:format:(cmake)' \
+        '--overwrite[Overwrite an existing ezmk.toml]'
+}
+
+_ezmk_workspace() {
+    local -a subcmds
+    subcmds=(
+        'list:List workspace members'
+        'build:Build all members'
+        'test:Run member tests'
+        'watch:Watch all members'
+        'clean:Clean member caches'
+        'scan:Adopt existing projects into a workspace'
+    )
+    _describe -t subcommands 'workspace subcommand' subcmds
+}
+
+_ezmk_workspace_build() {
+    _arguments \
+        '-j[Max parallel members]:jobs:' \
+        '--jobs[Max parallel members]:jobs:' \
+        '--stop-on-error[Stop after the first failure]' \
+        '--member[Only this member and its dependency closure]:member:'
+}
+
+_ezmk_workspace_test() {
+    _ezmk_workspace_build
+}
+
+_ezmk_workspace_watch() {
+    _arguments \
+        '-j[Max parallel members]:jobs:' \
+        '--jobs[Max parallel members]:jobs:' \
+        '--stop-on-error[Stop after the first failure]' \
+        '--member[Only this member and its dependency closure]:member:' \
+        '--run[Run the rebuilt executable]'
+}
+
+_ezmk_workspace_clean() {
+    _arguments '--member[Only this member]:member:'
+}
+
+_ezmk_workspace_scan() {
+    _arguments \
+        '--dry-run[Show what would be written]' \
+        '(-y)--yes[Skip confirmation prompts]' \
+        '-y[Skip confirmation prompts (short)]' \
+        '1:directory:_files -/'
 }
 
 # ===================================================================
@@ -313,12 +385,30 @@ _ezmk_utils() {
 }
 
 # ===================================================================
+# Global options (1.5.0-pre.1)
+# ===================================================================
+
+_ezmk_global_options() {
+    _arguments -s \
+        '--config[Use FILE instead of the user-level config.toml]:file:_files' \
+        '--no-config[Skip global and user config.toml]' \
+        '--lang[UI language tag]:tag:(en zh zh-TW)' \
+        '--color[Color output mode]:mode:(always auto never enable default disable on off 16colors 256colors truecolor)'
+}
+
+# ===================================================================
 # Main dispatch
 # ===================================================================
 
 _ezmk() {
     local curcontext="$curcontext" state line
     typeset -A opt_args
+
+    # 1.5.0-pre.1: global config / language / color options.
+    if [[ "${words[2]}" == --* ]]; then
+        _ezmk_global_options
+        return
+    fi
 
     if (( CURRENT == 2 )); then
         _ezmk_commands
@@ -365,6 +455,9 @@ _ezmk() {
                     install) _ezmk_project_install ;;
                     pack)    _ezmk_project_pack ;;
                     test)    _ezmk_project_test ;;
+                    cc)      _ezmk_project_cc ;;
+                    export)  _ezmk_project_export ;;
+                    import)  _ezmk_project_import ;;
                     *)       _ezmk_project ;;
                 esac
             fi
@@ -399,6 +492,25 @@ _ezmk() {
                     *)      _ezmk_repo ;;
                 esac
             fi
+            ;;
+        workspace)
+            if (( CURRENT == 3 )); then
+                _ezmk_workspace
+            else
+                subcmd=${words[3]}
+                case "$subcmd" in
+                    list)  ;;
+                    build) _ezmk_workspace_build ;;
+                    test)  _ezmk_workspace_test ;;
+                    watch) _ezmk_workspace_watch ;;
+                    clean) _ezmk_workspace_clean ;;
+                    scan)  _ezmk_workspace_scan ;;
+                    *)     _ezmk_workspace ;;
+                esac
+            fi
+            ;;
+        example)
+            _arguments '1:example name:(hello greeter with-hooks cmake-interop with-tests with-packages list)' '-o[Output directory]:directory:_files -/'
             ;;
         utils)
             _ezmk_utils

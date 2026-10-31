@@ -8,6 +8,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -561,7 +563,23 @@ TEST_CASE("cli parse: unknown command group throws", "[cli][1.4.11]") {
 
 TEST_CASE("print_usage: does not throw", "[cli]") {
     // Redirect stdout to suppress output during test
+    std::ostringstream sink;
+    auto* old_buf = std::cout.rdbuf(sink.rdbuf());
     REQUIRE_NOTHROW(print_usage());
+    std::cout.rdbuf(old_buf);
+}
+
+// 1.5.0-pre.1: the three global config switches must be discoverable in --help.
+TEST_CASE("print_usage: documents 1.5.0 global options", "[cli][1.5.0]") {
+    std::ostringstream out;
+    auto* old_buf = std::cout.rdbuf(out.rdbuf());
+    print_usage();
+    std::cout.rdbuf(old_buf);
+    const std::string text = out.str();
+    CHECK(text.find("--config <file>") != std::string::npos);
+    CHECK(text.find("--no-config") != std::string::npos);
+    CHECK(text.find("--lang <tag>") != std::string::npos);
+    CHECK(text.find("truecolor") != std::string::npos);
 }
 
 // ===================================================================

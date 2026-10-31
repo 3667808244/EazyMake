@@ -335,15 +335,10 @@ std::vector<std::string> verify(const fs::path& proj_root,
         if (pkg.scope == "project") {
             pkg_path = proj_root / ".ezmk/pkg" / pkg.name;
         } else if (pkg.scope == "user") {
-#ifdef EZMK_WIN
-            const char* appdata = std::getenv("LOCALAPPDATA");
-            if (appdata) pkg_path = fs::path(appdata) / "ezmk/pkg" / pkg.name;
-            else pkg_path = util::get_home_dir() / "AppData/Local/ezmk/pkg" / pkg.name;
-#else
-            pkg_path = util::get_home_dir() / ".local/ezmk/pkg" / pkg.name;
-#endif
+            // 1.5.0-pre.1: honor [base_dir].installed_packages.
+            pkg_path = pkg::pkg_install_dir(cli::Scope::User) / pkg.name;
         } else { // global
-            pkg_path = util::get_exe_dir() / "pkg" / pkg.name;
+            pkg_path = pkg::pkg_install_dir(cli::Scope::Global) / pkg.name;
         }
 
         if (!util::file_exists(pkg_path)) {

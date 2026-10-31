@@ -25,6 +25,8 @@ namespace ezmk::import {
 
 namespace {
 
+static std::string comment_safe(std::string s);
+
 // ===================================================================
 // 轻量 CMake 解析
 // ===================================================================
@@ -785,16 +787,26 @@ std::string build_toml(const ImportedProject& p) {
         std::string spec = name;
         auto it = p.find_pkg_versions.find(name);
         if (it != p.find_pkg_versions.end()) spec += "@" + it->second;
-        t += "# TODO: 原 CMake 引用了 " + name + "，请手动执行 `ezmk pkg install " + name +
-             "` 后取消注释\n";
+        const std::string safe_name = comment_safe(name);
+        t += "# TODO: 原 CMake 引用了 " + safe_name +
+             "，请手动执行 `ezmk pkg install " + safe_name + "` 后取消注释\n";
         t += "# lib = [" + util::toml_quote(spec) + "]\n";
     }
     t += "lib = []\n";
 
     for (auto& note : p.todos)
-        t += "# TODO: " + note + "\n";
+        t += "# TODO: " + comment_safe(note) + "\n";
 
     return t;
+}
+
+// 1.5.0-pre.1 (C-10): values copied into `#` comments must never smuggle a
+// newline that turns the rest of the line into an active TOML key.
+static std::string comment_safe(std::string s) {
+    for (auto& c : s) {
+        if (c == '\n' || c == '\r') c = ' ';
+    }
+    return s;
 }
 
 } // namespace
@@ -830,7 +842,9 @@ int import_project(const cli::ProjectImportOptions& opts,
     std::string src = read_file(cmake_file);
     std::string text = import_cmake_text(src, project_root);
 
-    util::file_write(toml_file, text);
+    if (!util::file_write(toml_file, text))
+        util::fatal(i18n::I18nKey::import_write_failed,
+                    {{"path", toml_file.string()}});
     util::info("wrote " + toml_file.string());
     return 0;
 }

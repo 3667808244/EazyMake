@@ -20,6 +20,11 @@ namespace ezmk::config {
 
 namespace {
 
+// 1.5.0-pre.1 (R-17): defined near the schema helpers below; declared here so
+// parse_project()/parse_test() can validate paths before that block.
+void validate_no_nul(const fs::path& file, const char* field,
+                     const std::string& value);
+
 // 1.2.0-dev.11: array fields must contain only strings — a type mismatch (e.g.
 // `flags = ["-Wall", 42]`) used to be silently dropped, hiding config mistakes.
 // `field` names the config field for the error message.
@@ -700,8 +705,17 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
                            "project.precompiled_strict",
                            cfg.project.precompiled_strict);
         // 1.5.0-dev.2: per-project build directory (empty = global default).
-        if (auto bd = (*proj)["build_dir"].value<std::string>()) {
-            cfg.project.build_dir = *bd;
+        // 1.5.0-pre.1 (B-03/R-17): strict type + NUL validation. Keep the
+        // bracket form so scripts/check_man_sync.py still sees the key.
+        if (auto* bd = (*proj)["build_dir"].node()) {
+            auto v = bd->value<std::string>();
+            if (!v) {
+                throw std::runtime_error("project.build_dir must be a string");
+            }
+            cfg.project.build_dir = *v;
+            if (cfg.project.build_dir.find('\0') != std::string::npos) {
+                throw std::runtime_error("project.build_dir contains a NUL byte");
+            }
         }
         // 1.5.0-dev.5: artifact basename (empty = project name).
         read_strict_string(*proj, "output_name", "project.output_name",
@@ -1016,7 +1030,8 @@ static void parse_install(const toml::table& root, EzConfig& cfg) {
     }
 }
 
-static void parse_test(const toml::table& root, EzConfig& cfg) {
+static void parse_test(const toml::table& root, EzConfig& cfg,
+                       const fs::path& file) {
     // 1.1.0-dev.6: [test] — test configuration
     if (auto test = root["test"].as_table()) {
         cfg.test.dirs = extract_string_array(test->get("dirs"), "test.dirs");
@@ -1038,6 +1053,7 @@ static void parse_test(const toml::table& root, EzConfig& cfg) {
                         0, 86400);
         read_strict_string(*test, "report_dir", "test.report_dir",
                            cfg.test.report_dir);
+        validate_no_nul(file, "test.report_dir", cfg.test.report_dir);
     }
     // Apply defaults for test section
     if (cfg.test.dirs.empty()) cfg.test.dirs = {"test"};
@@ -1110,7 +1126,8 @@ static void parse_watch(const toml::table& root, EzConfig& cfg) {
 }
 
 // 1.5.0-dev.5: [pack] — format / output dir / name / extra excludes.
-static void parse_pack(const toml::table& root, EzConfig& cfg) {
+static void parse_pack(const toml::table& root, EzConfig& cfg,
+                       const fs::path& file) {
     if (auto pack = root["pack"].as_table()) {
         std::string fmt = cfg.pack.format;
         read_strict_string(*pack, "format", "pack.format", fmt);
@@ -1127,7 +1144,9 @@ static void parse_pack(const toml::table& root, EzConfig& cfg) {
         }
         read_strict_string(*pack, "output_dir", "pack.output_dir",
                            cfg.pack.output_dir);
+        validate_no_nul(file, "pack.output_dir", cfg.pack.output_dir);
         read_strict_string(*pack, "name", "pack.name", cfg.pack.name);
+        validate_no_nul(file, "pack.name", cfg.pack.name);
         if (!cfg.pack.name.empty() && !is_safe_basename(cfg.pack.name)) {
             throw std::runtime_error("pack.name must be a safe basename");
         }
@@ -1175,7 +1194,7 @@ EzConfig parse_config(const fs::path& toml_path) {
     parse_install(root, cfg);
 
     // [test]
-    parse_test(root, cfg);
+    parse_test(root, cfg, toml_path);
 
     // [utils]
     parse_utils(root, cfg);
@@ -1184,7 +1203,7 @@ EzConfig parse_config(const fs::path& toml_path) {
     parse_pkg(root, cfg);
     // [watch] / [pack] (1.5.0-dev.5)
     parse_watch(root, cfg);
-    parse_pack(root, cfg);
+    parse_pack(root, cfg, toml_path);
 
     // 1.1.0-dev.5: Resolve @link: references in path arrays
     {
@@ -1359,6 +1378,16 @@ fs::path default_user_config_dir() {
                              file.string() + " must be " + expected);
 }
 
+// 1.5.0-pre.1 (R-17): a NUL in a path/tool value truncates it at the Windows
+// API boundary, so reject it uniformly at the config reader.
+void validate_no_nul(const fs::path& file, const char* field,
+                     const std::string& value) {
+    if (value.find('\0') != std::string::npos) {
+        throw std::runtime_error("config field '" + std::string(field) + "' in " +
+                                 file.string() + " contains a NUL byte");
+    }
+}
+
 void validate_enum(const fs::path& file, const char* field,
                    const std::string& value,
                    std::initializer_list<const char*> allowed) {
@@ -1460,11 +1489,10 @@ void parse_base_dir_table(const toml::table& t, BaseDirConfig& out,
         if (!n) return;
         auto v = n->value<std::string>();
         if (!v) config_type_error(file, field, "a string path");
-        if (v->find('\0') != std::string::npos) {
-            throw std::runtime_error("config field '" + std::string(field) +
-                                     "' in " + file.string() +
-                                     " contains a NUL byte");
-        }
+        validate_no_nul(file, field, *v);
+        // 1.5.0-pre.1 (R-13): an empty string is "not configured", not an
+        // engaged empty path (which later broke log-dir creation).
+        if (v->empty()) return;
         dst = fs::path(*v);
     };
     read_path("installed_packages", "base_dir.installed_packages",
@@ -1550,6 +1578,19 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     }
 
     read_string(t, "build_dir", "settings.build_dir", file, s.build_dir);
+    validate_no_nul(file, "settings.build_dir", s.build_dir);
+    if (!s.build_dir.empty()) {
+        fs::path p(s.build_dir);
+        // 1.5.0-pre.1 (R-09): a shared absolute build dir would make every
+        // project write objects into the same directory. Require a project-
+        // relative path; [project].build_dir may still be absolute.
+        if (p.is_absolute() || p.has_root_name() || p.has_root_directory()) {
+            throw std::runtime_error(
+                "config field 'settings.build_dir' in " + file.string() +
+                " must be a relative path (e.g. \"build\"); an absolute "
+                "directory would be shared by every project");
+        }
+    }
     read_int(t, "default_jobs", "settings.default_jobs", file, s.default_jobs,
              0, 1024);
     read_int(t, "test_timeout", "settings.test_timeout", file, s.test_timeout,
@@ -1557,6 +1598,7 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     if (t.get("test_timeout")) s.has_test_timeout = true;
     read_string(t, "test_report_dir", "settings.test_report_dir", file,
                 s.test_report_dir);
+    validate_no_nul(file, "settings.test_report_dir", s.test_report_dir);
     read_int(t, "watch_debounce_ms", "settings.watch_debounce_ms", file,
              s.watch_debounce_ms, 0, 5000);
     if (s.watch_debounce_ms != 0 && s.watch_debounce_ms < 50) {
@@ -1570,11 +1612,18 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     }
 
     read_string(t, "pack_format", "settings.pack_format", file, s.pack_format);
+    // 1.5.0-pre.1 (R-12): normalize exactly like [pack].format / --format.
+    for (auto& c : s.pack_format) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (s.pack_format == "tgz") s.pack_format = "tar.gz";
     validate_enum(file, "settings.pack_format", s.pack_format,
-                  {"tar.gz", "zip", "tgz"});
+                  {"tar.gz", "zip"});
     read_string(t, "pack_output_dir", "settings.pack_output_dir", file,
                 s.pack_output_dir);
+    validate_no_nul(file, "settings.pack_output_dir", s.pack_output_dir);
     read_string(t, "pack_name", "settings.pack_name", file, s.pack_name);
+    validate_no_nul(file, "settings.pack_name", s.pack_name);
     if (t.get("pack_exclude")) {
         s.pack_exclude = extract_string_array(t.get("pack_exclude"),
                                               "settings.pack_exclude");
@@ -1592,7 +1641,9 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     }
 
     read_string(t, "git_path", "settings.git_path", file, s.git_path);
+    validate_no_nul(file, "settings.git_path", s.git_path);
     read_string(t, "editor", "settings.editor", file, s.editor);
+    validate_no_nul(file, "settings.editor", s.editor);
     read_bool(t, "auto_pack", "settings.auto_pack", file, s.auto_pack);
 }
 
@@ -1602,8 +1653,9 @@ void parse_runtime_file(const fs::path& file, BaseDirConfig& dirs,
     try {
         tbl = toml::parse_file(file.string());
     } catch (const toml::parse_error& e) {
+        // 1.5.0-pre.1 (B-09): keep toml++'s line/column information.
         throw std::runtime_error("failed to parse " + file.string() + ": " +
-                                 std::string(e.description()));
+                                 std::string(e.what()));
     }
     for (auto&& [k, v] : tbl) {
         (void)v;

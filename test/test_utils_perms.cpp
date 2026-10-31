@@ -168,6 +168,34 @@ TEST_CASE("perm run: trailing-* prefix wildcard", "[perms]") {
     REQUIRE(ezmk::lua::check_run_permission("git.exe status", p) == PermResult::Allow);
 }
 
+TEST_CASE("perm read: Windows path deny is case-insensitive",
+          "[perms][1.5.0-pre.1]") {
+#if defined(_WIN32)
+    UtilsPermissions p;
+    p.read = {"secrets/"};
+    p.read_deny = {"secrets/"};
+    auto op = std::make_optional(p);
+    REQUIRE(ezmk::lua::check_read_permission(ROOT / "SECRETS/x", op, ROOT, PKG)
+            == PermResult::Deny);
+#else
+    SKIP("Windows-only case-insensitive filesystem check");
+#endif
+}
+
+TEST_CASE("perm run: shell-quoted executable token is denied",
+          "[perms][1.5.0-pre.1]") {
+#if !defined(_WIN32)
+    UtilsPermissions p;
+    p.run = {"*"};
+    p.run_deny = {"rm"};
+    auto op = std::make_optional(p);
+    REQUIRE(ezmk::lua::check_run_permission("r''m -rf x", op) == PermResult::Deny);
+    REQUIRE(ezmk::lua::check_run_permission("\\rm -rf x", op) == PermResult::Deny);
+#else
+    SKIP("POSIX shell tokenization only");
+#endif
+}
+
 TEST_CASE("perm run: unlisted command → Ask", "[perms]") {
     auto p = std::make_optional(make_perms());
     REQUIRE(ezmk::lua::check_run_permission("python foo.py", p) == PermResult::Ask);

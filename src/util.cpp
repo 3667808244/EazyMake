@@ -1,5 +1,6 @@
 #include "ezmk/util.hpp"
 #include "ezmk/config.hpp"
+#include "ezmk/pkg.hpp"
 
 #include <algorithm>
 #include <array>
@@ -2312,24 +2313,15 @@ fs::path find_utils_script(const std::string& name) {
     };
 
     // 1) Project scope
-    fs::path project_dir = fs::current_path() / ".ezmk/pkg";
-    auto found = scan_dir(project_dir);
+    auto found = scan_dir(pkg::pkg_install_dir(cli::Scope::Project));
     if (!found.empty()) return found;
 
-    // 2) User scope
-#ifdef EZMK_WIN
-    const char* appdata = std::getenv("LOCALAPPDATA");
-    fs::path user_dir = appdata ? fs::path(appdata) / "ezmk/pkg"
-                                : get_home_dir() / "AppData/Local/ezmk/pkg";
-#else
-    fs::path user_dir = get_home_dir() / ".local/ezmk/pkg";
-#endif
-    found = scan_dir(user_dir);
+    // 2) User scope (honors [base_dir].installed_packages)
+    found = scan_dir(pkg::pkg_install_dir(cli::Scope::User));
     if (!found.empty()) return found;
 
-    // 3) Global scope: same as pkg_install_dir(Global) = get_exe_dir() / "pkg"
-    fs::path global_dir = get_exe_dir() / "pkg";
-    found = scan_dir(global_dir);
+    // 3) Global scope (honors [base_dir].installed_packages)
+    found = scan_dir(pkg::pkg_install_dir(cli::Scope::Global));
     if (!found.empty()) return found;
 
     // 4) Development fallback: project source pkg/ dir (for testing during development)

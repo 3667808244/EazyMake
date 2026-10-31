@@ -141,9 +141,13 @@ int main(int argc, char **argv){
 
     // .gitignore (1.5.0-dev.3: [settings].gen_gitignore)
     if (!disable_gitignore && settings.gen_gitignore) {
+        // 1.5.0-pre.1 (B-08): keep the project-relative layout (e.g.
+        // "out/build"), not just the final path component.
+        fs::path build_dir = config::effective_build_dir_for(root);
+        fs::path rel = build_dir.lexically_relative(root);
         std::string build_name =
-            config::effective_build_dir_for(root).filename().string();
-        if (build_name.empty()) build_name = "build";
+            (rel.empty() ? build_dir.filename() : rel).generic_string();
+        if (build_name.empty() || build_name == ".") build_name = "build";
         std::string gitignore = "# EazyMake build artifacts\n";
         gitignore += build_name + "/\n";
         gitignore += ".ezmk/\n*.o\n*.obj\n*.tmp.o\n*.tmp.obj\n";

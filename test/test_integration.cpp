@@ -91,6 +91,66 @@ TEST_CASE("integration: create project, build, and run (end-to-end)", "[integrat
     }
 }
 
+// 1.5.0-pre.1 (A-02): a.c and a.cpp in the same directory must produce
+// distinct objects; before the fix both collapsed to a.o.
+TEST_CASE("integration: same-stem .c and .cpp objects do not collide",
+          "[integration][1.5.0-pre.1]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src");
+    std::ofstream(tmp.path / "ezmk.toml") <<
+        "[project]\nname = \"mixed_stem\"\ntype = \"executable\"\nversion = \"0.1.0\"\n"
+        "language = \"C++17\"\n\n[compile]\nsrc_dirs = [\"src\"]\n";
+    std::ofstream(tmp.path / "src" / "main.cpp") <<
+        "int main() { return 0; }\n";
+    std::ofstream(tmp.path / "src" / "a.c") << "int c_func(void) { return 1; }\n";
+    std::ofstream(tmp.path / "src" / "a.cpp") << "int cpp_func(void) { return 2; }\n";
+
+    ProcResult r = run_ezmk("project build", tmp.path);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+
+    const fs::path obj_dir = tmp.path / ".ezmk/temp/src";
+    auto has_object = [&](const std::string& stem) {
+        return fs::exists(obj_dir / (stem + EZMK_OBJ_SUFFIX)) ||
+               fs::exists(obj_dir / (stem + ".obj"));
+    };
+    REQUIRE(has_object("a.c"));  // non-.cpp source keeps its extension
+    REQUIRE(has_object("a"));    // .cpp uses the common a.o name
+}
+
+// 1.5.0-pre.1 (A-03): src_dirs=["."] must pack the source tree, not just
+// include/ + ezmk.toml (stage_dir/"." used to look already-copied).
+TEST_CASE("integration: pack with src_dirs=dot includes root sources",
+          "[integration][1.5.0-pre.1]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    TempDir tmp;
+    fs::path proj = tmp.path / "proj";
+    fs::create_directories(proj);
+    fs::create_directories(tmp.path / "out");
+    std::ofstream(proj / "ezmk.toml") <<
+        "[project]\nname = \"packdot\"\ntype = \"executable\"\nversion = \"0.1.0\"\n"
+        "language = \"C++17\"\n\n[compile]\nsrc_dirs = [\".\"]\n";
+    std::ofstream(proj / "main.cpp") << "int main() { return 0; }\n";
+
+    ProcResult r = run_ezmk(
+        "project pack --output \"" + (tmp.path / "out").string() + "\"", proj);
+    INFO("stderr: " << r.err);
+    INFO("stdout: " << r.out);
+    REQUIRE(r.exit_code == 0);
+    fs::path arch = tmp.path / "out" / "packdot-0.1.0.tar.gz";
+    REQUIRE(fs::exists(arch));
+
+    fs::path extract = tmp.path / "extract";
+    ezmk::util::extract_targz(arch, extract);
+    REQUIRE(fs::exists(extract / "main.cpp"));
+}
+
 // 1.4.10: a "src/**" entry compiles files in subdirectories, and
 // compile_commands.json lists the nested translation unit.
 TEST_CASE("integration: recursive src_dirs compiles nested sources (1.4.10)", "[integration][1.4.10]") {

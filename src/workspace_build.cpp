@@ -326,10 +326,14 @@ int run_workspace_action(const workspace::Workspace& ws,
 int resolve_jobs(int cli_jobs, const workspace::Workspace& ws) {
     int jobs = cli_jobs;
     if (jobs <= 0) jobs = ws.options.default_jobs;
+    // 1.5.0-pre.1 (C-03): honor the global [settings].default_jobs, and clamp
+    // exactly like build.cpp — an absurd -j must not spawn 100k threads.
+    if (jobs <= 0) jobs = config::runtime_config().settings.default_jobs;
     if (jobs <= 0) {
         jobs = static_cast<int>(std::thread::hardware_concurrency());
         if (jobs <= 0) jobs = 1;
     }
+    if (jobs > 1024) jobs = 1024;
     return jobs;
 }
 
@@ -407,7 +411,8 @@ int run_clean(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
             const auto& m = ws.members[*rit];
             util::info(I18nKey::workspace_member_start,
                        {{"member", m.name}, {"action", "clean"}});
-            std::string cmd = "\"" + ezmk_exe_path().string() + "\" clean";
+            // 1.5.0-pre.1 (C-09): platform-correct quoting.
+            std::string cmd = util::quote_cli_arg(ezmk_exe_path().string()) + " clean";
             util::RunOptions ro;
             ro.cwd = m.path;
             auto res = util::run_command(cmd, ro);
