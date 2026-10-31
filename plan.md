@@ -71,10 +71,10 @@ dev.1 ~ dev.7 已落地用户/全局两级 config.toml 与运行默认值，dev.
 ### 阶段七：发布收口（P0）
 - [x] CHANGES.md 新增 1.5.0-pre.1 条目（修复 / 文档 / 已知限制 / 延后项）
 - [x] plans/1.5.x/README.md、plans/README.md、根 plan.md 状态与勾选
-- [ ] 发布清单预检：版本号、release.yml、PKGBUILD/Homebrew/winget 仅 checklist，不在 pre 改版本
+- [x] 发布清单预检：确认 PKGBUILD/Homebrew/winget 仍指向 1.4.11，正式发布时统一升级
 - [x] `bash build.sh test-all` 零失败（`EZMK_TEST_OFFLINE=1`：1219/6979/8/0；3 个联网 catch2 用例按环境跳过）
 - [ ] CI push 绿色；check_i18n / check_man_sync / check_docs_sync / check_config_docs / groff 全绿
-- [ ] 发布门槛预核对并记录结论
+- [x] 发布门槛预核对：②API 无破坏 + ③全量零失败已满足；①清单收口、CI 绿色待补
 
 ## 4 关键设计决策
 
@@ -107,8 +107,8 @@ A-06 符号链接打包、A-07 Catch2 include、A-08 C 编译器版本缓存、A
 ⛔ 进入 1.5.0 正式发布前必须同时满足：
 
 - [ ] 阶段一~七全部勾选，或延后项明确登记
-- [ ] 47 项审查 + dev.6 遗留全部有去向
-- [ ] P1 零残留；P2 修复或明确收口
-- [ ] `bash build.sh test-all` 零失败，≥ 1205/6940
+- [x] 47 项审查 + dev.6 遗留全部有去向
+- [x] P1 零残留；P2 修复或明确收口
+- [x] `bash build.sh test-all` 零失败（离线模式 1219/6979/8/0）
 - [ ] CI 最后一次 push 绿色
-- [ ] 公共 API 无破坏性变更；破坏性变更仍归 2.0.0
+- [x] 公共 API 无破坏性变更；破坏性变更仍归 2.0.0
