@@ -1,6 +1,6 @@
 # 1.5.x — 功能版本系列
 
-> 1.5.x 系列 = **1.5.0 功能次版本**。dev.1~dev.7 与 pre.1 已完成；**dev.8（项目级 agent skills）为 pre.1 后的插队功能**，完成后需追加 pre.2；正式版聚合计划 `1.5.0` 待 pre.2 收口后补充。
+> 1.5.x 系列 = **1.5.0 功能次版本**。dev.1~dev.8 已收口；**dev.9（编译器输出策略）已立项待执行**，完成后需追加 pre.2；正式版聚合计划 `1.5.0` 待 pre.2 收口后补充。
 
 ## 版本规划
 
@@ -15,6 +15,7 @@
 | [1.5.0-dev.7](1.5.0-dev.7.md) | 文档、i18n 与 dev 收口 | i18n / README / docs / tutorial / man / CHANGES / 索引 / 门槛 | dev.1~dev.6 | ✅ dev 收口（1205/6940） |
 | [1.5.0-pre.1](1.5.0-pre.1.md) | 发布前收口 | 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛 | dev.1~dev.7 | ✅ 收口完成（test-all 1219/6979；CI run 41212564762 全绿） |
 | [1.5.0-dev.8](1.5.0-dev.8.md) | 项目级 agent skills 分发 | `[settings].gen_agent_skills`（bool/string）+ 构建期嵌入 4 个 `ezmk-user-*` 技能 + 分发到 `.claude/skills` / `.github/skills` / `.agents/skills` + AGENTS.md 技能描述 + 文档/测试 | dev.1、dev.3 | ✅ 实现收口（1224/7046；CI 42347726309 绿；待 pre.2） |
+| [1.5.0-dev.9](1.5.0-dev.9.md) | 编译器输出策略 | `[settings].compiler_output`（always / warning / error）+ 串行/并行诊断输出 | dev.8 | 📝 待执行 |
 
 > **全量源代码审查**（pre.1 输入）：[1.5.0-pre.1-audit.md](1.5.0-pre.1-audit.md) —— 47 项（P1 4 / P2 23 / P3 20，无 P0）。
 
@@ -29,13 +30,15 @@ dev.1 配置骨架与加载器
          └──→ dev.7 文档、i18n 与 dev 收口（依赖 dev.1~dev.6）
                 └──→ pre.1 发布前收口（依赖 dev.1~dev.7）
                        └──→ dev.8 项目级 agent skills（插队）
-                              └──→ pre.2 发布前复核
+                              └──→ dev.9 编译器输出策略
+                                     └──→ pre.2 发布前复核
 ~~~
 
 - **dev.1 是所有后续版本的唯一数据源**：后续 dev 只读 `RuntimeConfig`，不各自解析 `config.toml`。
 - **dev.2 必须先于 dev.4 / dev.5**：日志目录与 `build_dir` 由路径层解析。
 - **dev.6 是代码审查，dev.7 是 dev 收口，pre.1 是发布收口**：pre.1 不新增功能，只修缺陷、补文档与闸门。
 - **dev.8 是 pre.1 后的插队功能**：新增 `gen_agent_skills` 与项目模板；完成后必须 pre.2，不沿用 pre.1 的发布门槛结论。
+- **dev.9 紧随 dev.8**：新增编译器诊断输出策略，默认保持旧行为；与 dev.8 一起进入 pre.2。
 - **第 10 项（git clone 深度）不纳入**（用户裁定 2026-10-24）。
 
 ## 定位
@@ -48,6 +51,6 @@ dev.1 配置骨架与加载器
 
 ## 跨版本关注点
 
-- 正式版聚合计划 `1.5.0`、CHANGES 聚合、版本号与三渠道分发待 dev.8 + pre.2 完成后创建/执行。
+- 正式版聚合计划 `1.5.0`、CHANGES 聚合、版本号与三渠道分发待 dev.8 + dev.9 + pre.2 完成后创建/执行。
 - 回归基线：pre.1 **1219 用例 / 6979 断言 / 8 跳过 / 0 失败**；dev.8/pre.2 不得低于该基线。
 - 本系列暂不影响 2.0.0 的破坏性变更窗口；pre.1 不新增 deprecation。
