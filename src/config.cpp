@@ -1414,7 +1414,7 @@ bool is_known_settings_key(const std::string& k) {
     static const std::set<std::string> keys = {
         "natural_language", "color_mode", "color_theme", "log_level",
         "initial_commit", "auto_init_git", "gen_gitignore", "gen_readme",
-        "gen_agent_md", "default_project_type", "default_language",
+        "gen_agent_md", "gen_agent_skills", "default_project_type", "default_language",
         "default_project_version", "default_compile_flags", "build_dir",
         "default_jobs", "test_timeout", "test_report_dir",
         "watch_debounce_ms", "watch_ignore", "pack_format",
@@ -1524,6 +1524,73 @@ void parse_base_dir_table(const toml::table& t, BaseDirConfig& out,
     resolve(out.logs);
 }
 
+// 1.5.0-dev.8: normalize the bool|string skill-profile selector into a
+// canonical comma list. Unknown tokens fail at load time so a typo never
+// silently disables scaffolding.
+std::string normalize_agent_skills(const std::string& raw,
+                                   const fs::path& file) {
+    bool claude = false, copilot = false, agents = false;
+    std::string token;
+    auto flush = [&]() {
+        if (token.empty()) return;
+        for (char& c : token) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        if (token == "claude" || token == "claude-code") {
+            claude = true;
+        } else if (token == "copilot" || token == "github") {
+            copilot = true;
+        } else if (token == "agents" || token == "agent" ||
+                   token == "codex" || token == "gemini") {
+            agents = true;
+        } else if (token == "all") {
+            claude = copilot = agents = true;
+        } else {
+            throw std::runtime_error(
+                "invalid value '" + token +
+                "' for config field 'settings.gen_agent_skills' in " +
+                file.string() +
+                " (expected bool or a comma list of: claude, copilot, agents, all)");
+        }
+        token.clear();
+    };
+    for (char c : raw) {
+        if (c == ',' || std::isspace(static_cast<unsigned char>(c))) {
+            flush();
+        } else {
+            token += c;
+        }
+    }
+    flush();
+    std::string out;
+    auto add = [&](const char* name) {
+        if (!out.empty()) out += ",";
+        out += name;
+    };
+    if (claude) add("claude");
+    if (copilot) add("copilot");
+    if (agents) add("agents");
+    return out;
+}
+
+void read_gen_agent_skills(const toml::table& t, const fs::path& file,
+                           SettingsConfig& s) {
+    auto* n = t.get("gen_agent_skills");
+    if (!n) return;
+    if (n->is_boolean()) {
+        s.gen_agent_skills = n->value<bool>().value()
+                                 ? "claude,copilot,agents"
+                                 : "";
+        return;
+    }
+    if (n->is_string()) {
+        s.gen_agent_skills = normalize_agent_skills(*n->value<std::string>(), file);
+        return;
+    }
+    config_type_error(file, "settings.gen_agent_skills",
+                      "a boolean or a string");
+}
+
 void parse_settings_table(const toml::table& t, SettingsConfig& s,
                           const fs::path& file) {
     for (auto&& [k, v] : t) {
@@ -1553,6 +1620,7 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     read_bool(t, "gen_readme", "settings.gen_readme", file, s.gen_readme);
     read_bool(t, "gen_agent_md", "settings.gen_agent_md", file,
               s.gen_agent_md);
+    read_gen_agent_skills(t, file, s);
     read_initial_commit(t, file, s);
 
     read_string(t, "default_project_type", "settings.default_project_type",

@@ -59,6 +59,7 @@ def main() -> int:
     body = parse_block.group(1)
     read_keys = set(re.findall(r'read_(?:string|bool|int)\([^,]+,\s*"([a-z_]+)"', body))
     read_keys.add("initial_commit")  # special tri-state reader
+    read_keys.add("gen_agent_skills")  # bool|string reader
     read_keys.update(re.findall(r't\.get\("([a-z_]+)"\)', body))
 
     unknown_read = sorted(read_keys - known)

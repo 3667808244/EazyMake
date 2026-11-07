@@ -24,11 +24,27 @@
 
 **v1.5.0 扩展（1.5.0-pre.1）：**
 
-- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、project-new 默认、构建目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
+- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
 - **CLI：** `--config <file>` / `--no-config` / `--lang <tag>`；`--color` 的 `on` / `off` / `16colors` / `256colors` / `truecolor` 别名。
 - **环境：** `EZMK_GLOBAL_CONFIG_DIR` / `EZMK_USER_CONFIG_DIR` / `XDG_CONFIG_HOME` 的配置目录解析。
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
+
+## 1.5.0-dev.8 (2026-11-07) — 项目级 agent skills 分发
+
+> **状态：实现完成（2026-11-07），未发布。** 在 pre.1 收口后新增 opt-in 能力；单元 **1103 / 6265 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1224 / 7046 / 8 跳过 / 0 失败**；需 pre.2 发布复核。
+
+### 新增
+
+- **`[settings].gen_agent_skills`**：bool / string，默认 `false`。`true` 分发到全部受支持目录；字符串支持 `claude` / `copilot` / `agents` / `all`（别名 `claude-code` / `github` / `codex` / `gemini`）的逗号列表；空串关闭，未知值加载期报错。
+- **项目级技能分发**：`ezmk project new` 将 4 个 `ezmk-user-*` 技能按 profile 写入 `.claude/skills/`、`.github/skills/`、`.agents/skills/`；每个技能保持 `SKILL.md` 原样。
+- **构建期嵌入**：新增 `scripts/embed_skills.py` 生成 `src/skill_data.cpp`，安装后的二进制不依赖源码树。
+- **AGENTS.md 联动**：`gen_agent_md` 与 `gen_agent_skills` 同时开启时，`AGENTS.md` 追加 `## Agent skills`，列出技能名称、frontmatter 描述与实际生成的目录；单独开启 `gen_agent_md` 时输出保持原样。
+
+### 文档
+
+- `docs/{zh,en}/user_config.md` 与 `man/ezmk.toml.5` 增加 `gen_agent_skills` 的 bool/string 语义与目录说明。
+- GitHub Copilot 支持 `.github/skills` / `.claude/skills` / `.agents/skills` 三种 `SKILL.md` 项目技能目录。
 
 ## 1.5.0-dev (2026-10-25) — 用户/全局配置层（开发中，未发布）
 

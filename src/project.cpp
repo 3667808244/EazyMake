@@ -2,10 +2,13 @@
 
 #include <cctype>
 #include "ezmk/config.hpp"
+#include "ezmk/skill_data.hpp"
 #include "ezmk/util.hpp"
 
+#include <cstddef>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace ezmk::project {
 
@@ -19,6 +22,81 @@ void must_write(const fs::path& p, std::string_view content) {
                     {{"path", p.string()}});
     }
 }
+bool has_skill_profile(const std::string& profiles, const char* name) {
+    if (profiles.empty()) return false;
+    const std::string needle = std::string(",") + name + ",";
+    return ("," + profiles + ",").find(needle) != std::string::npos;
+}
+
+std::vector<std::string> selected_skill_roots(const config::SettingsConfig& settings) {
+    std::vector<std::string> roots;
+    if (has_skill_profile(settings.gen_agent_skills, "claude")) {
+        roots.push_back(".claude/skills");
+    }
+    if (has_skill_profile(settings.gen_agent_skills, "copilot")) {
+        roots.push_back(".github/skills");
+    }
+    if (has_skill_profile(settings.gen_agent_skills, "agents")) {
+        roots.push_back(".agents/skills");
+    }
+    return roots;
+}
+
+// 1.5.0-dev.8: copy the embedded ezmk-user-* skills into the selected agent
+// roots. Returns the number of skills written (0 when the embedded table is
+// empty, e.g. a Python-less build).
+std::size_t write_agent_skills(const fs::path& root,
+                               const std::vector<std::string>& roots) {
+    if (roots.empty()) return 0;
+    std::size_t count = 0;
+    const ezmk::skills::Skill* embedded = ezmk::skills::all(count);
+    if (!embedded || count == 0) return 0;
+    for (const auto& rel_root : roots) {
+        for (std::size_t i = 0; i < count; ++i) {
+            fs::path dst = root / rel_root / embedded[i].name / "SKILL.md";
+            if (util::file_exists(dst)) continue;
+            fs::create_directories(dst.parent_path());
+            if (!util::file_write(dst, embedded[i].content)) {
+                util::fatal(ezmk::i18n::I18nKey::project_err_write_failed,
+                            {{"path", dst.string()}});
+            }
+        }
+    }
+    return count;
+}
+
+void write_agents_md(const fs::path& root,
+                     const std::vector<std::string>& roots,
+                     std::size_t skill_count) {
+    std::string agents = "# AGENTS.md\n\n";
+    agents += "This project is managed by EazyMake.\n\n";
+    agents += "## Build\n\n- `ezmk build`\n\n";
+    agents += "## Test\n\n- `ezmk test`\n\n";
+    agents += "## Layout\n\n- `src/` — sources\n- `include/` — headers\n";
+    if (skill_count > 0 && !roots.empty()) {
+        std::size_t count = 0;
+        const ezmk::skills::Skill* embedded = ezmk::skills::all(count);
+        agents += "\n## Agent skills\n\n";
+        agents += "This project ships these EazyMake user-project skills for AI agents:\n\n";
+        for (std::size_t i = 0; i < count; ++i) {
+            agents += "- `";
+            agents += embedded[i].name;
+            agents += "` — ";
+            agents += embedded[i].description;
+            agents += "\n";
+        }
+        agents += "\nGenerated under: ";
+        for (std::size_t i = 0; i < roots.size(); ++i) {
+            if (i) agents += ", ";
+            agents += "`";
+            agents += roots[i];
+            agents += "/`";
+        }
+        agents += "\n";
+    }
+    must_write(root / "AGENTS.md", agents);
+}
+
 } // namespace
 
 // 1.2.1: '-', '.', ' ' → '_' so the project name is a valid C++ namespace
@@ -154,14 +232,15 @@ int main(int argc, char **argv){
         must_write(root / ".gitignore", gitignore);
     }
 
-    // 1.5.0-dev.3: optional AGENTS.md scaffolding.
-    if (settings.gen_agent_md && !util::file_exists(root / "AGENTS.md")) {
-        std::string agents = "# AGENTS.md\n\n";
-        agents += "This project is managed by EazyMake.\n\n";
-        agents += "## Build\n\n- `ezmk build`\n\n";
-        agents += "## Test\n\n- `ezmk test`\n\n";
-        agents += "## Layout\n\n- `src/` — sources\n- `include/` — headers\n";
-        must_write(root / "AGENTS.md", agents);
+    // 1.5.0-dev.8: distribute embedded user-project skills first, then let
+    // AGENTS.md describe the directories that actually exist.
+    const auto skill_roots = selected_skill_roots(settings);
+    const std::size_t skill_count = write_agent_skills(root, skill_roots);
+
+    // 1.5.0-dev.3: optional AGENTS.md scaffolding. 1.5.0-dev.8 appends the
+    // Agent skills section only when skills were actually generated.
+    if (settings.gen_agent_md) {
+        write_agents_md(root, skill_roots, skill_count);
     }
 
     // git init (1.5.0-dev.3: [settings].auto_init_git; only if git available)

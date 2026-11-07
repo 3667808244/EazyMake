@@ -53,7 +53,8 @@ Path rules:
 | `auto_init_git` | bool | `true` | Whether `ezmk project new` runs `git init` |
 | `gen_gitignore` | bool | `true` | Generate `.gitignore` |
 | `gen_readme` | bool | `true` | Generate `README.md` |
-| `gen_agent_md` | bool | `false` | Generate `AGENTS.md` |
+| `gen_agent_md` | bool | `false` | Generate `AGENTS.md`; when `gen_agent_skills` is also enabled, append a skill list with descriptions and generated directories |
+| `gen_agent_skills` | bool / string | `false` | Generate the four `ezmk-user-*` skills under `.claude/skills`, `.github/skills`, `.agents/skills`. `true` = all; a string is a comma list of `claude` / `copilot` / `agents` / `all` (aliases: `claude-code`, `github`, `codex`, `gemini`). Empty string disables |
 | `default_project_type` | string | `"executable"` | Default `project new` type when `--type` is omitted |
 | `default_language` | string | `"C++17"` | Default language standard; invalid values fail at load time |
 | `default_project_version` | string | `"0.1.0"` | Default new-project version; must not be empty |

@@ -1,6 +1,7 @@
 # ── Generated sources (written by build.sh) ─────────────────────────────────
 src/locale_data.cpp
 src/example_data.cpp
+src/skill_data.cpp
 include/ezmk/logo.gen.h
 include/ezmk/version.hpp
 

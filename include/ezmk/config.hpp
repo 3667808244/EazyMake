@@ -199,6 +199,9 @@ struct SettingsConfig {
     bool gen_gitignore = true;
     bool gen_readme = true;
     bool gen_agent_md = false;
+    // 1.5.0-dev.8: normalized skill profiles ("" = off; e.g.
+    // "claude" / "copilot" / "agents" / "claude,copilot,agents").
+    std::string gen_agent_skills;
 
     std::string default_project_type = "executable";
     std::string default_language = "C++17";

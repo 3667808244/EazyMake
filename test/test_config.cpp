@@ -2601,6 +2601,81 @@ TEST_CASE("runtime config: initial_commit accepts bool or string",
     fs::remove_all(root);
 }
 
+TEST_CASE("runtime config: gen_agent_skills accepts bool or string",
+          "[config][1.5.0-dev.8]") {
+    auto root = make_runtime_cfg_root("agentskills");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+
+    auto load_user = [&](const std::string& text) {
+        write_runtime_cfg(udir, text);
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        ezmk::config::load_runtime_config(2, av);
+        return ezmk::config::runtime_config().settings.gen_agent_skills;
+    };
+
+    SECTION("default is off") {
+        REQUIRE(load_user("[settings]\n").empty());
+    }
+    SECTION("bool true enables all profiles") {
+        REQUIRE(load_user("[settings]\ngen_agent_skills = true\n") ==
+                "claude,copilot,agents");
+    }
+    SECTION("bool false disables") {
+        REQUIRE(load_user("[settings]\ngen_agent_skills = false\n").empty());
+    }
+    SECTION("aliases and case are normalized") {
+        REQUIRE(load_user("[settings]\ngen_agent_skills = "
+                          "\"Claude-Code, GitHub, Codex\"\n") ==
+                "claude,copilot,agents");
+    }
+    SECTION("comma list preserves canonical order") {
+        REQUIRE(load_user("[settings]\ngen_agent_skills = "
+                          "\"agents,claude\"\n") == "claude,agents");
+    }
+    SECTION("empty string disables") {
+        REQUIRE(load_user("[settings]\ngen_agent_skills = \"\"\n").empty());
+    }
+    SECTION("unknown token fails") {
+        write_runtime_cfg(udir,
+            "[settings]\ngen_agent_skills = \"claude,unknown\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("integer fails") {
+        write_runtime_cfg(udir, "[settings]\ngen_agent_skills = 3\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
+TEST_CASE("runtime config: gen_agent_skills user overrides global",
+          "[config][1.5.0-dev.8]") {
+    auto root = make_runtime_cfg_root("agentskillsmerge");
+    auto gdir = root / "global";
+    auto udir = root / "user";
+    write_runtime_cfg(gdir, "[settings]\ngen_agent_skills = true\n");
+    write_runtime_cfg(udir,
+        "[settings]\ngen_agent_skills = \"claude\"\n");
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", gdir.string());
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+    REQUIRE(ezmk::config::runtime_config().settings.gen_agent_skills ==
+            "claude");
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
 // ===================================================================
 // 1.5.0-dev.2: path and tool resolution
 // ===================================================================

@@ -53,7 +53,8 @@
 | `auto_init_git` | bool | `true` | `ezmk project new` 是否执行 `git init` |
 | `gen_gitignore` | bool | `true` | 是否生成 `.gitignore` |
 | `gen_readme` | bool | `true` | 是否生成 `README.md` |
-| `gen_agent_md` | bool | `false` | 是否生成 `AGENTS.md` |
+| `gen_agent_md` | bool | `false` | 是否生成 `AGENTS.md`；与 `gen_agent_skills` 同时开启时追加技能列表、说明与生成目录 |
+| `gen_agent_skills` | bool / string | `false` | 将 4 个 `ezmk-user-*` 技能生成到 `.claude/skills` / `.github/skills` / `.agents/skills`。`true` = 全部；字符串为 `claude` / `copilot` / `agents` / `all` 的逗号列表（别名：`claude-code`、`github`、`codex`、`gemini`）；空串关闭 |
 | `default_project_type` | string | `"executable"` | `project new` 未传 `--type` 时的类型 |
 | `default_language` | string | `"C++17"` | 新项目默认语言标准；非法值加载即报错 |
 | `default_project_version` | string | `"0.1.0"` | 新项目默认版本；不得为空 |

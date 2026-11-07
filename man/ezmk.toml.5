@@ -622,6 +622,30 @@ Boolean, default true. Generate
 .B gen_agent_md
 Boolean, default false. Generate
 .BR AGENTS.md .
+When
+.B gen_agent_skills
+is also enabled, AGENTS.md additionally lists the generated skills.
+.TP
+.B gen_agent_skills
+Boolean or string, default false. When enabled,
+.B ezmk project new
+copies the four embedded
+.B ezmk\-user\-*
+skills into the selected agent directories:
+.BR .claude/skills ,
+.BR .github/skills ,
+and
+.BR .agents/skills .
+A boolean true writes all three; a string is a comma list of
+.BR claude ,
+.BR copilot ,
+.BR agents ,
+or
+.BR all .
+When
+.B gen_agent_md
+is also enabled, AGENTS.md lists the skills, their descriptions, and the
+directories that were actually generated.
 .TP
 .B default_project_type
 Default

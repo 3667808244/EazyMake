@@ -307,6 +307,72 @@ TEST_CASE("create_project: existing directory throws", "[project]") {
     REQUIRE_THROWS_AS(create_project("exists_dir", "executable"), ezmk::fatal_error);
 }
 
+TEST_CASE("create_project: agent skills distribution",
+          "[project][1.5.0-dev.8]") {
+    const fs::path repo = fs::current_path();
+    CwdGuard guard;
+    auto cfg_path = guard.temp_dir / "skills-config.toml";
+    std::ofstream(cfg_path)
+        << "[settings]\n"
+           "gen_agent_md = true\n"
+           "gen_agent_skills = \"claude,copilot,agents\"\n"
+           "auto_init_git = false\n";
+    std::string p = cfg_path.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::config::load_runtime_config(4, av);
+
+    create_project("skillprj", "executable", true, true);
+
+    auto root = guard.temp_dir / "skillprj";
+    const char* names[] = {"ezmk-user-build", "ezmk-user-config",
+                           "ezmk-user-pkg", "ezmk-user-test"};
+    for (const char* name : names) {
+        REQUIRE(fs::exists(root / ".claude" / "skills" / name / "SKILL.md"));
+        REQUIRE(fs::exists(root / ".github" / "skills" / name / "SKILL.md"));
+        REQUIRE(fs::exists(root / ".agents" / "skills" / name / "SKILL.md"));
+        REQUIRE(file_read(root / ".claude" / "skills" / name / "SKILL.md") ==
+                file_read(repo / ".claude" / "skills" / name / "SKILL.md"));
+    }
+    auto agents = file_read(root / "AGENTS.md");
+    REQUIRE(agents.find("## Agent skills") != std::string::npos);
+    REQUIRE(agents.find("ezmk-user-build") != std::string::npos);
+    REQUIRE(agents.find("ezmk-user-test") != std::string::npos);
+    REQUIRE(agents.find("How to compile") != std::string::npos);
+    REQUIRE(agents.find("Generated under:") != std::string::npos);
+    REQUIRE(agents.find(".claude/skills/") != std::string::npos);
+    REQUIRE(agents.find(".github/skills/") != std::string::npos);
+    REQUIRE(agents.find(".agents/skills/") != std::string::npos);
+
+    ezmk::config::reset_runtime_config_for_test();
+}
+
+TEST_CASE("create_project: agent skills profile and AGENTS.md are independent",
+          "[project][1.5.0-dev.8]") {
+    CwdGuard guard;
+    auto cfg_path = guard.temp_dir / "skills-claude.toml";
+    std::ofstream(cfg_path)
+        << "[settings]\n"
+           "gen_agent_md = false\n"
+           "gen_agent_skills = \"claude\"\n"
+           "auto_init_git = false\n";
+    std::string p = cfg_path.string();
+    const char* av[] = {"ezmk", "--config", p.c_str(), "version"};
+    ezmk::config::reset_runtime_config_for_test();
+    ezmk::config::load_runtime_config(4, av);
+
+    create_project("skillprj2", "executable", true, true);
+
+    auto root = guard.temp_dir / "skillprj2";
+    REQUIRE(fs::exists(root / ".claude" / "skills" / "ezmk-user-build" /
+                       "SKILL.md"));
+    REQUIRE_FALSE(fs::exists(root / ".github"));
+    REQUIRE_FALSE(fs::exists(root / ".agents"));
+    REQUIRE_FALSE(fs::exists(root / "AGENTS.md"));
+
+    ezmk::config::reset_runtime_config_for_test();
+}
+
 TEST_CASE("create_project: [settings] defaults and toggles",
           "[project][1.5.0-dev.3]") {
     CwdGuard guard;
