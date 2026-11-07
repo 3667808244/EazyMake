@@ -1,6 +1,6 @@
 # EazyMake 1.5.0-dev.8 执行计划
 
-> **状态：✅ 实现完成（2026-11-07），待 pre.2 发布复核** —— 详细设计见 [plans/1.5.x/1.5.0-dev.8.md](plans/1.5.x/1.5.0-dev.8.md)；pre.1 代码 CI 已绿（run 41212564762），本版完成后需追加 pre.2。
+> **状态：✅ 实现收口（2026-11-07；CI run `42347726309` 全绿），待 pre.2 发布复核** —— 详细设计见 [plans/1.5.x/1.5.0-dev.8.md](plans/1.5.x/1.5.0-dev.8.md)；pre.1 代码 CI 已绿（run 41212564762），本版完成后需追加 pre.2。
 >
 > **回归**：单元 **1103 / 6265 / 4 跳过 / 0 失败**；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1224 / 7046 / 8 跳过 / 0 失败**。
 >
@@ -49,7 +49,7 @@ pre.1 已有 `gen_agent_md`，但只生成一个最小 AGENTS.md。本版把仓�
 - [x] `check_i18n` / `check_man_sync` / `check_docs_sync` / `check_config_docs` / groff
 - [x] 更新 `plans/1.5.x/README.md`、`plans/README.md`
 - [x] 全量 `bash build.sh test-all` 零失败（基线 1219/6979）
-- [ ] CI 绿色
+- [x] CI 绿色（run `42347726309`）
 - [ ] 发布门槛复核后追加 pre.2
 
 ## 4 关键设计决策
