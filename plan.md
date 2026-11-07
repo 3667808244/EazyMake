@@ -27,7 +27,7 @@
 - [x] `always` 输出全部；`error` 保持旧行为；失败诊断始终输出
 - [x] `util::raw_diagnostics()` 原样写 stderr，不加 `[ezmk]` 前缀
 - [x] 缓存命中不产生编译器输出
-- [x] 手工验证六种组合 + 单元回归
+- [x] 手工验证编译器三种模式 + linker 策略复用同一判定 + 单元回归
 
 ### 阶段三：文档 / 闸门 / pre.2（P0）
 - [x] user_config、man、CHANGES、索引更新
