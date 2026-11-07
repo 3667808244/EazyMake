@@ -192,6 +192,9 @@ struct SettingsConfig {
     std::string color_mode = "auto";
     std::string color_theme = "default";
     std::string log_level = "info";
+    // 1.5.0-dev.9: diagnostics policy: "always" / "warning" / "error".
+    std::string compiler_output = "error";
+    std::string linker_output = "error";
 
     bool initial_commit_enabled = false;
     std::string initial_commit_message;

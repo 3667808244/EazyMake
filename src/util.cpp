@@ -142,6 +142,14 @@ void info(std::string_view msg)  {
     else
         std::cerr << "[ezmk] " << msg << "\n";
 }
+void raw_diagnostics(std::string_view msg) {
+    if (msg.empty()) return;
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    log_file_write("INFO", msg);
+    std::cerr << msg;
+    if (msg.back() != '\n') std::cerr << '\n';
+}
+
 void warn(std::string_view msg)  {
     std::lock_guard<std::mutex> lock(g_log_mutex);
     if (!log_enabled(LogSeverity::Warn)) return;

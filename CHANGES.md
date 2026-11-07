@@ -24,11 +24,27 @@
 
 **v1.5.0 扩展（1.5.0-pre.1）：**
 
-- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
+- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、编译器/连接器输出策略、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
 - **CLI：** `--config <file>` / `--no-config` / `--lang <tag>`；`--color` 的 `on` / `off` / `16colors` / `256colors` / `truecolor` 别名。
 - **环境：** `EZMK_GLOBAL_CONFIG_DIR` / `EZMK_USER_CONFIG_DIR` / `XDG_CONFIG_HOME` 的配置目录解析。
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
+
+## 1.5.0-dev.9 (2026-11-07) — 编译器/连接器输出策略
+
+> **状态：实现完成（2026-11-07），未发布。** 新增两个独立配置键；单元 **1105 / 6277 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1226 / 7058 / 8 跳过 / 0 失败**。
+
+### 新增
+
+- **`[settings].compiler_output`**：`always` / `warning` / `error`（默认 `error`），控制成功编译时 stderr/stdout 的显示；失败诊断始终显示。
+- **`[settings].linker_output`**：同样的枚举，控制成功链接/静态库归档时的诊断；失败诊断始终显示。
+- **诊断收集**：`SingleCompileResult` / `CompileResult` 保存成功编译输出；`execute_link()` 保存成功链接输出；并行构建在主线程按完成顺序打印，避免交错。
+- **警告检测**：支持 GCC/Clang `warning:`、MSVC `warning C` / `warning LNK`。
+
+### 行为
+
+- 默认 `error`：成功警告仍不显示，与 1.5.0-dev.8 一致。
+- `always` / `warning` 不受 `log_level` 过滤；输出不加 `[ezmk]` 前缀。
 
 ## 1.5.0-dev.8 (2026-11-07) — 项目级 agent skills 分发
 

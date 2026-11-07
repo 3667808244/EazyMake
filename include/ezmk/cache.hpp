@@ -58,6 +58,8 @@ struct CompileResult {
     std::vector<fs::path> objects;   // compiled .o/.obj paths (in obj_dir)
     int cache_hits = 0;
     int cache_misses = 0;
+    // 1.5.0-dev.9: successful compiler diagnostics, in completion order.
+    std::vector<std::string> compiler_outputs;
 };
 
 // Unified compile loop: for each source, check cache or compile to temp + atomic rename.
@@ -75,10 +77,14 @@ struct SingleCompileResult {
     bool cache_hit = false;    // true if served from cache
     bool success = false;      // false if compilation failed
     std::string error_msg;     // error details on failure
+    std::string compiler_output; // 1.5.0-dev.9: stderr + stdout of this compile
     std::string rel_src;       // source path relative to proj_root (cache key)
     FileEntry record_entry;    // new cache record entry (only valid if success && !cache_hit)
     std::vector<DepEntry> new_deps; // parsed dependencies (for dependency change detection)
 };
+
+// 1.5.0-dev.9: true when diagnostics contain a compiler/linker warning marker.
+bool has_diagnostic_warning(const std::string& output);
 
 // 0.2.3+: Compile a single source file (check cache, compile if needed).
 // Designed for parallel use — reads from `record` (read-only during parallel phase),

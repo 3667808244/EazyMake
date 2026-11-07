@@ -784,3 +784,13 @@ TEST_CASE("check_cache: deterministic signature follows the active lockfile (1.4
         compile_options_signature(compile) + ":" + sha256_file(json_path);
     REQUIRE(check_cache(src, compile, record, tmp.path).has_value());
 }
+
+// 1.5.0-dev.9: compiler/linker diagnostic classification
+TEST_CASE("cache: diagnostic warning detection", "[cache][1.5.0-dev.9]") {
+    REQUIRE(has_diagnostic_warning("foo.cpp:1:2: warning: unused variable"));
+    REQUIRE(has_diagnostic_warning("foo.cpp(1): warning C4996: deprecated"));
+    REQUIRE(has_diagnostic_warning("LINK : warning LNK4006: duplicate"));
+    REQUIRE(has_diagnostic_warning("ld: warning: cannot find entry"));
+    REQUIRE_FALSE(has_diagnostic_warning("foo.cpp:1:2: error: boom"));
+    REQUIRE_FALSE(has_diagnostic_warning(""));
+}

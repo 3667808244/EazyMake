@@ -598,6 +598,28 @@ or
 .B fatal
 messages are never filtered.
 .TP
+.B compiler_output
+Compiler diagnostics policy for successful builds: one of
+.BR always ,
+.BR warning ,
+or
+.BR error .
+The default
+.B error
+keeps the pre\-1.5.0\-dev.9 behavior (warnings from successful compiles are
+suppressed); diagnostics from failed compiles are always shown.
+.TP
+.B linker_output
+Link/archive diagnostics policy for successful builds: one of
+.BR always ,
+.BR warning ,
+or
+.BR error .
+The default
+.B error
+suppresses diagnostics from successful links; diagnostics from failed links are
+always shown.
+.TP
 .B initial_commit
 Boolean or string. Enables an initial
 .B git commit

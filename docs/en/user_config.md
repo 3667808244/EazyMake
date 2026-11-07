@@ -49,6 +49,8 @@ Path rules:
 | `color_mode` | string | `"auto"` | `auto` / `off` / `16colors` / `256colors` / `truecolor` |
 | `color_theme` | string | `"default"` | Reserved; only `default` is accepted today |
 | `log_level` | string | `"info"` | `off` / `error` / `warn` / `info` / `debug`; `fatal` is never filtered |
+| `compiler_output` | string | `"error"` | Successful compile diagnostics: `always` / `warning` / `error`. `error` keeps the pre-1.5.0-dev.9 behavior; failed compiles always show diagnostics |
+| `linker_output` | string | `"error"` | Successful link/archive diagnostics: `always` / `warning` / `error`. Failed links always show diagnostics |
 | `initial_commit` | bool / string | unset | `true` uses the default message; a string is the commit message; runs only after a successful `git init` |
 | `auto_init_git` | bool | `true` | Whether `ezmk project new` runs `git init` |
 | `gen_gitignore` | bool | `true` | Generate `.gitignore` |

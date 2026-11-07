@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <ctime>
 #include <set>
 #include <sstream>
@@ -28,6 +29,17 @@ constexpr int kCacheRecordVersion = 2;
 // ===================================================================
 // Helpers
 // ===================================================================
+
+bool has_diagnostic_warning(const std::string& output) {
+    std::string lower;
+    lower.reserve(output.size());
+    for (char c : output) {
+        lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return lower.find("warning:") != std::string::npos ||
+           lower.find("warning c") != std::string::npos ||
+           lower.find("warning lnk") != std::string::npos;
+}
 
 bool same_dependency_paths(const std::vector<DepEntry>& old_deps,
                             const std::vector<DepEntry>& new_deps) {
@@ -877,13 +889,21 @@ SingleCompileResult compile_one_source(const fs::path& src,
         fs::remove(jc.rsp_file, ec);
     }
 
+    result.compiler_output = res.err;
+    if (!res.out.empty()) {
+        if (!result.compiler_output.empty() &&
+            result.compiler_output.back() != '\n') {
+            result.compiler_output += '\n';
+        }
+        result.compiler_output += res.out;
+    }
+
     if (res.exit_code != 0) {
         std::ostringstream err;
         err << ezmk::i18n::fmt(ezmk::i18n::I18nKey::compilation_failed,
                                 {{"file", src.string()},
                                  {"code", std::to_string(res.exit_code)}}) << "\n";
-        if (!res.err.empty()) err << res.err << "\n";
-        if (!res.out.empty()) err << res.out << "\n";
+        if (!result.compiler_output.empty()) err << result.compiler_output << "\n";
         err << "  cmd: " << cmd;
         result.error_msg = err.str();
         std::error_code ec;
@@ -948,6 +968,9 @@ CompileResult compile_sources(const CompileInput& in, CacheRecord& record) {
                 !same_dependency_paths(old_it->second.dependencies, sr.new_deps)) {
                 util::info(ezmk::i18n::I18nKey::include_structure_changed,
                            {{"file", sr.rel_src}});
+            }
+            if (!sr.compiler_output.empty()) {
+                result.compiler_outputs.push_back(sr.compiler_output);
             }
             // Update cache record with new entry
             // 1.4.2 F-09: --disable-cache must not merge entries into the

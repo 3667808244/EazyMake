@@ -2676,6 +2676,53 @@ TEST_CASE("runtime config: gen_agent_skills user overrides global",
     fs::remove_all(root);
 }
 
+TEST_CASE("runtime config: compiler/linker output enums",
+          "[config][1.5.0-dev.9]") {
+    auto root = make_runtime_cfg_root("outputpolicy");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+
+    auto load = [&](const std::string& text) {
+        write_runtime_cfg(udir, text);
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        ezmk::config::load_runtime_config(2, av);
+        return &ezmk::config::runtime_config().settings;
+    };
+
+    SECTION("defaults are error") {
+        const auto* st = load("[settings]\n");
+        REQUIRE(st->compiler_output == "error");
+        REQUIRE(st->linker_output == "error");
+    }
+    SECTION("values are independent") {
+        const auto* st = load(
+            "[settings]\ncompiler_output = \"always\"\n"
+            "linker_output = \"warning\"\n");
+        REQUIRE(st->compiler_output == "always");
+        REQUIRE(st->linker_output == "warning");
+    }
+    SECTION("invalid compiler_output") {
+        write_runtime_cfg(udir,
+            "[settings]\ncompiler_output = \"sometimes\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("invalid linker_output") {
+        write_runtime_cfg(udir,
+            "[settings]\nlinker_output = \"sometimes\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
 // ===================================================================
 // 1.5.0-dev.2: path and tool resolution
 // ===================================================================

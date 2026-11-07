@@ -1,6 +1,8 @@
 # EazyMake 1.5.0-dev.9 执行计划
 
-> **状态：📝 待执行（2026-11-07 立项）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.9.md](plans/1.5.x/1.5.0-dev.9.md)。dev.8 已收口（1224/7046；CI run 42347726309 全绿）；本版完成后与 dev.8 一起进入 pre.2。
+> **状态：✅ 实现完成（2026-11-07），待 CI 与 pre.2 发布复核** —— 详细设计见 [plans/1.5.x/1.5.0-dev.9.md](plans/1.5.x/1.5.0-dev.9.md)。dev.8 已收口（1224/7046；CI run 42347726309 全绿）；本版完成后与 dev.8 一起进入 pre.2。
+>
+> **回归**：单元 **1105 / 6277 / 4 跳过 / 0 失败**；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1226 / 7058 / 8 跳过 / 0 失败**。
 >
 > **目标**：新增 `[settings].compiler_output` 与 `[settings].linker_output`，分别控制成功编译、成功链接时诊断的显示方式：`always`（总是）/ `warning`（有警告时）/ `error`（有错误时，默认保持旧行为）。
 
@@ -11,26 +13,26 @@
 ## 2 执行阶段
 
 ### 阶段一：配置与数据（P0）
-- [ ] `SettingsConfig.compiler_output` / `linker_output` 默认 `"error"`
-- [ ] 解析并校验 `always` / `warning` / `error`（两个键独立），非法值加载期报错
-- [ ] `SingleCompileResult` 增加 `compiler_output`；`CompileResult` 增加成功编译输出集合
-- [ ] `compile_one_source()` 成功/失败都保存 stderr+stdout
-- [ ] `execute_link()` 成功时保留 stderr/stdout 供策略判断
-- [ ] 单测：默认/合法值/非法值、warning 检测、两键独立
+- [x] `SettingsConfig.compiler_output` / `linker_output` 默认 `"error"`
+- [x] 解析并校验 `always` / `warning` / `error`（两个键独立），非法值加载期报错
+- [x] `SingleCompileResult` 增加 `compiler_output`；`CompileResult` 增加成功编译输出集合
+- [x] `compile_one_source()` 成功/失败都保存 stderr+stdout
+- [x] `execute_link()` 成功时保留 stderr/stdout 供策略判断
+- [x] 单测：默认/合法值/非法值、warning 检测、两键独立
 
 ### 阶段二：输出策略（P0）
-- [ ] `build.cpp` 串行与并行路径按 `compiler_output` 输出成功诊断
-- [ ] `execute_link()` 按 `linker_output` 输出成功链接/归档诊断
-- [ ] `warning` 识别 GCC/Clang `warning:`、MSVC `warning C` / `warning LNK`
-- [ ] `always` 输出全部；`error` 保持旧行为；失败诊断始终输出
-- [ ] `util::raw_diagnostics()` 原样写 stderr，不加 `[ezmk]` 前缀
-- [ ] 缓存命中不产生编译器输出
-- [ ] 手工验证六种组合 + 单元回归
+- [x] `build.cpp` 串行与并行路径按 `compiler_output` 输出成功诊断
+- [x] `execute_link()` 按 `linker_output` 输出成功链接/归档诊断
+- [x] `warning` 识别 GCC/Clang `warning:`、MSVC `warning C` / `warning LNK`
+- [x] `always` 输出全部；`error` 保持旧行为；失败诊断始终输出
+- [x] `util::raw_diagnostics()` 原样写 stderr，不加 `[ezmk]` 前缀
+- [x] 缓存命中不产生编译器输出
+- [x] 手工验证六种组合 + 单元回归
 
 ### 阶段三：文档 / 闸门 / pre.2（P0）
-- [ ] user_config、man、CHANGES、索引更新
-- [ ] `check_config_docs` / man / docs / i18n / groff
-- [ ] 全量 `test-all` 零失败（基线 1224/7046）
+- [x] user_config、man、CHANGES、索引更新
+- [x] `check_config_docs` / man / docs / i18n / groff
+- [x] 全量 `test-all` 零失败（1226/7058）
 - [ ] CI 绿色
 - [ ] 与 dev.8 一起进入 pre.2
 

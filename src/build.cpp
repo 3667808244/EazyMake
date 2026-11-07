@@ -26,6 +26,15 @@ namespace ezmk::build {
 
 // ---- helpers ----
 
+// 1.5.0-dev.9: shared policy for successful compiler/linker diagnostics.
+static bool should_emit_diagnostics(const std::string& mode,
+                                    const std::string& output) {
+    if (output.empty()) return false;
+    if (mode == "always") return true;
+    return mode == "warning" && cache::has_diagnostic_warning(output);
+}
+
+
 // 1.2.4-fix: the test-compile cache was never signature-validated — the
 // record's compile_options_signature stayed empty, so every test source
 // recompiled on each `ezmk test`. Mirror the build path: set the signature
@@ -1160,6 +1169,14 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     }
     if (num_jobs > 1024) num_jobs = 1024;
 
+    const std::string& output_mode =
+        config::runtime_config().settings.compiler_output;
+    auto emit_compiler_output = [&](const std::string& out) {
+        if (should_emit_diagnostics(output_mode, out)) {
+            util::raw_diagnostics(out);
+        }
+    };
+
     cache::CompileResult comp_result;
     std::vector<cache::SingleCompileResult> single_results;
     single_results.reserve(cin.sources.size());
@@ -1230,6 +1247,11 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
         }
     }
 
+    // Serial path: diagnostics were collected by compile_sources().
+    if (single_results.empty()) {
+        for (const auto& out : comp_result.compiler_outputs) emit_compiler_output(out);
+    }
+
     // Process parallel results
     if (!single_results.empty()) {
         bool has_failure = false;
@@ -1239,6 +1261,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
                 comp_result.objects.push_back(sr.object);
                 ++comp_result.cache_hits;
             } else if (sr.success) {
+                emit_compiler_output(sr.compiler_output);
                 comp_result.objects.push_back(sr.object);
                 ++comp_result.cache_misses;
                 // 1.4.2 F-09: --disable-cache must not merge entries into the
@@ -1479,6 +1502,19 @@ static fs::path execute_link(
         if (!res.err.empty()) util::error(res.err);
         if (show_stdout && !res.out.empty()) util::error(res.out);
         util::fatal(ezmk::i18n::I18nKey::build_failed);
+    }
+
+    // 1.5.0-dev.9: successful link/archive diagnostics follow linker_output.
+    {
+        std::string diag = res.err;
+        if (!res.out.empty()) {
+            if (!diag.empty() && diag.back() != '\n') diag += '\n';
+            diag += res.out;
+        }
+        if (should_emit_diagnostics(
+                config::runtime_config().settings.linker_output, diag)) {
+            util::raw_diagnostics(diag);
+        }
     }
 
     // 1.1.2 C1: check the atomic-rename result — a failed rename (locked target)

@@ -53,6 +53,8 @@ void error_always(std::string_view msg);
 // 0.9.8+: structured info line — [ezmk] prefix, no color, stderr, with newline.
 // Intended for multi-line structured output (pkg info, repo info, repo list).
 void info_line(std::string_view msg);
+// 1.5.0-dev.9: raw compiler/linker diagnostics (no [ezmk] prefix).
+void raw_diagnostics(std::string_view msg);
 
 // 1.5.0-dev.4: debug-level message (shown only with log_level = "debug").
 void debug(std::string_view msg);

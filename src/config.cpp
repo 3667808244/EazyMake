@@ -1413,6 +1413,7 @@ bool is_known_base_dir_key(const std::string& k) {
 bool is_known_settings_key(const std::string& k) {
     static const std::set<std::string> keys = {
         "natural_language", "color_mode", "color_theme", "log_level",
+        "compiler_output", "linker_output",
         "initial_commit", "auto_init_git", "gen_gitignore", "gen_readme",
         "gen_agent_md", "gen_agent_skills", "default_project_type", "default_language",
         "default_project_version", "default_compile_flags", "build_dir",
@@ -1612,6 +1613,14 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
     read_string(t, "log_level", "settings.log_level", file, s.log_level);
     validate_enum(file, "settings.log_level", s.log_level,
                   {"off", "error", "warn", "info", "debug"});
+    read_string(t, "compiler_output", "settings.compiler_output", file,
+                s.compiler_output);
+    validate_enum(file, "settings.compiler_output", s.compiler_output,
+                  {"always", "warning", "error"});
+    read_string(t, "linker_output", "settings.linker_output", file,
+                s.linker_output);
+    validate_enum(file, "settings.linker_output", s.linker_output,
+                  {"always", "warning", "error"});
 
     read_bool(t, "auto_init_git", "settings.auto_init_git", file,
               s.auto_init_git);

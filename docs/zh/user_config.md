@@ -49,6 +49,8 @@
 | `color_mode` | string | `"auto"` | `auto` / `off` / `16colors` / `256colors` / `truecolor` |
 | `color_theme` | string | `"default"` | 预留主题名；当前仅接受 `default` |
 | `log_level` | string | `"info"` | `off` / `error` / `warn` / `info` / `debug`；`fatal` 始终输出 |
+| `compiler_output` | string | `"error"` | 编译成功时诊断输出策略：`always` / `warning` / `error`。`error` 保持 1.5.0-dev.9 之前的行为；编译失败始终显示诊断 |
+| `linker_output` | string | `"error"` | 链接/归档成功时诊断输出策略：`always` / `warning` / `error`；链接失败始终显示诊断 |
 | `initial_commit` | bool / string | 未设置 | `true` 用默认消息；字符串作为提交消息；仅在 `git init` 成功后执行 |
 | `auto_init_git` | bool | `true` | `ezmk project new` 是否执行 `git init` |
 | `gen_gitignore` | bool | `true` | 是否生成 `.gitignore` |
