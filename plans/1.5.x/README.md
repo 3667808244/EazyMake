@@ -14,7 +14,7 @@
 | [1.5.0-dev.6](1.5.0-dev.6.md) | 代码审查（增量） | 审查 dev.1~dev.5 的配置 / 路径 / 工具 / 项目创建 / 日志 / 运行默认；P0/P1 修复或收口 | dev.1~dev.5 | ✅ 修复收口（1205/6940） |
 | [1.5.0-dev.7](1.5.0-dev.7.md) | 文档、i18n 与 dev 收口 | i18n / README / docs / tutorial / man / CHANGES / 索引 / 门槛 | dev.1~dev.6 | ✅ dev 收口（1205/6940） |
 | [1.5.0-pre.1](1.5.0-pre.1.md) | 发布前收口 | 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛 | dev.1~dev.7 | ✅ 收口完成（test-all 1219/6979；CI run 41212564762 全绿） |
-| [1.5.0-dev.8](1.5.0-dev.8.md) | 项目级 agent skills 分发 | `[settings].gen_agent_skills`（bool/string）+ 构建期嵌入 4 个 `ezmk-user-*` 技能 + 分发到 `.claude/skills` / `.agents/skills` + 文档/测试 | dev.1、dev.3 | 📝 待执行（pre.1 后插队） |
+| [1.5.0-dev.8](1.5.0-dev.8.md) | 项目级 agent skills 分发 | `[settings].gen_agent_skills`（bool/string）+ 构建期嵌入 4 个 `ezmk-user-*` 技能 + 分发到 `.claude/skills` / `.github/skills` / `.agents/skills` + 文档/测试 | dev.1、dev.3 | 📝 待执行（pre.1 后插队） |
 
 > **全量源代码审查**（pre.1 输入）：[1.5.0-pre.1-audit.md](1.5.0-pre.1-audit.md) —— 47 项（P1 4 / P2 23 / P3 20，无 P0）。
 
