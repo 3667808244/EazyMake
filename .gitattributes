@@ -7,3 +7,6 @@
 # tree). All other text files follow the platform default (git autocrlf).
 
 examples/** text eol=lf
+# 1.5.0-dev.8: skills are embedded byte-for-byte (scripts/embed_skills.py);
+# force LF so a Windows checkout cannot inject CR bytes.
+.claude/skills/** text eol=lf
