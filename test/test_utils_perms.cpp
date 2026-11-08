@@ -58,6 +58,20 @@ TEST_CASE("perm read: deny-list hit → Deny even if under allow", "[perms]") {
             == PermResult::Deny);
 }
 
+// 1.5.0: relative DENY globs must not be anchored to the project root — with
+// read = ["/"] and read_deny = ["*.key"], a key file outside the project used
+// to be allowed because the deny glob bailed out early.
+TEST_CASE("perm read: relative deny glob matches outside the project",
+          "[perms][1.5.0]") {
+    UtilsPermissions p;
+    p.read = {"/"};
+    p.read_deny = {"*.key"};
+    auto op = std::make_optional(p);
+    REQUIRE(ezmk::lua::check_read_permission(
+                ROOT.parent_path() / "elsewhere" / "secret.key", op, ROOT, PKG)
+            == PermResult::Deny);
+}
+
 TEST_CASE("perm read: deny wins when target is also in allow", "[perms]") {
     UtilsPermissions p;
     p.read      = {"src/"};

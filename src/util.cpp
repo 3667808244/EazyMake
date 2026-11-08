@@ -354,9 +354,14 @@ std::string file_read(const fs::path& p) {
     std::ifstream f(p, std::ios::binary | std::ios::ate);
     if (!f) return {};
     auto sz = f.tellg();
+    // 1.5.0: tellg() can fail (-1) for unseekable special files; casting that
+    // to size_t allocated SIZE_MAX and threw length_error/bad_alloc.
+    if (sz < 0) return {};
     f.seekg(0);
     std::string s(static_cast<size_t>(sz), '\0');
-    f.read(s.data(), sz);
+    if (sz > 0) f.read(s.data(), sz);
+    if (f.bad()) return {};      // partial read is not a valid file body
+    s.resize(static_cast<size_t>(f.gcount()));
     return s;
 }
 

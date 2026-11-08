@@ -183,7 +183,8 @@ bool path_within(const std::string& child_in, const std::string& parent_in) {
 // exactly. A trailing "*" (or glob-ish token) is treated as a prefix match.
 bool path_matches_entry(const std::string& target_abs,
                         const std::string& entry,
-                        const fs::path& project_root) {
+                        const fs::path& project_root,
+                        bool anchor_relative = true) {
     if (entry.empty()) return false;
 
     // Glob-style entries (contain * or ?) → match against the last path segment
@@ -193,7 +194,10 @@ bool path_matches_entry(const std::string& target_abs,
         // pattern like "src/*" cannot match an absolute path outside the project
         // (the regex below searches the whole absolute path).
         fs::path glob_entry(entry);
-        if (!glob_entry.is_absolute() &&
+        // 1.5.0: anchoring is correct for ALLOW entries, but fail-open for
+        // DENY ones — `read = ["/"], read_deny = ["*.key"]` used to allow a
+        // key file outside the project because the deny glob returned false.
+        if (anchor_relative && !glob_entry.is_absolute() &&
             !path_within(target_abs, norm_path(project_root))) {
             return false;
         }
@@ -289,7 +293,8 @@ PermResult check_read_permission(const fs::path& path,
 
     // deny wins over everything.
     for (const auto& d : perms->read_deny) {
-        if (path_matches_entry(target, d, project_root)) return PermResult::Deny;
+        if (path_matches_entry(target, d, project_root,
+                               /*anchor_relative=*/false)) return PermResult::Deny;
     }
     // allow list.
     for (const auto& a : perms->read) {
@@ -313,7 +318,8 @@ PermResult check_write_permission(const fs::path& path,
     std::string target = norm_path(path);
 
     for (const auto& d : perms->write_deny) {
-        if (path_matches_entry(target, d, project_root)) return PermResult::Deny;
+        if (path_matches_entry(target, d, project_root,
+                               /*anchor_relative=*/false)) return PermResult::Deny;
     }
     for (const auto& a : perms->write) {
         if (path_matches_entry(target, a, project_root)) return PermResult::Allow;

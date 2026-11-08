@@ -170,7 +170,16 @@ void FileWatcher::flush_pending() {
         std::error_code ec;
         if (!fs::exists(fp, ec) || ec) continue;  // 1.4.2 F-32: deletion → no rebuild
 
-        callback_(fp);
+        // 1.5.0: a throwing callback used to escape run() (and the watcher
+        // thread) → std::terminate with platform resources never released.
+        // A failed build is recoverable; keep watching.
+        try {
+            callback_(fp);
+        } catch (const std::exception& e) {
+            util::warn(std::string("FileWatcher: change callback failed: ") + e.what());
+        } catch (...) {
+            util::warn("FileWatcher: change callback failed");
+        }
     }
 }
 

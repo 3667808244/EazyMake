@@ -3079,24 +3079,31 @@ void run_tests(const config::EzConfig& cfg,
     {
         fs::path pkg_dir = proj_root / ".ezmk/pkg";
         if (util::file_exists(pkg_dir)) {
+            // 1.5.0: sort the package dirs like prepare_build_state does —
+            // filesystem order made test include precedence and static-library
+            // link order non-deterministic (and differ from a real build).
+            std::vector<fs::path> pkg_entries;
             for (auto& entry : fs::directory_iterator(pkg_dir)) {
-                if (!entry.is_directory()) continue;
-                auto pkg_toml = entry.path() / "ezmk.toml";
+                if (entry.is_directory()) pkg_entries.push_back(entry.path());
+            }
+            std::sort(pkg_entries.begin(), pkg_entries.end());
+            for (auto& pkg_path : pkg_entries) {
+                auto pkg_toml = pkg_path / "ezmk.toml";
                 if (util::file_exists(pkg_toml)) {
                     try {
                         auto pkg_cfg = config::parse_config(pkg_toml);
-                        auto incs = package_include_dirs(entry.path(), pkg_cfg);
+                        auto incs = package_include_dirs(pkg_path, pkg_cfg);
                         pkg_includes.insert(pkg_includes.end(), incs.begin(), incs.end());
                         for (auto& f : pkg_cfg.link.flags) pkg_link_flags.push_back(f);
                         for (auto& d : pkg_cfg.link.link_dirs) pkg_link_dirs.push_back(d);
                         for (auto& t : pkg_cfg.link.system_targets) pkg_system_targets.push_back(t);
                     } catch (...) { /* skip broken package configs */ }
                 } else {
-                    auto pkg_include = entry.path() / "include";
+                    auto pkg_include = pkg_path / "include";
                     if (util::file_exists(pkg_include)) pkg_includes.push_back(pkg_include);
                 }
                 // Archives are config-independent (mirrors prepare_build_state).
-                auto archives = collect_package_archives(entry.path(), is_msvc);
+                auto archives = collect_package_archives(pkg_path, is_msvc);
                 pkg_archives.insert(pkg_archives.end(), archives.begin(), archives.end());
             }
         }

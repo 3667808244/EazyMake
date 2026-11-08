@@ -169,6 +169,10 @@ std::string sha256_file(const std::filesystem::path& p) {
     while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
         s.update(buf, static_cast<size_t>(f.gcount()));
     }
+    // 1.5.0: a hard read error (network share dropped, device error) used to
+    // return the hash of the partial body — callers pinned a bogus value into
+    // the cache/lockfile. An empty result means "could not hash".
+    if (f.bad()) return {};
     return s.finalize();
 }
 

@@ -8,7 +8,7 @@
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `name` | string | No | — | Project name. Not currently enforced — only `version` is required |
+| `name` | string | No | — | Project name. If present it must be a safe basename (no path separators, `..`, or drive letter) because it is used as a build-artifact and install path segment; only `version` is required |
 | `type` | string | No | `"executable"` | Project type: `"executable"` / `"static"` / `"shared"` / `"utils"` |
 | `version` | string | Yes | — | Project version; SemVer format recommended (e.g. `"0.1.0"`) |
 | `language` | string | No | `"C++17"` | Language standard, e.g. `"C++17"`, `"C11"`, `"GNUCPP17"`. Case-insensitive; `C++`/`CXX`/`CPP` unified. **1.3.1+** range syntax: `">=C++11"` (minimum) / `"C++11..C++17"` (min..max) |
