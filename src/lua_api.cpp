@@ -780,8 +780,7 @@ static fs::path resolve_path(const fs::path& p) {
 static void warn_perms_undeclared() {
     if (g_perms_warned) return;
     g_perms_warned = true;
-    util::warn("script permissions not declared; all file/command access allowed. "
-               "Define [utils.permissions] to restrict.");
+    util::warn(ezmk::i18n::I18nKey::lua_permissions_undeclared);
 }
 
 // Resolve a PermResult to a final allow/deny decision, prompting on Ask.

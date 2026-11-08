@@ -522,8 +522,9 @@ static Toolchain detect_gcc_like(const std::string& cxx, const std::string& cc) 
         ezmk::config::runtime_config().settings.linker);
     if (!cfg_linker.empty()) {
         if (!tool_probe_ok(cfg_linker)) {
-            util::fatal("configured settings.linker is not executable: " +
-                        cfg_linker);
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::toolchain_setting_not_executable,
+                {{"setting", "settings.linker"}, {"value", cfg_linker}}));
         }
         tc.linker = fs::path(cfg_linker);
     }
@@ -822,13 +823,17 @@ Toolchain detect_toolchain() {
         const std::string cfg_cc = resolve_tool_setting(cfg.cc);
         if (!cfg_cxx.empty()) {
             if (!tool_probe_ok(cfg_cxx)) {
-                util::fatal("configured settings.cxx is not executable: " + cfg_cxx);
+                util::fatal(ezmk::i18n::fmt(
+                    ezmk::i18n::I18nKey::toolchain_setting_not_executable,
+                    {{"setting", "settings.cxx"}, {"value", cfg_cxx}}));
             }
             std::string cc = cfg_cc;
             if (cc.empty()) {
                 cc = (cfg_cxx.find("clang") != std::string::npos) ? "clang" : "gcc";
             } else if (!tool_probe_ok(cc)) {
-                util::fatal("configured settings.cc is not executable: " + cc);
+                util::fatal(ezmk::i18n::fmt(
+                    ezmk::i18n::I18nKey::toolchain_setting_not_executable,
+                    {{"setting", "settings.cc"}, {"value", cc}}));
             }
             cached = detect_gcc_like(cfg_cxx, cc);
             cached_valid = true;
@@ -838,7 +843,9 @@ Toolchain detect_toolchain() {
         // normal C++ discovery, but pair it with the requested C compiler.
         if (!cfg_cc.empty()) {
             if (!tool_probe_ok(cfg_cc)) {
-                util::fatal("configured settings.cc is not executable: " + cfg_cc);
+                util::fatal(ezmk::i18n::fmt(
+                    ezmk::i18n::I18nKey::toolchain_setting_not_executable,
+                    {{"setting", "settings.cc"}, {"value", cfg_cc}}));
             }
             for (const char* cand : {"g++", "clang++"}) {
                 if (tool_probe_ok(cand)) {
@@ -905,7 +912,7 @@ Toolchain detect_toolchain() {
 
         if (forced == "msvc") {
             auto tc = try_msvc();
-            if (!tc) util::fatal("EZMK_TOOLCHAIN=msvc requested but MSVC (vcvars64.bat + cl) was not found");
+            if (!tc) util::fatal(ezmk::i18n::I18nKey::toolchain_msvc_not_found);
             cached = *tc;
             cached_valid = true;
             util::info(ezmk::i18n::I18nKey::toolchain_msvc_detected);
@@ -915,7 +922,9 @@ Toolchain detect_toolchain() {
             const std::string only = (forced == "gcc") ? "g++" : "clang++";
             const std::string cc = (forced == "gcc") ? "gcc" : "clang";
             auto tc = try_gcc_like({only}, {cc}, only);
-            if (!tc) util::fatal("EZMK_TOOLCHAIN=" + forced + " requested but " + only + " was not found");
+            if (!tc) util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::toolchain_forced_missing,
+                {{"tool", forced}}));
             cached = *tc;
             cached_valid = true;
             return cached;
@@ -950,7 +959,7 @@ Toolchain detect_toolchain() {
 
     // 1.4.7 M-06: honour EZMK_TOOLCHAIN on POSIX too.
     if (forced == "msvc") {
-        util::fatal("EZMK_TOOLCHAIN=msvc is only supported on Windows");
+        util::fatal(ezmk::i18n::I18nKey::toolchain_msvc_windows_only);
     }
 #ifdef EZMK_MACOS
     if (forced == "gcc")        { cxx_candidates = {"g++"};     c_candidates = {"gcc"}; }
@@ -979,7 +988,9 @@ Toolchain detect_toolchain() {
 
     // Nothing found
     if (!forced.empty()) {
-        util::fatal("EZMK_TOOLCHAIN=" + forced + " requested but the compiler was not found");
+        util::fatal(ezmk::i18n::fmt(
+            ezmk::i18n::I18nKey::toolchain_forced_missing,
+            {{"tool", forced}}));
     }
     std::string msg = "no C";
     msg += "++ compiler found.\n\n";

@@ -145,7 +145,8 @@ void create_project(const std::string& name, const std::string& project_type,
     fs::path root = fs::current_path() / name;
 
     if (util::file_exists(root)) {
-        util::fatal("directory already exists: " + root.string());
+        util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::project_dir_exists,
+                                    {{"path", root.string()}}));
     }
 
     util::info(ezmk::i18n::I18nKey::creating_project,

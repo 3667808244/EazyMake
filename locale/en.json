@@ -423,6 +423,18 @@
     "project_err_write_failed": "failed to write {path} - the project directory is incomplete",
     "example_err_write_failed": "failed to write file: {path}",
     "export_err_write_failed": "failed to write {path}",
-    "cli_err_conflicting_glob": "conflicting options: --glob and --no-glob"
+    "cli_err_conflicting_glob": "conflicting options: --glob and --no-glob",
+    "cli_option_requires_value": "option '{{option}}' requires a value",
+    "toolchain_setting_not_executable": "{{setting}} is not executable: {{value}}",
+    "toolchain_msvc_not_found": "EZMK_TOOLCHAIN=msvc requested but MSVC (vcvars64.bat + cl) was not found",
+    "toolchain_msvc_windows_only": "EZMK_TOOLCHAIN=msvc is only supported on Windows",
+    "toolchain_forced_missing": "EZMK_TOOLCHAIN={{tool}} requested but the compiler was not found",
+    "project_dir_exists": "directory already exists: {{path}}",
+    "test_catch2_missing": "Catch2 not found. Install it with:\n  ezmk pkg install catch2\nor place catch2.hpp in include/vendor/catch2.hpp",
+    "test_no_sources": "no test source files found in test directories. Configure test.dirs in ezmk.toml.",
+    "pack_precompiled_requires_static": "project pack --precompiled requires type=\"static\", got type=\"{{type}}\"",
+    "pack_invalid_format": "invalid pack format: {{format}}",
+    "pack_invalid_name": "invalid pack name (must be a basename): {{name}}",
+    "lua_permissions_undeclared": "script permissions not declared; all file/command access allowed. Define [utils.permissions] to restrict."
   }
 }

@@ -423,6 +423,18 @@
     "project_err_write_failed": "写入失败: {path} - 项目目录不完整",
     "example_err_write_failed": "写入文件失败: {path}",
     "export_err_write_failed": "写入失败: {path}",
-    "cli_err_conflicting_glob": "冲突的选项: --glob 与 --no-glob"
+    "cli_err_conflicting_glob": "冲突的选项: --glob 与 --no-glob",
+    "cli_option_requires_value": "选项 '{{option}}' 需要一个值",
+    "toolchain_setting_not_executable": "{{setting}} 不可执行：{{value}}",
+    "toolchain_msvc_not_found": "请求 EZMK_TOOLCHAIN=msvc，但未找到 MSVC（vcvars64.bat + cl）",
+    "toolchain_msvc_windows_only": "EZMK_TOOLCHAIN=msvc 仅支持 Windows",
+    "toolchain_forced_missing": "请求 EZMK_TOOLCHAIN={{tool}}，但未找到编译器",
+    "project_dir_exists": "目录已存在：{{path}}",
+    "test_catch2_missing": "未找到 Catch2。可通过以下方式安装：\n  ezmk pkg install catch2\n或将 catch2.hpp 放到 include/vendor/catch2.hpp",
+    "test_no_sources": "测试目录中没有源文件。请在 ezmk.toml 中配置 test.dirs。",
+    "pack_precompiled_requires_static": "project pack --precompiled 要求 type=\"static\"，当前为 \"{{type}}\"",
+    "pack_invalid_format": "无效的打包格式：{{format}}",
+    "pack_invalid_name": "无效的包名（必须是 basename）：{{name}}",
+    "lua_permissions_undeclared": "脚本未声明权限；允许所有文件/命令访问。定义 [utils.permissions] 以限制。"
   }
 }

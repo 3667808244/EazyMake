@@ -480,3 +480,15 @@ EZMK_I18N_KEY(example_err_write_failed)        // example scaffold write failed
 EZMK_I18N_KEY(export_err_write_failed)         // export write failed
 EZMK_I18N_KEY(cli_err_conflicting_glob)        // --glob vs --no-glob
 
+EZMK_I18N_KEY(cli_option_requires_value)
+EZMK_I18N_KEY(toolchain_setting_not_executable)
+EZMK_I18N_KEY(toolchain_msvc_not_found)
+EZMK_I18N_KEY(toolchain_msvc_windows_only)
+EZMK_I18N_KEY(toolchain_forced_missing)
+EZMK_I18N_KEY(project_dir_exists)
+EZMK_I18N_KEY(test_catch2_missing)
+EZMK_I18N_KEY(test_no_sources)
+EZMK_I18N_KEY(pack_precompiled_requires_static)
+EZMK_I18N_KEY(pack_invalid_format)
+EZMK_I18N_KEY(pack_invalid_name)
+EZMK_I18N_KEY(lua_permissions_undeclared)

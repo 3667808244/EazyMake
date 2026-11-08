@@ -2173,8 +2173,9 @@ void pack_project(const config::EzConfig& cfg,
     // platform-independent and accepts any project type — installed packages
     // are always compiled as static libs anyway (compile_package).
     if (precompiled && cfg.project.type != "static") {
-        util::fatal("project pack --precompiled requires type=\"static\", got type=\"" +
-                     cfg.project.type + "\"");
+        util::fatal(ezmk::i18n::fmt(
+            ezmk::i18n::I18nKey::pack_precompiled_requires_static,
+            {{"type", cfg.project.type}}));
     }
 
     // 1.5.0-dev.5: resolve CLI > [pack] > [settings] defaults.
@@ -2185,7 +2186,8 @@ void pack_project(const config::EzConfig& cfg,
     if (fmt.empty()) fmt = "tar.gz";
     if (fmt == "tgz") fmt = "tar.gz";
     if (fmt != "tar.gz" && fmt != "zip") {
-        util::fatal("invalid pack format: " + fmt);
+        util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_invalid_format,
+                                    {{"format", fmt}}));
     }
     std::string output = opts.output_explicit ? opts.output_dir : std::string();
     if (output.empty()) output = cfg.pack.output_dir;
@@ -2198,7 +2200,8 @@ void pack_project(const config::EzConfig& cfg,
     if (base.empty()) base = name + "-" + version;
     if (base.empty() || base == "." || base == ".." ||
         fs::path(base).filename().string() != base) {
-        util::fatal("invalid pack name (must be a basename): " + base);
+        util::fatal(ezmk::i18n::fmt(ezmk::i18n::I18nKey::pack_invalid_name,
+                                    {{"name", base}}));
     }
     // Step 1: Create staging directory. 1.5.0-dev.6 R-01: never remove a
     // user-visible path — stage under a unique temp root, then archive the
@@ -2611,9 +2614,7 @@ static void run_catch2_tests(TestRunContext& ctx) {
     // Detect Catch2
     std::string catch2_inc = detect_catch2(ctx.proj_root);
     if (catch2_inc.empty()) {
-        util::fatal("Catch2 not found. Install it with:\n"
-                    "  ezmk pkg install catch2\n"
-                    "or place catch2.hpp in include/vendor/catch2.hpp");
+        util::fatal(ezmk::i18n::I18nKey::test_catch2_missing);
     }
     util::info(std::string("  Catch2 include: ") + catch2_inc);
     // 1.5.0: the detected include root must reach the compile command. It used
@@ -3098,8 +3099,7 @@ void run_tests(const config::EzConfig& cfg,
     auto test_sources = collect_test_sources(cfg.test.dirs, cfg.test.dirs_recursive,
                                               proj_root);
     if (test_sources.empty()) {
-        util::fatal("no test source files found in test directories. "
-                     "Configure test.dirs in ezmk.toml.");
+        util::fatal(ezmk::i18n::I18nKey::test_no_sources);
     }
 
     // 1.2.0-dev.11: derive project objects from the project's own sources —

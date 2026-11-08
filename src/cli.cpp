@@ -1175,24 +1175,32 @@ namespace ezmk::cli
             if (t == "--no-config") continue;
             if (t == "--config") {
                 if (i + 1 >= toks.size())
-                    util::fatal("option '--config' requires a value");
+                    util::fatal(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::cli_option_requires_value,
+                        {{"option", "--config"}}));
                 ++i;
                 continue;
             }
             if (t.rfind("--config=", 0) == 0) {
                 if (t.size() == 9)
-                    util::fatal("option '--config' requires a value");
+                    util::fatal(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::cli_option_requires_value,
+                        {{"option", "--config"}}));
                 continue;
             }
             if (t == "--lang") {
                 if (i + 1 >= toks.size())
-                    util::fatal("option '--lang' requires a value");
+                    util::fatal(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::cli_option_requires_value,
+                        {{"option", "--lang"}}));
                 ++i;
                 continue;
             }
             if (t.rfind("--lang=", 0) == 0) {
                 if (t.size() == 7)
-                    util::fatal("option '--lang' requires a value");
+                    util::fatal(ezmk::i18n::fmt(
+                        ezmk::i18n::I18nKey::cli_option_requires_value,
+                        {{"option", "--lang"}}));
                 continue;
             }
             out.push_back(t);
