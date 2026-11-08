@@ -1390,7 +1390,7 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     content += "[compile.profile.release]\n";
     content += "flags = [\"-O2\", \"-DNDEBUG\"]\n";
     content += "msvc_flags = [\"/O2\", \"/DNDEBUG\"]\n";
-    content += "export_objs = true              # 1.4.9+：release 构建额外产出 build/obj_files.zip\n";
+    content += "export_objs = true              # 1.4.9+: release builds also emit build/obj_files.zip\n";
     content += "\n";
     content += "[link]\n";
     content += "flags = []\n";
@@ -1412,12 +1412,12 @@ void write_default_config(const fs::path& toml_path, std::string_view project_na
     // link_targets). Deliberately omits the deprecated [test].flags (removed
     // in 2.0.0) — the example only teaches the modern usage.
     content += "\n";
-    content += "# [test]                     # 启用项目测试：取消注释后运行 `ezmk test`\n";
-    content += "# framework = \"catch2\"       # \"catch2\" | \"ezmk\"（内置框架）\n";
+    content += "# [test]                     # enable project tests, then run `ezmk test`\n";
+    content += "# framework = \"catch2\"       # \"catch2\" | \"ezmk\" (built-in framework)\n";
     content += "# dirs = [\"test\"]\n";
-    content += "# default_profile = \"debug\"  # 1.2.0-dev.12+：测试默认 profile\n";
-    content += "# include_dirs = [\"test/helpers\"]   # 测试专属 -I（1.2.0-dev.12+）\n";
-    content += "# link_targets = [\"pthread\"]        # 测试专属 -l（1.2.0-dev.12+）\n";
+    content += "# default_profile = \"debug\"  # 1.2.0-dev.12+: default profile for tests\n";
+    content += "# include_dirs = [\"test/helpers\"]   # test-only -I (1.2.0-dev.12+)\n";
+    content += "# link_targets = [\"pthread\"]        # test-only -l (1.2.0-dev.12+)\n";
 
     if (!util::file_write(toml_path, content)) {
         throw std::runtime_error("failed to write config file: " + toml_path.string());

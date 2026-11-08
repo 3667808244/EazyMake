@@ -63,14 +63,13 @@ TEST_CASE("All I18nKey values produce non-empty strings", "[i18n][keys]") {
         I18nKey::compilation_failed, I18nKey::link_failed,
         I18nKey::archive_failed, I18nKey::build_failed,
         // cache
-        I18nKey::cache_hit, I18nKey::cache_hit_brief, I18nKey::cache_miss,
+        I18nKey::cache_hit, I18nKey::cache_miss,
         I18nKey::cache_miss_record, I18nKey::cache_miss_source,
         I18nKey::cache_miss_options, I18nKey::cache_miss_header,
-        I18nKey::source_changed, I18nKey::options_changed, I18nKey::header_changed,
         I18nKey::include_structure_changed,
         // pkg
-        I18nKey::installing, I18nKey::installed, I18nKey::removing,
-        I18nKey::removed, I18nKey::downloading, I18nKey::extracting,
+        I18nKey::installed, I18nKey::removing,
+        I18nKey::downloading, I18nKey::extracting,
         I18nKey::verifying, I18nKey::sha256_ok, I18nKey::sha256_mismatch,
         I18nKey::circular_dep, I18nKey::missing_dep,
         I18nKey::global_confirm, I18nKey::overwrite_confirm,
@@ -81,7 +80,7 @@ TEST_CASE("All I18nKey values produce non-empty strings", "[i18n][keys]") {
         // repo
         I18nKey::cloning, I18nKey::pulling, I18nKey::re_cloning,
         I18nKey::re_reading, I18nKey::repo_added, I18nKey::repo_removed,
-        I18nKey::repo_updated, I18nKey::repo_not_found, I18nKey::no_repos,
+        I18nKey::repo_not_found, I18nKey::no_repos,
         I18nKey::removing_cache,
         // project
         I18nKey::creating_project, I18nKey::project_created,
@@ -92,7 +91,7 @@ TEST_CASE("All I18nKey values produce non-empty strings", "[i18n][keys]") {
         // editor
         I18nKey::no_editor, I18nKey::opening_editor, I18nKey::editor_error,
         // version & utils
-        I18nKey::version_output, I18nKey::utils_placeholder,
+        I18nKey::version_output,
         // general
         I18nKey::fatal_prefix, I18nKey::error_prefix,
         I18nKey::warn_prefix, I18nKey::info_prefix,
@@ -313,7 +312,6 @@ TEST_CASE("General prefix keys are non-empty", "[i18n][general]") {
 TEST_CASE("0.2.3 i18n keys: parallel and profile keys", "[i18n][0.2.3]") {
     init("en");
     REQUIRE(!get(I18nKey::parallel_jobs_info).empty());
-    REQUIRE(!get(I18nKey::profile_not_found).empty());
 }
 
 TEST_CASE("0.2.3 i18n keys: hook keys", "[i18n][0.2.3]") {

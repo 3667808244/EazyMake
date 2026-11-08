@@ -117,7 +117,12 @@ LUA_OUTPUT="build/ezmk-lua"
 TEST_OUTPUT="build/test_ezmk"
 CXX="${CXX:-g++}"
 CC="${CC:-gcc}"
-CXXFLAGS="${CXXFLAGS:--std=c++17}"
+# 1.5.0-dev.12 (A-17): optimize by default and enable warnings for first-party
+# code. All 194 warnings from a strict build come from vendored miniz
+# (-Wunused-function / -Wtype-limits), so those two classes are suppressed
+# globally; src/ and include/ezmk/ are otherwise warning-clean. Override with
+# CXXFLAGS=... as before.
+CXXFLAGS="${CXXFLAGS:--std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-type-limits}"
 
 # 1.5.0-dev.12 (A-17): the generators below rewrite these files on every run, so
 # their mtime must not participate in the staleness check — otherwise the

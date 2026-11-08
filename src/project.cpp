@@ -169,12 +169,17 @@ void create_project(const std::string& name, const std::string& project_type,
 
         std::string hpp = "#pragma once\n"
                           "\n"
-                          "// " + name + " — 示例公共 API。\n"
-                          "// 替换为你的库接口：头文件放 include/，实现放 src/。\n"
+                          // 1.5.0-dev.12 (A-16): generated files use English
+                          // comments consistently (the executable template and the
+                          // default config.toml were already English); generated
+                          // sources should not depend on the UI language.
+                          "// " + name + " — example public API.\n"
+                          "// Replace with your library interface: headers in include/,\n"
+                          "// implementation in src/.\n"
                           "\n"
                           "namespace " + ns + " {\n"
                           "\n"
-                          "// 示例函数：返回一条问候消息。\n"
+                          "// Example function: returns a greeting message.\n"
                           "const char* greeting();\n"
                           "\n"
                           "} // namespace " + ns + "\n";

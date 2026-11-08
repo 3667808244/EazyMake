@@ -39,7 +39,6 @@ EZMK_I18N_KEY(repo_list_migrated)          // 1.4.5: list.toml → list.json mig
 EZMK_I18N_KEY(repo_list_legacy_stale)      // 1.4.5: both registry files present; the JSON one wins
 EZMK_I18N_KEY(install_summary)             // 1.1.0
 EZMK_I18N_KEY(install_dry_run)             // 1.1.0
-EZMK_I18N_KEY(pack_not_static)             // 1.1.0-dev.2
 EZMK_I18N_KEY(pack_collecting)             // 1.1.0-dev.2
 EZMK_I18N_KEY(pack_creating)              // 1.1.0-dev.2
 EZMK_I18N_KEY(pack_sha256)                // 1.1.0-dev.2
@@ -55,7 +54,6 @@ EZMK_I18N_KEY(src_dir_missing)
 EZMK_I18N_KEY(cache_summary)
 EZMK_I18N_KEY(cache_record_newer)       // 1.4.2 F-37: record.json written by a newer ezmk
 EZMK_I18N_KEY(parallel_jobs_info)       // 0.2.3+
-EZMK_I18N_KEY(profile_not_found)        // 0.2.3+
 EZMK_I18N_KEY(pre_build_hook)           // 0.2.3+
 EZMK_I18N_KEY(post_build_hook)          // 0.2.3+
 EZMK_I18N_KEY(on_failure_hook)          // 0.2.3+
@@ -88,15 +86,11 @@ EZMK_I18N_KEY(build_warn_lang_exceeds_capability)  // 1.4.0-pre.1
 
 // ---- cache (verbose) ----
 EZMK_I18N_KEY(cache_hit)
-EZMK_I18N_KEY(cache_hit_brief)
 EZMK_I18N_KEY(cache_miss)
 EZMK_I18N_KEY(cache_miss_record)
 EZMK_I18N_KEY(cache_miss_source)
 EZMK_I18N_KEY(cache_miss_options)
 EZMK_I18N_KEY(cache_miss_header)
-EZMK_I18N_KEY(source_changed)
-EZMK_I18N_KEY(options_changed)
-EZMK_I18N_KEY(header_changed)
 EZMK_I18N_KEY(include_structure_changed)
 
 // ---- pkg ----
@@ -104,7 +98,6 @@ EZMK_I18N_KEY(auto_yes)
 EZMK_I18N_KEY(circular_dep)
 EZMK_I18N_KEY(compiling_pkg)
 EZMK_I18N_KEY(confirm_continue)
-EZMK_I18N_KEY(confirm_script)
 EZMK_I18N_KEY(downloading)
 EZMK_I18N_KEY(extracting)
 EZMK_I18N_KEY(exec_question)
@@ -114,8 +107,6 @@ EZMK_I18N_KEY(global_confirm)
 EZMK_I18N_KEY(install_cancelled)
 EZMK_I18N_KEY(install_cancelled_user)
 EZMK_I18N_KEY(installed)
-EZMK_I18N_KEY(install_hook_lua_error)   // 0.9.9
-EZMK_I18N_KEY(install_hook_no_run)      // 0.9.9
 EZMK_I18N_KEY(installing)
 EZMK_I18N_KEY(installing_to)
 EZMK_I18N_KEY(pkg_header_only)            // 0.9.7+
@@ -148,7 +139,6 @@ EZMK_I18N_KEY(not_found)
 EZMK_I18N_KEY(overwrite_confirm)
 EZMK_I18N_KEY(url_no_sha256_confirm)      // 1.1.3 S3
 EZMK_I18N_KEY(url_http_confirm)           // 1.1.3 S3
-EZMK_I18N_KEY(removed)
 EZMK_I18N_KEY(removing)
 EZMK_I18N_KEY(resolving_deps)
 EZMK_I18N_KEY(running_script)
@@ -222,13 +212,7 @@ EZMK_I18N_KEY(build_time_truncated)   // 1.2.0-dev.6
 
 // ---- cli usage / parsing (0.2.3+) ----
 EZMK_I18N_KEY(cli_usage_header)
-EZMK_I18N_KEY(cli_usage_project)
-EZMK_I18N_KEY(cli_usage_pkg)
-EZMK_I18N_KEY(cli_usage_repo)
-EZMK_I18N_KEY(cli_usage_utils)
 EZMK_I18N_KEY(cli_usage_scopes)
-EZMK_I18N_KEY(cli_usage_build_flags)
-EZMK_I18N_KEY(cli_usage_install_flags)
 EZMK_I18N_KEY(cli_usage_usage)
 EZMK_I18N_KEY(cli_unknown_option)        // 0.2.5+
 EZMK_I18N_KEY(cli_missing_value)         // 0.2.5+
@@ -244,7 +228,6 @@ EZMK_I18N_KEY(cli_takes_no_args)
 EZMK_I18N_KEY(cli_unexpected_arg)
 EZMK_I18N_KEY(cli_unknown_subcommand)
 EZMK_I18N_KEY(cli_requires_subcommand)
-EZMK_I18N_KEY(cli_unknown_group)
 EZMK_I18N_KEY(cli_one_scope)
 EZMK_I18N_KEY(cli_unknown_project_type)
 EZMK_I18N_KEY(cli_update_needs_name_or_all)
@@ -258,7 +241,6 @@ EZMK_I18N_KEY(cli_invalid_color)         // 0.2.6+
 EZMK_I18N_KEY(cli_did_you_mean)          // 0.9.4+
 EZMK_I18N_KEY(cli_unknown_command)       // 0.9.4+
 EZMK_I18N_KEY(cli_available_commands)    // 0.9.4+
-EZMK_I18N_KEY(profile_available)         // 0.9.4+
 EZMK_I18N_KEY(shorthand_expansion)       // 0.9.8+
 // argument nouns for {what} placeholders (0.2.6+)
 EZMK_I18N_KEY(arg_project_name)
@@ -277,7 +259,6 @@ EZMK_I18N_KEY(re_reading)
 EZMK_I18N_KEY(repo_added)
 EZMK_I18N_KEY(repo_not_found)
 EZMK_I18N_KEY(repo_removed)
-EZMK_I18N_KEY(repo_updated)
 EZMK_I18N_KEY(removing_cache)
 EZMK_I18N_KEY(repo_list_title)           // 0.2.6+
 EZMK_I18N_KEY(repo_list_none)            // 0.2.6+
@@ -319,7 +300,6 @@ EZMK_I18N_KEY(editor_error)
 EZMK_I18N_KEY(version_output)
 
 // ---- utils / Lua ----
-EZMK_I18N_KEY(utils_placeholder)
 EZMK_I18N_KEY(utils_not_found)
 EZMK_I18N_KEY(lua_init_failed)
 EZMK_I18N_KEY(lua_error)
@@ -341,7 +321,6 @@ EZMK_I18N_KEY(cli_err_run_needs_executable) // 1.3.4: --run requires an executab
 // ---- test (1.1.0-dev.6) ----
 EZMK_I18N_KEY(test_summary)
 EZMK_I18N_KEY(test_failed)
-EZMK_I18N_KEY(test_catch2_not_found)
 EZMK_I18N_KEY(test_flags_deprecated)        // 1.2.0-dev.12
 EZMK_I18N_KEY(test_report_not_supported)    // 1.3.2: EZMK framework only emits junit
 
@@ -392,7 +371,6 @@ EZMK_I18N_KEY(help_scope_project)
 EZMK_I18N_KEY(help_scope_user)
 EZMK_I18N_KEY(help_scope_global)
 EZMK_I18N_KEY(help_scope_combined)
-EZMK_I18N_KEY(help_global_options)
 EZMK_I18N_KEY(help_option_syntax_title)
 EZMK_I18N_KEY(help_option_syntax_long)
 EZMK_I18N_KEY(help_option_syntax_short)
@@ -403,7 +381,6 @@ EZMK_I18N_KEY(help_see_also_man)   // 1.4.3: `ezmk help` 末尾 See also 行
 EZMK_I18N_KEY(toolchain_msvc_detected)
 
 // ---- cache ----
-EZMK_I18N_KEY(cache_hit_detail)
 
 // ---- example (1.2.3) ----
 EZMK_I18N_KEY(example_list_header)
@@ -443,9 +420,7 @@ EZMK_I18N_KEY(workspace_test_start)             // test: start line (count + job
 EZMK_I18N_KEY(workspace_watch_start)            // watch: start line (count + jobs) — 1.4.0-dev.5
 EZMK_I18N_KEY(workspace_clean_start)            // clean: start line (count)
 EZMK_I18N_KEY(workspace_member_start)           // per-member start (member + action)
-EZMK_I18N_KEY(workspace_member_ok)              // per-member success (member + time)
 EZMK_I18N_KEY(workspace_member_fail)            // per-member failure (member + exit code)
-EZMK_I18N_KEY(workspace_member_skip)            // per-member skipped
 EZMK_I18N_KEY(workspace_test_no_tests)          // member skipped: no tests configured
 EZMK_I18N_KEY(workspace_summary)                // action summary (succeeded/failed/skipped)
 EZMK_I18N_KEY(workspace_clean_done)             // clean completion (count)
