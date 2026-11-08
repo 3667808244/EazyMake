@@ -2012,6 +2012,10 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
                                  const std::vector<std::string>& extra_exclude) {
     std::error_code ec;
     fs::create_directories(to, ec);
+    if (ec) {
+        throw std::runtime_error("failed to create pack staging directory " +
+                                 to.string() + " (" + ec.message() + ")");
+    }
     std::set<std::string> prune_dirs = {"build", ".ezmk", ".git"};
     if (!build_dir_name.empty()) prune_dirs.insert(build_dir_name);
     static const std::set<std::string> prune_exts = {
@@ -2027,10 +2031,36 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
         }
         return false;
     };
-    for (auto it = fs::directory_iterator(from, ec);
-         !ec && it != fs::directory_iterator(); it.increment(ec)) {
+    // 1.5.0-dev.12 (A-10): errors while walking the tree used to end the loop
+    // silently, producing an incomplete package that still reported success.
+    // Propagate every error, and never recurse into a directory symlink (it can
+    // point outside the project, or form a loop).
+    fs::directory_iterator it(from, ec);
+    if (ec) {
+        throw std::runtime_error("failed to read directory " + from.string() +
+                                 " (" + ec.message() + ")");
+    }
+    for (; it != fs::directory_iterator(); it.increment(ec)) {
+        if (ec) {
+            throw std::runtime_error("failed to read directory " + from.string() +
+                                     " (" + ec.message() + ")");
+        }
         const fs::path& p = it->path();
         std::string name = p.filename().string();
+        std::error_code sec;
+        auto sym = it->symlink_status(sec);
+        if (sec) {
+            throw std::runtime_error("failed to stat " + p.string() + " (" +
+                                     sec.message() + ")");
+        }
+        if (fs::is_symlink(sym) && it->is_directory(ec)) {
+            ec.clear();
+            continue;   // directory symlink: never followed, never packed
+        }
+        if (ec) {
+            throw std::runtime_error("failed to stat " + p.string() + " (" +
+                                     ec.message() + ")");
+        }
         if (it->is_directory(ec)) {
             // 1.5.0-pre.1 (A-03): never recurse into a pack staging tree even
             // when src_dirs spans the project root / output dir.
@@ -2044,11 +2074,15 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
             if (prune_exts.count(p.extension().string()) ||
                 excluded(name, p.extension().string())) continue;
             fs::copy_file(p, to / name, fs::copy_options::overwrite_existing, ec);
-            if (ec)
+            if (ec) {
                 throw std::runtime_error("failed to copy " + p.string() +
                                          " (" + ec.message() + ")");
+            }
         }
-        ec.clear();
+        if (ec) {
+            throw std::runtime_error("failed to stat " + p.string() + " (" +
+                                     ec.message() + ")");
+        }
     }
 }
 

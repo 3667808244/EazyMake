@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -13,6 +15,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -23,6 +26,8 @@
   #endif
   #include <windows.h>
   #include <winhttp.h>
+  #include <fcntl.h>
+  #include <io.h>
 #elif defined(EZMK_MACOS)
   #include <csignal>
   #include <crt_externs.h>
@@ -32,6 +37,7 @@
   #include <sys/wait.h>
 #else
   #include <csignal>
+  #include <fcntl.h>
   #include <pwd.h>
   #include <unistd.h>
   #include <sys/wait.h>
@@ -435,13 +441,58 @@ void atomic_rename(const fs::path& from, const fs::path& to) {
     fs::remove(from, rm_ec);   // copy succeeded; best-effort source cleanup
 }
 
+// 1.5.0-dev.12 (A-05): private temp directory. POSIX uses mkdtemp (atomic
+// create + 0700), so a local attacker cannot pre-create/symlink the path;
+// Windows uses an unpredictable name under the per-user %TEMP%.
+fs::path make_temp_dir(std::string_view prefix) {
+    const fs::path base = fs::temp_directory_path();
+#ifdef EZMK_WIN
+    static std::atomic<unsigned long long> seq{0};
+    for (int attempt = 0; attempt < 64; ++attempt) {
+        const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        fs::path p = base / (std::string(prefix) + std::to_string(now) + "_" +
+                             std::to_string(seq.fetch_add(1, std::memory_order_relaxed)));
+        std::error_code ec;
+        if (fs::create_directory(p, ec) && !ec) return p;
+    }
+    throw std::runtime_error("failed to create a private temp directory under " +
+                             base.string());
+#else
+    std::string tmpl = (base / (std::string(prefix) + "XXXXXX")).string();
+    std::vector<char> buf(tmpl.begin(), tmpl.end());
+    buf.push_back('\0');
+    if (::mkdtemp(buf.data()) == nullptr) {
+        throw std::runtime_error("failed to create a private temp directory under " +
+                                 base.string());
+    }
+    return fs::path(buf.data());
+#endif
+}
+
 // 1.4.5: crash-safe text write — same temp → atomic_rename recipe the cache
 // (record.json), compile_commands.json and the .vscode trio already use, lifted
 // into one place for the generated TOML→JSON artifacts (lockfile, repo registry).
 bool atomic_write_text(const fs::path& p, std::string_view content) {
+    // 1.5.0-dev.12 (A-12): unique temp name per write. A fixed "<p>.tmp" let
+    // two concurrent ezmk processes truncate each other's temp file and then
+    // publish an interleaved artifact.
+    static std::atomic<unsigned long long> seq{0};
     auto tmp = p;
-    tmp += ".tmp";
+    tmp += ".tmp" + std::to_string(seq.fetch_add(1, std::memory_order_relaxed));
     if (!file_write(tmp, content)) return false;  // file_write creates parent dirs
+    // Best-effort durability before the rename: a crash right after the rename
+    // must not publish a valid-looking but empty artifact.
+#ifdef EZMK_WIN
+    if (int fd = _wopen(tmp.c_str(), _O_RDWR | _O_BINARY); fd >= 0) {
+        _commit(fd);
+        _close(fd);
+    }
+#else
+    if (int fd = ::open(tmp.c_str(), O_RDONLY); fd >= 0) {
+        ::fsync(fd);
+        ::close(fd);
+    }
+#endif
     try {
         atomic_rename(tmp, p);
     } catch (const std::exception&) {
@@ -451,6 +502,16 @@ bool atomic_write_text(const fs::path& p, std::string_view content) {
         fs::remove(tmp, ec);
         return false;
     }
+#ifndef EZMK_WIN
+    // Make the rename itself durable (POSIX): fsync the containing directory.
+    auto parent = p.parent_path();
+    if (!parent.empty()) {
+        if (int dfd = ::open(parent.c_str(), O_RDONLY); dfd >= 0) {
+            ::fsync(dfd);
+            ::close(dfd);
+        }
+    }
+#endif
     return true;
 }
 
@@ -888,11 +949,18 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
                 hdr_name.size() - (slash + 1) <= 100) {
                 hdr_prefix = hdr_name.substr(0, slash);
                 hdr_name = hdr_name.substr(slash + 1);
-                if (hdr_prefix.size() > 155) hdr_prefix.resize(155);  // ustar cap
+                // 1.5.0-dev.12 (A-11): never truncate silently — a truncated
+                // prefix/name extracts under the wrong path (and diverges from
+                // the zip writer). Fail with an actionable message instead.
+                if (hdr_prefix.size() > 155) {
+                    throw std::runtime_error(
+                        "path too long for tar.gz (ustar prefix limit 155): " +
+                        entry.name + " — use --format zip");
+                }
             } else {
-                // A single component longer than 100 chars cannot be split —
-                // truncate (documented ustar limitation).
-                hdr_name.resize(100);
+                throw std::runtime_error(
+                    "path too long for tar.gz (ustar name limit 100): " +
+                    entry.name + " — use --format zip");
             }
         }
 
@@ -1005,7 +1073,11 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
 
     // Atomic write
     fs::create_directories(output_file.parent_path());
-    auto tmp = output_file.string() + ".tmp";
+    // 1.5.0-dev.12 (A-12): unique temp name — two concurrent packs of the same
+    // output used to write the same "<archive>.tmp".
+    static std::atomic<unsigned long long> pack_seq{0};
+    auto tmp = output_file.string() + ".tmp" +
+               std::to_string(pack_seq.fetch_add(1, std::memory_order_relaxed));
     {
         // 1.5.0: pass the path through std::filesystem::path so libstdc++ uses
         // the wide-character open on Windows — a narrow std::ofstream failed
@@ -1731,13 +1803,25 @@ ProcResult run_command(const std::string& cmd, int timeout_sec) {
 static std::vector<wchar_t> build_env_block(const std::map<std::string, std::string>& extra) {
     std::vector<wchar_t> block;
     if (extra.empty()) return block;
+    // 1.5.0-dev.12 (A-06): Windows environment variable names are
+    // case-insensitive. The old case-sensitive lookup left the inherited
+    // "PATH" in the block while appending vcvars' "Path", so the child could
+    // resolve the stale value (cl/link then missed the vcvars tools).
+    auto fold = [](std::string s) {
+        for (char& c : s) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        return s;
+    };
+    std::set<std::string> extra_keys;
+    for (const auto& kv : extra) extra_keys.insert(fold(kv.first));
     wchar_t* env = GetEnvironmentStringsW();
     if (env) {
         for (wchar_t* p = env; *p; p += wcslen(p) + 1) {
             std::string entry = wide_to_utf8(p);
             auto eq = entry.find('=');
             std::string key = (eq == std::string::npos) ? entry : entry.substr(0, eq);
-            if (extra.find(key) == extra.end()) {
+            if (extra_keys.find(fold(key)) == extra_keys.end()) {
                 block.insert(block.end(), p, p + wcslen(p));
                 block.push_back(L'\0');
             }
@@ -1976,6 +2060,7 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
         if (opts.timeout_sec > 0) setpgid(pid, pid);
 
         int status = 0;
+        bool reaped = false;
         if (opts.timeout_sec > 0) {
             // Poll waitpid (WNOHANG) against a deadline; SIGKILL on timeout.
             auto deadline = std::chrono::steady_clock::now()
@@ -1983,13 +2068,21 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
             bool timed_out = false;
             for (;;) {
                 pid_t r = waitpid(pid, &status, WNOHANG);
-                if (r == pid) break;               // reaped normally
-                if (r < 0) break;                  // waitpid error
+                if (r == pid) { reaped = true; break; }
+                if (r < 0) {
+                    // 1.5.0-dev.12 (A-07): a signal (EINTR) must retry, not
+                    // silently report exit code 0. Any other failure means the
+                    // status is unknown — fail the command.
+                    if (errno == EINTR) continue;
+                    result.exit_code = 1;
+                    break;
+                }
                 if (std::chrono::steady_clock::now() >= deadline) {
                     // 1.4.2 F-37: kill the whole process group (falls back to
                     // the shell itself if the group is already gone).
                     if (kill(-pid, SIGKILL) != 0) kill(pid, SIGKILL);
-                    waitpid(pid, &status, 0);      // reap the zombie
+                    pid_t kr;
+                    do { kr = waitpid(pid, &status, 0); } while (kr < 0 && errno == EINTR);
                     result.exit_code = 1;
                     result.timed_out = true;
                     timed_out = true;
@@ -1997,15 +2090,22 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
-            if (!timed_out && WIFEXITED(status)) {
-                result.exit_code = WEXITSTATUS(status);
-            } else if (!timed_out) {
-                result.exit_code = status;
+            if (!timed_out && reaped) {
+                if (WIFEXITED(status)) result.exit_code = WEXITSTATUS(status);
+                else result.exit_code = status;
             }
         } else {
-            waitpid(pid, &status, 0);
-            if (WIFEXITED(status)) result.exit_code = WEXITSTATUS(status);
-            else result.exit_code = status;
+            // 1.5.0-dev.12 (A-07): same EINTR handling on the blocking path;
+            // the old code ignored the return value and read a zero status.
+            pid_t r;
+            do { r = waitpid(pid, &status, 0); } while (r < 0 && errno == EINTR);
+            if (r < 0) {
+                result.exit_code = 1;
+            } else if (WIFEXITED(status)) {
+                result.exit_code = WEXITSTATUS(status);
+            } else {
+                result.exit_code = status;
+            }
         }
     } else {
         // fork failed
@@ -2093,7 +2193,12 @@ bool git_clone(const std::string& url, const fs::path& dest,
     cmd << " " << quote_cli_arg(url) << " " << quote_cli_arg(dest.string());
     const auto& net = config::runtime_config().settings;
     RunOptions net_opts;
-    if (net.network_timeout > 0) net_opts.timeout_sec = net.network_timeout;
+    // 1.5.0-dev.12 (A-22): git has no built-in timeout; a stalled TCP
+    // connection or credential prompt could hang a CI job forever. Use the
+    // configured timeout, else a conservative 300 s cap.
+    net_opts.timeout_sec = net.network_timeout > 0 ? net.network_timeout : 300;
+    // Never prompt for credentials when there is no terminal to answer.
+    if (!stderr_is_tty()) net_opts.env["GIT_TERMINAL_PROMPT"] = "0";
     if (!net.proxy.empty()) {
         net_opts.env["HTTPS_PROXY"] = net.proxy;
         net_opts.env["HTTP_PROXY"] = net.proxy;
@@ -2117,7 +2222,12 @@ bool git_pull(const fs::path& repo_dir, std::string_view branch) {
         << " pull origin " << quote_cli_arg(branch);
     const auto& net = config::runtime_config().settings;
     RunOptions net_opts;
-    if (net.network_timeout > 0) net_opts.timeout_sec = net.network_timeout;
+    // 1.5.0-dev.12 (A-22): git has no built-in timeout; a stalled TCP
+    // connection or credential prompt could hang a CI job forever. Use the
+    // configured timeout, else a conservative 300 s cap.
+    net_opts.timeout_sec = net.network_timeout > 0 ? net.network_timeout : 300;
+    // Never prompt for credentials when there is no terminal to answer.
+    if (!stderr_is_tty()) net_opts.env["GIT_TERMINAL_PROMPT"] = "0";
     if (!net.proxy.empty()) {
         net_opts.env["HTTPS_PROXY"] = net.proxy;
         net_opts.env["HTTP_PROXY"] = net.proxy;

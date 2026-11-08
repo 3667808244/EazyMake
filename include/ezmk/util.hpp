@@ -114,6 +114,11 @@ void copy_recursive(const fs::path& from, const fs::path& to);
 // ezmk::fatal_error if both fail, so callers must NOT report success.
 void atomic_rename(const fs::path& from, const fs::path& to);
 
+// 1.5.0-dev.12 (A-05): create a private temporary directory (mkdtemp → 0700 on
+// POSIX) instead of a predictable name under the shared temp dir. Throws on
+// failure. The caller owns the directory and must remove it.
+fs::path make_temp_dir(std::string_view prefix);
+
 // 1.4.5: crash-safe write of a GENERATED text artifact (temp file + atomic_rename,
 // binary mode so '\n' is not translated to CRLF on Windows). A half-written
 // lockfile / registry is worse than a missing one: the reader would accept the

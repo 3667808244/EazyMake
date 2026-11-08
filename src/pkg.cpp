@@ -1761,13 +1761,9 @@ static InstallOutcome install_git_source(const std::string& source_url,
         util::fatal(ezmk::i18n::I18nKey::pkg_git_not_available);
     }
 
-    // Unique temp clone dir (PID + high-res counter, like the extract staging).
-    static std::atomic<uint64_t> counter{0};
-    auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    fs::path clone_dir = fs::temp_directory_path() /
-        ("ezmk_git_" + std::to_string(now_us) + "_" +
-         std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
+    // 1.5.0-dev.12 (A-05): private temp clone dir (mkdtemp/0700 on POSIX)
+    // instead of a predictable name under the shared temp directory.
+    fs::path clone_dir = util::make_temp_dir("ezmk_git_");
 
     util::info(ezmk::i18n::I18nKey::pkg_git_cloning, {{"url", source_url}});
 
@@ -2051,7 +2047,10 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     struct TempDownloadGuard {
         std::vector<fs::path> paths;
         ~TempDownloadGuard() {
-            for (auto& p : paths) { std::error_code ec; fs::remove(p, ec); }
+            // 1.5.0-dev.12 (A-05): downloads now live in their own private
+            // directory, so remove the whole tree (remove_all also handles a
+            // plain file from older call sites).
+            for (auto& p : paths) { std::error_code ec; fs::remove_all(p, ec); }
         }
     } temp_download_guard;
 
@@ -2072,7 +2071,10 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
             return InstallOutcome::Cancelled;
         }
         // Download to temp
-        fs::path tmp_dir = fs::temp_directory_path();
+        // 1.5.0-dev.12 (A-05): private download directory (0700) — the file
+        // name inside is predictable, the directory is not.
+        fs::path tmp_dir = util::make_temp_dir("ezmk_dl_");
+        temp_download_guard.paths.push_back(tmp_dir);
         // 1.4.6 Q-06: never trust the URL's last segment as a path. On Windows a
         // segment containing backslash-separated dots escaped the temp dir, and a
         // fixed basename collided between concurrent installs and stale runs.
@@ -2256,14 +2258,8 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         }
     }
 
-    // Extract to temp staging area — use PID + high-res counter to avoid collisions
-    static std::atomic<uint64_t> counter{0};
-    auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    fs::path stage = fs::temp_directory_path() /
-        ("ezmk_pkg_" + std::to_string(now_us) + "_" +
-         std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
-    fs::create_directories(stage);
+    // 1.5.0-dev.12 (A-05): private staging dir (mkdtemp/0700 on POSIX).
+    fs::path stage = util::make_temp_dir("ezmk_pkg_");
 
     // 1.5.0: the installed package name is needed for the provenance marker
     // AFTER the stage is deleted. It used to be re-read from the staged

@@ -18,7 +18,7 @@
 | [1.5.0-dev.9](1.5.0-dev.9.md) | 编译器/连接器输出策略 | `[settings].compiler_output` + `[settings].linker_output`（always / warning / error）+ 串行/并行诊断输出 | dev.8 | ✅ 实现收口（1226/7058；CI 42363070935 绿；待 pre.2） |
 | [1.5.0-dev.10](1.5.0-dev.10.md) | 工具链/缓存/网络/安装前缀配置 | `[settings].cxx` / `.cc` / `.linker` / `.use_cache` / `.network_timeout` / `.retries` / `.proxy` / `.install_prefix` | dev.9 | ✅ 实现收口（1227/7077；CI 42447385973 绿；待 pre.2） |
 | [1.5.0-dev.11](1.5.0-dev.11.md) | 首次无配置生成默认模板 | 无配置首次运行生成全注释 `config.toml`；不覆盖、不阻断 | dev.10 | ✅ 实现收口（1228/7095；CI 42449910408 绿；待 pre.2） |
-| [1.5.0-dev.12](1.5.0-dev.12.md) | 全量代码审核修复（第二轮） | 阶段零 31 项已落地（P1×6 / P2×16 / P3×9）；阶段一 Lua 内存/墙钟上限、JSON 长跳安全、repo sha256 策略；剩余递归 watch、linker/C 缓存、MSVC env、pack/tar、TOML 严格、i18n 清理等 | dev.11 | 🚧 执行中（阶段零/一 ✅：单元 1115/6359、离线集成 122/785；阶段二~五待执行） |
+| [1.5.0-dev.12](1.5.0-dev.12.md) | 全量代码审核修复（第二轮） | 阶段零 31 项 + 阶段一 Lua 资源上限/JSON 长跳/repo sha256 + 阶段二（临时目录/原子写/waitpid/pack/git 网络）已落地；剩余递归 watch、linker/C 缓存、TOML 严格、i18n 清理等 | dev.11 | 🚧 执行中（阶段零/一/二部分 ✅：单元 1116/6362、离线集成 122/785；A-03 与阶段三~五待执行） |
 
 > **全量源代码审查**（pre.1 输入）：[1.5.0-pre.1-audit.md](1.5.0-pre.1-audit.md) —— 47 项（P1 4 / P2 23 / P3 20，无 P0）。
 

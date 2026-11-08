@@ -1720,3 +1720,22 @@ TEST_CASE("is_path_within: containment and escapes (1.4.2 F-23)", "[util][1.4.2]
 #endif
 }
 
+// 1.5.0-dev.12 (A-05): private, atomically-created temp directories.
+TEST_CASE("make_temp_dir: creates unique private directories (1.5.0-dev.12)",
+          "[util][1.5.0-dev.12]") {
+    auto a = make_temp_dir("ezmk_test_tmp_");
+    auto b = make_temp_dir("ezmk_test_tmp_");
+    CHECK(fs::is_directory(a));
+    CHECK(fs::is_directory(b));
+    CHECK(a != b);
+#ifndef _WIN32
+    const auto perm = fs::status(a).permissions();
+    CHECK((perm & fs::perms::owner_all) == fs::perms::owner_all);
+    CHECK((perm & fs::perms::group_all) == fs::perms::none);
+    CHECK((perm & fs::perms::others_all) == fs::perms::none);
+#endif
+    fs::remove_all(a);
+    fs::remove_all(b);
+}
+
+
