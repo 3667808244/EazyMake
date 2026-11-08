@@ -187,6 +187,7 @@ EZMK_I18N_KEY(pkg_info_none)            // 0.2.3+
 EZMK_I18N_KEY(pkg_info_permissions)     // 0.2.5+
 
 // ---- config errors (0.2.3+) ----
+EZMK_I18N_KEY(config_default_template_written)  // 1.5.0-dev.11
 EZMK_I18N_KEY(config_err_invalid_type)
 EZMK_I18N_KEY(config_err_missing_ver)
 EZMK_I18N_KEY(config_err_invalid_lang)

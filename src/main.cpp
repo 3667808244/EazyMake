@@ -20,6 +20,7 @@
 
 #include <atomic>
 #include <csignal>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -180,6 +181,24 @@ int main(int argc, char** argv) {
         // so it runs after the config load.
         ezmk::config::load_runtime_config(argc, argv);
         ezmk::i18n::init();
+        // 1.5.0-dev.11: first run with no config at all writes an all-commented
+        // user template. EZMK_NO_AUTO_CONFIG is an escape hatch for scripts/CI;
+        // --no-config / --config and existing config files are never touched.
+        {
+            const auto& rc = ezmk::config::runtime_config();
+            if (!rc.config_disabled && !rc.explicit_config &&
+                rc.global_config_file.empty() && rc.user_config_file.empty() &&
+                !std::getenv("EZMK_NO_AUTO_CONFIG")) {
+                std::string err;
+                if (ezmk::config::generate_default_user_config(&err)) {
+                    ezmk::util::info(
+                        ezmk::i18n::I18nKey::config_default_template_written,
+                        {{"path", ezmk::config::default_user_config_file().string()}});
+                } else if (!err.empty()) {
+                    ezmk::util::warn("could not write default user config: " + err);
+                }
+            }
+        }
         {
             // 1.5.0-dev.3: apply [settings].color_mode; --color (parsed later)
             // still wins.

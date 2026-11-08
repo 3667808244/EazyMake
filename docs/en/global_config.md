@@ -2,7 +2,7 @@
 
 > Project-level config lives in [project_config.md](project_config.md); the user level is documented in [user_config.md](user_config.md).
 
-The global file applies to every user on the machine and has the lowest precedence. It is normally maintained by an administrator; users can override its `[settings]` keys in their user-level file.
+The global file applies to every user on the machine and has the lowest precedence. It is normally maintained by an administrator; users can override its `[settings]` keys in their user-level file. EazyMake never auto-creates this global file; the first-run template is written to the user level only.
 
 ## Location
 

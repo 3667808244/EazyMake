@@ -250,12 +250,20 @@ struct RuntimeConfig {
     fs::path global_config_file; // empty = not present
     fs::path user_config_file;   // empty = not present
     bool loaded = false;
+    bool config_disabled = false;   // --no-config
+    bool explicit_config = false;   // --config <file>
     std::string language_override; // 1.5.0-dev.3: --lang (highest priority)
 };
 
 // Merged runtime configuration. Before load_runtime_config() runs (e.g. in unit
 // tests that call helpers directly) this returns the built-in defaults.
 const RuntimeConfig& runtime_config();
+
+// 1.5.0-dev.11: write an all-commented user config template when no config
+// exists. Returns true when a file was created; false when it already exists
+// or nothing was written. On failure, returns false and fills error.
+bool generate_default_user_config(std::string* error = nullptr);
+fs::path default_user_config_file();
 
 // Load the system + user config.toml files. Idempotent. Scans --config <file>
 // and --no-config, then reads the files. Throws std::runtime_error on malformed

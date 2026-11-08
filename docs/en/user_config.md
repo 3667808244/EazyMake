@@ -14,6 +14,8 @@ The user-level file affects only the current user and is the middle layer of `gl
 
 `ezmk --config <file>` replaces the user-level file for one invocation (the global file still applies); `--no-config` skips both levels.
 
+On the first run where neither the global nor the user file exists, EazyMake writes an **all-commented template** to the user location above. It never overwrites an existing file, never writes the global location, and does not change any default because every key is commented out. `--no-config`, an explicit `--config`, an existing global/user file, or `EZMK_NO_AUTO_CONFIG=1` disables this. If the template cannot be written, EazyMake warns and continues.
+
 ## Merge order
 
 Lowest to highest:

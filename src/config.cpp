@@ -9,6 +9,9 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#ifndef EZMK_WIN
+#include <sys/stat.h>
+#endif
 
 // toml++ header-only (exceptions enabled by default: parse_file returns table directly)
 #include "toml.hpp"
@@ -1830,6 +1833,8 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
 
     RuntimeConfig rc;  // built-in defaults
     if (explicit_language) rc.language_override = *explicit_language;
+    rc.config_disabled = no_config;
+    rc.explicit_config = explicit_config.has_value();
     if (no_config) {
         rc.loaded = true;
         g_runtime_config = std::move(rc);
@@ -1872,7 +1877,72 @@ void load_runtime_config_impl(int argc, const char* const* argv) {
     }
 }
 
+static const char* kDefaultUserConfigTemplate = R"EZMK(# EazyMake user configuration
+# Auto-generated on first run. Uncomment a key to override a built-in default.
+# Docs: https://github.com/3667808244/EazyMake/blob/main/docs/en/user_config.md
+
+[settings]
+# natural_language = "auto"
+# color_mode = "auto"
+# log_level = "info"
+# compiler_output = "error"
+# linker_output = "error"
+# cxx = ""
+# cc = ""
+# linker = ""
+# use_cache = true
+# network_timeout = 0
+# retries = 0
+# proxy = ""
+# install_prefix = ""
+# default_jobs = 0
+# test_timeout = 30
+# watch_debounce_ms = 300
+# pack_format = "tar.gz"
+# auto_install_deps = true
+# auto_pack = false
+
+[base_dir]
+# installed_packages = "~/.local/ezmk/pkg"
+# repo_cache = "~/.local/ezmk/repo"
+# examples = "~/.local/ezmk/examples"
+# logs = "~/.local/ezmk/logs"
+)EZMK";
+
 } // anonymous namespace
+
+fs::path default_user_config_file() {
+    return default_user_config_dir() / "config.toml";
+}
+
+bool generate_default_user_config(std::string* error) {
+    const fs::path file = default_user_config_file();
+    const fs::path dir = file.parent_path();
+    if (util::file_exists(file)) return false;
+
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (ec) {
+        if (error) *error = "cannot create " + dir.string() + ": " + ec.message();
+        return false;
+    }
+    fs::path tmp = file;
+    tmp += ".tmp";
+    if (!util::file_write(tmp, kDefaultUserConfigTemplate)) {
+        if (error) *error = "cannot write " + tmp.string();
+        return false;
+    }
+#ifndef EZMK_WIN
+    ::chmod(tmp.c_str(), 0600);
+#endif
+    fs::rename(tmp, file, ec);
+    if (ec) {
+        fs::remove(tmp, ec);
+        if (error) *error = "cannot rename " + file.string();
+        return false;
+    }
+    return true;
+}
 
 const RuntimeConfig& runtime_config() { return g_runtime_config; }
 

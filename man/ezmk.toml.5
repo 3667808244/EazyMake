@@ -537,7 +537,10 @@ user
 .BR config.toml ,
 project
 .BR ezmk.toml ,
-then command\-line/environment overrides. Relative
+then command\-line/environment overrides. On the first run with no global or
+user file and no \-\-config/\-\-no\-config, a fully commented user template is
+created in the user config directory; it is never overwritten, never written to
+the global directory, and changes no defaults. Relative
 .B [base_dir]
 paths resolve against the directory containing the config file; a leading
 .B \(ti

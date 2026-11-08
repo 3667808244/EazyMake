@@ -234,6 +234,7 @@
     "pkg_info_artifacts": "  Artifacts",
     "pkg_info_none": " (none)",
     "pkg_info_permissions": "  Permissions",
+    "config_default_template_written": "generated default user config: {path} (edit it to override defaults)",
     "config_err_invalid_type": "invalid project type '{type}'; expected one of: executable, static, shared, utils",
     "config_err_missing_ver": "[project] section missing required field 'version'. Add: version = \"0.1.0\"",
     "config_err_invalid_lang": "invalid language format: '{lang}'. Expected format: <Lang><Version>, e.g. C++17, C11; range syntax supported: >=C++11 (at least) or C++11..C++17 (min..max)",

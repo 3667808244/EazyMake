@@ -24,11 +24,22 @@
 
 **v1.5.0 扩展（1.5.0-pre.1）：**
 
-- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、编译器/连接器输出策略、工具链路径、缓存/网络/安装前缀、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
+- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、编译器/连接器输出策略、工具链路径、缓存/网络/安装前缀、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；首次无配置运行时自动生成全注释用户模板；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
 - **CLI：** `--config <file>` / `--no-config` / `--lang <tag>`；`--color` 的 `on` / `off` / `16colors` / `256colors` / `truecolor` 别名。
 - **环境：** `EZMK_GLOBAL_CONFIG_DIR` / `EZMK_USER_CONFIG_DIR` / `XDG_CONFIG_HOME` 的配置目录解析。
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
+
+## 1.5.0-dev.11 (2026-11-08) — 首次无配置生成默认模板
+
+> **状态：实现完成（2026-11-08），未发布。** 无配置首次运行生成全注释用户模板；单元 **1107 / 6314 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1228 / 7095 / 8 跳过 / 0 失败**。
+
+### 新增
+
+- **首次运行模板**：用户级与全局级配置都不存在、且没有 `--config` / `--no-config` 时，在用户配置目录生成 `config.toml`。
+- 模板所有键均为注释，生成前后配置解析结果一致；不覆盖已有文件、不写全局目录、不冻结默认值。
+- 写入失败只告警，不阻断命令；原子写，POSIX 尽量 0600。
+- `EZMK_NO_AUTO_CONFIG=1` 可显式禁止生成（测试/CI 使用）。
 
 ## 1.5.0-dev.10 (2026-11-08) — 工具链、缓存、网络与安装前缀配置
 

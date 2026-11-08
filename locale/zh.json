@@ -234,6 +234,7 @@
     "pkg_info_artifacts": "  产物",
     "pkg_info_none": " (无)",
     "pkg_info_permissions": "  权限",
+    "config_default_template_written": "已生成默认用户配置：{path}（可编辑以覆盖默认值）",
     "config_err_invalid_type": "无效的项目类型 '{type}'；期望: executable, static, shared, utils",
     "config_err_missing_ver": "[project] 节缺少必填字段 'version'。请添加: version = \"0.1.0\"",
     "config_err_invalid_lang": "无效的语言格式: '{lang}'。期望格式: <语言><版本>, 如 C++17, C11；支持区间语法: >=C++11（最低要求）或 C++11..C++17（min..max）",

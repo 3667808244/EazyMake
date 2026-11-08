@@ -101,6 +101,8 @@ ENV_INTERNAL = {
     "LANG": "system locale detection",
     "LC_ALL": "system locale detection",
     "EZMK_TEST_BIN": "integration-test harness only",
+    "EZMK_NO_AUTO_CONFIG": "first-run template escape hatch for scripts/CI",
+
 }
 # Variables read through a helper/constant rather than a literal getenv("...")
 # in src/*.cpp; still documented in ezmk(1).

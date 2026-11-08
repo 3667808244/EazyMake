@@ -288,6 +288,8 @@ if $BUILD_TEST; then
             EZMK_TEST_BIN="$EZMK_TEST_BIN.exe"
         fi
         export EZMK_TEST_BIN
+        # 1.5.0-dev.11: do not let the integration suite write a real user config.
+        export EZMK_NO_AUTO_CONFIG=1
 
         echo ""
         # Propagate the test-suite exit code so `build.sh test*` can gate CI:

@@ -3404,3 +3404,40 @@ TEST_CASE("pack: configured name never deletes an existing source dir",
 
 
 
+
+// 1.5.0-dev.11: first-run default user config template
+TEST_CASE("default user config template is generated once",
+          "[config][1.5.0-dev.11]") {
+    auto root = make_runtime_cfg_root("defaulttemplate");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+    EnvScope g("EZMK_GLOBAL_CONFIG_DIR", (root / "global").string());
+    fs::remove_all(udir);
+
+    const fs::path file = ezmk::config::default_user_config_file();
+    REQUIRE_FALSE(fs::exists(file));
+
+    std::string err;
+    REQUIRE(ezmk::config::generate_default_user_config(&err));
+    REQUIRE(err.empty());
+    REQUIRE(fs::exists(file));
+
+    const std::string content = ezmk::util::file_read(file);
+    REQUIRE(content.find("# EazyMake user configuration") != std::string::npos);
+    REQUIRE(content.find("\ncxx =") == std::string::npos);
+    REQUIRE(content.find("\n# cxx =") != std::string::npos);
+    REQUIRE(content.find("[settings]") != std::string::npos);
+    REQUIRE(content.find("[base_dir]") != std::string::npos);
+
+    // Second call must not overwrite or fail.
+    REQUIRE_FALSE(ezmk::config::generate_default_user_config(&err));
+
+    ezmk::config::reset_runtime_config_for_test();
+    const char* av[] = {"ezmk", "version"};
+    ezmk::config::load_runtime_config(2, av);
+    REQUIRE(ezmk::config::runtime_config().settings.use_cache);
+    REQUIRE(ezmk::config::runtime_config().settings.network_timeout == 0);
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
