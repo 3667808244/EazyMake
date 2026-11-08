@@ -127,6 +127,8 @@ EZMK_I18N_KEY(pkg_info_precompiled_variants)        // 1.2.0-dev.10
 EZMK_I18N_KEY(pkg_install_from_dir)       // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_sha256_skipped_dir)     // 1.2.0-dev.7
 EZMK_I18N_KEY(pkg_sha256_sidecar)         // 1.4.0-dev.5: verifying via <archive>.sha256 sidecar
+EZMK_I18N_KEY(pkg_repo_missing_sha256)    // 1.5.0-dev.12: repo index has no sha256 (warn + confirm)
+EZMK_I18N_KEY(pkg_repo_missing_sha256_locked) // 1.5.0-dev.12: --locked refuses an unverifiable repo package
 EZMK_I18N_KEY(pkg_git_cloning)            // 1.4.1: cloning a git-source package
 EZMK_I18N_KEY(pkg_git_not_available)      // 1.4.1: git binary missing
 EZMK_I18N_KEY(pkg_git_sha256_skipped)     // 1.4.1: --sha256 given for a git source

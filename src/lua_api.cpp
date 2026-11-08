@@ -11,6 +11,7 @@
 
 #include <cassert>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -94,15 +95,72 @@ static constexpr int kInstructionBudget = 100000000;   // ~1e8 instructions per 
 static constexpr int kInstructionHookInterval = 1000000;
 static uint64_t g_instruction_budget_remaining = 0;
 static bool g_instruction_budget_active = false;
-static constexpr int kRunCommandTimeoutSec = 300;      // default timeout for ezmk.run / run_capture
+static constexpr int kRunCommandTimeoutSec = 300;      // per-command timeout for ezmk.run / run_capture
 static constexpr int kJsonMaxDepth = 200;              // json_encode nesting cap
 // Initial Lua-stack slots reserved at init() (see init() for why): must stay
 // comfortably above kJsonMaxDepth * (slots per level + margin) so the json
 // converters never force a mid-recursion stack reallocation.
 static constexpr int kLuaStackSlots = 4096;
 
+// 1.5.0-dev.12 (A-01): per-script resource budgets beyond the instruction
+// count. The instruction hook cannot see a single huge C-level allocation
+// (`string.rep("x", 1e9)`) or wall-clock time spent inside a C function or a
+// child process. The allocator enforces a memory ceiling (Lua turns a NULL
+// return into LUA_ERRMEM) and the hook checks an absolute deadline; ezmk.run /
+// run_capture additionally shrink their own timeout to the remaining budget.
+static constexpr size_t kLuaMemoryBudgetBytes = size_t(512) * 1024 * 1024; // 512 MiB
+static constexpr int kScriptWallClockBudgetSec = 900;  // 15 minutes per script
+static size_t g_lua_mem_used = 0;      // bytes currently held by Lua
+static size_t g_lua_mem_limit = 0;     // 0 = unlimited (outside a sandboxed script)
+static bool g_lua_mem_limit_hit = false;
+static bool g_wall_clock_active = false;
+static std::chrono::steady_clock::time_point g_script_deadline;
+
+// 1.5.0-dev.12 (A-01): allocator that tracks Lua's live bytes and refuses
+// allocations past the per-script ceiling. Lua requires an allocator to return
+// NULL (never raise); NULL becomes LUA_ERRMEM in the script.
+static void* lua_bounded_alloc(void* /*ud*/, void* ptr, size_t osize,
+                               size_t nsize) {
+    const size_t old_size = ptr ? osize : 0;
+    if (nsize == 0) {
+        std::free(ptr);
+        if (old_size > g_lua_mem_used) g_lua_mem_used = 0;
+        else g_lua_mem_used -= old_size;
+        return nullptr;
+    }
+    if (g_lua_mem_limit != 0 && nsize > old_size) {
+        const size_t extra = nsize - old_size;
+        if (g_lua_mem_used > g_lua_mem_limit ||
+            extra > g_lua_mem_limit - g_lua_mem_used) {
+            g_lua_mem_limit_hit = true;
+            return nullptr;
+        }
+    }
+    void* np = std::realloc(ptr, nsize);
+    if (!np) return nullptr;
+    if (old_size > g_lua_mem_used) g_lua_mem_used = 0;
+    else g_lua_mem_used -= old_size;
+    g_lua_mem_used += nsize;
+    return np;
+}
+
 static void instruction_budget_hook(lua_State* L, lua_Debug*) {
     if (!g_instruction_budget_active) return;
+    // 1.5.0-dev.12 (A-01): a failed allocation normally raises LUA_ERRMEM by
+    // itself; if a C function ignored the failure, fail on the next tick.
+    if (g_lua_mem_limit_hit) {
+        g_instruction_budget_remaining = 0;
+        lua_sethook(L, nullptr, 0, 0);
+        luaL_error(L, "script exceeded the memory budget (%d MiB)",
+                   static_cast<int>(kLuaMemoryBudgetBytes >> 20));
+    }
+    if (g_wall_clock_active &&
+        std::chrono::steady_clock::now() >= g_script_deadline) {
+        g_instruction_budget_remaining = 0;
+        lua_sethook(L, nullptr, 0, 0);
+        luaL_error(L, "script exceeded the wall-clock budget (%d s)",
+                   kScriptWallClockBudgetSec);
+    }
     if (g_instruction_budget_remaining <= kInstructionHookInterval) {
         g_instruction_budget_remaining = 0;
         // Keep the guard active: a coroutine can catch the error and resume
@@ -116,6 +174,18 @@ static void instruction_budget_hook(lua_State* L, lua_Debug*) {
     g_instruction_budget_remaining -= kInstructionHookInterval;
 }
 
+// 1.5.0-dev.12 (A-01): seconds left for a child process, capped by the
+// per-command timeout. 0 means the script budget is already exhausted.
+static int script_remaining_seconds(int cap_seconds) {
+    if (!g_wall_clock_active) return cap_seconds;
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= g_script_deadline) return 0;
+    const auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
+        g_script_deadline - now).count();
+    if (remaining <= 0) return 0;
+    return (remaining < cap_seconds) ? static_cast<int>(remaining) : cap_seconds;
+}
+
 // RAII: arm the count hook for one script execution and always disarm on scope
 // exit (success, Lua error, or early return) so the budget can never leak into
 // a later script running on the same state.
@@ -124,12 +194,20 @@ struct InstructionBudgetGuard {
     explicit InstructionBudgetGuard(lua_State* s) : L(s) {
         g_instruction_budget_remaining = kInstructionBudget;
         g_instruction_budget_active = true;
+        g_wall_clock_active = true;
+        g_script_deadline = std::chrono::steady_clock::now() +
+                            std::chrono::seconds(kScriptWallClockBudgetSec);
+        g_lua_mem_limit = kLuaMemoryBudgetBytes;
+        g_lua_mem_limit_hit = false;
         if (L) lua_sethook(L, instruction_budget_hook, LUA_MASKCOUNT,
                            kInstructionHookInterval);
     }
     ~InstructionBudgetGuard() {
         g_instruction_budget_active = false;
         g_instruction_budget_remaining = 0;
+        g_wall_clock_active = false;
+        g_lua_mem_limit = 0;
+        g_lua_mem_limit_hit = false;
         if (L) lua_sethook(L, nullptr, 0, 0);
     }
 };
@@ -437,6 +515,13 @@ void init() {
     if (!g_L) {
         util::fatal(ezmk::i18n::I18nKey::lua_init_failed);
     }
+    // 1.5.0-dev.12 (A-01): route every subsequent Lua allocation through the
+    // tracking/bounded allocator. The state itself was created by the default
+    // allocator; Lua keeps the block sizes, so realloc/free stay compatible.
+    g_lua_mem_used = 0;
+    g_lua_mem_limit = 0;
+    g_lua_mem_limit_hit = false;
+    lua_setallocf(g_L, lua_bounded_alloc, nullptr);
 
     // 1.4.2 F-19: pre-grow the Lua stack. The json <-> Lua converters
     // (lua_to_json / json_to_lua) recurse in C++ while pushing one or two
@@ -861,7 +946,20 @@ static int ezmk_run(lua_State* L) {
 
     // 1.4.2 F-19: subprocesses are bounded by a default timeout so a hung
     // child (or a script that keeps spawning work) cannot hang ezmk forever.
-    auto res = util::run_command(cmd, kRunCommandTimeoutSec);
+    // 1.5.0-dev.12 (A-01): the timeout can never exceed the script's remaining
+    // wall-clock budget.
+    const int timeout = script_remaining_seconds(kRunCommandTimeoutSec);
+    if (timeout <= 0) {
+        lua_createtable(L, 0, 3);
+        lua_pushinteger(L, -1);
+        lua_setfield(L, -2, "exit_code");
+        lua_pushstring(L, "");
+        lua_setfield(L, -2, "stdout");
+        lua_pushstring(L, "script wall-clock budget exhausted");
+        lua_setfield(L, -2, "stderr");
+        return 1;
+    }
+    auto res = util::run_command(cmd, timeout);
 
     lua_createtable(L, 0, 3);
     lua_pushinteger(L, res.exit_code);
@@ -895,9 +993,22 @@ static int ezmk_run_capture(lua_State* L) {
     }
 
     // 1.4.2 F-19: bounded like ezmk.run — see above.
-    auto res = util::run_command(cmd, kRunCommandTimeoutSec);
+    // 1.5.0-dev.12 (A-01/A-02): use the remaining script budget, and prepare
+    // the error message BEFORE raising it. luaL_error/lua_error is a longjmp —
+    // any C++ object still alive (here: the captured stdout/stderr strings,
+    // potentially large) would skip its destructor.
+    const int timeout = script_remaining_seconds(kRunCommandTimeoutSec);
+    if (timeout <= 0) {
+        lua_pushliteral(L, "script wall-clock budget exhausted");
+        return lua_error(L);
+    }
+    auto res = util::run_command(cmd, timeout);
     if (res.exit_code != 0) {
-        luaL_error(L, "command failed (exit %d): %s", res.exit_code, res.err.c_str());
+        lua_pushfstring(L, "command failed (exit %d): %s", res.exit_code,
+                        res.err.c_str());
+        std::string().swap(res.out);
+        std::string().swap(res.err);
+        return lua_error(L);
     }
     lua_pushlstring(L, res.out.data(), res.out.size());
     return 1;
@@ -961,13 +1072,15 @@ static int ezmk_cache_dir(lua_State* L) {
 // 3.7 JSON (reuses nlohmann/json.hpp)
 // ===================================================================
 
-// Recursive helper: push a Lua value from a nlohmann::json object
-static void json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
+// Recursive helper: push a Lua value from a nlohmann::json object.
+// 1.5.0-dev.12 (A-02): returns false on the depth cap instead of calling
+// luaL_error — the caller still owns the parsed json tree, and a longjmp here
+// would skip its destructor (and leave partially built Lua tables behind).
+static bool json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
     // 1.4.11 Q4-22: symmetric with lua_to_json's kJsonMaxDepth cap — without it
     // a deeply nested JSON document overflows the C++ stack during conversion.
     if (depth > kJsonMaxDepth) {
-        luaL_error(L, "json decode: nesting exceeds depth limit (%d)", kJsonMaxDepth);
-        return;
+        return false;
     }
     switch (j.type()) {
     case nlohmann::json::value_t::null:
@@ -992,7 +1105,7 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
         lua_createtable(L, (int)j.size(), 0);
         int idx = 1;
         for (auto& el : j) {
-            json_to_lua(L, el, depth + 1);
+            if (!json_to_lua(L, el, depth + 1)) return false;
             lua_rawseti(L, -2, idx++);
         }
         break;
@@ -1001,7 +1114,7 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
         lua_createtable(L, 0, (int)j.size());
         for (auto& [k, v] : j.items()) {
             lua_pushlstring(L, k.data(), k.size());
-            json_to_lua(L, v, depth + 1);
+            if (!json_to_lua(L, v, depth + 1)) return false;
             lua_settable(L, -3);
         }
         break;
@@ -1010,6 +1123,7 @@ static void json_to_lua(lua_State* L, const nlohmann::json& j, int depth = 0) {
         lua_pushnil(L);
         break;
     }
+    return true;
 }
 
 // Recursive helper: convert a Lua value at the given stack index to nlohmann::json
@@ -1121,36 +1235,69 @@ static int ezmk_json_encode(lua_State* L) {
     check_arg_count(L, 1);
     luaL_checktype(L, 1, LUA_TTABLE);
 
+    // 1.5.0-dev.12 (A-02): collect the error, leave the catch scope (the
+    // exception and the JSON tree are destroyed), then raise. Raising from
+    // inside catch is also avoided because longjmp out of a handler is not
+    // portable across exception ABIs.
+    std::string err;
+    std::string encoded;
     try {
         std::set<const void*> seen;  // 1.4.0-pre.1: 循环表检测（入口建一次，贯穿递归）
         nlohmann::json j = lua_to_json(L, 1, seen, 0);
-        std::string s = j.dump();
-        lua_pushlstring(L, s.data(), s.size());
-        return 1;
+        encoded = j.dump();
     } catch (const std::exception& e) {
-        luaL_error(L, "json encode error: %s", e.what());
-        return 0;
+        err = e.what();
     }
+    if (!err.empty()) {
+        lua_pushfstring(L, "json encode error: %s", err.c_str());
+        std::string().swap(err);
+        std::string().swap(encoded);
+        return lua_error(L);
+    }
+    lua_pushlstring(L, encoded.data(), encoded.size());
+    return 1;
 }
 
 static int ezmk_json_decode(lua_State* L) {
     check_arg_count(L, 1);
     const char* s = luaL_checkstring(L, 1);
 
+    bool ok = false;
+    std::string err;
     try {
-        nlohmann::json j = nlohmann::json::parse(s);
-        json_to_lua(L, j);
-        return 1;
+        // 1.5.0-dev.12 (A-02): keep the json tree in an inner scope so it is
+        // destroyed before the error is raised below.
+        {
+            nlohmann::json j = nlohmann::json::parse(s);
+            ok = json_to_lua(L, j);
+        }
     } catch (const std::exception& e) {
-        luaL_error(L, "json decode error: %s", e.what());
-        return 0;
+        err = e.what();
     }
+    if (!err.empty()) {
+        lua_pushfstring(L, "json decode error: %s", err.c_str());
+        std::string().swap(err);
+        return lua_error(L);
+    }
+    if (!ok) {
+        lua_pushfstring(L, "json decode: nesting exceeds depth limit (%d)",
+                        kJsonMaxDepth);
+        return lua_error(L);
+    }
+    return 1;
 }
 
 // ===================================================================
 // API registration table
 // ===================================================================
 
+// NOTE (1.5.0-dev.12, A-02): a global try/catch thunk around every API
+// function looks attractive but is NOT usable here: on MinGW, longjmp out of
+// a C++ catch (luaL_error / lua_error) unwinds through the thunk and is
+// delivered as a forced-unwind exception to its catch(...), turning every Lua
+// argument/nesting error into a useless "internal error". Lua errors are
+// therefore raised directly; functions that can throw catch the C++ exception
+// first, destroy their C++ objects, and only then call lua_error.
 static const luaL_Reg ezmk_api[] = {
     // 3.1 Project info
     {"project_root",   ezmk_project_root},

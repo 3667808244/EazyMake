@@ -69,6 +69,8 @@
     "pkg_install_from_dir": "从目录安装包 {dir}",
     "pkg_sha256_skipped_dir": "SHA-256 校验已跳过 — 从目录安装的包无归档可校验",
     "pkg_sha256_sidecar": "正在通过 .sha256 边车校验（{file}）",
+    "pkg_repo_missing_sha256": "仓库 '{repo}' 中的包 '{pkg}' 在 index.toml 中没有 sha256，无法校验完整性（可用 --sha256 固定哈希）",
+    "pkg_repo_missing_sha256_locked": "仓库 '{repo}' 中的包 '{pkg}' 在 index.toml 中没有 sha256，--locked 无法校验",
     "pkg_git_cloning": "正在克隆 git 仓库 {url} ...",
     "pkg_git_not_available": "git 不可用。请安装 git 并将其加入 PATH。",
     "pkg_git_sha256_skipped": "SHA-256 校验已跳过 — 从 git 仓库安装的包以 commit SHA 为指纹",

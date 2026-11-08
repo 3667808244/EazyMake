@@ -1794,6 +1794,36 @@ end
     REQUIRE(run_script(L, script, {}) == 1);
 }
 
+
+// 1.5.0-dev.12 (A-01): the instruction hook cannot see a single huge C-level
+// allocation, so the tracking allocator enforces a 512 MiB per-script ceiling.
+TEST_CASE("run_script: oversized Lua allocation stopped by memory budget",
+          "[lua][script][1.5.0-dev.12]") {
+    init();
+    lua_State* L = state();
+    REQUIRE(L != nullptr);
+    register_api(L, fs::current_path());
+
+    TempDir tmp;
+    auto script = write_lua_script(tmp.path, "memory_bomb", R"(
+function run(args)
+    local s = string.rep("x", 600 * 1024 * 1024)
+    return #s == 0 and 1 or 0
+end
+)");
+    // LUA_ERRMEM from the bounded allocator instead of a 600 MiB allocation.
+    REQUIRE(run_script(L, script, {}) == 1);
+
+    // The ceiling is per-script — the next script allocates normally.
+    auto ok = write_lua_script(tmp.path, "after_mem_bomb", R"(
+function run(args)
+    local s = string.rep("y", 1024 * 1024)
+    return #s > 0 and 0 or 1
+end
+)");
+    REQUIRE(run_script(L, ok, {}) == 0);
+}
+
 TEST_CASE("run_script: budget hook does not leak into the next script (F-19)", "[lua][script][1.4.2]") {
     init();  // idempotent — safe even in a filtered run
     lua_State* L = state();

@@ -2061,6 +2061,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // reinstall can verify the archive it installs from.
     std::string prov_kind;    // "url" / "local" / "repo"
     std::string prov_source;  // URL, local path or repo name
+    bool source_is_repo = false;  // 1.5.0-dev.12 (A-04): repo index hash policy
 
     if (is_url) {
         prov_kind = "url";
@@ -2133,6 +2134,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
             archive_path = search_result.archive_path;
             prov_kind = "repo";
             prov_source = search_result.repo_name;
+            source_is_repo = true;
             // Use sha256 from index.toml if user didn't provide one explicitly.
             // expected_sha256 is a string_view param — bind it to a local copy
             // (repo_sha) that outlives this block: search_result dies at the end
@@ -2168,6 +2170,26 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         }
     }
 
+    // 1.5.0-dev.12 (A-04): a repo package whose index.toml has no sha256
+    // cannot be verified. Fail hard under --locked (the lockfile promises
+    // integrity); otherwise warn and require confirmation.
+    if (source_is_repo && expected_sha256.empty() &&
+        !fs::is_directory(archive_path)) {
+        if (locked) {
+            util::fatal(ezmk::i18n::fmt(
+                ezmk::i18n::I18nKey::pkg_repo_missing_sha256_locked,
+                {{"pkg", pkg_file}, {"repo", prov_source}}));
+        }
+        const std::string msg = ezmk::i18n::fmt(
+            ezmk::i18n::I18nKey::pkg_repo_missing_sha256,
+            {{"pkg", pkg_file}, {"repo", prov_source}});
+        util::warn(msg);
+        if (!confirm(msg, assume_yes)) {
+            util::info(ezmk::i18n::I18nKey::install_cancelled);
+            return InstallOutcome::Cancelled;
+        }
+    }
+
     // SHA-256 verification
     // 1.4.0-dev.5: local-archive sidecar auto-verification — when no explicit
     // --sha256 / index.toml sha256 was given AND the archive has a sibling
@@ -2176,7 +2198,11 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // (坑 3: explicit --sha256 wins; a sidecar only fills an EMPTY expected
     // value, and a missing/malformed sidecar skips verification, not blocks).
     std::string sidecar_sha;
-    if (expected_sha256.empty() && !is_url && !fs::is_directory(archive_path)) {
+    // 1.5.0-dev.12 (A-04): the sidecar is a developer convenience for LOCAL
+    // archives only. A sidecar shipped inside a repo cache would let the repo
+    // "prove" its own archive, so repo sources are excluded like URLs.
+    if (expected_sha256.empty() && !is_url && !source_is_repo &&
+        !fs::is_directory(archive_path)) {
         fs::path sidecar(archive_path.string() + ".sha256");
         if (util::file_exists(sidecar)) {
             std::string content = util::file_read(sidecar);

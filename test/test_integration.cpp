@@ -2567,6 +2567,64 @@ TEST_CASE("integration: mutual deps stop auto-install recursion (dev.11)", "[int
     REQUIRE((r.out + r.err).find("circular") != std::string::npos);
 }
 
+// 1.5.0-dev.12 (A-04): a repo package whose index.toml omits sha256 cannot be
+// verified. Install must warn (confirmation auto-accepted by -y) instead of
+// silently skipping integrity checks; a repo-supplied .sha256 sidecar is not
+// trusted as proof.
+TEST_CASE("integration: repo pkg without index sha256 warns (1.5.0-dev.12)",
+          "[integration][1.5.0-dev.12]") {
+    if (!ezmk_available()) {
+        SKIP("ezmk binary not found — build it first with: bash build.sh");
+    }
+    EnvGuard lang_guard("EZMK_LANG", "en");
+    TempDir tmp;
+
+    fs::path repo_dir = tmp.path / "repo";
+    fs::create_directories(repo_dir);
+
+    fs::path lib = tmp.path / "nohash";
+    fs::create_directories(lib / "src");
+    fs::create_directories(lib / "include");
+    std::ofstream(lib / "src" / "nohash.cpp") << "int nohash_f() { return 1; }\n";
+    {
+        std::ofstream of(lib / "ezmk.toml");
+        of << "[project]\nname = \"nohash\"\ntype = \"static\"\n"
+              "version = \"1.0.0\"\nlanguage = \"C++17\"\n\n"
+              "[compile]\nflags = []\ninclude_dirs = [\"include\"]\n\n"
+              "[link]\nflags = []\nlink_dirs = []\nsystem_target = []\n";
+    }
+    ProcResult packed =
+        run_ezmk("project pack --output \"" + repo_dir.string() + "\"", lib);
+    REQUIRE(packed.exit_code == 0);
+
+    // Deliberately no sha256 for the package.
+    file_write(repo_dir / "index.toml",
+        "[repo]\nname = \"nohashrepo\"\n\n"
+        "[[packages]]\nname = \"nohash\"\nversion = \"1.0.0\"\n"
+        "file = \"nohash-1.0.0.tar.gz\"\n");
+
+    fs::path proj = tmp.path / "proj";
+    fs::create_directories(proj / "src");
+    std::ofstream(proj / "src" / "main.cpp") << "int main() { return 0; }\n";
+    {
+        std::ofstream of(proj / "ezmk.toml");
+        of << "[project]\nname = \"proj\"\ntype = \"executable\"\n"
+              "version = \"0.1.0\"\nlanguage = \"C++17\"\n\n"
+              "[depends]\nlib = [\"nohash\"]\n";
+    }
+
+    ProcResult ra = run_ezmk("repo add -p \"" + repo_dir.string() + "\"", proj);
+    REQUIRE(ra.exit_code == 0);
+
+    ProcResult r = run_ezmk("pkg install nohash -p -y", proj);
+    INFO("stdout: " << r.out);
+    INFO("stderr: " << r.err);
+    REQUIRE(r.exit_code == 0);
+    REQUIRE((r.out + r.err).find("has no sha256 in index.toml") !=
+            std::string::npos);
+}
+
+
 // 1.4.6 Q-02: a SUCCESSFUL directory-source install must keep the dependencies
 // it auto-installed. The directory / git / repo-dir return paths left the
 // outermost transaction uncommitted, so TxnGuard rolled the fresh deps back and
