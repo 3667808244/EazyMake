@@ -656,6 +656,15 @@ JoinedCommand join_args_with_response_file(const std::vector<std::string>& args,
     return {join_shell_args(cmd_args), rsp};
 }
 
+fs::path object_path_for(const fs::path& obj_dir, const fs::path& proj_root,
+                         const fs::path& src, const std::string& suffix) {
+    fs::path p = obj_dir / safe_relative(src, proj_root);
+    const std::string ext = src.extension().string();
+    if (!ext.empty() && ext != ".cpp") p += ext;
+    p.replace_extension(suffix);
+    return p;
+}
+
 // ===================================================================
 // 0.2.3+: Single-source compile (thread-safe — read-only on record)
 //
@@ -748,19 +757,11 @@ SingleCompileResult compile_one_source(const fs::path& src,
     // 1.5.0-pre.1 (A-02): a.c and a.cpp used to collapse to the same a.o in a
     // parallel build. Keep the common .cpp object name, but append the source
     // extension for every other language so same-stem files cannot collide.
-    auto lang_suffix = [&](fs::path p) {
-        const std::string ext = src.extension().string();
-        if (!ext.empty() && ext != ".cpp") p += ext;
-        return p;
-    };
-
-    fs::path obj = lang_suffix(in.obj_dir / rel);
-    obj.replace_extension(obj_suffix);
-    fs::path obj_tmp = lang_suffix(in.obj_dir / rel);
-    obj_tmp.replace_extension(tmp_suffix);
-
-    fs::path cache_obj = lang_suffix(in.cache_obj_dir / rel);
-    cache_obj.replace_extension(obj_suffix);
+    // 1.5.0: shared with the test runner (object_path_for).
+    fs::path obj = object_path_for(in.obj_dir, in.proj_root, src, obj_suffix);
+    fs::path obj_tmp = object_path_for(in.obj_dir, in.proj_root, src, tmp_suffix);
+    fs::path cache_obj = object_path_for(in.cache_obj_dir, in.proj_root, src,
+                                         obj_suffix);
 
     fs::create_directories(obj.parent_path());
     fs::create_directories(cache_obj.parent_path());

@@ -287,7 +287,11 @@ std::optional<Workspace> load_from(const fs::path& start_dir) {
     if (auto opts = options_node.as_table()) {
         for (const auto& [key, val] : *opts) {
             std::string key_name(key.str());
-            if (!contains_key(kOptionsKeys, 2, key_name)) {
+            // 1.5.0: kOptionsKeys gained `scan_skip` (dev.5) but this
+            // count stayed at 2, so any workspace using it failed to load.
+            if (!contains_key(kOptionsKeys,
+                              sizeof(kOptionsKeys) / sizeof(kOptionsKeys[0]),
+                              key_name)) {
                 throw std::runtime_error(
                     i18n::fmt(I18nKey::workspace_err_unknown_key,
                               {{"key", key_name},

@@ -464,8 +464,10 @@ namespace ezmk::i18n
             }
         }
 #else
-        // Linux/macOS: check $LANG, $LC_ALL (e.g. "zh_TW.UTF-8").
-        for (const char *var : {"LANG", "LC_ALL"})
+        // Linux/macOS: check $LC_ALL / $LC_MESSAGES / $LANG (e.g.
+        // "zh_TW.UTF-8"). 1.5.0: POSIX precedence — LC_ALL overrides
+        // LC_MESSAGES overrides LANG.
+        for (const char *var : {"LC_ALL", "LC_MESSAGES", "LANG"})
         {
             const char *val = std::getenv(var);
             if (val && val[0] != '\0')

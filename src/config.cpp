@@ -479,6 +479,10 @@ LanguageInfo parse_language(std::string_view language) {
     auto lang_ordinal = [](const std::string& v) -> int {
         if (v == "98") return 1998;
         if (v == "03") return 2003;
+        // 1.5.0: C89/C99 were mapped to 2089/2099, so a legal range such as
+        // "C89..C11" or "C99..C17" was rejected as reversed.
+        if (v == "89") return 1989;
+        if (v == "99") return 1999;
         return 2000 + std::stoi(v);
     };
     int min_ver = std::stoi(lo.ver);
@@ -566,9 +570,22 @@ std::map<std::string, std::string> load_links_json(const fs::path& project_root)
             }
         }
 
-        // Validate value: no absolute paths, no traversal attempts
-        if (!value.empty() && (value[0] == '/' || value[0] == '\\')) {
-            throw std::runtime_error(".ezmk/links.json: absolute paths not allowed for link '" + key + "'");
+        // 1.5.0: validate with fs::path — the old first-character check let
+        // "../x" and "C:\x" through although the comment promised traversal
+        // rejection (an @link could then point outside the project).
+        if (!value.empty()) {
+            fs::path lv(value);
+            // has_root_directory() catches POSIX-style absolute values
+            // ("/etc/x") on Windows, where they are NOT is_absolute().
+            bool unsafe = lv.is_absolute() || lv.has_root_name() ||
+                          lv.has_root_directory();
+            for (const auto& part : lv) {
+                if (part == "..") { unsafe = true; break; }
+            }
+            if (unsafe) {
+                throw std::runtime_error(
+                    ".ezmk/links.json: unsafe path for link '" + key + "'");
+            }
         }
 
         links[key] = value;
@@ -676,6 +693,15 @@ static void parse_project(const toml::table& root, EzConfig& cfg) {
     if (auto proj = root["project"].as_table()) {
         if (auto name = (*proj)["name"].value<std::string>()) {
             cfg.project.name = *name;
+            // 1.5.0: `name` becomes a path segment (build output basename,
+            // install include dir). Unvalidated, name = "../../x" wrote the
+            // executable above the project root and created install dirs
+            // outside the prefix. output_name already had this check.
+            if (!is_safe_basename(cfg.project.name)) {
+                throw std::runtime_error(
+                    "project.name must be a safe basename (no path "
+                    "separators, '..', or drive letter)");
+            }
         }
         if (auto type = (*proj)["type"].value<std::string>()) {
             // Validate type

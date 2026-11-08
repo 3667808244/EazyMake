@@ -448,6 +448,7 @@ EZMK_I18N_KEY(workspace_test_no_tests)          // member skipped: no tests conf
 EZMK_I18N_KEY(workspace_summary)                // action summary (succeeded/failed/skipped)
 EZMK_I18N_KEY(workspace_clean_done)             // clean completion (count)
 EZMK_I18N_KEY(workspace_err_unknown_member)     // --member name not found
+EZMK_I18N_KEY(workspace_err_member_invalid)     // --member names an invalid member
 EZMK_I18N_KEY(workspace_err_pure_container)     // container root without ezmk.toml
 EZMK_I18N_KEY(workspace_err_clean_stop_on_error)// clean does not support --stop-on-error
 EZMK_I18N_KEY(workspace_inject_missing)         // sibling artifact missing hint

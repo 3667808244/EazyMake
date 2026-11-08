@@ -31,7 +31,8 @@ void list_workspace(const workspace::Workspace& ws);
 // explicit `-j/--jobs` > `[workspace.options].default_jobs` > hardware
 // concurrency (1 when the platform reports none). Extracted so the
 // precedence rule is unit-testable.
-int resolve_jobs(int cli_jobs, const workspace::Workspace& ws);
+int resolve_jobs(int cli_jobs, const workspace::Workspace& ws,
+                 bool jobs_explicit = false);
 
 // `ezmk workspace build` — topological subprocess build with intra-layer
 // parallelism. Returns the process exit code (0 = all members succeeded).
@@ -44,8 +45,9 @@ int run_test(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts);
 // 1.4.0-dev.5: `ezmk workspace watch` — start `ezmk watch` in every selected
 // member (long-running subprocesses; the orchestrator waits until all member
 // watchers exit, normally via SIGINT which each member handles itself).
-// Topological layers still gate startup order (dependencies start first, so
-// their initial builds finish before dependents watch). Returns the process
+// Topological layers gate the START order only (dependencies launch first);
+// there is no barrier waiting for a dependency's initial build, so a dependent
+// may have to rebuild once its sibling artifact appears. Returns the process
 // exit code (0 = all members exited cleanly).
 int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts);
 

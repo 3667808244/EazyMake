@@ -380,6 +380,13 @@ TEST_CASE("workspace resolve_jobs: explicit -j > default_jobs > auto", "[workspa
     REQUIRE(ezmk::workspace_build::resolve_jobs(8, *ws) == 8);   // explicit wins
     REQUIRE(ezmk::workspace_build::resolve_jobs(-1, *ws) == 4);  // negative → default
 
+    // 1.5.0: explicit -j 0 means auto — it must not be overridden by
+    // [workspace.options].default_jobs.
+    int hw_explicit = static_cast<int>(std::thread::hardware_concurrency());
+    if (hw_explicit < 1) hw_explicit = 1;
+    REQUIRE(ezmk::workspace_build::resolve_jobs(0, *ws, /*jobs_explicit=*/true) ==
+            hw_explicit);
+
     // No default_jobs and no -j → hardware_concurrency (≥ 1).
     TempDir tmp2;
     write_ws_toml(tmp2.path, "[workspace]\nmembers = [\"a\"]\n");

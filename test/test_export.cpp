@@ -245,6 +245,31 @@ TEST_CASE("export cmake: flags split — -std/-D/-I extracted, macros + ezmk_mac
     REQUIRE(t.find("-Iextra_inc") == std::string::npos);
 }
 
+// 1.5.0: c++2a/2b/2c are C++20/23/26 (the old mapping was one standard ahead).
+TEST_CASE("export cmake: -std aliases 2a/2b/2c map to 20/23/26 (1.5.0)",
+          "[export][1.5.0]") {
+    auto cfg = make_exe_config();
+    cfg.compile.flags = {"-std=c++2a"};
+    REQUIRE(build_cmake_text(cfg, fs::current_path(), ExportOptions{})
+                .find("CXX_STANDARD 20") != std::string::npos);
+
+    cfg.compile.flags = {"-std=c++2b"};
+    REQUIRE(build_cmake_text(cfg, fs::current_path(), ExportOptions{})
+                .find("CXX_STANDARD 23") != std::string::npos);
+}
+
+// 1.5.0: a negative macro value is an integer — build.cpp injects -DN=-5, so
+// export must not quote it into a string literal.
+TEST_CASE("export cmake: negative integer macro stays bare (1.5.0)",
+          "[export][1.5.0]") {
+    auto cfg = make_exe_config();
+    cfg.compile.macros = {{"N", "-5"}, {"NAME", "demo"}};
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("N=-5") != std::string::npos);
+    REQUIRE(t.find("N=\"-5\"") == std::string::npos);
+    REQUIRE(t.find("NAME=\"demo\"") != std::string::npos);
+}
+
 TEST_CASE("export cmake: msvc_flags wrapped in genex", "[export]") {
     auto cfg = make_exe_config();
     cfg.compile.msvc_flags = {"/W4"};

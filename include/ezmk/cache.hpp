@@ -83,6 +83,13 @@ struct SingleCompileResult {
     std::vector<DepEntry> new_deps; // parsed dependencies (for dependency change detection)
 };
 
+// 1.5.0: object path for one source — SINGLE source of truth shared by the
+// build loop and the test runner (which used to derive it with a plain
+// replace_extension, missing the .c/.cc/.cxx suffix rule of 1.5.0-pre.1 A-02).
+// `suffix` is ".o" / ".obj" / ".tmp.o" / ".tmp.obj".
+fs::path object_path_for(const fs::path& obj_dir, const fs::path& proj_root,
+                         const fs::path& src, const std::string& suffix);
+
 // 1.5.0-dev.9: true when diagnostics contain a compiler/linker warning marker.
 bool has_diagnostic_warning(const std::string& output);
 

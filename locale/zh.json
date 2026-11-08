@@ -401,6 +401,7 @@
     "workspace_summary": "workspace {action}：{succeeded} 成功，{failed} 失败，{skipped} 跳过",
     "workspace_clean_done": "workspace clean 完成：已清理 {count} 个成员",
     "workspace_err_unknown_member": "未知的 workspace 成员 '{name}'（--member）",
+    "workspace_err_member_invalid": "workspace 成员 '{member}' 无效：{reason}",
     "workspace_err_pure_container": "该目录是 workspace 容器根（无 ezmk.toml）——请使用 `ezmk workspace build`（或 `ezmk build -w`）",
     "workspace_err_clean_stop_on_error": "workspace clean 不支持 --stop-on-error",
     "workspace_inject_missing": "兄弟产物 '{dep}' 不存在——若 '{member}' 链接失败，请先运行 `ezmk workspace build`",

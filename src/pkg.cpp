@@ -1142,7 +1142,8 @@ static InstallOutcome process_installed_pkg(const fs::path& pkg_root,
                                             cli::Scope scope,
                                             bool assume_yes,
                                             const toolchain::Toolchain& tc,
-                                            const fs::path& stage) {
+                                            const fs::path& stage,
+                                            bool locked) {
     validate_pkg(pkg_root);
 
     auto pkg_cfg = config::parse_config(pkg_root / "ezmk.toml");
@@ -1254,9 +1255,19 @@ static InstallOutcome process_installed_pkg(const fs::path& pkg_root,
                             util::info(std::string("auto-installing dependency: ") + dep.name);
                             try {
                                 AutoInstallGuard guard(dep.name);
-                                // Install to the same scope, skip lockfile for transitive deps
-                                install(dep.name, scope, search.sha256,
-                                        assume_yes, false, true);
+                                // Install to the same scope, skip lockfile for
+                                // transitive deps. 1.5.0: in --locked mode the
+                                // recursive install MUST inherit the flag —
+                                // otherwise the dependency was installed at
+                                // the index's newest version while the lockfile
+                                // (and the rest of the graph) stayed pinned.
+                                // With locked=true the recorded version becomes
+                                // an Exact constraint and the recorded archive
+                                // hash is what gets verified.
+                                install(dep.name, scope,
+                                        locked ? std::string_view{}
+                                               : std::string_view(search.sha256),
+                                        assume_yes, locked, true);
                                 // 1.4.2 F-30: remember it for rollback if this
                                 // install later fails.
                                 AutoInstallTxn::paths().push_back(dest_dir / dep.name);
@@ -1692,7 +1703,8 @@ static void maybe_write_lockfile(cli::Scope scope, bool no_lock,
 // emits a notice when --sha256 was requested. Shares the full post-validate
 // processing with archive installs.
 static InstallOutcome install_from_directory(const fs::path& dir, cli::Scope scope,
-                                             bool assume_yes, bool no_lock) {
+                                             bool assume_yes, bool no_lock,
+                                             bool locked) {
     util::info(ezmk::i18n::I18nKey::pkg_install_from_dir, {{"dir", dir.string()}});
 
     auto tc = toolchain::detect_toolchain();
@@ -1710,7 +1722,7 @@ static InstallOutcome install_from_directory(const fs::path& dir, cli::Scope sco
     // removed. Shares validate → hooks → deps → compile → copy → postinstall.
     // 1.4.6 Q-11: a user cancellation inside process_installed_pkg must not be
     // reported as a successful install (which also rewrote the lockfile).
-    if (process_installed_pkg(dir, dest_dir, scope, assume_yes, tc, {}) ==
+    if (process_installed_pkg(dir, dest_dir, scope, assume_yes, tc, {}, locked) ==
         InstallOutcome::Cancelled) {
         return InstallOutcome::Cancelled;
     }
@@ -1731,6 +1743,7 @@ static InstallOutcome install_git_source(const std::string& source_url,
                                          std::string_view ref,
                                          cli::Scope scope,
                                          bool assume_yes, bool no_lock,
+                                         bool locked,
                                          const std::string* expected_commit = nullptr) {
     // git:// is plaintext (MITM) — warn + confirm, mirroring
     // url_integrity_confirm's http:// branch (1.1.3 S3 pattern).
@@ -1814,7 +1827,8 @@ static InstallOutcome install_git_source(const std::string& source_url,
         // (the lockfile is rebuilt from installed dirs, not kept incrementally).
         util::file_write(clone_dir / ".ezmk-git-source",
                          source_url + "\n" + head + "\n");
-        InstallOutcome outcome = install_from_directory(clone_dir, scope, assume_yes, no_lock);
+        InstallOutcome outcome =
+            install_from_directory(clone_dir, scope, assume_yes, no_lock, locked);
         { std::error_code ec; fs::remove_all(clone_dir, ec); }
         return outcome;
     } catch (...) {
@@ -1833,6 +1847,9 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // Only the OUTERMOST call owns the transaction: it clears the record on entry
     // and rolls the auto-installed dependencies back if it does not complete
     // (exception, or a cancelled install).
+    // 1.5.0: -y must also silence the Lua sandbox's interactive permission
+    // prompt — the switch existed but no caller ever set it.
+    if (assume_yes) lua::set_noninteractive(true);
     const bool outermost_txn = (AutoInstallTxn::depth()++ == 0);
     if (outermost_txn) AutoInstallTxn::paths().clear();
     struct TxnGuard {
@@ -1952,7 +1969,8 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         if (!expected_sha256.empty()) {
             util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
         }
-        return finish(install_from_directory(input, scope, assume_yes, no_lock));
+        return finish(install_from_directory(input, scope, assume_yes, no_lock,
+                                              locked));
     }
 
     // 1.4.1: --locked git source — the url+commit were resolved from ezmk.lock.json
@@ -1963,7 +1981,8 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
             util::warn(ezmk::i18n::I18nKey::pkg_git_sha256_skipped);
         }
         return finish(install_git_source(locked_git_url, locked_git_commit, scope,
-                                         assume_yes, no_lock, &locked_git_commit));
+                                         assume_yes, no_lock, locked,
+                                         &locked_git_commit));
     }
 
     // 1.4.1: git repository URL source — clone & install via the directory
@@ -1997,7 +2016,7 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
         if (base.find("://") == std::string::npos && base.rfind("git@", 0) != 0) {
             base = "https://" + base;
         }
-        return finish(install_git_source(base, ref, scope, assume_yes, no_lock));
+        return finish(install_git_source(base, ref, scope, assume_yes, no_lock, locked));
     }
 
     // Determine if it's a URL or local file
@@ -2143,7 +2162,8 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
                 if (!expected_sha256.empty()) {
                     util::warn(ezmk::i18n::I18nKey::pkg_sha256_skipped_dir);
                 }
-                return finish(install_from_directory(archive_path, scope, assume_yes, no_lock));
+                return finish(install_from_directory(archive_path, scope,
+                                                      assume_yes, no_lock, locked));
             }
         }
     }
@@ -2219,9 +2239,11 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
          std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
     fs::create_directories(stage);
 
-    // 1.4.2 F-04: the staged package root, kept for the provenance marker below
-    // (the marker is written after the stage is cleaned up).
-    fs::path staged_pkg_root = stage;
+    // 1.5.0: the installed package name is needed for the provenance marker
+    // AFTER the stage is deleted. It used to be re-read from the staged
+    // ezmk.toml at that point, i.e. from a path that no longer existed — the
+    // exception was swallowed and the marker was never written.
+    std::string staged_pkg_name;
 
     try {
         util::info(ezmk::i18n::I18nKey::extracting);
@@ -2243,9 +2265,14 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
 
         // Shared post-validate processing: validate → hooks → deps → compile →
         // copy → postinstall (1.2.0-dev.7). Also shared by directory installs.
-        InstallOutcome po =
-            process_installed_pkg(pkg_root, dest_dir, scope, assume_yes, tc, stage);
-        staged_pkg_root = pkg_root;
+        InstallOutcome po = process_installed_pkg(pkg_root, dest_dir, scope,
+                                                  assume_yes, tc, stage, locked);
+        try {
+            staged_pkg_name =
+                config::parse_config(pkg_root / "ezmk.toml").project.name;
+        } catch (...) {
+            // Unreadable staged config → nothing to record.
+        }
         if (po == InstallOutcome::Cancelled) {
             // 1.4.6 Q-11: user cancelled (overwrite/preinstall prompt) — do not
             // write provenance or the lockfile, and let the transaction roll back.
@@ -2266,21 +2293,18 @@ InstallOutcome install(const std::string& pkg_file, cli::Scope scope,
     // 1.4.2 F-04: write the install-source marker into the INSTALLED package dir
     // (it must outlive the staging cleanup above) so maybe_write_lockfile can
     // pin source/source_url/archive hash into ezmk.lock.json.
-    if (!prov_kind.empty()) {
-        std::string installed_name;
-        try {
-            installed_name =
-                config::parse_config(staged_pkg_root / "ezmk.toml").project.name;
-        } catch (...) {
-            // Unreadable staged config → nothing to record.
-        }
-        if (!installed_name.empty()) {
-            fs::path installed_dir = dest_dir / installed_name;
-            if (util::file_exists(installed_dir)) {
-                util::file_write(installed_dir / ".ezmk-archive-source",
-                                 prov_kind + "\n" + prov_source + "\n" +
-                                     archive_sha + "\n");
-            }
+    if (!prov_kind.empty() && !staged_pkg_name.empty()) {
+        fs::path installed_dir = dest_dir / staged_pkg_name;
+        if (util::file_exists(installed_dir)) {
+            // 1.5.0: never trust a provenance marker shipped INSIDE an
+            // archive. maybe_write_lockfile reads .ezmk-git-source first, so a
+            // package could masquerade as a git source and make --locked clone
+            // an attacker-chosen URL.
+            std::error_code rm_ec;
+            fs::remove(installed_dir / ".ezmk-git-source", rm_ec);
+            util::file_write(installed_dir / ".ezmk-archive-source",
+                             prov_kind + "\n" + prov_source + "\n" +
+                                 archive_sha + "\n");
         }
     }
 

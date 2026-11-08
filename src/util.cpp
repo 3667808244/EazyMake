@@ -1002,7 +1002,11 @@ void create_targz(const fs::path& source_dir, const fs::path& output_file) {
     fs::create_directories(output_file.parent_path());
     auto tmp = output_file.string() + ".tmp";
     {
-        std::ofstream of(tmp, std::ios::binary);
+        // 1.5.0: pass the path through std::filesystem::path so libstdc++ uses
+        // the wide-character open on Windows — a narrow std::ofstream failed
+        // for non-ASCII output directories (the zip writer already used
+        // fopen_utf8).
+        std::ofstream of(fs::path(tmp), std::ios::binary);
         if (!of) throw std::runtime_error("cannot create: " + tmp);
         of.write(reinterpret_cast<const char*>(gz.data()), gz.size());
         if (!of) throw std::runtime_error("write failed: " + tmp);
@@ -1774,6 +1778,11 @@ ProcResult run_command(const std::string& cmd, const RunOptions& opts) {
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = hWriteOut;
     si.hStdError  = hWriteErr;
+    // 1.5.0: STARTF_USESTDHANDLES makes the child take ALL three standard
+    // handles from STARTUPINFO. hStdInput used to stay null, so every child
+    // started through run_command had an invalid stdin (interactive programs
+    // launched by `ezmk run` / `watch --run` failed their first read).
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 
     PROCESS_INFORMATION pi{};
     // 1.4.2 F-20: the command line is UTF-8 throughout ezmk — convert it (and
@@ -2071,10 +2080,12 @@ bool git_clone(const std::string& url, const fs::path& dest,
     if (shallow) cmd << " --depth 1";
     // An empty branch means "remote default branch" — omit --branch entirely.
     if (!branch.empty()) {
-        cmd << " --branch \"" << escape_shell_arg(branch) << "\"";
+        cmd << " --branch " << quote_cli_arg(branch);
     }
-    cmd << " \"" << escape_shell_arg(url) << "\" \""
-        << escape_shell_arg(dest.string()) << "\"";
+    // 1.5.0: platform-correct quoting. Windows run_command goes straight to
+    // CreateProcess (no shell), so POSIX escaping doubled every backslash and
+    // corrupted UNC / \\?\ / $-containing paths.
+    cmd << " " << quote_cli_arg(url) << " " << quote_cli_arg(dest.string());
     const auto& net = config::runtime_config().settings;
     RunOptions net_opts;
     if (net.network_timeout > 0) net_opts.timeout_sec = net.network_timeout;
@@ -2097,8 +2108,8 @@ bool git_clone(const std::string& url, const fs::path& dest,
 
 bool git_pull(const fs::path& repo_dir, std::string_view branch) {
     std::ostringstream cmd;
-    cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
-        << "\" pull origin \"" << escape_shell_arg(branch) << "\"";
+    cmd << quote_cli_arg(git_executable()) << " -C " << quote_cli_arg(repo_dir.string())
+        << " pull origin " << quote_cli_arg(branch);
     const auto& net = config::runtime_config().settings;
     RunOptions net_opts;
     if (net.network_timeout > 0) net_opts.timeout_sec = net.network_timeout;
@@ -2121,8 +2132,8 @@ bool git_pull(const fs::path& repo_dir, std::string_view branch) {
 
 std::string git_last_commit_time(const fs::path& repo_dir) {
     std::ostringstream cmd;
-    cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
-        << "\" log -1 --format=%cI";
+    cmd << quote_cli_arg(git_executable()) << " -C " << quote_cli_arg(repo_dir.string())
+        << " log -1 --format=%cI";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) return {};
     // Trim trailing newline
@@ -2136,8 +2147,8 @@ std::string git_last_commit_time(const fs::path& repo_dir) {
 // lockfile and by `--locked` to reject force-pushed / drifted refs.
 std::string git_head_commit(const fs::path& repo_dir) {
     std::ostringstream cmd;
-    cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
-        << "\" rev-parse HEAD";
+    cmd << quote_cli_arg(git_executable()) << " -C " << quote_cli_arg(repo_dir.string())
+        << " rev-parse HEAD";
     auto res = run_command(cmd.str());
     if (res.exit_code != 0) return {};
     auto s = res.out;
@@ -2205,11 +2216,11 @@ ProcResult run_script(const fs::path& script, const fs::path& cwd) {
     std::ostringstream cmd;
 
     if (ext == ".sh") {
-        cmd << "bash \""
-            << escape_shell_arg(script.string()) << "\"";
+        // 1.5.0: platform-correct quoting — Windows has no shell here.
+        cmd << "bash " << quote_cli_arg(script.string());
     } else if (ext == ".ps1") {
-        cmd << "powershell -ExecutionPolicy Bypass -File \""
-            << escape_shell_arg(script.string()) << "\"";
+        cmd << "powershell -ExecutionPolicy Bypass -File "
+            << quote_cli_arg(script.string());
     } else if (ext == ".bat") {
         cmd << "cmd /c \"" << escape_cmd_arg(script.string()) << "\"";
     } else {

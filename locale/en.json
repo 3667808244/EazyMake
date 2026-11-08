@@ -401,6 +401,7 @@
     "workspace_summary": "workspace {action}: {succeeded} succeeded, {failed} failed, {skipped} skipped",
     "workspace_clean_done": "workspace clean done: {count} member(s) cleaned",
     "workspace_err_unknown_member": "unknown workspace member '{name}' (--member)",
+    "workspace_err_member_invalid": "workspace member '{member}' is invalid: {reason}",
     "workspace_err_pure_container": "this directory is a workspace container root without an ezmk.toml — run `ezmk workspace build` (or `ezmk build -w`)",
     "workspace_err_clean_stop_on_error": "workspace clean does not support --stop-on-error",
     "workspace_inject_missing": "sibling artifact '{dep}' not found — run `ezmk workspace build` first if '{member}' fails to link",

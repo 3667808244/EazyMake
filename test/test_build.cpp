@@ -73,9 +73,10 @@ TEST_CASE("build: BuildOptions struct", "[build]") {
     // 1.4.4: spell out every aggregate field (C++17 positional init) so
     // -Wmissing-field-initializers stays clean. Designated initializers
     // (`.field = value`) are C++20 and must not reappear here (1.4.2 F-10).
-    BuildOptions opts2{true, true, 0, "", false, false};
+    BuildOptions opts2{true, true, 0, true, "", false, false, false, false};
     REQUIRE(opts2.disable_cache == true);
     REQUIRE(opts2.verbose == true);
+    REQUIRE(opts2.jobs_explicit == true);
 }
 
 TEST_CASE("build: CompileSection defaults are valid for build", "[build]") {
@@ -973,4 +974,32 @@ TEST_CASE("inject_precompiled_marker: result parses and sets precompiled",
     REQUIRE(cfg.project.precompiled);
     REQUIRE(cfg.project.name == "foo");
     REQUIRE(cfg.project.type == "static");
+}
+
+// 1.5.0: --dry-run used to create bin/lib/include under the prefix before the
+// dry_run check, leaving empty directories behind (and failing on a read-only
+// prefix).
+TEST_CASE("install_project: --dry-run writes nothing (1.5.0)",
+          "[build][1.5.0]") {
+    TempDir tmp;
+    EzConfig cfg;
+    cfg.project.name = "demo";
+    cfg.project.type = "static";
+    cfg.project.version = "0.1.0";
+    cfg.install.prefix = (tmp.path / "pfx").string();
+    cfg.install.bindir = "bin";
+    cfg.install.libdir = "lib";
+    cfg.install.includedir = "include";
+
+    // Artifacts for both toolchain flavours, so the dry run has something to
+    // "copy" without actually copying it.
+    fs::create_directories(tmp.path / "build");
+    std::ofstream(tmp.path / "build" / "libdemo.a", std::ios::binary) << "fake";
+    std::ofstream(tmp.path / "build" / "demo.lib", std::ios::binary) << "fake";
+
+    ProjectInstallOptions opts;
+    opts.dry_run = true;
+    install_project(cfg, opts, tmp.path);
+
+    REQUIRE_FALSE(fs::exists(tmp.path / "pfx"));
 }

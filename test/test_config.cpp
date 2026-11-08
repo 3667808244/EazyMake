@@ -202,6 +202,15 @@ TEST_CASE("parse_language: range — double-sided C++11..C++17", "[config][1.3.1
         REQUIRE(range.max_ver == 17);
         REQUIRE(exact.max_ver == 0);
     }
+
+    // 1.5.0: C89/C99 used to be ordered as 2089/2099, rejecting legal ranges.
+    SECTION("C89..C11 → C89 is ordered as 1989") {
+        auto info = parse_language("C89..C11");
+        REQUIRE(info.compiler == "gcc");
+        REQUIRE(info.std_flag == "-std=c89");
+        REQUIRE(info.min_ver == 89);
+        REQUIRE(info.max_ver == 11);
+    }
 }
 
 TEST_CASE("parse_language: exact values keep min_ver/max_ver semantics", "[config][1.3.1]") {
@@ -482,6 +491,31 @@ header_only = "true"
 )");
     REQUIRE_THROWS_AS(parse_config(toml), std::runtime_error);
     fs::remove(toml);
+}
+
+// 1.5.0: project.name becomes a path segment (build artifact basename +
+// install include dir); "../../x" used to write outside the project root.
+TEST_CASE("parse_config: project.name must be a safe basename (1.5.0)",
+          "[config][1.5.0]") {
+    using namespace ezmk::config;
+    auto make = [](const std::string& name) {
+        return write_temp_toml("[project]\nname = \"" + name +
+                               "\"\nversion = \"0.1.0\"\n");
+    };
+
+    auto traversal = make("../evil");
+    REQUIRE_THROWS_AS(parse_config(traversal), std::runtime_error);
+    fs::remove(traversal);
+
+    auto drive = make("C:/evil");
+    REQUIRE_THROWS_AS(parse_config(drive), std::runtime_error);
+    fs::remove(drive);
+
+    // A space is still a valid basename (no separator).
+    auto ok = make("my app");
+    auto cfg = parse_config(ok);
+    fs::remove(ok);
+    REQUIRE(cfg.project.name == "my app");
 }
 
 // ===================================================================

@@ -895,6 +895,13 @@ TEST_CASE("compare_version_precedence: release beats pre-release (F-27)", "[util
     // Build metadata never affects the order.
     REQUIRE(compare_version_precedence("1.0.0+b1", "1.0.0+b2") == 0);
     REQUIRE(compare_version_precedence("1.0.0-rc+b1", "1.0.0") < 0);
+
+    // 1.5.0: numeric pre-release identifiers compare numerically, and a longer
+    // identifier set outranks its prefix (semver §11).
+    REQUIRE(compare_version_precedence("1.0.0-rc.9", "1.0.0-rc.10") < 0);
+    REQUIRE(compare_version_precedence("1.0.0-rc.10", "1.0.0-rc.9") > 0);
+    REQUIRE(compare_version_precedence("1.0.0-rc", "1.0.0-rc.1") < 0);
+    REQUIRE(compare_version_precedence("1.0.0-1", "1.0.0-alpha") < 0);
 }
 
 // ===================================================================

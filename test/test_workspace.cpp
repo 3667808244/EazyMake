@@ -33,8 +33,15 @@ void write_member(const fs::path& root, const std::string& rel,
                   const std::vector<std::string>& ws_deps = {}) {
     auto dir = root / rel;
     ezmk::util::create_directories(dir);
+    // 1.5.0: project.name is validated as a path-safe basename, so the
+    // root-member fixture (".") must use a real name — the workspace member
+    // identity comes from [workspace].members, not from this field.
+    std::string proj_name = fs::path(rel).filename().string();
+    if (proj_name.empty() || proj_name == "." || proj_name == "..") {
+        proj_name = "workspace_root";
+    }
     std::ofstream of(dir / "ezmk.toml");
-    of << "[project]\nname = \"" << fs::path(rel).filename().string()
+    of << "[project]\nname = \"" << proj_name
        << "\"\ntype = \"" << type << "\"\nversion = \"0.1.0\"\nlanguage = \"C++17\"\n";
     if (!ws_deps.empty()) {
         of << "\n[depends]\nworkspace = [";
@@ -817,5 +824,19 @@ TEST_CASE("workspace scan: scan_skip excludes directories",
     REQUIRE_FALSE(has_skip);
 
     ezmk::util::remove_all(root);
+}
+
+// 1.5.0: the allowlist check counted only 2 of the 3 known option keys, so any
+// workspace file using scan_skip failed to load with "unknown key".
+TEST_CASE("workspace config: [workspace.options].scan_skip is accepted (1.5.0)",
+          "[workspace][1.5.0]") {
+    TempDir tmp;
+    write_member(tmp.path, "a");
+    write_ws_toml(tmp.path,
+                  "[workspace]\nmembers = [\"a\"]\n\n"
+                  "[workspace.options]\nscan_skip = [\"third_party\"]\n");
+    auto ws = load_from(tmp.path);
+    REQUIRE(ws.has_value());
+    REQUIRE(ws->options.scan_skip == std::vector<std::string>{"third_party"});
 }
 

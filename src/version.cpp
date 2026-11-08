@@ -87,6 +87,45 @@ static std::string_view pre_release_part(std::string_view s) {
     return {};
 }
 
+// 1.5.0: semantic-versioning precedence for the dot-separated pre-release
+// identifiers: numeric identifiers compare numerically (rc.9 < rc.10),
+// numeric < alphanumeric, and a larger identifier set wins when all preceding
+// identifiers are equal. The previous plain string compare ordered rc.10
+// before rc.9.
+static int compare_prerelease_ids(std::string_view a, std::string_view b) {
+    size_t i = 0, j = 0;
+    while (i < a.size() && j < b.size()) {
+        size_t ai_end = a.find('.', i);
+        if (ai_end == std::string_view::npos) ai_end = a.size();
+        size_t bj_end = b.find('.', j);
+        if (bj_end == std::string_view::npos) bj_end = b.size();
+        const std::string_view ai = a.substr(i, ai_end - i);
+        const std::string_view bj = b.substr(j, bj_end - j);
+
+        const bool a_num = !ai.empty() &&
+            std::all_of(ai.begin(), ai.end(),
+                        [](char c) { return c >= '0' && c <= '9'; });
+        const bool b_num = !bj.empty() &&
+            std::all_of(bj.begin(), bj.end(),
+                        [](char c) { return c >= '0' && c <= '9'; });
+        if (a_num && b_num) {
+            const unsigned long av = parse_version_component(ai);
+            const unsigned long bv = parse_version_component(bj);
+            if (av != bv) return av < bv ? -1 : 1;
+        } else if (a_num != b_num) {
+            return a_num ? -1 : 1;   // numeric identifiers rank lower
+        } else if (ai != bj) {
+            return ai < bj ? -1 : 1;
+        }
+        i = (ai_end >= a.size()) ? a.size() : ai_end + 1;
+        j = (bj_end >= b.size()) ? b.size() : bj_end + 1;
+    }
+    const bool a_more = i < a.size();
+    const bool b_more = j < b.size();
+    if (a_more == b_more) return 0;
+    return a_more ? 1 : -1;   // more identifiers outrank a prefix
+}
+
 int compare_version_precedence(std::string_view a, std::string_view b) {
     const int core = compare_version(a, b);
     if (core != 0) return core;
@@ -95,8 +134,7 @@ int compare_version_precedence(std::string_view a, std::string_view b) {
     if (pa.empty() && pb.empty()) return 0;
     if (pa.empty()) return 1;    // release outranks a pre-release
     if (pb.empty()) return -1;
-    if (pa == pb) return 0;
-    return pa < pb ? -1 : 1;
+    return compare_prerelease_ids(pa, pb);
 }
 
 } // namespace ezmk::util

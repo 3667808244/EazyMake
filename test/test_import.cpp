@@ -33,6 +33,19 @@ TEST_CASE("import: project fields (name/version/type/language)", "[import][1.2.0
     CHECK(t.find("src_dirs = [\"src\"]") != std::string::npos);
 }
 
+// 1.5.0: LANGUAGES is a list; only reading the first token imported a mixed
+// C/C++ project as C17 and then failed to compile its .cpp sources.
+TEST_CASE("import: project(... LANGUAGES C CXX) selects C++ (1.5.0)",
+          "[import][1.5.0]") {
+    auto t = ezmk::import::import_cmake_text(
+        "cmake_minimum_required(VERSION 3.16)\n"
+        "project(app VERSION 1.0 LANGUAGES C CXX)\n"
+        "add_executable(app src/main.cpp)\n",
+        test_root());
+    CHECK(t.find("language = \"C++17\"") != std::string::npos);
+    CHECK(t.find("version = \"1.0\"") != std::string::npos);
+}
+
 // 1.2.0-dev.11: target_* argument scanning is keyword-aware — the legacy
 // no-keyword forms are not lost, and PRIVATE/PUBLIC tokens are skipped instead
 // of being collected as paths/options.

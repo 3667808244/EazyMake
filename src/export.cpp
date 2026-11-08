@@ -24,8 +24,14 @@ namespace {
 // definitions byte-identical to what `ezmk build` injects.
 std::string escape_macro_value(const std::string& val) {
     if (val.empty()) return val;
-    bool plain_int = std::all_of(val.begin(), val.end(),
-                                 [](char c) { return c >= '0' && c <= '9'; });
+    // 1.5.0: mirror build.cpp's is_plain_integer, which accepts a leading '-'.
+    // "-5" must stay bare (-DN=-5); the old digits-only test quoted it, turning
+    // an integer macro into a string literal in the exported project.
+    size_t start = (!val.empty() && val[0] == '-') ? 1 : 0;
+    bool plain_int = start < val.size();
+    for (size_t i = start; i < val.size(); ++i) {
+        if (val[i] < '0' || val[i] > '9') { plain_int = false; break; }
+    }
     if (plain_int) return val;
     std::string escaped;
     for (char c : val) {
@@ -300,8 +306,11 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         if (st.rfind("++", 0) == 0) st = st.substr(2);
         else if (st.rfind("c++", 0) == 0) st = st.substr(3);
         else if (st.rfind("c", 0) == 0) st = st.substr(1);
-        if (st == "2a") st = "23";
-        else if (st == "2b") st = "26";
+        // 1.5.0: the aliases are 2a=C++20, 2b=C++23, 2c=C++26 (the old
+        // mapping was one standard ahead).
+        if (st == "2a") st = "20";
+        else if (st == "2b") st = "23";
+        else if (st == "2c") st = "26";
         bool numeric = !st.empty();
         for (char c : st) if (!std::isdigit((unsigned char)c)) numeric = false;
         if (numeric) {

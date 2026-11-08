@@ -64,6 +64,13 @@ std::vector<std::vector<size_t>> select_layers(
             util::fatal(ezmk::i18n::fmt(I18nKey::workspace_err_unknown_member,
                                         {{"name", name}}));
         }
+        // 1.5.0: an invalid member never appears in topo_layers, so selecting
+        // it produced a 0-task run that exited 0. Fail loudly instead.
+        if (!ws.members[*idx].valid) {
+            util::fatal(i18n::fmt(I18nKey::workspace_err_member_invalid,
+                                  {{"member", ws.members[*idx].name},
+                                   {"reason", ws.members[*idx].error}}));
+        }
         selected[*idx] = true;
     }
 
@@ -203,7 +210,7 @@ bool run_member(const workspace::Member& m, const std::string& action,
 int run_workspace_action(const workspace::Workspace& ws,
                          const std::string& action,
                          const cli::WorkspaceOptions& opts) {
-    int jobs = resolve_jobs(opts.jobs, ws);
+    int jobs = resolve_jobs(opts.jobs, ws, opts.jobs_explicit);
     // 1.4.6 Q-10: the config value is the default when the CLI flag is absent;
     // an explicit CLI flag wins.
     const bool stop_on_err = opts.stop_on_error || ws.options.stop_on_error;
@@ -323,12 +330,17 @@ int run_workspace_action(const workspace::Workspace& ws,
 // 1.3.0-dev.3: effective parallel-job count for build/test —
 // explicit `-j/--jobs` > `[workspace.options].default_jobs` > hardware
 // concurrency (1 when the platform reports none). Public for unit tests.
-int resolve_jobs(int cli_jobs, const workspace::Workspace& ws) {
+int resolve_jobs(int cli_jobs, const workspace::Workspace& ws,
+                 bool jobs_explicit) {
     int jobs = cli_jobs;
-    if (jobs <= 0) jobs = ws.options.default_jobs;
-    // 1.5.0-pre.1 (C-03): honor the global [settings].default_jobs, and clamp
-    // exactly like build.cpp — an absurd -j must not spawn 100k threads.
-    if (jobs <= 0) jobs = config::runtime_config().settings.default_jobs;
+    // 1.5.0: only an absent -j falls back to config; explicit -j 0 = auto.
+    if (jobs <= 0 && !jobs_explicit) {
+        jobs = ws.options.default_jobs;
+        // 1.5.0-pre.1 (C-03): honor the global [settings].default_jobs, and
+        // clamp exactly like build.cpp — an absurd -j must not spawn 100k
+        // threads.
+        if (jobs <= 0) jobs = config::runtime_config().settings.default_jobs;
+    }
     if (jobs <= 0) {
         jobs = static_cast<int>(std::thread::hardware_concurrency());
         if (jobs <= 0) jobs = 1;
@@ -449,7 +461,7 @@ int run_clean(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts)
 // (the next rebuild self-heals); documented in cli.md. Members are dispatched
 // in topological order to minimize the window (dependencies build first).
 int run_watch(const workspace::Workspace& ws, const cli::WorkspaceOptions& opts) {
-    int jobs = resolve_jobs(opts.jobs, ws);
+    int jobs = resolve_jobs(opts.jobs, ws, opts.jobs_explicit);
     // 1.4.6 Q-10: config default, CLI flag wins.
     const bool stop_on_err = opts.stop_on_error || ws.options.stop_on_error;
     auto layers = workspace::topo_layers(ws);

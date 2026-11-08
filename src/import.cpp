@@ -515,10 +515,24 @@ ImportedProject build_project(const std::vector<CmakeCall>& calls,
                     ascii_upper(key);
                     if (key == "VERSION") p.version = call.args[k + 1];
                     else if (key == "LANGUAGES") {
-                        std::string lang = call.args[k + 1];
-                        ascii_upper(lang);
-                        if (lang.find("CXX") != std::string::npos) p.language = "C++17";
-                        else if (lang.find("C") != std::string::npos) p.language = "C17";
+                        // 1.5.0: LANGUAGES takes a LIST — the old code read a
+                        // single token, so project(... LANGUAGES C CXX) was
+                        // imported as C17 and the .cpp sources failed to build.
+                        bool saw_c = false, saw_cxx = false;
+                        size_t m = k + 1;
+                        for (; m < call.args.size(); ++m) {
+                            std::string lang = call.args[m];
+                            ascii_upper(lang);
+                            if (lang == "VERSION" || lang == "DESCRIPTION" ||
+                                lang == "HOMEPAGE" || lang == "LANGUAGES") {
+                                break;
+                            }
+                            if (lang.find("CXX") != std::string::npos) saw_cxx = true;
+                            else if (lang.find("C") != std::string::npos) saw_c = true;
+                        }
+                        if (saw_cxx) p.language = "C++17";
+                        else if (saw_c) p.language = "C17";
+                        k = (m > k + 1) ? m - 1 : k;
                     }
                 }
             }

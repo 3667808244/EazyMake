@@ -1189,8 +1189,10 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     auto cin = make_compile_input(st, opts);
 
     // 1.5.0-dev.5: -j > [compile].jobs > [settings].default_jobs > hardware.
+    // 1.5.0: fall back to the config only when -j was NOT given — an explicit
+    // -j 0 means auto and used to be overridden by the configured value.
     int num_jobs = opts.jobs;
-    if (num_jobs <= 0) {
+    if (num_jobs <= 0 && !opts.jobs_explicit) {
         int configured = st.compile_cfg.jobs;
         if (configured < 0) {
             configured = config::runtime_config().settings.default_jobs;
@@ -1881,6 +1883,16 @@ void install_project(const config::EzConfig& cfg,
 
     // Resolve prefix (CLI override takes priority)
     fs::path prefix = opts.prefix.empty() ? fs::path(inst.prefix) : fs::path(opts.prefix);
+    // 1.5.0: expand "~" for the CLI override too — config.toml already did, so
+    // `--prefix ~/opt` used to create a literal "~" directory in the project.
+    {
+        std::string ps = prefix.string();
+        if (ps == "~") {
+            prefix = util::get_home_dir();
+        } else if (ps.size() > 1 && ps[0] == '~' && (ps[1] == '/' || ps[1] == '\\')) {
+            prefix = util::get_home_dir() / ps.substr(2);
+        }
+    }
     // 1.5.0-dev.10: relative install prefixes resolve against the project root.
     if (prefix.is_relative()) prefix = proj_root / prefix;
 
@@ -1894,9 +1906,13 @@ void install_project(const config::EzConfig& cfg,
     std::string type = cfg.project.type;
     fs::path build_dir = config::effective_build_dir(cfg, proj_root);
 
-    fs::create_directories(bindir);
-    fs::create_directories(libdir);
-    if (!opts.no_headers) fs::create_directories(includedir / name);
+    // 1.5.0: --dry-run must not touch the filesystem (this used to leave
+    // bin/lib/include/<name> behind under the install prefix).
+    if (!opts.dry_run) {
+        fs::create_directories(bindir);
+        fs::create_directories(libdir);
+        if (!opts.no_headers) fs::create_directories(includedir / name);
+    }
 
     int files_copied = 0;
     size_t total_bytes = 0;
@@ -1947,12 +1963,12 @@ void install_project(const config::EzConfig& cfg,
         auto include_src = proj_root / "include";
         if (util::file_exists(include_src)) {
             auto include_dst = includedir / name;
-            fs::create_directories(include_dst);
+            if (!opts.dry_run) fs::create_directories(include_dst);
             for (auto& entry : fs::recursive_directory_iterator(include_src)) {
                 if (entry.is_regular_file()) {
                     auto rel = fs::relative(entry.path(), include_src);
                     auto dst = include_dst / rel;
-                    fs::create_directories(dst.parent_path());
+                    if (!opts.dry_run) fs::create_directories(dst.parent_path());
                     copy_file(entry.path(), dst);
                 }
             }
@@ -1966,12 +1982,16 @@ void install_project(const config::EzConfig& cfg,
         else if (total_bytes < 1024 * 1024) size_str = ", " + std::to_string(total_bytes / 1024) + " KB";
         else size_str = ", " + std::to_string(total_bytes / (1024 * 1024)) + " MB";
     }
-    util::info(ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_summary,
+    std::string summary = ezmk::i18n::fmt(ezmk::i18n::I18nKey::install_summary,
         {{"name", name},
          {"version", cfg.project.version},
          {"prefix", prefix.string()},
          {"files", std::to_string(files_copied)},
-         {"size", size_str}}));
+         {"size", size_str}});
+    // 1.5.0: make it explicit that nothing was written (the old dry-run printed
+    // the normal "Installed ..." summary).
+    if (opts.dry_run) summary += ezmk::i18n::get(ezmk::i18n::I18nKey::install_dry_run);
+    util::info(summary);
 }
 
 // 1.5.0-pre.1 (A-03): remove a pack staging tree on every exit path,
@@ -1996,7 +2016,10 @@ static void copy_pack_source_dir(const fs::path& from, const fs::path& to,
     if (!build_dir_name.empty()) prune_dirs.insert(build_dir_name);
     static const std::set<std::string> prune_exts = {
         ".o", ".obj", ".a", ".lib", ".so", ".dylib", ".dll", ".exe",
-        ".rsp", ".log"};
+        ".rsp", ".log",
+        // 1.5.0: previous pack outputs (zip/tgz) and checksum sidecars must not
+        // be swept into the next source package.
+        ".zip", ".tgz", ".sha256"};
     auto excluded = [&](const std::string& filename,
                         const std::string& ext) {
         for (const auto& e : extra_exclude) {
@@ -2525,6 +2548,18 @@ static void run_catch2_tests(TestRunContext& ctx) {
                     "or place catch2.hpp in include/vendor/catch2.hpp");
     }
     util::info(std::string("  Catch2 include: ") + catch2_inc);
+    // 1.5.0: the detected include root must reach the compile command. It used
+    // to be logged only, so single-header (include/vendor/catch2.hpp) and
+    // user/global-scope Catch2 failed to compile unless a project package
+    // happened to contribute the same -I.
+    {
+        fs::path inc(catch2_inc);
+        if (std::find(ctx.cin.extra_includes.begin(),
+                      ctx.cin.extra_includes.end(), inc) ==
+            ctx.cin.extra_includes.end()) {
+            ctx.cin.extra_includes.push_back(inc);
+        }
+    }
 
     // Check if any test file has user-defined main
     bool user_has_main = false;
@@ -3016,11 +3051,14 @@ void run_tests(const config::EzConfig& cfg,
                                                 cfg.project.type);
             fs::path temp_dir = proj_root / ".ezmk/temp";
             for (auto& s : proj_sources) {
-                auto rel = fs::relative(s, proj_root);
-                fs::path obj = temp_dir / rel;
-                obj.replace_extension(is_msvc ? ".obj" : ".o");
-                auto fname = obj.filename().string();
-                if (fname == "main.o" || fname == "main.obj") continue;
+                // 1.5.0: reuse the build's object naming (a.c -> a.c.o); the
+                // old replace_extension dropped every .c/.cc/.cxx object, so
+                // tests of C projects linked without their own symbols.
+                fs::path obj = cache::object_path_for(
+                    temp_dir, proj_root, s, is_msvc ? ".obj" : ".o");
+                // The test runner provides main(): skip any source whose stem
+                // is "main" (covers main.cpp/main.c/main.cc).
+                if (s.stem() == "main") continue;
                 if (util::file_exists(obj)) project_objs.push_back(obj);
             }
         } catch (...) {

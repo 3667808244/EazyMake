@@ -172,9 +172,12 @@ namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
     ezmk::util::init_console();
-    ezmk::lua::init();   // initialize Lua interpreter
 
     try {
+        // 1.5.0: lua::init() raises fatal_error on luaL_newstate / self-check
+        // failure. It used to run before the try block, so a failed init
+        // escaped main() (std::terminate, no cleanup) instead of exiting 1.
+        ezmk::lua::init();   // initialize Lua interpreter
         // 1.5.0-dev.1: load the two-level config.toml before CLI parsing so
         // --config / --no-config are honoured by every command.
         // 1.5.0-dev.3: i18n initialization needs the configured/--lang value,

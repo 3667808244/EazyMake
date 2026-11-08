@@ -79,6 +79,7 @@ namespace ezmk::cli
             if (j < 0)
                 util::fatal(ezmk::i18n::I18nKey::cli_jobs_negative);
             b.jobs = j;
+            b.jobs_explicit = true;   // 1.5.0: -j 0 must mean auto, not "config wins"
         }
         if (auto v = p.value("profile"))
             b.profile = *v;
@@ -151,6 +152,7 @@ namespace ezmk::cli
             if (j < 0)
                 util::fatal(ezmk::i18n::I18nKey::cli_jobs_negative);
             w.jobs = j;
+            w.jobs_explicit = true;   // 1.5.0: -j 0 = auto
         }
         if (p.has("stop-on-error"))
             w.stop_on_error = true;

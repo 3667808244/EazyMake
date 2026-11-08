@@ -104,7 +104,12 @@ void generate_compile_db(const cache::CompileInput& cin,
     // 1.5.0-dev.2: honor [project].build_dir / the global build_dir default.
     const fs::path build_dir = config::effective_build_dir_for(root);
     for (auto& src : cin.sources) {
-        auto rel = fs::relative(src, root);
+        std::error_code rel_ec;
+        auto rel = fs::relative(src, root, rel_ec);
+        // 1.5.0: a source on another Windows drive has no relative form;
+        // fs::relative used to throw/return empty, yielding "file": "" and an
+        // -o pointing at the build directory. Fall back to the absolute path.
+        if (rel_ec || rel.empty()) rel = src.lexically_normal();
         // Logical object path (build/<rel>.<ext>) — the index is read-only, so
         // a stable relative -o keeps the JSON clean without touching the build.
         fs::path obj = build_dir / rel;

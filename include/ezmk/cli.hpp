@@ -51,6 +51,7 @@ struct BuildOptions {
     bool disable_cache = false;
     bool verbose = false;
     int jobs = 0;              // 0.2.3+ (0 = auto-detect via hardware_concurrency)
+    bool jobs_explicit = false; // 1.5.0: -j was passed (0 means auto, not "use config")
     std::string profile;        // 0.2.3+ build profile name (debug, release, etc.)
     bool auto_update = false;   // 0.2.5+: auto-update repo indices before build
     bool compile_commands = false;  // 1.1.1: also generate compile_commands.json after build
@@ -111,6 +112,7 @@ struct ExampleOptions {
 // (also filled for the `-w` redirect on build/test/clean).
 struct WorkspaceOptions {
     int jobs = 0;                            // -j/--jobs (0 = auto)
+    bool jobs_explicit = false;              // 1.5.0: -j was passed (0 = auto)
     bool stop_on_error = false;              // --stop-on-error (build/test only)
     std::vector<std::string> members;        // --member <name> (repeatable)
     std::string test_report;                 // 1.3.2: --report (test only) — forwarded to members

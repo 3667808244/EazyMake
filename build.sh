@@ -122,11 +122,17 @@ CXXFLAGS="${CXXFLAGS:--std=c++17}"
 # Build the standalone ezmk-lua runtime (stale-aware, mirrors the ezmk build).
 build_ezmk_lua() {
     local need_build=false
-    if [ ! -f "$LUA_OUTPUT" ]; then
+    # 1.5.0: MinGW appends ".exe" to -o, so checking the extension-less path
+    # always looked stale and rebuilt this binary on every invocation.
+    local lua_bin="$LUA_OUTPUT"
+    if [ -f "$LUA_OUTPUT.exe" ]; then
+        lua_bin="$LUA_OUTPUT.exe"
+    fi
+    if [ ! -f "$lua_bin" ]; then
         need_build=true
     else
-        for src in $LUA_RUNTIME_SRC; do
-            if [ "$src" -nt "$LUA_OUTPUT" ]; then
+        for src in $LUA_RUNTIME_SRC include/ezmk/*.hpp build.sh; do
+            if [ "$src" -nt "$lua_bin" ]; then
                 need_build=true
                 break
             fi
@@ -148,7 +154,7 @@ build_ezmk_lua() {
         echo "=== ezmk-lua build successful: $LUA_OUTPUT ==="
         echo ""
     else
-        echo "=== ezmk-lua binary is up to date: $LUA_OUTPUT ==="
+        echo "=== ezmk-lua binary is up to date: $lua_bin ==="
         echo ""
     fi
 }
@@ -222,12 +228,20 @@ if $BUILD_TEST; then
     if $BUILD_EZMK; then
         # Only build ezmk if it doesn't exist or source is newer
         NEED_EZMK_BUILD=false
-        if [ ! -f "$OUTPUT" ]; then
+        # 1.5.0: the real output is "$OUTPUT.exe" on Windows; testing the
+        # extension-less path rebuilt the binary every run. Headers and this
+        # script are inputs too, so a header-only change no longer leaves a
+        # stale binary for the integration tests.
+        EZMK_BIN="$OUTPUT"
+        if [ -f "$OUTPUT.exe" ]; then
+            EZMK_BIN="$OUTPUT.exe"
+        fi
+        if [ ! -f "$EZMK_BIN" ]; then
             NEED_EZMK_BUILD=true
         else
             # Check if any source is newer than the binary
-            for src in src/*.cpp src/vendor/*.c src/vendor/lua/*.c; do
-                if [ "$src" -nt "$OUTPUT" ]; then
+            for src in src/*.cpp include/ezmk/*.hpp include/*.hpp                        src/vendor/*.c src/vendor/lua/*.c build.sh; do
+                if [ "$src" -nt "$EZMK_BIN" ]; then
                     NEED_EZMK_BUILD=true
                     break
                 fi
