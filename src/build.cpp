@@ -417,104 +417,93 @@ struct RspGuard {
     }
 };
 
+// 1.5.0-dev.12 (A-20): MSVC command assembly with a response-file fallback.
+// A command line longer than the shared threshold (thousands of objects / long
+// paths) exceeds the Windows 32767-character CreateProcess limit, so the
+// arguments are written to an @file instead. Each argument is MSVCRT-quoted,
+// which link.exe/lib.exe accept in a response file.
+static cache::JoinedCommand make_msvc_invocation(std::vector<std::string> args,
+                                                 const fs::path& rsp_dir) {
+    const std::string joined = cache::join_shell_args(args);
+    if (joined.size() <= cache::kResponseFileThreshold || rsp_dir.empty()) {
+        return {joined, {}};
+    }
+    static std::atomic<unsigned> rsp_seq{0};
+    fs::path rsp = rsp_dir / ("ezmk-msvc-rsp-" +
+                              std::to_string(rsp_seq.fetch_add(1)) + ".rsp.tmp");
+    std::string content;
+    for (size_t i = 1; i < args.size(); ++i) {
+        content += util::quote_windows_arg(args[i]);
+        content += "\r\n";
+    }
+    std::error_code ec;
+    fs::create_directories(rsp_dir, ec);
+    if (!util::file_write(rsp, content)) return {joined, {}};
+    return {cache::join_shell_args({args[0], "@" + rsp.string()}), rsp};
+}
+
 // MSVC link command builder — executable
-static std::string make_msvc_exe_cmd(const std::vector<fs::path>& objs,
-                                     const std::vector<fs::path>& archives,
-                                     const fs::path& output,
-                                     const config::LinkSection& link) {
-    std::ostringstream cmd;
-    // 1.4.6 Q-20: CreateProcessW parses a raw command line (no shell) — use the
-    // MSVCRT quoting rule. escape_shell_arg doubles every backslash, which
-    // corrupts UNC / extended-length paths.
+static cache::JoinedCommand make_msvc_exe_cmd(
+    const std::vector<fs::path>& objs,
+    const std::vector<fs::path>& archives,
+    const fs::path& output,
+    const config::LinkSection& link,
+    const fs::path& rsp_dir) {
+    std::vector<std::string> args;
     // 1.4.7 M-03: absolute link.exe (CreateProcess does not search the child
-    // vcvars PATH).
-    cmd << util::quote_windows_arg(toolchain::detect_toolchain().linker.string())
-        << " /OUT:" << util::quote_windows_arg(output.string()) << " ";
+    // vcvars PATH). 1.4.6 Q-20: args are MSVCRT-quoted at join time.
+    args.push_back(toolchain::detect_toolchain().linker.string());
+    args.push_back("/OUT:" + output.string());
+    for (auto& o : objs) args.push_back(o.string());
+    for (auto& a : archives) args.push_back(a.string());
 
-    for (auto& o : objs) {
-        cmd << util::quote_windows_arg(o.string()) << " ";
-    }
-    for (auto& a : archives) {
-        cmd << util::quote_windows_arg(a.string()) << " ";
-    }
-
-    // Translate and add link flags
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
-    for (auto& f : translated.translated) {
-        cmd << util::quote_windows_arg(f) << " ";
-    }
+    for (auto& f : translated.translated) args.push_back(f);
+    for (auto& f : link.msvc_flags) args.push_back(f);
+    // System targets: -l<name> → <name>.lib (before /LIBPATH is fine).
+    for (auto& t : link.system_targets) args.push_back(t + ".lib");
+    for (auto& d : link.link_dirs) args.push_back("/LIBPATH:" + d);
 
-    // MSVC-specific link flags
-    for (auto& f : link.msvc_flags) {
-        cmd << util::quote_windows_arg(f) << " ";
-    }
-
-    // Link dirs → /LIBPATH
-    for (auto& d : link.link_dirs) {
-        cmd << "/LIBPATH:" << util::quote_windows_arg(d) << " ";
-    }
-
-    // System targets: -l<name> → <name>.lib
-    for (auto& t : link.system_targets) {
-        cmd << util::quote_windows_arg(t + ".lib") << " ";
-    }
-
-    return cmd.str();
+    return make_msvc_invocation(std::move(args), rsp_dir);
 }
 
 // MSVC link command builder — shared library (DLL)
-static std::string make_msvc_dll_cmd(const std::vector<fs::path>& objs,
-                                     const std::vector<fs::path>& archives,
-                                     const fs::path& output_dll,
-                                     const fs::path& output_implib,
-                                     const config::LinkSection& link) {
-    std::ostringstream cmd;
-    // 1.4.6 Q-20: MSVCRT quoting for CreateProcessW (see make_msvc_exe_cmd).
-    // 1.4.7 M-03: absolute link.exe.
-    cmd << util::quote_windows_arg(toolchain::detect_toolchain().linker.string())
-        << " /DLL /OUT:" << util::quote_windows_arg(output_dll.string()) << " ";
-    cmd << "/IMPLIB:" << util::quote_windows_arg(output_implib.string()) << " ";
-
-    for (auto& o : objs) {
-        cmd << util::quote_windows_arg(o.string()) << " ";
-    }
-    for (auto& a : archives) {
-        cmd << util::quote_windows_arg(a.string()) << " ";
-    }
+static cache::JoinedCommand make_msvc_dll_cmd(
+    const std::vector<fs::path>& objs,
+    const std::vector<fs::path>& archives,
+    const fs::path& output_dll,
+    const fs::path& output_implib,
+    const config::LinkSection& link,
+    const fs::path& rsp_dir) {
+    std::vector<std::string> args;
+    args.push_back(toolchain::detect_toolchain().linker.string());
+    args.push_back("/DLL");
+    args.push_back("/OUT:" + output_dll.string());
+    args.push_back("/IMPLIB:" + output_implib.string());
+    for (auto& o : objs) args.push_back(o.string());
+    for (auto& a : archives) args.push_back(a.string());
 
     auto translated = toolchain::translate_link_flags(link.flags,
         toolchain::CompilerFamily::Msvc);
-    for (auto& f : translated.translated) {
-        cmd << util::quote_windows_arg(f) << " ";
-    }
-    for (auto& f : link.msvc_flags) {
-        cmd << util::quote_windows_arg(f) << " ";
-    }
-    for (auto& d : link.link_dirs) {
-        cmd << "/LIBPATH:" << util::quote_windows_arg(d) << " ";
-    }
-    for (auto& t : link.system_targets) {
-        cmd << util::quote_windows_arg(t + ".lib") << " ";
-    }
+    for (auto& f : translated.translated) args.push_back(f);
+    for (auto& f : link.msvc_flags) args.push_back(f);
+    for (auto& t : link.system_targets) args.push_back(t + ".lib");
+    for (auto& d : link.link_dirs) args.push_back("/LIBPATH:" + d);
 
-    return cmd.str();
+    return make_msvc_invocation(std::move(args), rsp_dir);
 }
 
 // MSVC static library command builder (lib.exe)
-static std::string make_msvc_lib_cmd(const std::vector<fs::path>& objs,
-                                     const fs::path& output) {
-    std::ostringstream cmd;
-    // 1.4.6 Q-20: MSVCRT quoting for CreateProcessW (see make_msvc_exe_cmd).
+static cache::JoinedCommand make_msvc_lib_cmd(const std::vector<fs::path>& objs,
+                                             const fs::path& output,
+                                             const fs::path& rsp_dir) {
+    std::vector<std::string> args;
     // 1.4.7 M-03: absolute lib.exe.
-    cmd << util::quote_windows_arg(toolchain::detect_toolchain().archiver.string())
-        << " /OUT:" << util::quote_windows_arg(output.string()) << " ";
-
-    for (auto& o : objs) {
-        cmd << util::quote_windows_arg(o.string()) << " ";
-    }
-
-    return cmd.str();
+    args.push_back(toolchain::detect_toolchain().archiver.string());
+    args.push_back("/OUT:" + output.string());
+    for (auto& o : objs) args.push_back(o.string());
+    return make_msvc_invocation(std::move(args), rsp_dir);
 }
 
 // ===================================================================
@@ -1618,7 +1607,11 @@ fs::path link_phase(const BuildState& st,
             return try_link([&]() -> fs::path {
                 fs::path lib = st.build_dir / (out_name + ".lib");
                 fs::path lib_tmp = st.build_dir / (out_name + ".lib.tmp");
-                return execute_link(make_msvc_lib_cmd(objects, lib_tmp), lib, lib_tmp,
+                // 1.5.0-dev.12 (A-20): lib.exe gets the same response-file
+                // fallback as the archiver/linker (long object lists on Windows).
+                auto jc = make_msvc_lib_cmd(objects, lib_tmp, st.temp_dir);
+                RspGuard rsp_guard{jc.rsp_file};
+                return execute_link(jc.cmd, lib, lib_tmp,
                                     opts.verbose, ezmk::i18n::I18nKey::archiving,
                                     lib.filename().string(), ezmk::i18n::I18nKey::archive_failed, st.tc);
             });
@@ -1650,8 +1643,11 @@ fs::path link_phase(const BuildState& st,
                 fs::path dll = st.build_dir / (out_name + ".dll");
                 fs::path implib = st.build_dir / (out_name + "_implib.lib");
                 fs::path dll_tmp = st.build_dir / (out_name + ".dll.tmp");
-                return execute_link(make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp, implib, merged_link),
-                                    dll, dll_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                auto jc = make_msvc_dll_cmd(objects, st.pkg_archives, dll_tmp,
+                                            implib, merged_link, st.temp_dir);
+                RspGuard rsp_guard{jc.rsp_file};
+                return execute_link(jc.cmd, dll, dll_tmp, opts.verbose,
+                                    ezmk::i18n::I18nKey::linking,
                                     dll.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         } else {
@@ -1682,8 +1678,11 @@ fs::path link_phase(const BuildState& st,
             return try_link([&]() -> fs::path {
                 fs::path exe = st.build_dir / (out_name + ".exe");
                 fs::path exe_tmp = st.build_dir / (out_name + ".exe.tmp");
-                return execute_link(make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp, merged_link),
-                                    exe, exe_tmp, opts.verbose, ezmk::i18n::I18nKey::linking,
+                auto jc = make_msvc_exe_cmd(objects, st.pkg_archives, exe_tmp,
+                                            merged_link, st.temp_dir);
+                RspGuard rsp_guard{jc.rsp_file};
+                return execute_link(jc.cmd, exe, exe_tmp, opts.verbose,
+                                    ezmk::i18n::I18nKey::linking,
                                     exe.filename().string(), ezmk::i18n::I18nKey::link_failed, st.tc, true);
             });
         } else {
@@ -2726,7 +2725,7 @@ static void run_catch2_tests(TestRunContext& ctx) {
 
     // 1.3.0-dev.2: response-file fallback for the test-runner link too.
     auto jc = ctx.is_msvc
-        ? cache::JoinedCommand{make_msvc_exe_cmd(objs, archives, runner, ctx.test_link), {}}
+        ? make_msvc_exe_cmd(objs, archives, runner, ctx.test_link, ctx.cache_dir)
         : make_gcc_link_cmd(objs, archives, runner, ctx.test_link, ctx.lang_info,
                             ctx.cache_dir, false, ctx.linker);
     RspGuard rsp_guard{jc.rsp_file};
@@ -2928,7 +2927,8 @@ static void run_ezmk_tests(TestRunContext& ctx) {
         // 1.3.0-dev.2: response-file fallback for the per-test link.
         // 1.4.2 F-11: dependency package archives are linked here too.
         auto jc = ctx.is_msvc
-            ? cache::JoinedCommand{make_msvc_exe_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link), {}}
+            ? make_msvc_exe_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link,
+                                ctx.cache_dir)
             : make_gcc_link_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link,
                             ctx.lang_info, ctx.cache_dir, false, ctx.linker);
         RspGuard rsp_guard{jc.rsp_file};

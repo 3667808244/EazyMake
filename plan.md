@@ -1,6 +1,6 @@
 # EazyMake 1.5.0-dev.12 执行计划
 
-> **状态：🚧 执行中；阶段零 ✅、阶段一 ✅、阶段二 ✅、阶段三（部分）🚧（2026-11-08）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.12.md](plans/1.5.x/1.5.0-dev.12.md)。dev.11 已收口（1228/7095；CI run 42449910408 全绿）；本版完成后与 dev.8 ~ dev.11 一起进入 pre.2。
+> **状态：🚧 执行中；阶段零 ✅、阶段一 ✅、阶段二 ✅、阶段三 ✅（2026-11-08）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.12.md](plans/1.5.x/1.5.0-dev.12.md)。dev.11 已收口（1228/7095；CI run 42449910408 全绿）；本版完成后与 dev.8 ~ dev.11 一起进入 pre.2。
 >
 > **回归基线**：dev.11 全量 **1228 / 7095 / 8 跳过 / 0 失败**；阶段三后单元 **1117 / 6363 / 4 跳过 / 0 失败**、离线集成 **122 / 785 / 4 跳过 / 0 失败**。
 >
@@ -40,13 +40,13 @@
 - [x] A-22 git 操作默认 300s 兜底超时 + 非 TTY 设 `GIT_TERMINAL_PROMPT=0`（集成 helper 超时未改）
 - [x] 测试：`make_temp_dir` 唯一性/0700 单测；pack、pkg、watcher、workspace 相关离线集成全绿
 
-### 阶段三：构建/工具链正确性（P2/P3）🚧（A-20 MSVC rsp 待办）
+### 阶段三：构建/工具链正确性（P2/P3）✅
 
 - [x] A-08 `[settings].linker` 生效：GCC/Clang 链接与测试链接优先使用校验过的 link 驱动（空值回退 detected compiler）
 - [x] A-09 C 项目缓存标识改用实际 `$CC` 驱动 + 其 `--version`（C++ 仍用 `$CXX`），换 CC 全量重编
 - [x] A-18 `run_tests` 去掉静默 `catch (...)`，改为警告并保留降级行为
 - [x] A-19 export 的 defs/opt_flags/link_opts 统一 `cmake_quote`（空格与 `;` 不再拆参数）
-- [ ] A-20 `ar` 已走 response file；MSVC `lib`/`link` 的 rsp 回退未做
+- [x] A-20 `ar` 走 response file；MSVC `lib`/`link` 也改为 argv + 统一 rsp 回退（`make_msvc_invocation`，本机无 MSVC，未实机验证）
 - [x] A-21 `--locked` 自动安装直接从 lockfile 安装，不再被无约束“最新版”预搜索挡住
 - [x] 测试：含空格宏/带引号宏的 export 用例；单元 1117/6363、离线集成 122/785 全绿
 
