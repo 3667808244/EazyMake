@@ -518,6 +518,38 @@ TEST_CASE("parse_config: project.name must be a safe basename (1.5.0)",
     REQUIRE(cfg.project.name == "my app");
 }
 
+// 1.5.0-dev.12 (A-13/A-24): wrong TOML section/field types and a missing
+// project.name must fail at parse time instead of being silently ignored.
+TEST_CASE("parse_config: wrong section/field types fail fast (1.5.0-dev.12)",
+          "[config][1.5.0-dev.12]") {
+    using namespace ezmk::config;
+
+    SECTION("section written as a scalar") {
+        auto p = write_temp_toml("test = \"x\"\n");
+        REQUIRE_THROWS_AS(parse_config(p), std::runtime_error);
+        fs::remove(p);
+    }
+    SECTION("compile.macros is not a table") {
+        auto p = write_temp_toml(
+            "[project]\nname = \"x\"\nversion = \"0.1.0\"\n"
+            "[compile]\nmacros = [\"A=1\"]\n");
+        REQUIRE_THROWS_AS(parse_config(p), std::runtime_error);
+        fs::remove(p);
+    }
+    SECTION("utils.permissions.network is not a boolean") {
+        auto p = write_temp_toml(
+            "[project]\nname = \"x\"\nversion = \"0.1.0\"\n"
+            "[utils]\n[utils.permissions]\nnetwork = \"yes\"\n");
+        REQUIRE_THROWS_AS(parse_config(p), std::runtime_error);
+        fs::remove(p);
+    }
+    SECTION("missing project.name") {
+        auto p = write_temp_toml("[project]\nversion = \"0.1.0\"\n");
+        REQUIRE_THROWS_AS(parse_config(p), std::runtime_error);
+        fs::remove(p);
+    }
+}
+
 // ===================================================================
 // 1.1.0-dev.4: stdlib parsing tests
 // ===================================================================

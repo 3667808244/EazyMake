@@ -845,8 +845,14 @@ static void parse_compile(const toml::table& root, EzConfig& cfg) {
         }
     }
 
-    // 0.2.2+: [compile.macros] — semantic macro definitions
-    if (auto macros_node = root["compile"]["macros"].as_table()) {
+    // 0.2.2+: [compile.macros] — semantic macro definitions.
+    // 1.5.0-dev.12 (A-13): a non-table value must fail, not be ignored.
+    const auto macros_view = root["compile"]["macros"];
+    if (macros_view) {
+        const toml::table* macros_node = macros_view.as_table();
+        if (!macros_node) {
+            throw std::runtime_error("compile.macros must be a table");
+        }
         for (auto& [key, val] : *macros_node) {
             std::string macro_key(key.str());
             if (!is_valid_macro_name(macro_key)) {
@@ -913,6 +919,10 @@ static bool is_obj_archive_path(const std::string& path) {
 static void parse_profiles(const toml::table& root, EzConfig& cfg) {
     // 0.2.3+: [compile.profile.<name>] — build configuration profiles
     if (auto comp = root["compile"].as_table()) {
+        // 1.5.0-dev.12 (A-13): [compile.profile] must be a table.
+        if (const auto pv = (*comp)["profile"]; pv && !pv.is_table()) {
+            throw std::runtime_error("compile.profile must be a table");
+        }
         if (auto profiles = (*comp)["profile"].as_table()) {
             for (auto& [key, val] : *profiles) {
                 std::string profile_name(key.str());
@@ -925,11 +935,21 @@ static void parse_profiles(const toml::table& root, EzConfig& cfg) {
                 }
 
                 ProfileConfig pc;
-                if (auto prof_table = val.as_table()) {
+                // 1.5.0-dev.12 (A-13): a profile must be a table.
+                const toml::table* prof_table = val.as_table();
+                if (!prof_table) {
+                    throw std::runtime_error(
+                        "compile.profile." + profile_name + " must be a table");
+                }
+                {
                     pc.flags = extract_string_array(prof_table->get("flags"), "profile.flags");
                     pc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"), "profile.msvc_flags");
 
                     // Parse macros sub-table within profile
+                    if (const auto pmv = (*prof_table)["macros"]; pmv && !pmv.is_table()) {
+                        throw std::runtime_error(
+                            "compile.profile." + profile_name + ".macros must be a table");
+                    }
                     if (auto macros_node = (*prof_table)["macros"].as_table()) {
                         for (auto& [mk, mv] : *macros_node) {
                             std::string macro_key(mk.str());
@@ -984,6 +1004,10 @@ static void parse_profiles(const toml::table& root, EzConfig& cfg) {
 
     // 0.2.3+: [link.profile.<name>] — link configuration profiles
     if (auto link = root["link"].as_table()) {
+        // 1.5.0-dev.12 (A-13): [link.profile] must be a table.
+        if (const auto pv = (*link)["profile"]; pv && !pv.is_table()) {
+            throw std::runtime_error("link.profile must be a table");
+        }
         if (auto profiles = (*link)["profile"].as_table()) {
             for (auto& [key, val] : *profiles) {
                 std::string profile_name(key.str());
@@ -996,10 +1020,14 @@ static void parse_profiles(const toml::table& root, EzConfig& cfg) {
                 }
 
                 ProfileLinkConfig plc;
-                if (auto prof_table = val.as_table()) {
-                    plc.flags = extract_string_array(prof_table->get("flags"), "profile.flags");
-                    plc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"), "profile.msvc_flags");
+                // 1.5.0-dev.12 (A-13): a link profile must be a table.
+                const toml::table* prof_table = val.as_table();
+                if (!prof_table) {
+                    throw std::runtime_error(
+                        "link.profile." + profile_name + " must be a table");
                 }
+                plc.flags = extract_string_array(prof_table->get("flags"), "profile.flags");
+                plc.msvc_flags = extract_string_array(prof_table->get("msvc_flags"), "profile.msvc_flags");
                 cfg.link_profiles[profile_name] = std::move(plc);
             }
         }
@@ -1107,7 +1135,13 @@ static void parse_utils(const toml::table& root, EzConfig& cfg) {
         // 0.2.5+: [utils.permissions] — fine-grained read/write/run control.
         // Presence of the sub-table switches on the deny/allow/ask model;
         // absence keeps the legacy unrestricted behavior.
-        if (auto perms = (*utils)["permissions"].as_table()) {
+        // 1.5.0-dev.12 (A-13): permissions must be a table and network a bool —
+        // a typo used to silently keep the legacy unrestricted model.
+        if (const auto pv = (*utils)["permissions"]) {
+            const toml::table* perms = pv.as_table();
+            if (!perms) {
+                throw std::runtime_error("utils.permissions must be a table");
+            }
             UtilsPermissions up;
             up.read       = extract_string_array(perms->get("read"), "permissions.read");
             up.read_deny  = extract_string_array(perms->get("read_deny"), "permissions.read_deny");
@@ -1116,9 +1150,11 @@ static void parse_utils(const toml::table& root, EzConfig& cfg) {
             up.run        = extract_string_array(perms->get("run"), "permissions.run");
             up.run_deny   = extract_string_array(perms->get("run_deny"), "permissions.run_deny");
             if (auto net = perms->get("network")) {
-                if (net->is_boolean()) {
-                    up.network = net->as_boolean()->get();
+                if (!net->is_boolean()) {
+                    throw std::runtime_error(
+                        "utils.permissions.network must be a boolean");
                 }
+                up.network = net->as_boolean()->get();
             }
             cfg.utils.permissions = std::move(up);
         }
@@ -1205,11 +1241,32 @@ EzConfig parse_config(const fs::path& toml_path) {
             std::string("failed to parse ") + toml_path.string() + ":\n  " + e.what());
     }
 
+    // 1.5.0-dev.12 (A-13): a section written with the wrong TOML type (e.g.
+    // `test = "x"` or `[compile] macros = [...]`) used to be silently treated
+    // as absent, so the user's configuration was ignored. Reject it up front.
+    static const char* const kTableSections[] = {
+        "project", "compile", "link", "depends", "hooks",
+        "install", "test", "utils", "pkg", "watch", "pack"};
+    for (const char* section : kTableSections) {
+        const auto* node = root.get(section);
+        if (node && !node->is_table()) {
+            throw std::runtime_error(
+                "config section [" + std::string(section) +
+                "] must be a table in " + toml_path.string());
+        }
+    }
+
     // [project] + required version
     parse_project(root, cfg);
     if (cfg.project.version.empty()) {
         throw std::runtime_error(
             ezmk::i18n::get(ezmk::i18n::I18nKey::config_err_missing_ver));
+    }
+    // 1.5.0-dev.12 (A-24): a missing name used to surface only during the build
+    // (as an empty artifact basename); fail at parse time with the file name.
+    if (cfg.project.name.empty()) {
+        throw std::runtime_error(
+            "project.name is required in " + toml_path.string());
     }
 
     // [compile] / [link] / [depends]
