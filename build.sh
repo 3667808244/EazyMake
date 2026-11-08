@@ -119,6 +119,18 @@ CXX="${CXX:-g++}"
 CC="${CC:-gcc}"
 CXXFLAGS="${CXXFLAGS:--std=c++17}"
 
+# 1.5.0-dev.12 (A-17): the generators below rewrite these files on every run, so
+# their mtime must not participate in the staleness check — otherwise the
+# binaries were rebuilt on every invocation. Their real inputs are listed in the
+# loops instead (locale/, examples/, .claude/skills/, scripts/, res/).
+is_generated_file() {
+    case "$1" in
+        src/locale_data.cpp|src/example_data.cpp|src/skill_data.cpp|include/ezmk/version.hpp|include/ezmk/logo.gen.h)
+            return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Build the standalone ezmk-lua runtime (stale-aware, mirrors the ezmk build).
 build_ezmk_lua() {
     local need_build=false
@@ -128,10 +140,14 @@ build_ezmk_lua() {
     if [ -f "$LUA_OUTPUT.exe" ]; then
         lua_bin="$LUA_OUTPUT.exe"
     fi
-    if [ ! -f "$lua_bin" ]; then
+    if [ ! -f "$lua_bin" ] || \
+       ! grep -qF "#define EZMK_VERSION \"$EZMK_VERSION\"" include/ezmk/version.hpp 2>/dev/null; then
         need_build=true
     else
-        for src in $LUA_RUNTIME_SRC include/ezmk/*.hpp build.sh; do
+        for src in $LUA_RUNTIME_SRC include/ezmk/*.hpp include/*.hpp \
+                   locale/*.json examples/* .claude/skills/*/SKILL.md \
+                   scripts/*.py res/* build.sh; do
+            is_generated_file "$src" && continue
             if [ "$src" -nt "$lua_bin" ]; then
                 need_build=true
                 break
@@ -236,11 +252,18 @@ if $BUILD_TEST; then
         if [ -f "$OUTPUT.exe" ]; then
             EZMK_BIN="$OUTPUT.exe"
         fi
-        if [ ! -f "$EZMK_BIN" ]; then
+        # 1.5.0-dev.12 (A-17): the version string lives in a generated header, so
+        # compare its content (a release rebuild must not be skipped) and let the
+        # generator inputs drive the mtime check.
+        if [ ! -f "$EZMK_BIN" ] || \
+           ! grep -qF "#define EZMK_VERSION \"$EZMK_VERSION\"" include/ezmk/version.hpp 2>/dev/null; then
             NEED_EZMK_BUILD=true
         else
-            # Check if any source is newer than the binary
-            for src in src/*.cpp include/ezmk/*.hpp include/*.hpp                        src/vendor/*.c src/vendor/lua/*.c build.sh; do
+            # Check if any real source/generator input is newer than the binary
+            for src in src/*.cpp include/ezmk/*.hpp include/*.hpp \
+                       locale/*.json examples/* .claude/skills/*/SKILL.md \
+                       scripts/*.py res/* src/vendor/*.c src/vendor/lua/*.c build.sh; do
+                is_generated_file "$src" && continue
                 if [ "$src" -nt "$EZMK_BIN" ]; then
                     NEED_EZMK_BUILD=true
                     break
