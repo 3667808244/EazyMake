@@ -523,6 +523,32 @@ std::vector<std::string> build_compile_args(const CompileInput& in,
                                    "standard switch for: ") + f);
         }
         for (auto& f : effective_msvc_flags) args.push_back(f);
+        // 1.5.0-dev.12 (MSVC verification): /Zi writes a program database. With
+        // parallel compilation every cl.exe defaulted to the SAME .pdb, so a
+        // project with many sources died with C1041 ("cannot open program
+        // database") / C1090. Give each object its own /Fd path.
+        {
+            auto wants_pdb = [](const std::string& f) {
+                if (f.size() < 3 || f[0] != '/') return false;
+                std::string low = f.substr(0, 3);
+                for (char& c : low) {
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                }
+                return low == "/zi";
+            };
+            bool needs_pdb = false;
+            for (const auto& f : flag_trans.translated) {
+                if (wants_pdb(f)) { needs_pdb = true; break; }
+            }
+            if (!needs_pdb) {
+                for (const auto& f : effective_msvc_flags) {
+                    if (wants_pdb(f)) { needs_pdb = true; break; }
+                }
+            }
+            if (needs_pdb) {
+                args.push_back("/Fd" + obj.string() + ".pdb");
+            }
+        }
         args.push_back("/utf-8");
         args.push_back("/MD");
         // 1.2.0-dev.9: def_inc + include_dirs 保序去重

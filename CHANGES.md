@@ -32,7 +32,7 @@
 
 ## 1.5.0-dev.12 (2026-11-08) — 全量代码审核修复（第二轮）
 
-> **状态：实现收口（2026-11-08），未发布、待 CI。** 阶段零 31 项 + 阶段一~四；单元 **1118 / 6280 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1241 / 7919 / 8 跳过 / 0 失败**。
+> **状态：实现收口（2026-11-08），未发布、待 CI。** 阶段零 31 项 + 阶段一~四；单元 **1118 / 6280 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1242 / 7922 / 8 跳过 / 0 失败**。
 
 ### 安全与完整性
 
@@ -61,11 +61,12 @@
 
 - `build.sh` 默认 `-O2 -Wall -Wextra`（vendor 的 unused-function / type-limits 告警抑制；首方代码 0 告警）。
 - 新增回归：Lua 内存炸弹、缺 sha256 的 repo 安装、临时目录唯一/0700、错误配置类型、全部 i18n key 双语非空等。
+- **MSVC 实机验证**（VS 2022 BuildTools 14.44）：exe/static/shared/test 全部通过（shared 导出符号后生成 `.dll` + 导入库）；320 对象的 `lib.exe`/`link.exe` response file 实测生效；修复并行编译 PDB 冲突（每对象 `/Fd`，C1041/C1090）。
 
 ### 已知限制
 
-- MSVC 环境块大小写覆盖与 MSVC response file 未经实机验证（本机为 MinGW）。
 - macOS kqueue 递归分支未实机验证（Linux 由 CI 覆盖）。
+- MSVC 共享库模板未内置导出宏（需自行加 `__declspec(dllexport)`；实测导出后 `_implib.lib` 正常生成，模板导出宏留待后续）。
 - A-23（lockfile 全量重哈希）评估后保留现状：install 受编译/解压主导，批量保存优化留待 2.0.0。
 
 ## 1.5.0-dev.11 (2026-11-08) — 首次无配置生成默认模板

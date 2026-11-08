@@ -690,6 +690,39 @@ TEST_CASE("build_compile_args: def_inc + include_dirs dedup (MSVC)", "[cache][1.
     REQUIRE(std::count(args.begin(), args.end(), inc) == 1);
 }
 
+// 1.5.0-dev.12 (MSVC verification): /Zi used to make every parallel cl.exe
+// write the same default .pdb (C1041/C1090 with many sources). Each object
+// must get its own /Fd path.
+TEST_CASE("build_compile_args: /Zi gets a per-object /Fd (1.5.0-dev.12)",
+          "[cache][1.5.0-dev.12]") {
+    TempDir tmp;
+    fs::create_directories(tmp.path / "src");
+    fs::create_directories(tmp.path / "build");
+    std::ofstream(tmp.path / "src" / "main.cpp") << "int main() { return 0; }\n";
+
+    CompileInput in;
+    in.proj_root = tmp.path;
+    in.lang.compiler = "cl.exe";
+    in.lang.std_flag = "-std=c++17";
+    in.tc.family = ezmk::toolchain::CompilerFamily::Msvc;
+    in.compile.flags = {"-g"};  // → /Zi
+
+    const fs::path obj = tmp.path / "build" / "main.obj";
+    auto args = build_compile_args(in, tmp.path / "src" / "main.cpp", obj);
+
+    bool has_zi = false;
+    bool has_fd = false;
+    for (const auto& a : args) {
+        if (a == "/Zi") has_zi = true;
+        if (a.rfind("/Fd", 0) == 0) {
+            has_fd = true;
+            CHECK(a.find(obj.string()) != std::string::npos);
+        }
+    }
+    CHECK(has_zi);
+    CHECK(has_fd);
+}
+
 // 1.2.0-dev.11: the RESOLVED SOURCE_DATE_EPOCH must be part of the cache
 // signature — it is injected via the child env and embedded in objects, so a
 // change must invalidate cached objects even though the command line is the

@@ -2,7 +2,7 @@
 
 > **状态：✅ 阶段零~五收口（2026-11-08；待 CI 绿后进入 pre.2）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.12.md](plans/1.5.x/1.5.0-dev.12.md)。dev.11 已收口（1228/7095；CI run 42449910408 全绿）；本版完成后与 dev.8 ~ dev.11 一起进入 pre.2。
 >
-> **回归基线**：全量 `test-all`（离线）**1241 / 7919 / 8 跳过 / 0 失败**（单元 1118/6280 + 离线集成 122/785），高于 dev.11 的 1228/7095。
+> **回归基线**：全量 `test-all`（离线）**1242 / 7922 / 8 跳过 / 0 失败**（单元 1118/6280 + 离线集成 122/785），高于 dev.11 的 1228/7095。
 >
 > **目标**：修复 2026-11-08 全量代码审核发现的剩余 P1/P2/P3（31 项已随阶段零落地，24 项待修），零回归进入 pre.2。
 
@@ -32,7 +32,7 @@
 
 - [x] A-03 Linux/macOS 递归监听：`add_directory(recursive)` 展开现有子树（跳过隐藏/build/目录符号链接），每 2s rescan 补挂新子目录；Windows 继续用 bWatchSubtree；头文件/文档同步（Linux 由 CI 验证，macOS 本机未验证）
 - [x] A-05 临时路径排他创建：`util::make_temp_dir()`（POSIX `mkdtemp`/0700；Windows 不可预测名），pkg 的 stage/clone/download 全部改用
-- [x] A-06 MSVC 环境块按大小写不敏感覆盖（`PATH`/`Path` 不再双份；MSVC 实机仍待验证）
+- [x] A-06 MSVC 环境块按大小写不敏感覆盖（`PATH`/`Path` 不再双份；VS 2022 BuildTools 实机已验证）
 - [x] A-07 POSIX `waitpid` EINTR 重试；失败不再当 exit 0
 - [x] A-10 pack 遍历/stat 错误立即失败；目录符号链接不递归
 - [x] A-11 tar 长名不再静默截断（超限明确报错并提示 `--format zip`；GNU LongLink 未实现）
@@ -46,7 +46,7 @@
 - [x] A-09 C 项目缓存标识改用实际 `$CC` 驱动 + 其 `--version`（C++ 仍用 `$CXX`），换 CC 全量重编
 - [x] A-18 `run_tests` 去掉静默 `catch (...)`，改为警告并保留降级行为
 - [x] A-19 export 的 defs/opt_flags/link_opts 统一 `cmake_quote`（空格与 `;` 不再拆参数）
-- [x] A-20 `ar` 走 response file；MSVC `lib`/`link` 也改为 argv + 统一 rsp 回退（`make_msvc_invocation`，本机无 MSVC，未实机验证）
+- [x] A-20 `ar` 走 response file；MSVC `lib`/`link` 也改为 argv + 统一 rsp 回退（`make_msvc_invocation`；320 对象项目实机验证）
 - [x] A-21 `--locked` 自动安装直接从 lockfile 安装，不再被无约束“最新版”预搜索挡住
 - [x] 测试：含空格宏/带引号宏的 export 用例；单元 1117/6363、离线集成 122/785 全绿
 
@@ -62,7 +62,8 @@
 
 ### 阶段五：回归、文档与收口 ✅
 
-- [x] 全量 `test-all`（`EZMK_TEST_OFFLINE=1`）零失败：**1241 / 7919 / 8 跳过 / 0 失败**
+- [x] 全量 `test-all`（`EZMK_TEST_OFFLINE=1`）零失败：**1242 / 7922 / 8 跳过 / 0 失败**
+- [x] MSVC 实机验证（VS 2022 BuildTools 14.44）：exe/static/shared/test + 320 对象 lib/link rsp；修复并行编译 PDB 冲突（每对象 `/Fd`）
 - [x] i18n / man / docs-sync / config-docs 四套脚本全绿
 - [x] 文档对齐：name、`--locked`、dry-run、i18n 优先级；watch 递归说明更新 en/zh
 - [x] A-23 评估：保留现状，批量保存优化登记为 2.0.0 性能项
