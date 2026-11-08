@@ -1,6 +1,6 @@
 # EazyMake 1.5.0-dev.12 执行计划
 
-> **状态：🚧 执行中；阶段零 ✅、阶段一 ✅、阶段二（部分，A-03 待办）✅（2026-11-08）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.12.md](plans/1.5.x/1.5.0-dev.12.md)。dev.11 已收口（1228/7095；CI run 42449910408 全绿）；本版完成后与 dev.8 ~ dev.11 一起进入 pre.2。
+> **状态：🚧 执行中；阶段零 ✅、阶段一 ✅、阶段二 ✅（2026-11-08）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.12.md](plans/1.5.x/1.5.0-dev.12.md)。dev.11 已收口（1228/7095；CI run 42449910408 全绿）；本版完成后与 dev.8 ~ dev.11 一起进入 pre.2。
 >
 > **回归基线**：dev.11 全量 **1228 / 7095 / 8 跳过 / 0 失败**；阶段二后单元 **1116 / 6362 / 4 跳过 / 0 失败**、离线集成 **122 / 785 / 4 跳过 / 0 失败**。
 >
@@ -28,9 +28,9 @@
 - [x] 测试：内存炸弹（`string.rep 600 MiB`）、缺哈希 repo 安装告警（新增集成用例）
 - [x] 回归：单元 1115/6359、离线集成 122/785 零失败
 
-### 阶段二：跨平台与并发健壮性（P1/P2）🚧（A-03 待办）
+### 阶段二：跨平台与并发健壮性（P1/P2）✅
 
-- [ ] A-03 Linux inotify / macOS kqueue 递归监听 + 新目录补挂；头文件/文档同步
+- [x] A-03 Linux/macOS 递归监听：`add_directory(recursive)` 展开现有子树（跳过隐藏/build/目录符号链接），每 2s rescan 补挂新子目录；Windows 继续用 bWatchSubtree；头文件/文档同步（Linux 由 CI 验证，macOS 本机未验证）
 - [x] A-05 临时路径排他创建：`util::make_temp_dir()`（POSIX `mkdtemp`/0700；Windows 不可预测名），pkg 的 stage/clone/download 全部改用
 - [x] A-06 MSVC 环境块按大小写不敏感覆盖（`PATH`/`Path` 不再双份；MSVC 实机仍待验证）
 - [x] A-07 POSIX `waitpid` EINTR 重试；失败不再当 exit 0
@@ -38,7 +38,7 @@
 - [x] A-11 tar 长名不再静默截断（超限明确报错并提示 `--format zip`；GNU LongLink 未实现）
 - [x] A-12 `atomic_write_text` 唯一临时名 + `fsync`（含目录）；`create_targz`/`create_zip` 临时名唯一
 - [x] A-22 git 操作默认 300s 兜底超时 + 非 TTY 设 `GIT_TERMINAL_PROMPT=0`（集成 helper 超时未改）
-- [x] 测试：`make_temp_dir` 唯一性/0700 单测；pack、pkg、临时目录相关离线集成全绿
+- [x] 测试：`make_temp_dir` 唯一性/0700 单测；pack、pkg、watcher、workspace 相关离线集成全绿
 
 ### 阶段三：构建/工具链正确性（P2/P3）
 

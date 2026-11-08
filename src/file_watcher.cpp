@@ -56,16 +56,94 @@ FileWatcher::~FileWatcher() {
     stop();
 }
 
+#if !defined(EZMK_FILEWATCHER_WIN)
+// 1.5.0-dev.12 (A-03): prune the same directories the recursive source
+// collector prunes, so `.git/` and build output never generate watch events.
+static bool watch_prune_dir(const std::string& name) {
+    return (!name.empty() && name[0] == '.') || name == "build";
+}
+#endif
+
 void FileWatcher::add_directory(const fs::path& dir, bool recursive) {
     if (dir.empty()) {
         util::warn("FileWatcher: skipping empty directory path");
         return;
     }
-    // 1.1.3 C4: 原 recursive_ 字段是死代码（三平台实现都不读），已删除。递归行为
-    // 取决于平台实现（Windows bWatchSubtree=TRUE；Linux/macOS 仅监听目录本身）。
-    // 参数保留以兼容 API，当前不生效——未来按平台实现真正的递归。
-    (void)recursive;
-    dirs_.push_back(fs::absolute(dir));
+    const fs::path abs = fs::absolute(dir);
+    const std::string key = fold_case(path_key(abs));
+    if (!watch_keys_.insert(key).second) return;   // already watched
+    dirs_.push_back(abs);
+
+    // 1.5.0-dev.12 (A-03): Windows watches the subtree with one handle, so
+    // only the root is registered. Linux/macOS need one watch per directory —
+    // expand the existing subtree now; subdirectories created later are
+    // discovered by refresh_recursive_dirs().
+#if !defined(EZMK_FILEWATCHER_WIN)
+    if (recursive) {
+        recursive_roots_.push_back(abs);
+        std::error_code ec;
+        for (fs::recursive_directory_iterator it(
+                 abs, fs::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            std::error_code sec;
+            const auto st = it->symlink_status(sec);
+            if (sec) { it.disable_recursion_pending(); continue; }
+            if (fs::is_symlink(st)) { it.disable_recursion_pending(); continue; }
+            std::error_code dec;
+            if (!it->is_directory(dec)) continue;
+            if (watch_prune_dir(it->path().filename().string())) {
+                it.disable_recursion_pending();
+                continue;
+            }
+            if (watch_keys_.insert(fold_case(path_key(it->path()))).second) {
+                dirs_.push_back(it->path());
+            }
+        }
+    }
+#else
+    (void)recursive;   // bWatchSubtree=TRUE handles recursion
+#endif
+}
+
+void FileWatcher::refresh_recursive_dirs() {
+#if !defined(EZMK_FILEWATCHER_WIN)
+    for (const auto& root : recursive_roots_) {
+        if (!util::file_exists(root)) continue;
+        std::error_code ec;
+        for (fs::recursive_directory_iterator it(
+                 root, fs::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            std::error_code sec;
+            const auto st = it->symlink_status(sec);
+            if (sec) { it.disable_recursion_pending(); continue; }
+            if (fs::is_symlink(st)) { it.disable_recursion_pending(); continue; }
+            std::error_code dec;
+            if (!it->is_directory(dec)) continue;
+            if (watch_prune_dir(it->path().filename().string())) {
+                it.disable_recursion_pending();
+                continue;
+            }
+            const std::string key = fold_case(path_key(it->path()));
+            if (!watch_keys_.insert(key).second) continue;
+            fs::path p = it->path();
+            bool added = false;
+#if defined(EZMK_FILEWATCHER_LINUX)
+            {
+                std::lock_guard<std::mutex> lock(platform_mutex_);
+                added = linux_add_watch(p);
+                if (added) dirs_.push_back(p);
+            }
+#elif defined(EZMK_FILEWATCHER_MACOS)
+            {
+                std::lock_guard<std::mutex> lock(platform_mutex_);
+                added = macos_add_watch(p);
+                if (added) dirs_.push_back(p);
+            }
+#endif
+            if (!added) watch_keys_.erase(key);   // retry on the next pass
+        }
+    }
+#endif
 }
 
 // 1.4.2 F-32: build-artifact filtering. A prefix matches whole directory trees
@@ -227,6 +305,8 @@ void FileWatcher::main_loop() {
 #elif defined(EZMK_FILEWATCHER_MACOS)
             macos_repair_watches();
 #endif
+            // 1.5.0-dev.12 (A-03): pick up subdirectories created at runtime.
+            refresh_recursive_dirs();
         }
     }
 }
@@ -532,6 +612,22 @@ void FileWatcher::win32_cleanup() {
 // ===================================================================
 #ifdef EZMK_FILEWATCHER_LINUX
 
+// 1.5.0-dev.12 (A-03): register one directory. The caller holds
+// platform_mutex_ (the worker's repair/refresh paths both do).
+bool FileWatcher::linux_add_watch(const fs::path& dir) {
+    if (inotify_fd_ < 0) return false;
+    const std::string path = dir.string();
+    for (const auto& [wd, p] : wd_to_path_) {
+        (void)wd;
+        if (p == path) return true;
+    }
+    const uint32_t mask = IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MODIFY;
+    const int wd = inotify_add_watch(inotify_fd_, path.c_str(), mask);
+    if (wd < 0) return false;
+    wd_to_path_[wd] = path;
+    return true;
+}
+
 void FileWatcher::linux_worker() {
     char buf[4096 * 4] __attribute__((aligned(__alignof__(struct inotify_event))));
 
@@ -614,9 +710,7 @@ void FileWatcher::linux_repair_watches() {
         }
         if (!util::file_exists(dir)) continue;  // still gone — keep waiting
 
-        uint32_t mask = IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MODIFY;
-        int wd = inotify_add_watch(inotify_fd_, path.c_str(), mask);
-        if (wd < 0) {
+        if (!linux_add_watch(dir)) {
             // 1.4.2 F-31: warn once per loss instead of spamming every 2s.
             if (repair_warned_.insert(path).second) {
                 util::warn(std::string("FileWatcher: watch lost for ") + path +
@@ -624,7 +718,6 @@ void FileWatcher::linux_repair_watches() {
             }
             continue;
         }
-        wd_to_path_[wd] = path;
         bool was_warned = repair_warned_.erase(path) > 0;
         if (was_warned) {
             util::info(std::string("FileWatcher: re-established watch for ") + path);
@@ -645,6 +738,28 @@ void FileWatcher::linux_cleanup() {
 // macOS implementation (kqueue)
 // ===================================================================
 #ifdef EZMK_FILEWATCHER_MACOS
+
+// 1.5.0-dev.12 (A-03): open + register one directory. The caller holds
+// platform_mutex_ (worker repair/refresh and the initial single-threaded run).
+bool FileWatcher::macos_add_watch(const fs::path& dir) {
+    if (kq_ < 0) return false;
+    const std::string path = dir.string();
+    for (const auto& w : watches_) {
+        if (w.path == path) return true;
+    }
+    if (!util::file_exists(dir)) return false;
+    const int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) return false;
+    KqWatch w;
+    w.path = path;
+    w.fd = fd;
+    if (!macos_register(w)) {
+        close(fd);
+        return false;
+    }
+    watches_.push_back(std::move(w));
+    return true;
+}
 
 bool FileWatcher::macos_register(KqWatch& w) {
     struct kevent ch;
@@ -676,6 +791,12 @@ void FileWatcher::macos_worker() {
     std::vector<struct kevent> events(n);
 
     while (!stop_requested_) {
+        // 1.5.0-dev.12 (A-03): refresh_recursive_dirs() can add watches at
+        // runtime; grow the event array so new fds are never truncated.
+        {
+            std::lock_guard<std::mutex> lock(platform_mutex_);
+            if (watches_.size() > events.size()) events.resize(watches_.size());
+        }
         struct timespec ts;
         ts.tv_sec = 0;
         ts.tv_nsec = 500 * 1000000; // 500ms
@@ -832,13 +953,9 @@ void FileWatcher::run() {
             util::warn(std::string("watch directory not found, skipping: ") + dir.string());
             continue;
         }
-        uint32_t mask = IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MODIFY;
-        int wd = inotify_add_watch(inotify_fd_, dir.string().c_str(), mask);
-        if (wd < 0) {
+        if (!linux_add_watch(dir)) {
             util::warn(std::string("failed to watch directory: ") + dir.string());
-            continue;
         }
-        wd_to_path_[wd] = dir.string();
     }
 
     if (wd_to_path_.empty()) {
@@ -866,48 +983,22 @@ void FileWatcher::run() {
         return;
     }
 
-    // 1.4.2 F-36: dynamic registration array (was a fixed 32 slots).
-    std::vector<struct kevent> changes;
-    changes.reserve(dirs_.size());
-
+    // 1.5.0-dev.12 (A-03): macos_add_watch opens AND registers each directory
+    // immediately (one kevent per fd); recursion is expanded into extra watches.
     for (auto& dir : dirs_) {
         if (!util::file_exists(dir)) {
             util::warn(std::string("watch directory not found, skipping: ") + dir.string());
             continue;
         }
-
-        int fd = open(dir.string().c_str(), O_RDONLY);
-        if (fd < 0) {
+        if (!macos_add_watch(dir)) {
             util::warn(std::string("failed to open watch directory: ") + dir.string());
-            continue;
         }
-
-        KqWatch w;
-        w.path = dir.string();
-        w.fd = fd;
-        watches_.push_back(w);
-
-        struct kevent ch;
-        EV_SET(&ch, static_cast<uintptr_t>(fd), EVFILT_VNODE,
-               EV_ADD | EV_CLEAR | EV_ENABLE,
-               NOTE_WRITE | NOTE_DELETE | NOTE_RENAME | NOTE_EXTEND,
-               0, nullptr);
-        changes.push_back(ch);
     }
 
     if (watches_.empty()) {
         util::error("FileWatcher: no directories could be opened for watching");
         close(kq_);
         kq_ = -1;
-        running_ = false;
-        return;
-    }
-
-    // Register all events
-    if (kevent(kq_, changes.data(), static_cast<int>(changes.size()),
-               nullptr, 0, nullptr) < 0) {
-        util::error("FileWatcher: kevent registration failed");
-        macos_cleanup();
         running_ = false;
         return;
     }

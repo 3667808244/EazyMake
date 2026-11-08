@@ -30,12 +30,14 @@ namespace fs = std::filesystem;
 // Monitors directories for file changes and invokes a callback after
 // a debounce window (300ms by default) to coalesce rapid edits.
 //
-// Recursion (1.1.3 C4): platform-dependent and NOT configurable.
-//   - Windows: watches the directory subtree (ReadDirectoryChangesW bWatchSubtree=TRUE).
-//   - Linux/macOS: watches the directory itself only (non-recursive).
-// The old recursive_ field was dead code (never read) and has been removed;
-// the add_directory(recursive) parameter is kept for API compatibility but
-// is currently not honored.
+// Recursion (1.1.3 C4, 1.5.0-dev.12 A-03): add_directory(dir, /*recursive=*/true)
+// now watches the whole subtree on every platform.
+//   - Windows: ReadDirectoryChangesW bWatchSubtree=TRUE (one handle).
+//   - Linux/macOS: every existing subdirectory gets its own watch, and new
+//     subdirectories are picked up by a periodic rescan (2 s, matching the
+//     repair cadence). Hidden ('.'-prefixed) and "build" directories are
+//     pruned, and directory symlinks are never followed.
+// With recursive=false only the directory itself is watched.
 //
 // Event granularity (1.2.0-dev.11):
 //   - Windows/Linux: the callback receives the specific changed file path.
@@ -73,7 +75,9 @@ public:
     FileWatcher(Callback cb, int debounce_ms = 300);
     ~FileWatcher();
 
-    // Add a directory to watch. Must be called before run().
+    // Add a directory to watch. Must be called before run(). Recursive adds the
+    // existing subtree (see the note above); new subdirectories are discovered
+    // by the periodic rescan. Duplicate paths are ignored.
     void add_directory(const fs::path& dir, bool recursive = true);
 
     // 1.4.2 F-32: ignore any event whose absolute path starts with `prefix`
@@ -108,6 +112,9 @@ private:
 
     // 1.4.2: shared run() main loop (debounce + worker-death check + repair).
     void main_loop();
+    // 1.5.0-dev.12 (A-03): add watches for subdirectories created after run()
+    // started (called from main_loop's repair cadence).
+    void refresh_recursive_dirs();
     // Record a platform event (ignore-filtered) into the debounce set.
     void note_event(const fs::path& p);
     // Does the absolute generic path `abs_generic` hit an ignore rule?
@@ -122,6 +129,10 @@ private:
 
     // Directories to watch
     std::vector<fs::path> dirs_;
+    // 1.5.0-dev.12 (A-03): roots passed with recursive=true (rescanned for new
+    // subdirectories) and the dedup key of every directory in dirs_.
+    std::vector<fs::path> recursive_roots_;
+    std::set<std::string> watch_keys_;
 
     // 1.4.2 F-32: ignore rules (see add_ignore_prefix/add_ignore_suffix).
     std::vector<std::string> ignore_prefixes_;
@@ -174,6 +185,8 @@ private:
     void linux_worker();
     void linux_repair_watches();
     void linux_cleanup();
+    // 1.5.0-dev.12 (A-03): register one directory; caller holds platform_mutex_.
+    bool linux_add_watch(const fs::path& dir);
 #elif defined(EZMK_FILEWATCHER_MACOS)
     // macOS: kqueue
     int kq_ = -1;
@@ -191,6 +204,8 @@ private:
     bool macos_register(KqWatch& w);
     void macos_repair_watches();
     void macos_cleanup();
+    // 1.5.0-dev.12 (A-03): open+register one directory; caller holds platform_mutex_.
+    bool macos_add_watch(const fs::path& dir);
 #endif
 };
 
