@@ -16,7 +16,7 @@
 | [1.5.0-pre.1](1.5.0-pre.1.md) | 发布前收口 | 用户触达 / 全量文档 / i18n / 47 项审查修复 / 发布门槛 | dev.1~dev.7 | ✅ 收口完成（test-all 1219/6979；CI run 41212564762 全绿） |
 | [1.5.0-dev.8](1.5.0-dev.8.md) | 项目级 agent skills 分发 | `[settings].gen_agent_skills`（bool/string）+ 构建期嵌入 4 个 `ezmk-user-*` 技能 + 分发到 `.claude/skills` / `.github/skills` / `.agents/skills` + AGENTS.md 技能描述 + 文档/测试 | dev.1、dev.3 | ✅ 实现收口（1224/7046；CI 42347726309 绿；待 pre.2） |
 | [1.5.0-dev.9](1.5.0-dev.9.md) | 编译器/连接器输出策略 | `[settings].compiler_output` + `[settings].linker_output`（always / warning / error）+ 串行/并行诊断输出 | dev.8 | ✅ 实现收口（1226/7058；CI 42363070935 绿；待 pre.2） |
-| [1.5.0-dev.10](1.5.0-dev.10.md) | 工具链/缓存/网络/安装前缀配置 | `[settings].cxx` / `.cc` / `.linker` / `.use_cache` / `.network_timeout` / `.retries` / `.proxy` / `.install_prefix` | dev.9 | ✅ 实现完成（1227/7077；待 CI/pre.2） |
+| [1.5.0-dev.10](1.5.0-dev.10.md) | 工具链/缓存/网络/安装前缀配置 | `[settings].cxx` / `.cc` / `.linker` / `.use_cache` / `.network_timeout` / `.retries` / `.proxy` / `.install_prefix` | dev.9 | ✅ 实现收口（1227/7077；CI 42447385973 绿；待 pre.2） |
 
 > **全量源代码审查**（pre.1 输入）：[1.5.0-pre.1-audit.md](1.5.0-pre.1-audit.md) —— 47 项（P1 4 / P2 23 / P3 20，无 P0）。
 
