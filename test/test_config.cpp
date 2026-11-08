@@ -2723,6 +2723,76 @@ TEST_CASE("runtime config: compiler/linker output enums",
     fs::remove_all(root);
 }
 
+TEST_CASE("runtime config: dev10 tool/cache/network/install keys",
+          "[config][1.5.0-dev.10]") {
+    auto root = make_runtime_cfg_root("dev10cfg");
+    auto udir = root / "user";
+    EnvScope u("EZMK_USER_CONFIG_DIR", udir.string());
+
+    auto load = [&](const std::string& text) {
+        write_runtime_cfg(udir, text);
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        ezmk::config::load_runtime_config(2, av);
+        return &ezmk::config::runtime_config().settings;
+    };
+
+    SECTION("defaults") {
+        const auto* st = load("[settings]\n");
+        REQUIRE(st->cxx.empty());
+        REQUIRE(st->cc.empty());
+        REQUIRE(st->linker.empty());
+        REQUIRE(st->use_cache);
+        REQUIRE(st->network_timeout == 0);
+        REQUIRE(st->retries == 0);
+        REQUIRE(st->proxy.empty());
+        REQUIRE(st->install_prefix.empty());
+    }
+    SECTION("all values") {
+        const auto* st = load(
+            "[settings]\n"
+            "cxx = \"/opt/cxx\"\ncc = \"/opt/cc\"\n"
+            "linker = \"/opt/ld\"\nuse_cache = false\n"
+            "network_timeout = 45\nretries = 2\n"
+            "proxy = \"https://proxy.example:8080\"\n"
+            "install_prefix = \"~/opt\"\n");
+        REQUIRE(st->cxx == "/opt/cxx");
+        REQUIRE(st->cc == "/opt/cc");
+        REQUIRE(st->linker == "/opt/ld");
+        REQUIRE_FALSE(st->use_cache);
+        REQUIRE(st->network_timeout == 45);
+        REQUIRE(st->retries == 2);
+        REQUIRE(st->proxy == "https://proxy.example:8080");
+        REQUIRE(st->install_prefix == "~/opt");
+    }
+    SECTION("timeout out of range") {
+        write_runtime_cfg(udir,
+            "[settings]\nnetwork_timeout = 3601\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("retries out of range") {
+        write_runtime_cfg(udir, "[settings]\nretries = 11\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+    SECTION("bad proxy scheme") {
+        write_runtime_cfg(udir,
+            "[settings]\nproxy = \"socks5://host:1080\"\n");
+        ezmk::config::reset_runtime_config_for_test();
+        const char* av[] = {"ezmk", "version"};
+        REQUIRE_THROWS_AS(ezmk::config::load_runtime_config(2, av),
+                          std::runtime_error);
+    }
+
+    ezmk::config::reset_runtime_config_for_test();
+    fs::remove_all(root);
+}
+
 // ===================================================================
 // 1.5.0-dev.2: path and tool resolution
 // ===================================================================

@@ -1012,6 +1012,10 @@ static void parse_install(const toml::table& root, EzConfig& cfg) {
     if (cfg.install.includedir.empty()) cfg.install.includedir = "include";
     if (cfg.install.sharedir.empty()) cfg.install.sharedir = "share";
     if (cfg.install.prefix.empty()) {
+        // 1.5.0-dev.10: user/global default before the platform default.
+        cfg.install.prefix = runtime_config().settings.install_prefix;
+    }
+    if (cfg.install.prefix.empty()) {
 #ifdef EZMK_WIN
         const char* appdata = std::getenv("LOCALAPPDATA");
         if (appdata) cfg.install.prefix = std::string(appdata) + "\\ezmk";
@@ -1414,6 +1418,8 @@ bool is_known_settings_key(const std::string& k) {
     static const std::set<std::string> keys = {
         "natural_language", "color_mode", "color_theme", "log_level",
         "compiler_output", "linker_output",
+        "cxx", "cc", "linker", "use_cache", "network_timeout", "retries",
+        "proxy", "install_prefix",
         "initial_commit", "auto_init_git", "gen_gitignore", "gen_readme",
         "gen_agent_md", "gen_agent_skills", "default_project_type", "default_language",
         "default_project_version", "default_compile_flags", "build_dir",
@@ -1621,6 +1627,28 @@ void parse_settings_table(const toml::table& t, SettingsConfig& s,
                 s.linker_output);
     validate_enum(file, "settings.linker_output", s.linker_output,
                   {"always", "warning", "error"});
+
+    read_string(t, "cxx", "settings.cxx", file, s.cxx);
+    read_string(t, "cc", "settings.cc", file, s.cc);
+    read_string(t, "linker", "settings.linker", file, s.linker);
+    validate_no_nul(file, "settings.cxx", s.cxx);
+    validate_no_nul(file, "settings.cc", s.cc);
+    validate_no_nul(file, "settings.linker", s.linker);
+    read_bool(t, "use_cache", "settings.use_cache", file, s.use_cache);
+    read_int(t, "network_timeout", "settings.network_timeout", file,
+             s.network_timeout, 0, 3600);
+    read_int(t, "retries", "settings.retries", file, s.retries, 0, 10);
+    read_string(t, "proxy", "settings.proxy", file, s.proxy);
+    validate_no_nul(file, "settings.proxy", s.proxy);
+    if (!s.proxy.empty() && s.proxy.rfind("http://", 0) != 0 &&
+        s.proxy.rfind("https://", 0) != 0) {
+        throw std::runtime_error("config field 'settings.proxy' in " +
+                                 file.string() +
+                                 " must start with http:// or https://");
+    }
+    read_string(t, "install_prefix", "settings.install_prefix", file,
+                s.install_prefix);
+    validate_no_nul(file, "settings.install_prefix", s.install_prefix);
 
     read_bool(t, "auto_init_git", "settings.auto_init_git", file,
               s.auto_init_git);

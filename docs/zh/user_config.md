@@ -51,6 +51,14 @@
 | `log_level` | string | `"info"` | `off` / `error` / `warn` / `info` / `debug`；`fatal` 始终输出 |
 | `compiler_output` | string | `"error"` | 编译成功时诊断输出策略：`always` / `warning` / `error`。`error` 保持 1.5.0-dev.9 之前的行为；编译失败始终显示诊断 |
 | `linker_output` | string | `"error"` | 链接/归档成功时诊断输出策略：`always` / `warning` / `error`；链接失败始终显示诊断 |
+| `cxx` | string | 空 | C++ 编译器路径；空 = `$CXX` / 自动探测；相对路径按项目根解析 |
+| `cc` | string | 空 | C 编译器路径；空 = `$CC` / 自动探测 |
+| `linker` | string | 空 | GCC/Clang 链接驱动；空 = 使用 `cxx` |
+| `use_cache` | bool | `true` | 全局缓存开关；`false` 等价于构建与测试编译传 `--disable-cache` |
+| `network_timeout` | int | `0` | 单次网络操作超时秒数；`0` = 不超时；范围 0..3600 |
+| `retries` | int | `0` | 网络失败后的重试次数；范围 0..10 |
+| `proxy` | string | 空 | HTTP/HTTPS 代理地址；空 = 继承环境变量/系统设置；环境变量优先 |
+| `install_prefix` | string | 空 | 用户级安装前缀；空 = 平台默认；CLI `--prefix` 与项目 `[install].prefix` 优先 |
 | `initial_commit` | bool / string | 未设置 | `true` 用默认消息；字符串作为提交消息；仅在 `git init` 成功后执行 |
 | `auto_init_git` | bool | `true` | `ezmk project new` 是否执行 `git init` |
 | `gen_gitignore` | bool | `true` | 是否生成 `.gitignore` |

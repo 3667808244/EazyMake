@@ -1490,8 +1490,9 @@ fs::path find_package_archive(const fs::path& build_dir,
 // HTTP download
 // ===================================================================
 
-void download(std::string_view url_sv, const fs::path& dest) {
+static void download_once(std::string_view url_sv, const fs::path& dest) {
     std::string url(url_sv);
+    const auto& net = ezmk::config::runtime_config().settings;
 
 #ifdef EZMK_WIN
     // Parse URL
@@ -1544,6 +1545,17 @@ void download(std::string_view url_sv, const fs::path& dest) {
         WINHTTP_NO_PROXY_NAME,
         WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) throw std::runtime_error("WinHttpOpen failed");
+    if (net.network_timeout > 0) {
+        const int ms = net.network_timeout * 1000;
+        WinHttpSetTimeouts(hSession, ms, ms, ms, ms);
+    }
+    if (!net.proxy.empty()) {
+        std::wstring wproxy = utf8_to_wide(net.proxy);
+        WINHTTP_PROXY_INFO pi{};
+        pi.dwAccessType = WINHTTP_ACCESS_TYPE_NAMED_PROXY;
+        pi.lpszProxy = const_cast<wchar_t*>(wproxy.c_str());
+        WinHttpSetOption(hSession, WINHTTP_OPTION_PROXY, &pi, sizeof(pi));
+    }
 
     HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), port, 0);
     if (!hConnect) {
@@ -1673,7 +1685,14 @@ void download(std::string_view url_sv, const fs::path& dest) {
     };
     std::string escaped_url = escape_sq(url);
     std::string escaped_dest = escape_sq(dest.string());
-    std::string cmd = "curl -sL --fail --max-filesize 1073741824 -o '" + escaped_dest +
+    std::string cmd = "curl -sL --fail --max-filesize 1073741824";
+    if (net.network_timeout > 0) {
+        cmd += " --max-time " + std::to_string(net.network_timeout);
+    }
+    if (!net.proxy.empty()) {
+        cmd += " --proxy '" + escape_sq(net.proxy) + "'";
+    }
+    cmd += " -o '" + escaped_dest +
                       "' '" + escaped_url + "'";
     auto res = run_command(cmd);
     if (res.exit_code != 0) {
@@ -2056,24 +2075,48 @@ bool git_clone(const std::string& url, const fs::path& dest,
     }
     cmd << " \"" << escape_shell_arg(url) << "\" \""
         << escape_shell_arg(dest.string()) << "\"";
-    auto res = run_command(cmd.str());
-    if (res.exit_code != 0) {
-        error(std::string("git clone failed: ") + res.err);
-        return false;
+    const auto& net = config::runtime_config().settings;
+    RunOptions net_opts;
+    if (net.network_timeout > 0) net_opts.timeout_sec = net.network_timeout;
+    if (!net.proxy.empty()) {
+        net_opts.env["HTTPS_PROXY"] = net.proxy;
+        net_opts.env["HTTP_PROXY"] = net.proxy;
     }
-    return true;
+    for (int attempt = 0; attempt <= net.retries; ++attempt) {
+        auto res = run_command(cmd.str(), net_opts);
+        if (res.exit_code == 0) return true;
+        if (attempt < net.retries) {
+            warn("git clone failed (retry " + std::to_string(attempt + 1) +
+                 "/" + std::to_string(net.retries) + "): " + res.err);
+        } else {
+            error(std::string("git clone failed: ") + res.err);
+        }
+    }
+    return false;
 }
 
 bool git_pull(const fs::path& repo_dir, std::string_view branch) {
     std::ostringstream cmd;
     cmd << quote_cli_arg(git_executable()) << " -C \"" << escape_shell_arg(repo_dir.string())
         << "\" pull origin \"" << escape_shell_arg(branch) << "\"";
-    auto res = run_command(cmd.str());
-    if (res.exit_code != 0) {
-        error(std::string("git pull failed: ") + res.err);
-        return false;
+    const auto& net = config::runtime_config().settings;
+    RunOptions net_opts;
+    if (net.network_timeout > 0) net_opts.timeout_sec = net.network_timeout;
+    if (!net.proxy.empty()) {
+        net_opts.env["HTTPS_PROXY"] = net.proxy;
+        net_opts.env["HTTP_PROXY"] = net.proxy;
     }
-    return true;
+    for (int attempt = 0; attempt <= net.retries; ++attempt) {
+        auto res = run_command(cmd.str(), net_opts);
+        if (res.exit_code == 0) return true;
+        if (attempt < net.retries) {
+            warn("git pull failed (retry " + std::to_string(attempt + 1) +
+                 "/" + std::to_string(net.retries) + "): " + res.err);
+        } else {
+            error(std::string("git pull failed: ") + res.err);
+        }
+    }
+    return false;
 }
 
 std::string git_last_commit_time(const fs::path& repo_dir) {
@@ -2375,6 +2418,22 @@ std::vector<std::string> closest_match(
     result.reserve(matches.size());
     for (auto& [d, s] : matches) result.push_back(std::move(s));
     return result;
+}
+
+void download(std::string_view url_sv, const fs::path& dest) {
+    const auto& net = ezmk::config::runtime_config().settings;
+    for (int attempt = 0; attempt <= net.retries; ++attempt) {
+        try {
+            download_once(url_sv, dest);
+            return;
+        } catch (const std::exception& e) {
+            const std::string msg = e.what();
+            const bool permanent = msg.find("HTTP 4") != std::string::npos;
+            if (permanent || attempt >= net.retries) throw;
+            warn("download failed (retry " + std::to_string(attempt + 1) +
+                 "/" + std::to_string(net.retries) + "): " + msg);
+        }
+    }
 }
 
 } // namespace ezmk::util

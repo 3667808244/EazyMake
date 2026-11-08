@@ -1,4 +1,5 @@
 #include "ezmk/toolchain.hpp"
+#include "ezmk/config.hpp"
 #include "ezmk/util.hpp"
 
 #include <algorithm>
@@ -13,6 +14,26 @@
 #include <string>
 
 namespace ezmk::toolchain {
+
+// 1.5.0-dev.10: expand ~ and make a configured tool path absolute. Relative
+// paths are resolved against the current project root (the build CWD).
+static std::string resolve_tool_setting(const std::string& raw) {
+    if (raw.empty()) return {};
+    std::string s = raw;
+    if (s == "~") {
+        s = util::get_home_dir().string();
+    } else if (s.size() > 1 && s[0] == '~' && (s[1] == '/' || s[1] == '\\')) {
+        s = (util::get_home_dir() / s.substr(2)).string();
+    }
+    std::filesystem::path p(s);
+    if (p.is_relative()) p = std::filesystem::absolute(p);
+    return p.string();
+}
+
+static bool tool_probe_ok(const std::string& path) {
+    auto res = util::run_command(util::quote_cli_arg(path) + " --version 2>&1");
+    return res.exit_code == 0;
+}
 
 // ===================================================================
 // GCC → MSVC compile flag map
@@ -478,6 +499,17 @@ static Toolchain detect_gcc_like(const std::string& cxx, const std::string& cc) 
         }
     }
 
+    // 1.5.0-dev.10: explicit link driver (GCC/Clang only).
+    const std::string cfg_linker = resolve_tool_setting(
+        ezmk::config::runtime_config().settings.linker);
+    if (!cfg_linker.empty()) {
+        if (!tool_probe_ok(cfg_linker)) {
+            util::fatal("configured settings.linker is not executable: " +
+                        cfg_linker);
+        }
+        tc.linker = fs::path(cfg_linker);
+    }
+
     return tc;
 }
 
@@ -763,6 +795,41 @@ Toolchain detect_toolchain() {
         }
         util::warn(std::string("$CXX is set to '") + cxx +
                    "' but it is not executable — falling back to auto-detect");
+    }
+
+    // 1.5.0-dev.10: config compiler path (environment CXX/CC already handled).
+    {
+        const auto& cfg = ezmk::config::runtime_config().settings;
+        const std::string cfg_cxx = resolve_tool_setting(cfg.cxx);
+        const std::string cfg_cc = resolve_tool_setting(cfg.cc);
+        if (!cfg_cxx.empty()) {
+            if (!tool_probe_ok(cfg_cxx)) {
+                util::fatal("configured settings.cxx is not executable: " + cfg_cxx);
+            }
+            std::string cc = cfg_cc;
+            if (cc.empty()) {
+                cc = (cfg_cxx.find("clang") != std::string::npos) ? "clang" : "gcc";
+            } else if (!tool_probe_ok(cc)) {
+                util::fatal("configured settings.cc is not executable: " + cc);
+            }
+            cached = detect_gcc_like(cfg_cxx, cc);
+            cached_valid = true;
+            return cached;
+        }
+        // A configured C compiler without an explicit C++ compiler: keep the
+        // normal C++ discovery, but pair it with the requested C compiler.
+        if (!cfg_cc.empty()) {
+            if (!tool_probe_ok(cfg_cc)) {
+                util::fatal("configured settings.cc is not executable: " + cfg_cc);
+            }
+            for (const char* cand : {"g++", "clang++"}) {
+                if (tool_probe_ok(cand)) {
+                    cached = detect_gcc_like(cand, cfg_cc);
+                    cached_valid = true;
+                    return cached;
+                }
+            }
+        }
     }
 
     // 1.4.7 M-06: explicit toolchain override, shared by both platforms.

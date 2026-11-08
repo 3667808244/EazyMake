@@ -51,6 +51,14 @@ Path rules:
 | `log_level` | string | `"info"` | `off` / `error` / `warn` / `info` / `debug`; `fatal` is never filtered |
 | `compiler_output` | string | `"error"` | Successful compile diagnostics: `always` / `warning` / `error`. `error` keeps the pre-1.5.0-dev.9 behavior; failed compiles always show diagnostics |
 | `linker_output` | string | `"error"` | Successful link/archive diagnostics: `always` / `warning` / `error`. Failed links always show diagnostics |
+| `cxx` | string | empty | C++ compiler path; empty = `$CXX` / auto-detect. Relative paths resolve against the project root |
+| `cc` | string | empty | C compiler path; empty = `$CC` / auto-detect |
+| `linker` | string | empty | Link driver for GCC/Clang; empty = use `cxx` |
+| `use_cache` | bool | `true` | Global cache switch; `false` is equivalent to `--disable-cache` for build and test compilation |
+| `network_timeout` | int | `0` | Per-operation network timeout in seconds; `0` = no timeout; range 0..3600 |
+| `retries` | int | `0` | Retries after a network failure; range 0..10 |
+| `proxy` | string | empty | HTTP/HTTPS proxy URL; empty = inherit environment/system. Environment variables take precedence |
+| `install_prefix` | string | empty | User-level install prefix; empty = platform default. CLI `--prefix` and project `[install].prefix` override |
 | `initial_commit` | bool / string | unset | `true` uses the default message; a string is the commit message; runs only after a successful `git init` |
 | `auto_init_git` | bool | `true` | Whether `ezmk project new` runs `git init` |
 | `gen_gitignore` | bool | `true` | Generate `.gitignore` |

@@ -1,6 +1,8 @@
 # EazyMake 1.5.0-dev.10 执行计划
 
-> **状态：📝 待执行（2026-11-07 立项）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.10.md](plans/1.5.x/1.5.0-dev.10.md)。dev.9 已收口（1226/7058；CI run 42363070935 全绿）；本版完成后与 dev.8/dev.9 一起进入 pre.2。
+> **状态：✅ 实现完成（2026-11-08），待 CI 与 pre.2 发布复核** —— 详细设计见 [plans/1.5.x/1.5.0-dev.10.md](plans/1.5.x/1.5.0-dev.10.md)。dev.9 已收口（1226/7058；CI run 42363070935 全绿）；本版完成后与 dev.8/dev.9 一起进入 pre.2。
+>
+> **回归**：单元 **1106 / 6296 / 4 跳过 / 0 失败**；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1227 / 7077 / 8 跳过 / 0 失败**。
 >
 > **目标**：补齐 8 个全局配置项 —— `cxx` / `cc` / `linker` / `use_cache` / `network_timeout` / `retries` / `proxy` / `install_prefix`。
 
@@ -11,29 +13,29 @@
 ## 2 执行阶段
 
 ### 阶段一：配置骨架（P0）
-- [ ] `SettingsConfig` 增加 8 个字段与默认值（空 / 空 / 空 / `true` / `0` / `0` / 空 / 空）
-- [ ] 类型、范围（timeout 0..3600、retries 0..10）、代理 scheme 校验
-- [ ] user_config / global_config / man 文档表
-- [ ] 单测：默认 / 合法 / 非法 / global→user 覆盖
+- [x] `SettingsConfig` 增加 8 个字段与默认值（空 / 空 / 空 / `true` / `0` / `0` / 空 / 空）
+- [x] 类型、范围（timeout 0..3600、retries 0..10）、代理 scheme 校验
+- [x] user_config / global_config / man 文档表
+- [x] 单测：默认 / 合法 / 非法 / global→user 覆盖
 
 ### 阶段二：工具路径与缓存（P0）
-- [ ] `cxx` / `cc` / `linker` 接入工具链与链接命令；空 = 自动探测
-- [ ] 优先级：环境变量 > settings > 自动探测
-- [ ] `~` 展开、相对路径按项目根、缺失路径使用点 fatal
-- [ ] 缓存签名纳入实际编译器路径
-- [ ] `use_cache=false` 关闭构建/测试缓存；CLI `--disable-cache` 仍最高
-- [ ] 单测 + 回归
+- [x] `cxx` / `cc` / `linker` 接入工具链与链接命令；空 = 自动探测
+- [x] 优先级：环境变量 > settings > 自动探测
+- [x] `~` 展开、相对路径按项目根、缺失路径使用点 fatal
+- [x] 缓存签名纳入实际编译器路径
+- [x] `use_cache=false` 关闭构建/测试缓存；CLI `--disable-cache` 仍最高
+- [x] 单测 + 回归
 
 ### 阶段三：网络与安装前缀（P0）
-- [ ] `network_timeout` 接入 HTTP 下载 / git clone / git pull
-- [ ] `retries` 只重试超时、连接失败、5xx；4xx/校验/认证失败不重试
-- [ ] `proxy` 注入 git 子进程环境与 WinHTTP 下载；凭据脱敏
-- [ ] `install_prefix` 优先级：CLI > 项目 `[install].prefix` > settings > 平台默认
-- [ ] 单测 + 回归
+- [x] `network_timeout` 接入 HTTP 下载 / git clone / git pull
+- [x] `retries` 只重试超时、连接失败、5xx；4xx/校验/认证失败不重试
+- [x] `proxy` 注入 git 子进程环境与 WinHTTP 下载；凭据脱敏
+- [x] `install_prefix` 优先级：CLI > 项目 `[install].prefix` > settings > 平台默认
+- [x] 单测 + 回归
 
 ### 阶段四：收口（P0）
-- [ ] CHANGES / 索引 / 根 plan
-- [ ] 全量 `test-all` 零失败（基线 1226/7058）
+- [x] CHANGES / 索引 / 根 plan
+- [x] 全量 `test-all` 零失败（基线 1227/7077）
 - [ ] CI 绿色
 - [ ] 与 dev.8/dev.9 一起进入 pre.2
 

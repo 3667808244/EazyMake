@@ -275,6 +275,32 @@ std::string detect_compiler(const std::string& language) {
                    " is set to '" + candidate + "' but it is not executable — falling back to auto-detect");
     }
 
+    // 1.5.0-dev.10: [settings].cxx / .cc (environment still wins).
+    {
+        const auto& st = config::runtime_config().settings;
+        std::string cfg = is_cxx ? st.cxx : st.cc;
+        if (!cfg.empty()) {
+            if (cfg == "~") {
+                cfg = util::get_home_dir().string();
+            } else if (cfg.size() > 1 && cfg[0] == '~' &&
+                       (cfg[1] == '/' || cfg[1] == '\\')) {
+                cfg = (util::get_home_dir() / cfg.substr(2)).string();
+            }
+            fs::path p(cfg);
+            if (p.is_relative()) p = fs::absolute(p);
+            cfg = p.string();
+            auto res = util::run_command(util::quote_cli_arg(cfg) +
+                                         " --version 2>&1");
+            if (res.exit_code != 0) {
+                util::fatal(std::string("configured ") +
+                            (is_cxx ? "settings.cxx" : "settings.cc") +
+                            " is not executable: " + cfg);
+            }
+            cached = cfg;
+            return cached;
+        }
+    }
+
     // 2. Platform-specific candidate list
     std::vector<std::string> candidates;
 #ifdef EZMK_WIN
@@ -1080,7 +1106,8 @@ cache::CompileInput make_compile_input(BuildState& st, const cli::BuildOptions& 
     cin.lang = st.lang;
     cin.extra_includes = st.extra_includes;
     cin.cache_obj_dir = st.cache_obj_dir;
-    cin.disable_cache = opts.disable_cache;
+    cin.disable_cache =
+        opts.disable_cache || !config::runtime_config().settings.use_cache;
     cin.use_pic = st.use_pic;
     cin.verbose = opts.verbose;
     cin.tc = st.tc;
@@ -1098,16 +1125,23 @@ constexpr int BUILD_TIME_TOP_N = 10;
 // Phase 2: Compile all sources (cache check + compilation).
 // Returns the list of compiled object paths.
 std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opts) {
+    // 1.5.0-dev.10: [settings].use_cache is a global default; CLI --disable-cache
+    // still wins for this invocation.
+    const bool cache_disabled =
+        opts.disable_cache || !config::runtime_config().settings.use_cache;
     // Load cache
     auto record = cache::load_record();
 
     // 1.1.0: check compiler version — if changed, invalidate all caches
-    std::string compiler_name = st.tc.cxx_compiler.filename().string();
-    if (!record.compiler_version.empty() && record.compiler_version != st.tc.version) {
+    // 1.5.0-dev.10: include the full compiler path, not just its filename —
+    // switching between two g++ installs with the same version must rebuild.
+    std::string compiler_id = st.tc.cxx_compiler.generic_string();
+    if ((!record.compiler.empty() && record.compiler != compiler_id) ||
+        (!record.compiler_version.empty() && record.compiler_version != st.tc.version)) {
         util::info(ezmk::i18n::I18nKey::cache_compiler_changed);
         record.files.clear();
     }
-    record.compiler = compiler_name;
+    record.compiler = compiler_id;
     record.compiler_version = st.tc.version;
 
     // 1.1.0: track deterministic flag — toggling triggers full rebuild
@@ -1242,7 +1276,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
         try {
             comp_result = cache::compile_sources(cin, record);
         } catch (...) {
-            if (!opts.disable_cache) cache::save_record(record);
+            if (!cache_disabled) cache::save_record(record);
             throw;
         }
     }
@@ -1266,7 +1300,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
                 ++comp_result.cache_misses;
                 // 1.4.2 F-09: --disable-cache must not merge entries into the
                 // in-memory record either (an emptied record is saved below).
-                if (!opts.disable_cache) {
+                if (!cache_disabled) {
                     // 1.4.6 Q-30: look up BEFORE inserting. operator[] default-
                     // inserts, which made old_it != end() unconditionally true
                     // and reported a bogus include-structure change for every
@@ -1302,7 +1336,7 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     // 1.4.2 F-09: --disable-cache means "escape the incremental state". The
     // record is emptied before saving so a build that bypassed the cache cannot
     // leave stale entries behind for the next (normal) build to trust.
-    if (opts.disable_cache) {
+    if (cache_disabled) {
         record.files.clear();
     }
     cache::save_record(record);
@@ -1847,6 +1881,8 @@ void install_project(const config::EzConfig& cfg,
 
     // Resolve prefix (CLI override takes priority)
     fs::path prefix = opts.prefix.empty() ? fs::path(inst.prefix) : fs::path(opts.prefix);
+    // 1.5.0-dev.10: relative install prefixes resolve against the project root.
+    if (prefix.is_relative()) prefix = proj_root / prefix;
 
     // Resolve subdirectories
     auto bindir     = prefix / inst.bindir;
@@ -3055,7 +3091,7 @@ void run_tests(const config::EzConfig& cfg,
     cin.tc = tc;
     cin.stdlib = cfg.project.stdlib;
     cin.use_pic = false;
-    cin.disable_cache = false;
+    cin.disable_cache = !config::runtime_config().settings.use_cache;
     cin.verbose = verbose;
     cin.obj_dir = cache_dir / "obj_test";
     cin.dep_dir = cache_dir / "obj_test";

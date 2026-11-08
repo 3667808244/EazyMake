@@ -196,6 +196,16 @@ struct SettingsConfig {
     std::string compiler_output = "error";
     std::string linker_output = "error";
 
+    // 1.5.0-dev.10: toolchain, cache, network and install defaults.
+    std::string cxx;              // empty = auto-detect / $CXX
+    std::string cc;               // empty = auto-detect / $CC
+    std::string linker;           // empty = compiler driver
+    bool use_cache = true;        // false = same as --disable-cache
+    int network_timeout = 0;      // seconds; 0 = no timeout
+    int retries = 0;              // retries after the first network failure
+    std::string proxy;            // empty = inherit environment/system
+    std::string install_prefix;   // empty = platform default
+
     bool initial_commit_enabled = false;
     std::string initial_commit_message;
     bool auto_init_git = true;

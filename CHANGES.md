@@ -24,11 +24,23 @@
 
 **v1.5.0 扩展（1.5.0-pre.1）：**
 
-- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、编译器/连接器输出策略、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
+- **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、编译器/连接器输出策略、工具链路径、缓存/网络/安装前缀、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
 - **CLI：** `--config <file>` / `--no-config` / `--lang <tag>`；`--color` 的 `on` / `off` / `16colors` / `256colors` / `truecolor` 别名。
 - **环境：** `EZMK_GLOBAL_CONFIG_DIR` / `EZMK_USER_CONFIG_DIR` / `XDG_CONFIG_HOME` 的配置目录解析。
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
+
+## 1.5.0-dev.10 (2026-11-08) — 工具链、缓存、网络与安装前缀配置
+
+> **状态：实现完成（2026-11-08），未发布。** 8 个 opt-in 全局默认值；单元 **1106 / 6296 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1227 / 7077 / 8 跳过 / 0 失败**。默认行为与 dev.9 一致。
+
+### 新增
+
+- **`[settings].cxx` / `.cc` / `.linker`**：持久化编译器/链接器路径；空 = 环境变量或自动探测；环境变量仍优先。
+- **`[settings].use_cache`**：全局缓存开关；`false` 等价于构建/测试编译传 `--disable-cache`，CLI 仍最高。
+- **`[settings].network_timeout` / `.retries` / `.proxy`**：HTTP 下载与 git clone/pull 的超时、重试、代理；默认 0/0/空保持现状。
+- **`[settings].install_prefix`**：用户级安装前缀；CLI `--prefix` > 项目 `[install].prefix` > settings > 平台默认。
+- 编译器完整路径纳入缓存失效判断；配置的编译器/链接器缺失时使用点报错。
 
 ## 1.5.0-dev.9 (2026-11-07) — 编译器/连接器输出策略
 
