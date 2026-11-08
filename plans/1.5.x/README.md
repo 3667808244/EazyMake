@@ -17,7 +17,7 @@
 | [1.5.0-dev.8](1.5.0-dev.8.md) | 项目级 agent skills 分发 | `[settings].gen_agent_skills`（bool/string）+ 构建期嵌入 4 个 `ezmk-user-*` 技能 + 分发到 `.claude/skills` / `.github/skills` / `.agents/skills` + AGENTS.md 技能描述 + 文档/测试 | dev.1、dev.3 | ✅ 实现收口（1224/7046；CI 42347726309 绿；待 pre.2） |
 | [1.5.0-dev.9](1.5.0-dev.9.md) | 编译器/连接器输出策略 | `[settings].compiler_output` + `[settings].linker_output`（always / warning / error）+ 串行/并行诊断输出 | dev.8 | ✅ 实现收口（1226/7058；CI 42363070935 绿；待 pre.2） |
 | [1.5.0-dev.10](1.5.0-dev.10.md) | 工具链/缓存/网络/安装前缀配置 | `[settings].cxx` / `.cc` / `.linker` / `.use_cache` / `.network_timeout` / `.retries` / `.proxy` / `.install_prefix` | dev.9 | ✅ 实现收口（1227/7077；CI 42447385973 绿；待 pre.2） |
-| [1.5.0-dev.11](1.5.0-dev.11.md) | 首次无配置生成默认模板 | 无配置首次运行生成全注释 `config.toml`；不覆盖、不阻断 | dev.10 | ✅ 实现完成（1228/7095；待 CI/pre.2） |
+| [1.5.0-dev.11](1.5.0-dev.11.md) | 首次无配置生成默认模板 | 无配置首次运行生成全注释 `config.toml`；不覆盖、不阻断 | dev.10 | ✅ 实现收口（1228/7095；CI 42449910408 绿；待 pre.2） |
 
 > **全量源代码审查**（pre.1 输入）：[1.5.0-pre.1-audit.md](1.5.0-pre.1-audit.md) —— 47 项（P1 4 / P2 23 / P3 20，无 P0）。
 
