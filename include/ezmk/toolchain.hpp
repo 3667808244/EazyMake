@@ -28,6 +28,12 @@ struct Toolchain {
 // Respects $CXX/$CC env vars.
 Toolchain detect_toolchain();
 
+// 1.5.0-dev.12 (A-09): first line of `compiler --version` (empty on failure),
+// cached per executable path for the process lifetime. Used for the ACTUAL
+// compile driver of a project (a C project may use $CC while the toolchain
+// descriptor was probed from $CXX).
+std::string compiler_version(const fs::path& compiler);
+
 // 1.4.7 M-03: child-process environment for MSVC (PATH/INCLUDE/LIB/... captured
 // from vcvars64.bat), loaded once per process. Returns an empty map on
 // non-Windows or non-MSVC toolchains.

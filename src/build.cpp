@@ -362,10 +362,19 @@ static cache::JoinedCommand make_gcc_link_cmd(
     const config::LinkSection& link,
     const config::LanguageInfo& lang,
     const fs::path& rsp_dir,
-    bool shared = false) {
+    bool shared = false,
+    const fs::path& linker = {}) {
     std::vector<std::string> args;
-    args.push_back(lang.detected_compiler.empty() ? lang.compiler
-                                                  : lang.detected_compiler);
+    // 1.5.0-dev.12 (A-08): [settings].linker used to be detected and validated
+    // but never used — the GCC/Clang link always went through the compiler
+    // driver. Prefer the configured driver; an empty value keeps the previous
+    // behavior (detected compiler).
+    if (!linker.empty()) {
+        args.push_back(linker.string());
+    } else {
+        args.push_back(lang.detected_compiler.empty() ? lang.compiler
+                                                      : lang.detected_compiler);
+    }
 
     // Raw args — cache::join_shell_args applies quoting/escaping when building
     // the command line, and the response-file path writes each arg verbatim.
@@ -1136,13 +1145,25 @@ std::vector<fs::path> compile_phase(BuildState& st, const cli::BuildOptions& opt
     // 1.5.0-dev.10: include the full compiler path, not just its filename —
     // switching between two g++ installs with the same version must rebuild.
     std::string compiler_id = st.tc.cxx_compiler.generic_string();
+    std::string compiler_version = st.tc.version;
+    // 1.5.0-dev.12 (A-09): a C project is compiled by $CC/settings.cc, not by
+    // the $CXX driver the Toolchain descriptor was probed from. Record the
+    // ACTUAL driver + its version, otherwise switching CC alone kept old .o
+    // files that were produced by a different compiler.
+    if (!st.is_msvc && !st.lang.detected_compiler.empty()) {
+        const fs::path driver(st.lang.detected_compiler);
+        if (driver != st.tc.cxx_compiler) {
+            compiler_id = driver.generic_string();
+            compiler_version = toolchain::compiler_version(driver);
+        }
+    }
     if ((!record.compiler.empty() && record.compiler != compiler_id) ||
-        (!record.compiler_version.empty() && record.compiler_version != st.tc.version)) {
+        (!record.compiler_version.empty() && record.compiler_version != compiler_version)) {
         util::info(ezmk::i18n::I18nKey::cache_compiler_changed);
         record.files.clear();
     }
     record.compiler = compiler_id;
-    record.compiler_version = st.tc.version;
+    record.compiler_version = compiler_version;
 
     // 1.1.0: track deterministic flag — toggling triggers full rebuild
     if (record.deterministic != st.compile_cfg.deterministic) {
@@ -1605,14 +1626,20 @@ fs::path link_phase(const BuildState& st,
             return try_link([&]() -> fs::path {
                 fs::path lib = st.build_dir / ("lib" + out_name + ".a");
                 fs::path lib_tmp = st.build_dir / ("lib" + out_name + ".a.tmp");
-                std::ostringstream ar_cmd;
-                // 1.4.6 Q-20: platform-correct quoting — quote_cli_arg picks
-                // MSVCRT quoting on Windows (CreateProcess) and shell quoting on
-                // POSIX.
-                ar_cmd << "ar rcs " << util::quote_cli_arg(lib_tmp.string());
-                for (auto& o : objects)
-                    ar_cmd << " " << util::quote_cli_arg(o.string());
-                return execute_link(ar_cmd.str(), lib, lib_tmp, opts.verbose,
+                // 1.5.0-dev.12 (A-20): response-file fallback for the archiver
+                // too — thousands of long object paths hit the Windows
+                // CreateProcess command-line limit. GNU ar supports @file on
+                // both MinGW and POSIX.
+                std::vector<std::string> ar_args;
+                ar_args.push_back(st.tc.archiver.empty()
+                                      ? std::string("ar")
+                                      : st.tc.archiver.string());
+                ar_args.push_back("rcs");
+                ar_args.push_back(lib_tmp.string());
+                for (auto& o : objects) ar_args.push_back(o.string());
+                auto jc = cache::join_args_with_response_file(ar_args, st.temp_dir);
+                RspGuard rsp_guard{jc.rsp_file};
+                return execute_link(jc.cmd, lib, lib_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::archiving,
                                     lib.filename().string(), ezmk::i18n::I18nKey::archive_failed, st.tc);
             });
@@ -1638,8 +1665,11 @@ fs::path link_phase(const BuildState& st,
                 fs::path lib = st.build_dir / lib_name;
                 fs::path lib_tmp = st.build_dir / (lib_name + ".tmp");
                 // 1.3.0-dev.2: response-file fallback (command >16K).
-                auto jc = make_gcc_link_cmd(objects, st.pkg_archives, lib_tmp,
-                                            merged_link, st.lang, st.temp_dir, true);
+                auto jc = make_gcc_link_cmd(
+                    objects, st.pkg_archives, lib_tmp, merged_link, st.lang,
+                    st.temp_dir, true,
+                    config::runtime_config().settings.linker.empty()
+                        ? fs::path{} : st.tc.linker);
                 RspGuard rsp_guard{jc.rsp_file};
                 return execute_link(jc.cmd, lib, lib_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::linking,
@@ -1667,8 +1697,11 @@ fs::path link_phase(const BuildState& st,
                 exe_tmp += ".exe";
 #endif
                 // 1.3.0-dev.2: response-file fallback (command >16K).
-                auto jc = make_gcc_link_cmd(objects, st.pkg_archives, exe_tmp,
-                                            merged_link, st.lang, st.temp_dir);
+                auto jc = make_gcc_link_cmd(
+                    objects, st.pkg_archives, exe_tmp, merged_link, st.lang,
+                    st.temp_dir, false,
+                    config::runtime_config().settings.linker.empty()
+                        ? fs::path{} : st.tc.linker);
                 RspGuard rsp_guard{jc.rsp_file};
                 return execute_link(jc.cmd, exe, exe_tmp, opts.verbose,
                                     ezmk::i18n::I18nKey::linking,
@@ -2565,6 +2598,8 @@ struct TestRunContext {
     // compile/link/run subprocesses.
     std::map<std::string, std::string> msvc_env;
     config::LanguageInfo lang_info;
+    // 1.5.0-dev.12 (A-08): configured link driver (empty = detected compiler).
+    fs::path linker;
     int test_timeout = 30;  // 1.5.0-dev.5: seconds (0 = no timeout)
     int catch2_timeout = 0; // 1.5.0-dev.6 R-03: 0 = legacy no-timeout
 };
@@ -2692,7 +2727,8 @@ static void run_catch2_tests(TestRunContext& ctx) {
     // 1.3.0-dev.2: response-file fallback for the test-runner link too.
     auto jc = ctx.is_msvc
         ? cache::JoinedCommand{make_msvc_exe_cmd(objs, archives, runner, ctx.test_link), {}}
-        : make_gcc_link_cmd(objs, archives, runner, ctx.test_link, ctx.lang_info, ctx.cache_dir);
+        : make_gcc_link_cmd(objs, archives, runner, ctx.test_link, ctx.lang_info,
+                            ctx.cache_dir, false, ctx.linker);
     RspGuard rsp_guard{jc.rsp_file};
     std::string link_cmd = jc.cmd;
     if (ctx.verbose) util::info("  " + link_cmd);
@@ -2893,7 +2929,8 @@ static void run_ezmk_tests(TestRunContext& ctx) {
         // 1.4.2 F-11: dependency package archives are linked here too.
         auto jc = ctx.is_msvc
             ? cache::JoinedCommand{make_msvc_exe_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link), {}}
-            : make_gcc_link_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link, ctx.lang_info, ctx.cache_dir);
+            : make_gcc_link_cmd(objs, ctx.pkg_archives, test_exe, ctx.test_link,
+                            ctx.lang_info, ctx.cache_dir, false, ctx.linker);
         RspGuard rsp_guard{jc.rsp_file};
         std::string comp_cmd = jc.cmd;
 
@@ -3095,9 +3132,14 @@ void run_tests(const config::EzConfig& cfg,
                 if (s.stem() == "main") continue;
                 if (util::file_exists(obj)) project_objs.push_back(obj);
             }
+        } catch (const std::exception& e) {
+            // 1.5.0-dev.12 (A-18): a silent catch here dropped EVERY project
+            // object from the test link, producing confusing undefined
+            // references. Keep the degraded behavior but surface the reason.
+            util::warn(std::string("could not collect project objects for tests: ") +
+                       e.what());
         } catch (...) {
-            // Project sources unavailable — tests link without project objects,
-            // matching the pre-fix behavior for degenerate projects.
+            util::warn("could not collect project objects for tests (unknown error)");
         }
     }
 
@@ -3222,6 +3264,11 @@ void run_tests(const config::EzConfig& cfg,
     // 1.4.7 M-03: cached vcvars environment (empty unless the toolchain is MSVC).
     ctx.msvc_env = toolchain::msvc_env(toolchain::detect_toolchain());
     ctx.lang_info = std::move(lang_info);
+    // 1.5.0-dev.12 (A-08): the configured link driver (validated by
+    // detect_toolchain); empty keeps the detected compiler.
+    ctx.linker = config::runtime_config().settings.linker.empty()
+                     ? fs::path{}
+                     : toolchain::detect_toolchain().linker;
     // 1.5.0-dev.5: [test].timeout > [settings].test_timeout (0 = no timeout).
     // 1.5.0-dev.6 R-03: Catch2 had no timeout before dev.5, so keep it at 0
     // unless the user explicitly configured one (project or global).

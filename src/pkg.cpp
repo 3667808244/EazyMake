@@ -1248,10 +1248,20 @@ static InstallOutcome process_installed_pkg(const fs::path& pkg_root,
                                 "circular dependency during auto-install: '" +
                                 dep.name + "' is already being installed");
                         }
-                        auto search = repo::search_package(dep.name, {
-                            cli::Scope::Project, cli::Scope::User, cli::Scope::Global});
-                        if (!search.archive_path.empty() &&
-                            util::file_exists(search.archive_path)) {
+                        // 1.5.0-dev.12 (A-21): --locked installs the version
+                        // recorded in ezmk.lock.json; an unconstrained "newest"
+                        // search must not gate it (the newest release may no
+                        // longer be in the index while the pinned one still is).
+                        repo::PkgSearchResult search;
+                        bool found = locked;
+                        if (!locked) {
+                            search = repo::search_package(dep.name, {
+                                cli::Scope::Project, cli::Scope::User,
+                                cli::Scope::Global});
+                            found = !search.archive_path.empty() &&
+                                    util::file_exists(search.archive_path);
+                        }
+                        if (found) {
                             util::info(std::string("auto-installing dependency: ") + dep.name);
                             try {
                                 AutoInstallGuard guard(dep.name);

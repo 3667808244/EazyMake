@@ -235,7 +235,9 @@ TEST_CASE("export cmake: flags split — -std/-D/-I extracted, macros + ezmk_mac
     // -D from flags + [compile].macros + ezmk macros all land in definitions.
     REQUIRE(t.find("EZMK_EXTRA=1") != std::string::npos);
     REQUIRE(t.find("DEBUG=0") != std::string::npos);
-    REQUIRE(t.find("APP_NAME=\"demo\"") != std::string::npos);
+    // 1.5.0-dev.12 (A-19): definitions are CMake-quoted now, so the macro's
+    // own quotes are escaped inside the argument.
+    REQUIRE(t.find("\"APP_NAME=\\\"demo\\\"\"") != std::string::npos);
     REQUIRE(t.find("EZMK=1") != std::string::npos);
     // Plain flag stays in compile_options.
     REQUIRE(t.find("-Wall") != std::string::npos);
@@ -267,7 +269,19 @@ TEST_CASE("export cmake: negative integer macro stays bare (1.5.0)",
     auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
     REQUIRE(t.find("N=-5") != std::string::npos);
     REQUIRE(t.find("N=\"-5\"") == std::string::npos);
-    REQUIRE(t.find("NAME=\"demo\"") != std::string::npos);
+    // A-19: the whole definition is now CMake-quoted, so the value's quotes
+    // are escaped in the emitted text.
+    REQUIRE(t.find("NAME=\\\"demo\\\"") != std::string::npos);
+}
+
+// 1.5.0-dev.12 (A-19): a macro value containing a space must stay ONE CMake
+// argument (unquoted emission split it, changing the definition).
+TEST_CASE("export cmake: spaced macro value stays one argument (1.5.0-dev.12)",
+          "[export][1.5.0-dev.12]") {
+    auto cfg = make_exe_config();
+    cfg.compile.macros = {{"MSG", "hello world"}};
+    auto t = build_cmake_text(cfg, fs::current_path(), ExportOptions{});
+    REQUIRE(t.find("\"MSG=\\\"hello world\\\"\"") != std::string::npos);
 }
 
 TEST_CASE("export cmake: msvc_flags wrapped in genex", "[export]") {
@@ -304,7 +318,7 @@ TEST_CASE("export cmake: link mapping — system_targets + -l/-L split", "[expor
     // 1.4.11 Q4-35: link entries are CMake-quoted now.
     REQUIRE(t.find("target_link_libraries(demo PRIVATE \"dl\" \"pthread\")") != std::string::npos);
     REQUIRE(t.find("target_link_directories(demo PRIVATE") != std::string::npos);
-    REQUIRE(t.find("target_link_options(demo PRIVATE -s)") != std::string::npos);
+    REQUIRE(t.find("target_link_options(demo PRIVATE \"-s\")") != std::string::npos);
 }
 
 // ===================================================================

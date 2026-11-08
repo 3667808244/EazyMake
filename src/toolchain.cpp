@@ -450,6 +450,24 @@ static fs::path find_in_env_path(const std::map<std::string, std::string>& env,
     return {};
 }
 
+// 1.5.0-dev.12 (A-09): see toolchain.hpp. Cached because build/test paths may
+// ask for the same driver more than once per process.
+std::string compiler_version(const fs::path& compiler) {
+    static std::map<std::string, std::string> cache;
+    const std::string key = compiler.generic_string();
+    auto cached = cache.find(key);
+    if (cached != cache.end()) return cached->second;
+    std::string version;
+    auto res = util::run_command(util::quote_cli_arg(key) + " --version 2>&1");
+    if (res.exit_code == 0 && !res.out.empty()) {
+        auto nl = res.out.find('\n');
+        version = (nl == std::string::npos) ? res.out : res.out.substr(0, nl);
+        if (!version.empty() && version.back() == '\r') version.pop_back();
+    }
+    cache.emplace(key, version);
+    return version;
+}
+
 // ===================================================================
 // Toolchain detection
 // ===================================================================

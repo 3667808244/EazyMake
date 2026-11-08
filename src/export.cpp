@@ -363,8 +363,11 @@ std::string build_cmake_text(const config::EzConfig& cfg,
         }
     }
     if (!defs.empty()) {
+        // 1.5.0-dev.12 (A-19): quote every definition/option — a macro value
+        // with a space or ';' (or a flag like "-Wl,-rpath,C:\Program Files\x")
+        // used to be split into several CMake arguments.
         os << "target_compile_definitions(" << target << " PRIVATE";
-        for (const auto& d : defs) os << " " << d;
+        for (const auto& d : defs) os << " " << cmake_quote(d);
         os << ")\n";
     }
     if (std_num > 0) {
@@ -383,7 +386,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
     }
     if (!opt_flags.empty()) {
         os << "target_compile_options(" << target << " PRIVATE";
-        for (const auto& f : opt_flags) os << " " << f;
+        for (const auto& f : opt_flags) os << " " << cmake_quote(f);
         os << ")\n";
     }
     if (!compile.msvc_flags.empty()) {
@@ -428,7 +431,7 @@ std::string build_cmake_text(const config::EzConfig& cfg,
     }
     if (!link_opts.empty()) {
         os << "target_link_options(" << target << " PRIVATE";
-        for (const auto& f : link_opts) os << " " << f;
+        for (const auto& f : link_opts) os << " " << cmake_quote(f);
         os << ")\n";
     }
     if (!link.msvc_flags.empty()) {
