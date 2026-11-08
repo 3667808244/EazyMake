@@ -190,7 +190,7 @@ ezmk-lua <hook.lua> [--project-root <目录>] [--profile <名称>] [--output <�
 - **失败不再"假死"**：底层监视线程因硬错误退出（或所有被监视目录都打不开）时，`ezmk watch` 会打印 `file watcher stopped unexpectedly; leaving watch mode` 并以 **exit 1** 退出，而不是继续空转（此前界面看起来仍在监视，实际已无任何监视）。成功停止（Ctrl+C）仍为 exit 0。
 - **目录消失后可恢复**：运行期间被监视的目录被删除/重命名时，对应的内核监视会失效并**每 2 秒重试补挂**，目录恢复后自动重新生效（每个目录只警告一次）。
 - **不因自己的产物触发重建**：`build/`、`.ezmk/` 以及 `.o` / `.d` / `.tmp` 产物被忽略，因此构建输出不会反过来触发新一轮构建。
-- **非递归平台**：Linux/macOS 只监视被监视目录**自身**（新增子目录不会被真递归发现）——该已知限制见 `include/ezmk/file_watcher.hpp`；Windows 走 `ReadDirectoryChangesW` 子树监视，为真递归。
+- **递归监视（1.5.0-dev.12）**：Linux/macOS 现在监视整棵子树——现有子目录各建一个 watch，新增子目录由 2 秒 repair 周期补挂；隐藏目录与 `build/` 剪枝，不跟随目录符号链接。Windows 继续用 `ReadDirectoryChangesW` 子树监视。
 
 **`install` 专属标志：**
 

@@ -49,6 +49,20 @@ TEST_CASE("Locale JSON files exist and are valid", "[i18n][locale]") {
     REQUIRE(ver.find("EazyMake") != std::string::npos);
 }
 
+// 1.5.0-dev.12: every generated key must resolve in BOTH base locales — the
+// fixed sample list above missed keys added/removed by the audit (dead keys).
+TEST_CASE("every I18nKey resolves in en and zh (1.5.0-dev.12)",
+          "[i18n][keys][1.5.0-dev.12]") {
+    for (const char* lang : {"en", "zh"}) {
+        init(lang);
+        for (int i = 0; i < static_cast<int>(I18nKey::count); ++i) {
+            INFO("lang=" << lang << " key=" << i);
+            REQUIRE(!get(static_cast<I18nKey>(i)).empty());
+        }
+    }
+    init("en"); // leave the global language in a deterministic state
+}
+
 TEST_CASE("All I18nKey values produce non-empty strings", "[i18n][keys]") {
     init("en");
 

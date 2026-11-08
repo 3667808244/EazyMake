@@ -16,6 +16,9 @@ enum class I18nKey {
 #define EZMK_I18N_KEY(name) name,
 #include "ezmk/i18n_keys.def"
 #undef EZMK_I18N_KEY
+    // 1.5.0-dev.12: sentinel — lets tests iterate every key without hardcoding
+    // the list. Never pass it to get()/fmt().
+    count
 };
 
 // Initialize i18n subsystem. Call once at startup (in main()).

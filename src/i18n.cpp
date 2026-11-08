@@ -57,6 +57,8 @@ namespace ezmk::i18n
 #define EZMK_I18N_KEY(name) case I18nKey::name: return #name;
 #include "ezmk/i18n_keys.def"
 #undef EZMK_I18N_KEY
+            default:
+                break; // I18nKey::count sentinel
             }
             return "???"; // unreachable — all enum values are generated above
         }

@@ -159,7 +159,7 @@ Two traps:
 1. `/**` is a directory-level switch, not a glob — `"src/**/*.cpp"` is treated as a literal directory name (a missing directory only warns).
 2. Flat mode deduplicates by **filename** (only the first same-named file compiles, with a warning); recursive mode deduplicates by project-root-relative path, so same-named files all compile.
 
-> On Linux/macOS `ezmk watch` watches only the directory itself, so newly added nested files under a recursive entry do not trigger a rebuild.
+> All platforms watch recursively (1.5.0-dev.12): nested files added under a recursive entry trigger a rebuild.
 
 ---
 

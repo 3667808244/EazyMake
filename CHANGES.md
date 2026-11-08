@@ -30,6 +30,44 @@
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
+## 1.5.0-dev.12 (2026-11-08) — 全量代码审核修复（第二轮）
+
+> **状态：实现收口（2026-11-08），未发布、待 CI。** 阶段零 31 项 + 阶段一~四；单元 **1118 / 6280 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1241 / 7919 / 8 跳过 / 0 失败**。
+
+### 安全与完整性
+
+- **Lua 沙箱资源上限**：单脚本 512 MiB 内存（超限 `LUA_ERRMEM`）+ 900 s 墙钟预算；`ezmk.run` / `run_capture` 的子进程超时收缩到剩余预算。
+- **Lua 错误安全**：`run_capture` 先释放输出缓冲再 `lua_error`；JSON 编解码在 catch 外销毁 C++ 对象后再抛 Lua 错误（MinGW longjmp 安全）。
+- **临时路径**：`util::make_temp_dir()` 使用 `mkdtemp` / 0700（Windows 不可预测名），pkg 的 stage / clone / download 全部改用。
+- **远程包完整性**：repo 包缺 sha256 时警告 + 确认，`--locked` 直接失败。
+- **归档**：tar 超长名不再静默截断（提示 `--format zip`）；原子写唯一临时名 + fsync；pack 遍历/stat 错误立即失败、不递归目录符号链接。
+
+### 平台与工具链
+
+- **递归 watch（1.5.0-dev.12）**：Linux/macOS 展开现有子树（每目录一个 watch，2 秒补挂新目录；隐藏目录、`build/`、目录符号链接剪枝），Windows 保持 `ReadDirectoryChangesW` 子树监视。
+- `[settings].linker` 对 GCC/Clang 构建与测试链接生效；C 项目缓存按实际 `$CC` 驱动及其版本失效。
+- `ar` 与 MSVC `lib` / `link` 支持 response file（Windows 命令行长度上限）。
+- POSIX `waitpid` 处理 EINTR；失败不再当作 exit 0。
+- 用户可见错误迁移到 i18n（12 条）；删除 25 个死 key（440 → 415）。
+
+### 配置与导出
+
+- `--locked` 自动安装跳过无约束"最新版"预搜索，直接按 lockfile 安装。
+- 配置顶层节 / 子表 / `[utils.permissions]` 类型严格校验；缺 `[project].name` 在解析期报错；watch 只匹配项目根 `ezmk.toml`。
+- export 的宏定义 / 编译选项 / 链接选项统一 CMake 引号（空格与 `;` 不再拆参数）。
+- 脚手架与默认 `ezmk.toml` 模板注释统一英文。
+
+### 构建与测试
+
+- `build.sh` 默认 `-O2 -Wall -Wextra`（vendor 的 unused-function / type-limits 告警抑制；首方代码 0 告警）。
+- 新增回归：Lua 内存炸弹、缺 sha256 的 repo 安装、临时目录唯一/0700、错误配置类型、全部 i18n key 双语非空等。
+
+### 已知限制
+
+- MSVC 环境块大小写覆盖与 MSVC response file 未经实机验证（本机为 MinGW）。
+- macOS kqueue 递归分支未实机验证（Linux 由 CI 覆盖）。
+- A-23（lockfile 全量重哈希）评估后保留现状：install 受编译/解压主导，批量保存优化留待 2.0.0。
+
 ## 1.5.0-dev.11 (2026-11-08) — 首次无配置生成默认模板
 
 > **状态：实现收口（2026-11-08；CI run `42449910408` 全绿），未发布。** 无配置首次运行生成全注释用户模板；单元 **1107 / 6314 / 4 跳过 / 0 失败**，全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1228 / 7095 / 8 跳过 / 0 失败**。

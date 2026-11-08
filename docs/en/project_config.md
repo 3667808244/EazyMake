@@ -138,7 +138,7 @@ Note: Legacy field `include_dir` (singular) is deprecated; if encountered during
 > - Per entry, and freely mixable. `/**` is a **directory-level switch**, not a glob — `src/**/*.cpp` or `src/**/` is treated as a literal directory name (a missing directory only warns).
 > - Recursive entries deduplicate by **project-root-relative path**, so same-named files in different subdirectories all compile; flat entries keep **filename** dedup (the first one wins, with a duplicate warning).
 > - Recursive scanning prunes `.`-prefixed directories (`.git` / `.ezmk`, ...) and any directory named `build`, never follows directory symlinks, and returns sorted paths.
-> - On Linux/macOS `ezmk watch` still watches only the directory itself: newly added nested files under a recursive entry do not trigger a rebuild (Windows watches the subtree and is fine).
+> - All platforms watch recursively (1.5.0-dev.12): Linux/macOS expand the subtree into per-directory watches and pick up new subdirectories within ~2 s; Windows watches the subtree natively.
 > - `ezmk project pack` always copies the whole `src_dirs` subtree into a source package (regardless of `/**`); which files a consumer compiles is decided by that consumer own `src_dirs`.
 
 > **`source_date_epoch` resolution priority (only when `deterministic = true`):**

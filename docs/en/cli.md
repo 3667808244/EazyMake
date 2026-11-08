@@ -248,10 +248,11 @@ deliberately not shown).
 - **The watcher never rebuilds because of its own output.** `build/`, `.ezmk/`
   and `.o` / `.d` / `.tmp` artifacts are ignored, so a build cannot trigger the
   next build.
-- **Non-recursive platforms.** Linux/macOS watch only the watched directory
-  **itself** (newly created subdirectories are not discovered recursively) — the
-  known limitation documented in `include/ezmk/file_watcher.hpp`; Windows uses
-  `ReadDirectoryChangesW` subtree watching and is genuinely recursive.
+- **Recursive watching (1.5.0-dev.12).** Linux/macOS now watch the whole
+  subtree: every existing subdirectory gets its own watch, and new
+  subdirectories are discovered by the 2-second repair pass. Hidden
+  ('.'-prefixed) and `build/` directories are pruned, and directory symlinks
+  are never followed. Windows keeps `ReadDirectoryChangesW` subtree watching.
 
 **`install`-only flags:**
 
