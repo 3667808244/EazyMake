@@ -21,6 +21,8 @@ int main(int argc, char **argv){
 > `greeting()` 示例公共 API）+ `src/<name>.cpp`（实现）——文件名保留原始项目名，C++ namespace
 > 将 `-` / `.` / 空格替换为 `_`；`--type utils` 不生成任何 C++ 代码，只有 `utils/` 目录放 Lua 脚本。
 
+> **MSVC 共享库：** `shared` 模板不会给示例 API 加 `__declspec(dllexport)`，因此 MSVC 在至少导出一个符号前不会生成导入库；MinGW/GCC 默认导出示例符号。若需在 MSVC 下链接该 DLL，请自行给声明/定义加导出属性。
+
 ---
 
 ## `<project_dir>/ezmk.toml`

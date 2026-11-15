@@ -159,6 +159,8 @@ logs = "~/ezmk/logs"
 
 Merge order is **built-in < global < user < project < CLI/env**. Use `--config <file>` to replace the user layer, `--no-config` to skip both layers, and `--lang <tag>` to override the UI language. Full schemas: [User config](docs/en/user_config.md) and [Global config](docs/en/global_config.md).
 
+1.5.0 adds more `[settings]` defaults while keeping existing behavior: `compiler_output` / `linker_output`, `gen_agent_skills`, `cxx` / `cc` / `linker`, `use_cache`, `network_timeout` / `retries` / `proxy`, and `install_prefix`. The first run without any config also generates a fully commented template (`EZMK_NO_AUTO_CONFIG=1` disables it).
+
 ## Commands at a glance
 
 ```bash

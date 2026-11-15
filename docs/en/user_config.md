@@ -57,9 +57,9 @@ Path rules:
 | `cc` | string | empty | C compiler path; empty = `$CC` / auto-detect |
 | `linker` | string | empty | Link driver for GCC/Clang; empty = use `cxx` |
 | `use_cache` | bool | `true` | Global cache switch; `false` is equivalent to `--disable-cache` for build and test compilation |
-| `network_timeout` | int | `0` | Per-operation network timeout in seconds; `0` = no timeout; range 0..3600 |
-| `retries` | int | `0` | Retries after a network failure; range 0..10 |
-| `proxy` | string | empty | HTTP/HTTPS proxy URL; empty = inherit environment/system. Environment variables take precedence |
+| `network_timeout` | int | `0` | Per-operation network timeout in seconds; `0` = no timeout for HTTP downloads, while **git clone/pull falls back to 300 s** when 0. Range 0..3600. Non-TTY runs set `GIT_TERMINAL_PROMPT=0` |
+| `retries` | int | `0` | Retries after a network failure for HTTP downloads and git clone/pull; range 0..10 |
+| `proxy` | string | empty | HTTP/HTTPS proxy URL for downloads and git clone/pull; empty = inherit environment/system. Environment variables take precedence |
 | `install_prefix` | string | empty | User-level install prefix; empty = platform default. CLI `--prefix` and project `[install].prefix` override |
 | `initial_commit` | bool / string | unset | `true` uses the default message; a string is the commit message; runs only after a successful `git init` |
 | `auto_init_git` | bool | `true` | Whether `ezmk project new` runs `git init` |

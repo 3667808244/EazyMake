@@ -57,9 +57,9 @@
 | `cc` | string | 空 | C 编译器路径；空 = `$CC` / 自动探测 |
 | `linker` | string | 空 | GCC/Clang 链接驱动；空 = 使用 `cxx` |
 | `use_cache` | bool | `true` | 全局缓存开关；`false` 等价于构建与测试编译传 `--disable-cache` |
-| `network_timeout` | int | `0` | 单次网络操作超时秒数；`0` = 不超时；范围 0..3600 |
-| `retries` | int | `0` | 网络失败后的重试次数；范围 0..10 |
-| `proxy` | string | 空 | HTTP/HTTPS 代理地址；空 = 继承环境变量/系统设置；环境变量优先 |
+| `network_timeout` | int | `0` | 单次网络操作超时秒数；HTTP 下载为 0 时不超时，而 **git clone/pull 在 0 时兜底 300 秒**；范围 0..3600。非 TTY 环境自动设置 `GIT_TERMINAL_PROMPT=0` |
+| `retries` | int | `0` | HTTP 下载与 git clone/pull 网络失败后的重试次数；范围 0..10 |
+| `proxy` | string | 空 | HTTP 下载与 git clone/pull 的 HTTP/HTTPS 代理地址；空 = 继承环境变量/系统设置；环境变量优先 |
 | `install_prefix` | string | 空 | 用户级安装前缀；空 = 平台默认；CLI `--prefix` 与项目 `[install].prefix` 优先 |
 | `initial_commit` | bool / string | 未设置 | `true` 用默认消息；字符串作为提交消息；仅在 `git init` 成功后执行 |
 | `auto_init_git` | bool | `true` | `ezmk project new` 是否执行 `git init` |

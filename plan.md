@@ -21,13 +21,13 @@ dev.8~dev.12 在 pre.1 之后交付了 agent skills、编译器/连接器输出�
 
 ### 阶段二：文档与用户触达（P0）
 
-- [ ] `[project].name` 必填：`docs/{en,zh}/project_config.md` + 示例/教程核对
-- [ ] `network_timeout`：HTTP 0=不超时、git 300 s 兜底、非 TTY `GIT_TERMINAL_PROMPT=0` 写入 en/zh user_config
-- [ ] 首次运行模板与 `EZMK_NO_AUTO_CONFIG` 文档核对
-- [ ] README / README_ZH 增加 1.5.0 能力速览（agent skills / 输出策略 / 工具链 / 网络 / install prefix）
-- [ ] 递归 watch、`--locked`、MSVC shared 导出宏说明复核
-- [ ] man / zsh / help 交叉核对；`check_man_sync` + groff 零告警
-- [ ] `check_docs_sync` / `check_config_docs` 全绿
+- [x] `[project].name` 必填：`docs/{en,zh}/project_config.md` + 示例/教程核对
+- [x] `network_timeout`：HTTP 0=不超时、git 300 s 兜底、非 TTY `GIT_TERMINAL_PROMPT=0` 写入 en/zh user_config
+- [x] 首次运行模板与 `EZMK_NO_AUTO_CONFIG` 文档核对
+- [x] README / README_ZH 增加 1.5.0 能力速览（agent skills / 输出策略 / 工具链 / 网络 / install prefix）
+- [x] 递归 watch、`--locked`、MSVC shared 导出宏说明复核
+- [x] man / zsh / help 交叉核对；`check_man_sync` + groff 零告警
+- [x] `check_docs_sync` / `check_config_docs` 全绿
 
 ### 阶段三：i18n / CHANGES / API（P0）
 

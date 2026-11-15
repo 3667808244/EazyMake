@@ -158,6 +158,8 @@ logs = "~/ezmk/logs"
 
 合并顺序：**内置 < 全局 < 用户 < 项目 < CLI/env**。用 `--config <file>` 替换用户级、`--no-config` 跳过两级、`--lang <tag>` 覆盖界面语言。完整 schema 见 [用户级配置](docs/zh/user_config.md) 与 [全局级配置](docs/zh/global_config.md)。
 
+1.5.0 还增加了更多 `[settings]` 默认值（保持既有行为不变）：`compiler_output` / `linker_output`、`gen_agent_skills`、`cxx` / `cc` / `linker`、`use_cache`、`network_timeout` / `retries` / `proxy`、`install_prefix`。无任何配置的首次运行还会生成一份全注释模板（`EZMK_NO_AUTO_CONFIG=1` 可关闭）。
+
 ## 命令速览
 
 ```bash

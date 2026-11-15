@@ -26,6 +26,11 @@ int main(int argc, char **argv){
 > namespace replaces `-` / `.` / spaces with `_`; `--type utils` generates no
 > C++ code at all, only a `utils/` directory for Lua scripts.
 
+> **MSVC shared libraries:** the `shared` template does not add
+> `__declspec(dllexport)` to the sample API, so MSVC emits no import library
+> until you export at least one symbol. MinGW/GCC export the sample by default;
+> add the export attribute on MSVC if you need to link against the DLL.
+
 ---
 
 ## `<project_dir>/ezmk.toml`
