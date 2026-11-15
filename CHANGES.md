@@ -27,6 +27,7 @@
 - **配置：** 全局级 / 用户级 `config.toml` 的 `[base_dir]`（`installed_packages` / `repo_cache` / `examples` / `logs`）与 `[settings]`（语言、颜色、日志、编译器/连接器输出策略、工具链路径、缓存/网络/安装前缀、project-new 默认、build 目录/并行度、测试/watch/pack/包默认、git/editor、auto_pack、`gen_agent_skills`）；首次无配置运行时自动生成全注释用户模板；项目级覆盖 `[project].build_dir` / `output_name`、`[compile].jobs`、`[test].timeout` / `report_dir`、`[watch]`、`[pack]`、`[pkg].auto_install`、`[workspace.options].scan_skip`。
 - **CLI：** `--config <file>` / `--no-config` / `--lang <tag>`；`--color` 的 `on` / `off` / `16colors` / `256colors` / `truecolor` 别名。
 - **环境：** `EZMK_GLOBAL_CONFIG_DIR` / `EZMK_USER_CONFIG_DIR` / `XDG_CONFIG_HOME` 的配置目录解析。
+- **行为语义（1.5.0）：** `[project].name` 必填（缺失解析期报错）；三平台递归 watch；TOML 类型错误 fail-fast；`[settings].linker` 对 GCC/Clang 构建与测试链接生效。
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
@@ -34,9 +35,26 @@
 
 > **状态：🚧 执行中（2026-11-15）** —— 聚合 dev.8~dev.12，做文档/用户触达、i18n、CHANGES、发布流水线预检与发布门槛预核对；不新增功能、不升版本号、不打 tag。
 
+### 文档与用户触达
+
+- **`[project].name` 必填**：`docs/{en,zh}/project_config.md` 改为「Yes / 是」并注明缺失时解析期报错；1.5.0 前缺 name 的配置需补 `name`（见「行为变更」）。
+- **`network_timeout` 语义**：`docs/{en,zh}/user_config.md` 明确 HTTP 下载 0 = 不超时，而 **git clone/pull 在 0 时兜底 300 s**、非 TTY 设置 `GIT_TERMINAL_PROMPT=0`；`retries` / `proxy` 明确覆盖 git 操作。
+- **MSVC shared 导出**：`docs/{en,zh}/default_create.md` 注明 shared 模板不含 `__declspec(dllexport)`，MSVC 需自行导出才生成导入库。
+- **README / README_ZH**：1.5.0 新增 `[settings]` 能力速览（输出策略、agent skills、工具链、缓存/网络、install prefix）与首次运行模板开关。
+
+### 行为变更
+
+- **`[project].name` 必填（1.5.0）**：缺失 name 的项目在解析期报错（此前允许并在构建期以空产物名失败）。迁移：在 `[project]` 补 `name = "<safe-basename>"`。
+- 递归 watch（Linux/macOS）、TOML 类型错误 fail-fast、`[settings].linker` 生效、`build.sh` 默认 `-O2 -Wall -Wextra` 均已在 dev.8~dev.12 条目记录，本版只做发布前一致性核对。
+
 ### 修复
 
 - **预发布版本约束（C-02）**：`satisfies_version_constraint` 改用 `compare_version_precedence`——`=1.2.3` 不再把 `1.2.3-rc.1` 当作正式版，`--locked` 的精确安装不会装错预发布版；新增回归用例。
+
+### 聚合账本
+
+- pre.1 的 14 项延后：A-06/07/08/09/10/11/12、B-10、D-09 已由 dev.12 解决；C-02 本版修复；C-06（并发安装锁）、C-07（workspace 输出缓冲）、C-12（repo 迁移部分失败）、D-06（子进程输出上限）延后 1.5.x。
+- dev.11 CHANGES 的「14 项延后」旧列表已过时（MSVC rsp、预发布排序等已解决），以本版账本为准。
 
 ### 已知限制
 
