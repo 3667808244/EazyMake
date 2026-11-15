@@ -39,11 +39,11 @@ dev.8~dev.12 在 pre.1 之后交付了 agent skills、编译器/连接器输出�
 
 ### 阶段四：发布流水线预检与 CI 加固（P0/P1）
 
-- [ ] install.sh / install.ps1 本地 smoke（版本、man、zsh、`-DryRun`）
-- [ ] PKGBUILD / Homebrew / winget 仍指向 1.4.11（确认，不发布）
-- [ ] release.yml 矩阵/产物清单核对（macos-x64 skip、man 位置、Windows 不含 man）
-- [ ] `test/test_integration_helpers.hpp` 的 `run_ezmk` 增加 300 s 超时（dev.12 A-22 余项）+ 集成回归
-- [ ] 评估 `ubuntu-latest` 迁移（pin 24.04 或记录）
+- [x] install.sh / install.ps1 本地 smoke（版本、man、zsh、`-DryRun`）
+- [x] PKGBUILD / Homebrew / winget 仍指向 1.4.11（确认，不发布）
+- [x] release.yml 矩阵/产物清单核对（macos-x64 skip、man 位置、Windows 不含 man）
+- [x] `test/test_integration_helpers.hpp` 的 `run_ezmk` 增加 300 s 超时（dev.12 A-22 余项）+ 集成回归
+- [x] 评估 `ubuntu-latest` 迁移（pin 24.04 或记录）
 - [ ] push 后 CI 全绿并记录 run ID
 
 ### 阶段五：全量回归与发布门槛预核对（P0）

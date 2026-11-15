@@ -50,6 +50,7 @@
 ### 修复
 
 - **预发布版本约束（C-02）**：`satisfies_version_constraint` 改用 `compare_version_precedence`——`=1.2.3` 不再把 `1.2.3-rc.1` 当作正式版，`--locked` 的精确安装不会装错预发布版；新增回归用例。
+- **集成测试超时**：`run_ezmk` 增加 300 s 超时（dev.12 A-22 余项），网络/挂起场景不再拖死 CI。
 
 ### 聚合账本
 

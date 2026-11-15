@@ -102,12 +102,19 @@ inline std::string build_ezmk_cmd(const std::string& args, const fs::path& cwd) 
 
 // Run ezmk with given arguments in the specified working directory.
 // Uses "cd <dir> && ezmk ..." so the process CWD is never changed.
-inline ProcResult run_ezmk(const std::string& args, const fs::path& cwd = fs::current_path()) {
+// 1.5.0-pre.2 (dev.12 A-22 remainder): bound every spawned ezmk so a hung
+// child (network, lock, watcher) fails the test instead of blocking CI.
+// 300 s matches the git clone/pull fallback.
+inline ProcResult run_ezmk(const std::string& args,
+                           const fs::path& cwd = fs::current_path(),
+                           int timeout_sec = 300) {
     std::string cmd = build_ezmk_cmd(args, cwd);
 #ifdef EZMK_WIN
     cmd = "cmd /c " + cmd;
 #endif
-    return run_command(cmd);
+    RunOptions opts;
+    opts.timeout_sec = timeout_sec;
+    return run_command(cmd, opts);
 }
 
 // Detect if EazyMake binary is available (skip tests gracefully if not).
