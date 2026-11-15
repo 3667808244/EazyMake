@@ -33,7 +33,7 @@
 
 ## 1.5.0 (2026-11-15) — 用户/全局配置层
 
-> **状态：🚧 发布准备（2026-11-15）** —— 聚合 dev.1~dev.12 + pre.1/pre.2；全量 test-all（EZMK_TEST_OFFLINE=1）**1243 / 7928 / 8 跳过 / 0 失败**；版本号已置 1.5.0，tag/Release 与三渠道分发待执行（发布后回填 digest/渠道 commit）。
+> **状态：✅ 已发布（2026-11-15；tag `v1.5.0`；Release run `43724857610`）** —— 聚合 dev.1~dev.12 + pre.1/pre.2；全量 test-all（EZMK_TEST_OFFLINE=1）**1243 / 7928 / 8 跳过 / 0 失败**；三渠道与 install 脚本已处理（winget PR 审批为发布后跟进）。
 
 ### 新增
 
@@ -76,7 +76,17 @@
 
 ### 发布
 
-- tag v1.5.0；Release 资产与 digest、Homebrew / winget / pacman 渠道 commit 待发布后回填。
+- **tag**：v1.5.0（commit f48e4f8）；GitHub Release：https://github.com/3667808244/EazyMake/releases/tag/v1.5.0；Release run 43724857610 success（windows-x64 / linux-x64 / macos-arm64；macos-x64 skipped 属预期）。
+- **资产（7）**：
+  - ezmk-windows-x64.zip（sha256 61149ade0dd5fb3f46a46d43a2d1b9ee0c033c755fa8f18030b2681231829cf0）
+  - ezmk.exe（d2f8c1a209be7d0d074f35c77064e681c9070e64db6111ba506f0f12aa3ba234）+ .sha256
+  - ezmk-lua.exe（fa3e68fcee92ccdb85120ca6070ddf3e32afc2ea68f0067bb57f5d20b9de9485）+ .sha256
+  - ezmk-linux-x64.tar.gz（15e5e63337708cfea36b4d5a7433a1a698895787e7f49526dd76b48fad17d97b）
+  - ezmk-macos-arm64.tar.gz（5c84c4f3ea8fe8351be24e5dfe62026ae605a609a0b1c909ec08bcd243964bb0）
+- **Homebrew**：publish/homebrew/ezmk.rb 更新为 1.5.0 + 真实 sha256；tap 提交 ad52be8。
+- **pacman**：eazymake-1.5.0-1-x86_64.pkg.tar.zst（sha256 0a2d4bc052003817adff7620676257b33066e6e799547a7af02e95175b3f741b）；含 ezmk/ezmk-lua/_ezmk/man 4 页；包内 ezmk version → 1.5.0。
+- **winget**：publish/winget/e/ezmk/1.5.0 三件套，winget validate 通过；PR [#480904](https://github.com/microsoft/winget-pkgs/pull/480904) 已开启（CLA/CI/版主审批为发布后跟进）。
+- **install 脚本**：install.ps1 -DryRun 通过（解析/下载路径/校验/PATH/repo 流程）；install.sh 仅 bash -n（Windows 上不执行 Linux 安装路径）。
 
 ## 1.5.0-pre.2 (2026-11-15) — 发布前聚合收口（第二轮）
 

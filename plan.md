@@ -1,6 +1,6 @@
 # EazyMake 1.5.0 正式版发布计划
 
-> **状态：🚧 发布准备（2026-11-15；阶段一/二完成，tag/Release 待执行）** —— 详细设计见 [plans/1.5.x/1.5.0.md](plans/1.5.x/1.5.0.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。版本号已置 **1.5.0**、CHANGES/索引已聚合；下一步打 tag + Release + 三渠道分发。
+> **状态：✅ 已发布（2026-11-15；tag `v1.5.0`；Release run `43724857610`）** —— 详细设计见 [plans/1.5.x/1.5.0.md](plans/1.5.x/1.5.0.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。全量 **1243 / 7928 / 8 跳过 / 0 失败**；GitHub Release、Homebrew、pacman 已完成，winget PR #480904 待审批。
 >
 > **回归基线**：全量 test-all（EZMK_TEST_OFFLINE=1）**1243 / 7928 / 8 跳过 / 0 失败**；CI run **43702080867** 全绿。发布门槛：≥ 1243/7928、CI 绿、公共 API 无破坏性变更、发布清单逐项核对。
 >
@@ -27,25 +27,25 @@
 
 ### 阶段三：tag + Release（P0）
 
-- [ ] git tag v1.5.0 + git push origin v1.5.0
-- [ ] 创建 GitHub Release（published）触发 release.yml
-- [ ] 核对 7 个资产（windows zip/exe/sha256 ×2、linux tar.gz、macos-arm64 tar.gz）与 digest
-- [ ] 核对 man 放置（Linux/macOS 有、Windows 无）、解包后 ezmk version = 1.5.0
-- [ ] macos-x64 skipped 属预期；记录 Release run
+- [x] git tag v1.5.0 + git push origin v1.5.0
+- [x] 创建 GitHub Release（published）触发 release.yml
+- [x] 核对 7 个资产（windows zip/exe/sha256 ×2、linux tar.gz、macos-arm64 tar.gz）与 digest
+- [x] 核对 man 放置（Linux/macOS 有、Windows 无）、解包后 ezmk version = 1.5.0
+- [x] macos-x64 skipped 属预期；记录 Release run
 
 ### 阶段四：三渠道分发（P0）
 
-- [ ] Homebrew：publish/homebrew/ezmk.rb 1.5.0 + 真实 sha256 + tap 同步 + brew install 冒烟
-- [ ] winget：publish/winget/e/ezmk/1.5.0 三件套 + winget validate + PR
-- [ ] pacman：publish/arch/PKGBUILD 1.5.0 + 源码 tarball digest + makepkg 验证
-- [ ] install.sh / install.ps1 对 v1.5.0 冒烟
+- [x] Homebrew：publish/homebrew/ezmk.rb 1.5.0 + 真实 sha256 + tap 同步 + brew install 冒烟
+- [x] winget：publish/winget/e/ezmk/1.5.0 三件套 + winget validate + PR
+- [x] pacman：publish/arch/PKGBUILD 1.5.0 + 源码 tarball digest + makepkg 验证
+- [x] install.sh / install.ps1 对 v1.5.0 冒烟
 
 ### 阶段五：收尾与验收（P0）
 
-- [ ] CHANGES 1.5.0“发布”节回填 tag/Release digest/三渠道 commit
-- [ ] plans/README.md 移入已完成、路线图推进
-- [ ] 发布后验收（版本/man/zsh/资产/渠道）
-- [ ] 明确 2.0.0 为下一破坏性窗口
+- [x] CHANGES 1.5.0“发布”节回填 tag/Release digest/三渠道 commit
+- [x] plans/README.md 移入已完成、路线图推进
+- [x] 发布后验收（版本/man/zsh/资产/渠道）
+- [x] 明确 2.0.0 为下一破坏性窗口
 
 ## 3 发布门槛
 
