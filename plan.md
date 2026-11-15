@@ -1,8 +1,8 @@
 # EazyMake 1.5.0-pre.2 执行计划
 
-> **状态：📝 待执行（2026-11-15）** —— 详细设计见 [plans/1.5.x/1.5.0-pre.2.md](plans/1.5.x/1.5.0-pre.2.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。dev.12 已收口（1242/7922；CI run `43609114462` 全绿），本计划是 1.5.0 正式发布前的第二个（最后一个）pre 检查点，聚合 dev.8~dev.12。
+> **状态：✅ 收口完成（2026-11-15；CI run `43700818244` 全绿）** —— 详细设计见 [plans/1.5.x/1.5.0-pre.2.md](plans/1.5.x/1.5.0-pre.2.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。本计划是 1.5.0 正式发布前的第二个（最后一个）pre 检查点，聚合 dev.8~dev.12；全量 **1243 / 7928 / 8 跳过 / 0 失败**，发布门槛预核对通过，下一步立项 1.5.0 正式版。
 >
-> **回归基线**：dev.12 全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1242 / 7922 / 8 跳过 / 0 失败**；pre.1 为 1219/6979。本版不得低于 1242/7922。
+> **回归基线**：pre.2 全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1243 / 7928 / 8 跳过 / 0 失败**（C-02 新增用例 +1/+6）；dev.12 为 1242/7922，pre.1 为 1219/6979。
 >
 > **范围**：聚合复核、pre.1 延后项重新裁定、文档/用户触达、i18n/skills、CHANGES/API 稳定性、发布流水线预检、全量回归与门槛预核对。**不新增功能、不改公共 API、不升版本号、不打 tag、不更新分发 manifest。**
 
@@ -44,22 +44,22 @@ dev.8~dev.12 在 pre.1 之后交付了 agent skills、编译器/连接器输出�
 - [x] release.yml 矩阵/产物清单核对（macos-x64 skip、man 位置、Windows 不含 man）
 - [x] `test/test_integration_helpers.hpp` 的 `run_ezmk` 增加 300 s 超时（dev.12 A-22 余项）+ 集成回归
 - [x] 评估 `ubuntu-latest` 迁移（pin 24.04 或记录）
-- [ ] push 后 CI 全绿并记录 run ID
+- [x] push 后 CI 全绿并记录 run ID（`43700818244`）
 
 ### 阶段五：全量回归与发布门槛预核对（P0）
 
-- [ ] `bash build.sh test-all`（`EZMK_TEST_OFFLINE=1`）零失败，≥ **1242 / 7922 / 8 跳过 / 0 失败**
-- [ ] 门槛①：阶段一~六全部完成或延后登记
-- [ ] 门槛②：公共 API 无破坏性变更；行为变更（name 必填等）已在 CHANGES 逐条写明
-- [ ] 门槛③：全量零回归 + CI 在最后一次 push 上绿色
-- [ ] 发布清单预检（版本/日期/man/分发脚本 ready；不含版本号与 tag 变更）
+- [x] `bash build.sh test-all`（`EZMK_TEST_OFFLINE=1`）零失败：**1243 / 7928 / 8 跳过 / 0 失败**
+- [x] 门槛①：阶段一~六全部完成或延后登记
+- [x] 门槛②：公共 API 无破坏性变更；行为变更（name 必填等）已在 CHANGES 逐条写明
+- [x] 门槛③：全量零回归 + CI 在最后一次 push 上绿色（run `43700818244`）
+- [x] 发布清单预检（版本/日期/man/分发脚本 ready；不含版本号与 tag 变更）
 
 ### 阶段六：状态回填与收口（P0）
 
-- [ ] `plan.md` 勾选、dev.12/系列 README/plans README 状态
-- [ ] CHANGES pre.2 收口条目
-- [ ] 明确 1.5.0 正式版下一步（1.5.0 计划立项、版本号/tag/三渠道分发）
-- [ ] 提交并推送
+- [x] `plan.md` 勾选、dev.12/系列 README/plans README 状态
+- [x] CHANGES pre.2 收口条目
+- [x] 明确 1.5.0 正式版下一步（1.5.0 计划立项、版本号/tag/三渠道分发）
+- [x] 提交并推送
 
 ## 3 发布门槛
 
@@ -68,7 +68,7 @@ dev.8~dev.12 在 pre.1 之后交付了 agent skills、编译器/连接器输出�
 1. 本计划各阶段全部勾选，或延后项在设计文档 §3.1/§3.5 明确登记；
 2. pre.1 的 14 项延后 + dev.8~dev.12 已知限制全部有去向；
 3. P1 零残留，P2 修复或明确收口；
-4. 全量 `test-all` 零失败，不低于 1242/7922；
+4. 全量 `test-all` 零失败，不低于 1243/7928；
 5. CI 在最后一次 push 上绿色；
 6. 公共 API 无破坏性变更，行为变更已写入 CHANGES；
 7. 发布流水线预检完成，分发 manifest 仍指向 1.4.11（正式发布时升级）。
