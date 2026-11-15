@@ -1,97 +1,80 @@
-# EazyMake 1.5.0-dev.12 执行计划
+# EazyMake 1.5.0-pre.2 执行计划
 
-> **状态：✅ 阶段零~五收口（2026-11-08；CI run `43609114462` 全绿 2026-11-14，进入 pre.2）** —— 详细设计见 [plans/1.5.x/1.5.0-dev.12.md](plans/1.5.x/1.5.0-dev.12.md)。dev.11 已收口（1228/7095；CI run 42449910408 全绿）；本版与 dev.8 ~ dev.11 一起进入 pre.2。
+> **状态：📝 待执行（2026-11-15）** —— 详细设计见 [plans/1.5.x/1.5.0-pre.2.md](plans/1.5.x/1.5.0-pre.2.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。dev.12 已收口（1242/7922；CI run `43609114462` 全绿），本计划是 1.5.0 正式发布前的第二个（最后一个）pre 检查点，聚合 dev.8~dev.12。
 >
-> **回归基线**：全量 `test-all`（离线）**1242 / 7922 / 8 跳过 / 0 失败**（单元 1120/7137 + 离线集成 122/785），高于 dev.11 的 1228/7095。
+> **回归基线**：dev.12 全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1242 / 7922 / 8 跳过 / 0 失败**；pre.1 为 1219/6979。本版不得低于 1242/7922。
 >
-> **目标**：修复 2026-11-08 全量代码审核发现的剩余 P1/P2/P3（31 项已随阶段零落地，24 项待修），零回归进入 pre.2。
+> **范围**：聚合复核、pre.1 延后项重新裁定、文档/用户触达、i18n/skills、CHANGES/API 稳定性、发布流水线预检、全量回归与门槛预核对。**不新增功能、不改公共 API、不升版本号、不打 tag、不更新分发 manifest。**
 
 ## 1 背景
 
-全量审核覆盖 `src/` 非 vendor 代码（约 2.1 万行）、`include/ezmk/` 头文件与 `build.sh`，使用逐文件阅读 + clang-tidy + 单元/离线集成测试 + 黑盒复现。P1 与一批低风险 P2/P3 已在阶段零修复（`f77cf5d`、`72e96fe`）；剩余项集中在 Lua 沙箱资源上限、Linux/macOS 递归 watch、网络/临时文件、工具链正确性与 i18n 清理。
+dev.8~dev.12 在 pre.1 之后交付了 agent skills、编译器/连接器输出策略、工具链/缓存/网络/安装前缀配置、首次运行模板，以及 55 项审核修复。dev 阶段已全部收口，但 pre.1 的 14 项延后账本尚未回填、dev.8~12 的已知限制未汇总，且已确认两处文档事实漂移（`[project].name` 必填、`network_timeout` 的 git 300 s 兜底）。本计划只做聚合、核对、回填与发布门槛预检，不重复代码审核。
 
 ## 2 执行阶段
 
-### 阶段零：审核已落地修复（✅ 2026-11-08）
+### 阶段一：聚合复核与延后项裁定（P0）
 
-- [x] P1 六项：Windows stdin、`scan_skip`、`project.name` 逃逸、`--locked` 传递依赖、归档溯源/伪 git 源、Lua RUN 权限缓存
-- [x] P2 十六项：测试对象命名、Catch2 include、`-j 0`、C89/C99、dry-run、pack 排除、tar.gz 非 ASCII、git/ps1 引用、watcher 0 字节、无效 member、LANGUAGES、compile_db 跨盘符、export 2a/2b、`-y` 与 Lua 提示、deny glob、测试包排序
-- [x] P3 九项：`lua::init` try、links.json 穿越、LC_ALL 优先级、semver 预发布、build.sh stale、read/sha 错误、watcher 回调异常、`--prefix ~`、负整数宏
-- [x] 回归：单元 1114/6344、离线集成 121/781；手工复现 4 项
-- [x] 提交：`f77cf5d`、`72e96fe`
+- [ ] dev.8~dev.12 收口矩阵核对（计划勾选、CHANGES、CI run、全量基线）
+- [ ] pre.1 的 14 项延后清单逐项填结论（已解决 / 1.5.x / 2.0.0 / 明确不做）
+- [ ] 汇总 dev.8~dev.12 已知限制（macOS kqueue、MSVC shared 导出宏、A-23、C-06/C-07/C-12/D-06）
+- [ ] 更新设计文档 §3.1 账本与 CHANGES 已知限制
 
-### 阶段一：运行时安全与完整性（P1/P2）✅
+### 阶段二：文档与用户触达（P0）
 
-- [x] A-01 Lua 沙箱内存上限（512 MiB，tracking allocator）+ 整脚本墙钟 deadline（900s）；`ezmk.run/run_capture` 使用剩余预算
-- [x] A-02 不跨 longjmp 存活 C++ 对象：`run_capture` 先释放输出缓冲再报错；JSON encode/decode 在 catch 外销毁异常/JSON 树后 `lua_error`（全局 try/catch thunk 经 MinGW 验证会截获 longjmp，已放弃并记录原因）
-- [x] A-04 repo 缺 sha256：warn + 确认；`--locked` 直接失败；sha256 边车不用于 repo/URL
-- [x] 测试：内存炸弹（`string.rep 600 MiB`）、缺哈希 repo 安装告警（新增集成用例）
-- [x] 回归：单元 1115/6359、离线集成 122/785 零失败
+- [ ] `[project].name` 必填：`docs/{en,zh}/project_config.md` + 示例/教程核对
+- [ ] `network_timeout`：HTTP 0=不超时、git 300 s 兜底、非 TTY `GIT_TERMINAL_PROMPT=0` 写入 en/zh user_config
+- [ ] 首次运行模板与 `EZMK_NO_AUTO_CONFIG` 文档核对
+- [ ] README / README_ZH 增加 1.5.0 能力速览（agent skills / 输出策略 / 工具链 / 网络 / install prefix）
+- [ ] 递归 watch、`--locked`、MSVC shared 导出宏说明复核
+- [ ] man / zsh / help 交叉核对；`check_man_sync` + groff 零告警
+- [ ] `check_docs_sync` / `check_config_docs` 全绿
 
-### 阶段二：跨平台与并发健壮性（P1/P2）✅
+### 阶段三：i18n / CHANGES / API（P0）
 
-- [x] A-03 Linux/macOS 递归监听：`add_directory(recursive)` 展开现有子树（跳过隐藏/build/目录符号链接），每 2s rescan 补挂新子目录；Windows 继续用 bWatchSubtree；头文件/文档同步（Linux 由 CI 验证，macOS 本机未验证）
-- [x] A-05 临时路径排他创建：`util::make_temp_dir()`（POSIX `mkdtemp`/0700；Windows 不可预测名），pkg 的 stage/clone/download 全部改用
-- [x] A-06 MSVC 环境块按大小写不敏感覆盖（`PATH`/`Path` 不再双份；VS 2022 BuildTools 实机已验证）
-- [x] A-07 POSIX `waitpid` EINTR 重试；失败不再当 exit 0
-- [x] A-10 pack 遍历/stat 错误立即失败；目录符号链接不递归
-- [x] A-11 tar 长名不再静默截断（超限明确报错并提示 `--format zip`；GNU LongLink 未实现）
-- [x] A-12 `atomic_write_text` 唯一临时名 + `fsync`（含目录）；`create_targz`/`create_zip` 临时名唯一
-- [x] A-22 git 操作默认 300s 兜底超时 + 非 TTY 设 `GIT_TERMINAL_PROMPT=0`（集成 helper 超时未改）
-- [x] 测试：`make_temp_dir` 唯一性/0700 单测；pack、pkg、watcher、workspace 相关离线集成全绿
+- [ ] `check_i18n`（427 键）+ all-keys 测试；zh-TW 继承
+- [ ] dev.8~12 新增用户文案的中文语义核对
+- [ ] CHANGES 新增 1.5.0-pre.2 条目（新增/行为变更/修复/已知限制）
+- [ ] API 稳定性核对 + 1.5.0 聚合要点草稿
+- [ ] README_ZH 与英文同步
 
-### 阶段三：构建/工具链正确性（P2/P3）✅
+### 阶段四：发布流水线预检与 CI 加固（P0/P1）
 
-- [x] A-08 `[settings].linker` 生效：GCC/Clang 链接与测试链接优先使用校验过的 link 驱动（空值回退 detected compiler）
-- [x] A-09 C 项目缓存标识改用实际 `$CC` 驱动 + 其 `--version`（C++ 仍用 `$CXX`），换 CC 全量重编
-- [x] A-18 `run_tests` 去掉静默 `catch (...)`，改为警告并保留降级行为
-- [x] A-19 export 的 defs/opt_flags/link_opts 统一 `cmake_quote`（空格与 `;` 不再拆参数）
-- [x] A-20 `ar` 走 response file；MSVC `lib`/`link` 也改为 argv + 统一 rsp 回退（`make_msvc_invocation`；320 对象项目实机验证）
-- [x] A-21 `--locked` 自动安装直接从 lockfile 安装，不再被无约束“最新版”预搜索挡住
-- [x] 测试：含空格宏/带引号宏的 export 用例；单元 1117/6363、离线集成 122/785 全绿
+- [ ] install.sh / install.ps1 本地 smoke（版本、man、zsh、`-DryRun`）
+- [ ] PKGBUILD / Homebrew / winget 仍指向 1.4.11（确认，不发布）
+- [ ] release.yml 矩阵/产物清单核对（macos-x64 skip、man 位置、Windows 不含 man）
+- [ ] `test/test_integration_helpers.hpp` 的 `run_ezmk` 增加 300 s 超时（dev.12 A-22 余项）+ 集成回归
+- [ ] 评估 `ubuntu-latest` 迁移（pin 24.04 或记录）
+- [ ] push 后 CI 全绿并记录 run ID
 
-### 阶段四：配置/i18n/脚手架一致性（P2/P3）✅
+### 阶段五：全量回归与发布门槛预核对（P0）
 
-- [x] A-13 顶层节/子表/permissions 类型严格校验（scalar 节、`compile.macros`、`profile.*`、`network` 非 bool 全部报错）
-- [x] A-14 watch 仅项目根 `ezmk.toml` 触发整树重载（绝对路径比较，Windows 折叠大小写）
-- [x] A-15 死 i18n key 删 25 个（440→415）；12 条用户可见错误迁移到 i18n（CLI 缺值、settings.*/EZMK_TOOLCHAIN、pack、test、目录已存在、Lua 权限）；测试/诊断的机器可读输出（cmd:、[PASS]/[FAIL]、FileWatcher）保留英文
-- [x] A-16 脚手架/toml 模板注释统一英文（库模板与默认配置一致，不再随 UI 语言漂移）
-- [x] A-17 `build.sh` 默认 `-O2 -Wall -Wextra`（vendor 的 unused-function/type-limits 抑制；首方 0 告警）
-- [x] A-24 缺 `[project].name` 在解析期报错（带文件路径）
-- [x] 测试：新增 4 个错误类型/缺 name 用例；单元 1118/6367、离线集成 122/785 全绿
+- [ ] `bash build.sh test-all`（`EZMK_TEST_OFFLINE=1`）零失败，≥ **1242 / 7922 / 8 跳过 / 0 失败**
+- [ ] 门槛①：阶段一~六全部完成或延后登记
+- [ ] 门槛②：公共 API 无破坏性变更；行为变更（name 必填等）已在 CHANGES 逐条写明
+- [ ] 门槛③：全量零回归 + CI 在最后一次 push 上绿色
+- [ ] 发布清单预检（版本/日期/man/分发脚本 ready；不含版本号与 tag 变更）
 
-### 阶段五：回归、文档与收口 ✅
+### 阶段六：状态回填与收口（P0）
 
-- [x] 全量 `test-all`（`EZMK_TEST_OFFLINE=1`）零失败：**1242 / 7922 / 8 跳过 / 0 失败**
-- [x] MSVC 实机验证（VS 2022 BuildTools 14.44）：exe/static/shared/test + 320 对象 lib/link rsp；修复并行编译 PDB 冲突（每对象 `/Fd`）
-- [x] i18n / man / docs-sync / config-docs 四套脚本全绿
-- [x] 文档对齐：name、`--locked`、dry-run、i18n 优先级；watch 递归说明更新 en/zh
-- [x] A-23 评估：保留现状，批量保存优化登记为 2.0.0 性能项
-- [x] CHANGES / plans 索引 / 系列 README / 根 plan 回填
-- [x] 本版收口；CI 全绿（`43609114462`）；进入 pre.2
+- [ ] `plan.md` 勾选、dev.12/系列 README/plans README 状态
+- [ ] CHANGES pre.2 收口条目
+- [ ] 明确 1.5.0 正式版下一步（1.5.0 计划立项、版本号/tag/三渠道分发）
+- [ ] 提交并推送
 
-## 3 关键设计决策
+## 3 发布门槛
 
-1. **阶段零不单独升版本**：31 项审核修复已随两次提交落地，本版统一记录、统一回归；CHANGES 在阶段五写入。
-2. **安全项优先**：A-01/A-03 是本版仅有的两项 P1；未完成则不得进入 pre.2（或拆 dev.13 并记录）。
-3. **默认行为不变**：Lua 限额、watch 递归、linker 生效、网络超时均按"未配置 = 旧行为/安全默认"设计；新增诊断不得改变成功路径输出契约。
-4. **每阶段一提交**：`chore: 阶段N完成 — <简述>`；阶段内先测试后提交。
-5. **回归门槛**：每阶段至少 `bash build.sh test`；阶段五跑 `test-all`（离线）并对比 1228/7095。
+进入 1.5.0 正式发布前必须同时满足：
 
-## 4 兼容性
+1. 本计划各阶段全部勾选，或延后项在设计文档 §3.1/§3.5 明确登记；
+2. pre.1 的 14 项延后 + dev.8~dev.12 已知限制全部有去向；
+3. P1 零残留，P2 修复或明确收口；
+4. 全量 `test-all` 零失败，不低于 1242/7922；
+5. CI 在最后一次 push 上绿色；
+6. 公共 API 无破坏性变更，行为变更已写入 CHANGES；
+7. 发布流水线预检完成，分发 manifest 仍指向 1.4.11（正式发布时升级）。
 
-| 变更 | 影响 | 缓解 |
-|------|------|------|
-| `project.name` 安全 basename | 非法名字由静默接受变报错 | 文档 + 明确错误（阶段零已落地） |
-| Lua 内存/墙钟上限 | 失控脚本更早失败 | 阈值留足余量；错误说明预算 |
-| 递归 watch | 监听 fd 增加 | 深度/数量上限 + `[watch].ignore` |
-| `[settings].linker` 生效 | 配置者链接器改变 | 空值不变；日志提示 |
-| C 缓存标识 | 换 `CC` 后首次全量重编 | 一次性成本 |
-| `build.sh` 严格旗标 | 编译稍慢、历史告警出现 | 首方清零；`CXXFLAGS` 覆盖 |
-| 公共 API | 无破坏性变更 | 仅内部行为/诊断 |
+## 4 备注
 
-## 5 后续
-
-- 阶段五收口后，dev.8 ~ dev.12 一起进入 pre.2；pre.2 只做发布门槛复核，不重复审核。
-- A-01/A-03 若超期，拆 dev.13；A-23/A-15 若延后，登记到 2.0.0 移除清单。
-- 正式版聚合、版本号、tag 与三渠道分发待 pre.2 完成后按 workflow 生成。
+- 本版**不修改**版本号、不打 tag、不更新分发渠道；这些留给 1.5.0 正式版计划。
+- 正式版聚合计划 `plans/1.5.x/1.5.0.md` 在 pre.2 收口后立项。
+- 每个阶段完成后更新本文件勾选并提交；阶段提交信息遵循 `type(scope): 描述`。
