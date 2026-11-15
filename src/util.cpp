@@ -30,6 +30,7 @@
   #include <io.h>
 #elif defined(EZMK_MACOS)
   #include <csignal>
+  #include <fcntl.h>
   #include <crt_externs.h>
   #include <mach-o/dyld.h>
   #include <pwd.h>
