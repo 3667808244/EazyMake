@@ -1,6 +1,6 @@
 # EazyMake 1.5.0 正式版发布计划
 
-> **状态：📝 待执行（2026-11-15）** —— 详细设计见 [plans/1.5.x/1.5.0.md](plans/1.5.x/1.5.0.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。聚合 dev.1~dev.12 + pre.1 + pre.2，按 workflow §3 执行冻结 → 版本/文档 → tag/Release → 三渠道分发 → 收尾。
+> **状态：🚧 发布准备（2026-11-15；阶段一/二完成，tag/Release 待执行）** —— 详细设计见 [plans/1.5.x/1.5.0.md](plans/1.5.x/1.5.0.md)；系列索引见 [plans/1.5.x/README.md](plans/1.5.x/README.md)。版本号已置 **1.5.0**、CHANGES/索引已聚合；下一步打 tag + Release + 三渠道分发。
 >
 > **回归基线**：全量 test-all（EZMK_TEST_OFFLINE=1）**1243 / 7928 / 8 跳过 / 0 失败**；CI run **43702080867** 全绿。发布门槛：≥ 1243/7928、CI 绿、公共 API 无破坏性变更、发布清单逐项核对。
 >
@@ -14,16 +14,16 @@
 
 ### 阶段一：冻结与回归（P0）
 
-- [ ] 确认工作区干净、最后一次 push 的 CI 绿（run 43702080867）
-- [ ] 全量 bash build.sh test-all（EZMK_TEST_OFFLINE=1）零失败，≥ **1243 / 7928 / 8 跳过 / 0 失败**
+- [x] 确认工作区干净、最后一次 push 的 CI 绿（run 43702080867）
+- [x] 全量 bash build.sh test-all（EZMK_TEST_OFFLINE=1）零失败，≥ **1243 / 7928 / 8 跳过 / 0 失败**
 
 ### 阶段二：版本、CHANGES 与索引（P0）
 
-- [ ] build.sh 的 EZMK_VERSION fallback → 1.5.0；构建重新生成 include/ezmk/version.hpp
-- [ ] CHANGES.md 新增 1.5.0 聚合条目（新增/行为变更/修复/已知限制）
-- [ ] plans/README.md、系列 README、本 plan.md 状态切换
-- [ ] 文档中的当前版本引用核对
-- [ ] 提交 release: 1.5.0 并 push；CI 绿
+- [x] build.sh 的 EZMK_VERSION fallback → 1.5.0；构建重新生成 include/ezmk/version.hpp
+- [x] CHANGES.md 新增 1.5.0 聚合条目（新增/行为变更/修复/已知限制）
+- [x] plans/README.md、系列 README、本 plan.md 状态切换
+- [x] 文档中的当前版本引用核对
+- [x] 提交 release: 1.5.0 并 push；CI 绿
 
 ### 阶段三：tag + Release（P0）
 

@@ -31,6 +31,53 @@
 
 破坏性变更仅在 `2.0.0` 引入，且至少提前一个次版本（`1.x.0`）给出弃用警告。
 
+## 1.5.0 (2026-11-15) — 用户/全局配置层
+
+> **状态：🚧 发布准备（2026-11-15）** —— 聚合 dev.1~dev.12 + pre.1/pre.2；全量 test-all（EZMK_TEST_OFFLINE=1）**1243 / 7928 / 8 跳过 / 0 失败**；版本号已置 1.5.0，tag/Release 与三渠道分发待执行（发布后回填 digest/渠道 commit）。
+
+### 新增
+
+- **用户级 / 全局级 config.toml**：在项目级 ezmk.toml 之外提供个人或整机默认值；合并顺序 内置 < 全局 < 用户 < 项目 < CLI/env；不存在任何 config.toml 时行为与 1.4.11 完全一致。
+- **[base_dir]**：installed_packages / repo_cache / examples / logs；相对路径按 config 文件目录解析，支持 ~。
+- **[settings]**：语言/颜色/日志、project-new 默认、build 目录/并行度、测试/watch/pack/包管理默认、git/editor、auto_pack、compiler_output / linker_output、cxx / cc / linker、use_cache、network_timeout / retries / proxy、install_prefix、gen_agent_skills / gen_agent_md。
+- **项目级覆盖**：[project].build_dir / output_name、[compile].jobs、[test].timeout / report_dir、[watch]、[pack]、[pkg].auto_install、[workspace.options].scan_skip。
+- **CLI**：--config <file> / --no-config / --lang <tag>；--color 的 on/off/16colors/256colors/truecolor 别名。
+- **日志子系统**：log_level 过滤 + 可选文件日志（<logs>/ezmk.log）+ 失败降级。
+- **项目级 agent skills（1.5.0-dev.8）**：gen_agent_skills 按 claude/copilot/agents 分发 4 个 ezmk-user-* 技能；gen_agent_md 联动 AGENTS.md 技能列表。
+- **编译/链接输出策略（dev.9）**：compiler_output / linker_output = always / warning / error（默认 error），成功警告可按策略显示，失败始终显示。
+- **工具链/缓存/网络/安装前缀（dev.10）**：持久化 cxx / cc / linker；全局 use_cache；network_timeout / retries / proxy（HTTP + git）；install_prefix。
+- **首次运行模板（dev.11）**：无配置首次运行在用户配置目录生成全注释 config.toml；不覆盖、不写全局、不改变默认；EZMK_NO_AUTO_CONFIG=1 可关闭。
+- **审计修复（dev.12）**：Lua 沙箱 512 MiB 内存 + 900 s 墙钟预算；三平台递归 watch；临时目录 0700/mkdtemp；原子写 + fsync；pack/tar 长名与符号链接加固；waitpid EINTR；linker 生效；C 项目缓存按实际 CC；export CMake 引号；ar/MSVC response file；--locked 预搜索；TOML 严格校验；i18n 清理；MSVC 实机验证与 PDB 修复。
+
+### 行为变更
+
+- **[project].name 必填（1.5.0）**：缺失 name 的项目在解析期报错（此前允许并在构建期以空产物名失败）。迁移：在 [project] 补 name = "<safe-basename>"。
+- **递归 watch**：Linux/macOS 现在监听整棵子树（每目录一个 watch，2 s 补挂新目录；隐藏/build/目录符号链接剪枝），Windows 保持 bWatchSubtree。
+- **TOML 类型严格校验**：顶层节/子表/permissions 类型错误从静默忽略变为解析期报错。
+- **[settings].linker 生效**：仅显式配置时作为 GCC/Clang 链接驱动；空值保持原行为。
+- **i18n**：25 个死键删除（440→427）；12 条用户可见错误迁移；测试/诊断输出保留英文。
+
+### 修复（摘要，详见 dev.12 / pre.2 条目）
+
+- 55 项审核修复（阶段零 31 项 + A-01~A-24），覆盖 Lua longjmp/内存、Windows stdin、watch 生命周期、pack 遍历、tar 长名、--locked 传递、repo sha256、C 缓存、linker、export 引号、ar/MSVC rsp、TOML、i18n 等。
+- **C-02（pre.2）**：satisfies_version_constraint 使用 semver precedence，=1.2.3 不再匹配 1.2.3-rc.1。
+- **CI 加固**：run_ezmk 300 s 超时；MSVC 并行 PDB 每对象 /Fd；build.sh 默认 -O2 -Wall -Wextra。
+
+### 文档
+
+- docs/{en,zh}、tutorial/{en,zh}、man 4 页、README/README_ZH、.claude/skills 与 dev.1~dev.12/pre.1/pre.2 对齐；check_i18n（427 键）、check_man_sync、check_config_docs、check_docs_sync 全绿。
+
+### 已知限制
+
+- macOS kqueue 递归分支未实机验证（Linux 已由 CI 覆盖）；macos-x64 Release job 默认 skipped。
+- MSVC shared 模板未内置 __declspec(dllexport)，需自行导出才生成导入库。
+- A-23（lockfile 批量保存）延后 2.0.0；C-06（并发安装锁）、C-07（workspace 输出缓冲）、C-12（repo 迁移部分失败）、D-06（子进程输出上限）延后 1.5.x 补丁线。
+- 配置加载期诊断保持英文；[settings].editor 仍按单一可执行路径处理。
+
+### 发布
+
+- tag v1.5.0；Release 资产与 digest、Homebrew / winget / pacman 渠道 commit 待发布后回填。
+
 ## 1.5.0-pre.2 (2026-11-15) — 发布前聚合收口（第二轮）
 
 > **状态：✅ 收口完成（2026-11-15；CI run `43700818244` 全绿），未发布。** 聚合 dev.8~dev.12：文档/用户触达、i18n、CHANGES、发布流水线预检与发布门槛预核对；全量 `test-all`（`EZMK_TEST_OFFLINE=1`）**1243 / 7928 / 8 跳过 / 0 失败**。不新增功能、不升版本号、不打 tag。
