@@ -78,7 +78,10 @@ bool satisfies_version_constraint(std::string_view version,
     if (constraint.op == config::VersionConstraint::None)
         return true;
 
-    int cmp = util::compare_version(version, constraint.version);
+    // 1.5.0-pre.2 (C-02): compare semver precedence, not the core-only
+    // comparator — 1.2.0-rc.1 must not satisfy "=1.2.0" (a --locked exact
+    // install could otherwise pick the pre-release as the release).
+    int cmp = util::compare_version_precedence(version, constraint.version);
 
     switch (constraint.op) {
     case config::VersionConstraint::Exact:
@@ -96,7 +99,7 @@ bool satisfies_version_constraint(std::string_view version,
             ? util::parse_version_component(constraint.version)
             : util::parse_version_component(constraint.version.substr(0, dot));
         std::string next_major = std::to_string(major + 1) + ".0.0";
-        return util::compare_version(version, next_major) < 0;
+        return util::compare_version_precedence(version, next_major) < 0;
     }
     case config::VersionConstraint::Approx: {
         // ~X.Y.Z → >= X.Y.Z, < X.(Y+1).0
@@ -110,7 +113,7 @@ bool satisfies_version_constraint(std::string_view version,
             constraint.version.substr(dot1 + 1, dot2 - dot1 - 1));
         std::string next_minor = std::to_string(major) + "." +
                                  std::to_string(minor + 1) + ".0";
-        return util::compare_version(version, next_minor) < 0;
+        return util::compare_version_precedence(version, next_minor) < 0;
     }
     default:
         return true;

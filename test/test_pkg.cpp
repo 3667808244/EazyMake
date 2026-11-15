@@ -277,6 +277,30 @@ TEST_CASE("satisfies_version_constraint: Exact (@) matches only equal", "[pkg][0
     REQUIRE_FALSE(ezmk::pkg::satisfies_version_constraint("2.0.0", c));
 }
 
+// 1.5.0-pre.2 (C-02): constraints must use semver precedence. The old
+// core-only compare treated 1.2.3-rc.1 as equal to 1.2.3, so an exact
+// (--locked) constraint could install the pre-release as the release.
+TEST_CASE("satisfies_version_constraint: pre-release is not the release (1.5.0-pre.2)",
+          "[pkg][1.5.0-pre.2]") {
+    using namespace ezmk::config;
+    auto check = [](VersionConstraint::Op op, const char* want,
+                    const char* v) {
+        VersionConstraint c;
+        c.op = op;
+        c.version = want;
+        return ezmk::pkg::satisfies_version_constraint(v, c);
+    };
+    // Exact: rc != release, release == release
+    REQUIRE_FALSE(check(VersionConstraint::Exact, "1.2.3", "1.2.3-rc.1"));
+    REQUIRE(check(VersionConstraint::Exact, "1.2.3", "1.2.3"));
+    // Compatible / Approx: the rc of the lower bound does not satisfy it
+    REQUIRE_FALSE(check(VersionConstraint::Compatible, "1.2.3", "1.2.3-rc.1"));
+    REQUIRE_FALSE(check(VersionConstraint::Approx, "1.2.3", "1.2.3-rc.1"));
+    // Gte: rc is below the release, but a release satisfies an rc lower bound
+    REQUIRE_FALSE(check(VersionConstraint::Gte, "1.2.3", "1.2.3-rc.1"));
+    REQUIRE(check(VersionConstraint::Gte, "1.2.3-rc.1", "1.2.3"));
+}
+
 TEST_CASE("satisfies_version_constraint: Compatible (^) matches within major", "[pkg][0.9.6]") {
     using namespace ezmk::config;
     VersionConstraint c;

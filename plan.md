@@ -14,10 +14,10 @@ dev.8~dev.12 在 pre.1 之后交付了 agent skills、编译器/连接器输出�
 
 ### 阶段一：聚合复核与延后项裁定（P0）
 
-- [ ] dev.8~dev.12 收口矩阵核对（计划勾选、CHANGES、CI run、全量基线）
-- [ ] pre.1 的 14 项延后清单逐项填结论（已解决 / 1.5.x / 2.0.0 / 明确不做）
-- [ ] 汇总 dev.8~dev.12 已知限制（macOS kqueue、MSVC shared 导出宏、A-23、C-06/C-07/C-12/D-06）
-- [ ] 更新设计文档 §3.1 账本与 CHANGES 已知限制
+- [x] dev.8~dev.12 收口矩阵核对（计划勾选、CHANGES、CI run、全量基线）
+- [x] pre.1 的 14 项延后清单逐项填结论（已解决 / 1.5.x / 2.0.0 / 明确不做）
+- [x] 汇总 dev.8~dev.12 已知限制（macOS kqueue、MSVC shared 导出宏、A-23、C-06/C-07/C-12/D-06）
+- [x] 更新设计文档 §3.1 账本与 CHANGES 已知限制
 
 ### 阶段二：文档与用户触达（P0）
 
